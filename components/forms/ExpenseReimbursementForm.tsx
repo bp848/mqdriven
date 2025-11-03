@@ -342,7 +342,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                 
                 <div>
                     <label htmlFor="departmentId" className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">部門 *</label>
-                    <DepartmentSelect id="departmentId" value={departmentId} onChange={setDepartmentId} required disabled={isDisabled} />
+                    <DepartmentSelect
+                        id="departmentId"
+                        value={departmentId}
+                        onChange={setDepartmentId}
+                        required
+                        disabled={isDisabled}
+                        departments={departments}
+                    />
                 </div>
                 
                 <div>

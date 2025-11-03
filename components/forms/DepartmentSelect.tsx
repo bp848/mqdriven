@@ -10,15 +10,35 @@ type Props = {
   id?: string;
   // FIX: Add disabled prop to allow disabling the component.
   disabled?: boolean;
+  departments?: Department[];
 };
 
-export default function DepartmentSelect({ value, onChange, required, name = 'departmentId', id = 'departmentId', disabled }: Props) {
-  const [list, setList] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function DepartmentSelect({ value, onChange, required, name = 'departmentId', id = 'departmentId', disabled, departments }: Props) {
+  const [list, setList] = useState<Department[]>(departments ?? []);
+  const [loading, setLoading] = useState(!departments);
 
   useEffect(() => {
-    getDepartments().then(setList).finally(() => setLoading(false));
-  }, []);
+    let isMounted = true;
+    if (!departments) {
+      getDepartments()
+        .then(items => {
+          if (isMounted) {
+            setList(items);
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoading(false);
+          }
+        });
+    } else {
+      setList(departments);
+      setLoading(false);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [departments]);
 
   return (
     <select
