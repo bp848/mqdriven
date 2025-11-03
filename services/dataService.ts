@@ -113,6 +113,317 @@ const mapViewRowToEmployeeUser = (row: SupabaseEmployeeViewRow): EmployeeUser =>
   canUseAnythingAnalysis: row.can_use_anything_analysis ?? true,
 });
 
+type SupabaseAccountItemRow = {
+  id: string;
+  code?: string | null;
+  name?: string | null;
+  category_code?: string | null;
+  is_active?: boolean | null;
+  sort_order?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  mq_code?: Record<string, string | null> | null;
+  mq_code_p?: string | null;
+  mq_code_v?: string | null;
+  mq_code_m?: string | null;
+  mq_code_q?: string | null;
+  mq_code_f?: string | null;
+  mq_code_g?: string | null;
+};
+
+type SupabaseDepartmentRow = {
+  id: string;
+  name?: string | null;
+};
+
+type SupabasePaymentRecipientRow = {
+  id: string;
+  recipient_code?: string | null;
+  company_name?: string | null;
+  recipient_name?: string | null;
+  bank_name?: string | null;
+  bank_branch?: string | null;
+  bank_account_number?: string | null;
+  is_active?: boolean | null;
+  allocation_targets?: { id?: string | null; name?: string | null; target_id?: string | null; target_name?: string | null }[] | null;
+};
+
+type SupabaseAllocationDivisionRow = {
+  id: string;
+  name?: string | null;
+  is_active?: boolean | null;
+  created_at?: string | null;
+};
+
+const isRelationNotFoundError = (error?: PostgrestError | null): boolean => error?.code === '42P01';
+const isColumnNotFoundError = (error?: PostgrestError | null): boolean => error?.code === '42703';
+
+const toStringValue = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  return fallback;
+};
+
+const isBlankString = (value: string | null | undefined): boolean => {
+  if (typeof value !== 'string') {
+    return true;
+  }
+  return value.trim() === '';
+};
+
+const MQ_CODE_KEYS = ['p', 'v', 'm', 'q', 'f', 'g'] as const;
+type MqCodeKey = typeof MQ_CODE_KEYS[number];
+
+const resolveMqCodeSegment = (row: SupabaseAccountItemRow, key: MqCodeKey): string | undefined => {
+  const mqObject = typeof row.mq_code === 'object' && row.mq_code !== null ? row.mq_code : null;
+  const uppercaseKey = key.toUpperCase();
+  const candidates: unknown[] = [
+    mqObject?.[key],
+    mqObject?.[uppercaseKey],
+    (row as Record<string, unknown>)[`mq_code_${key}`],
+    (row as Record<string, unknown>)[`mq_code_${uppercaseKey}`],
+    (row as Record<string, unknown>)[key],
+    (row as Record<string, unknown>)[uppercaseKey],
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate;
+    }
+  }
+  return undefined;
+};
+
+const mapSupabaseAccountItemRow = (row: SupabaseAccountItemRow): AccountItem => {
+  const nowIso = new Date().toISOString();
+  const mqCode = MQ_CODE_KEYS.reduce<Record<MqCodeKey, string>>((acc, key) => {
+    acc[key] = toStringValue(resolveMqCodeSegment(row, key), '');
+    return acc;
+  }, { p: '', v: '', m: '', q: '', f: '', g: '' });
+
+  return {
+    id: row.id,
+    code: toStringValue(row.code, ''),
+    name: toStringValue(row.name, ''),
+    categoryCode: toStringValue(row.category_code, ''),
+    isActive: row.is_active ?? true,
+    sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
+    createdAt: toStringValue(row.created_at, nowIso),
+    updatedAt: toStringValue(row.updated_at, row.created_at ?? nowIso),
+    mqCode,
+  };
+};
+
+const mapSupabaseDepartmentRow = (row: SupabaseDepartmentRow): Department | null => {
+  const name = toStringValue(row.name, '').trim();
+  if (!row.id || !name) {
+    return null;
+  }
+  return { id: row.id, name };
+};
+
+const mapSupabasePaymentRecipientRow = (row: SupabasePaymentRecipientRow): PaymentRecipient => {
+  const allocationTargetsRaw =
+    (row.allocation_targets as unknown) ?? (row as Record<string, unknown>)['allocationTargets'];
+  const allocationTargets: { id: string; name: string }[] = Array.isArray(allocationTargetsRaw)
+    ? (allocationTargetsRaw as Array<Record<string, unknown>>)
+        .map((target) => {
+          if (!target) return null;
+          const idCandidate = toStringValue(target.id ?? target.target_id ?? null, '').trim();
+          const nameCandidate = toStringValue(target.name ?? target.target_name ?? null, '').trim();
+          if (!idCandidate || !nameCandidate) {
+            return null;
+          }
+          return { id: idCandidate, name: nameCandidate };
+        })
+        .filter((target): target is { id: string; name: string } => Boolean(target))
+    : [];
+
+  return {
+    id: row.id,
+    recipientCode: toStringValue(row.recipient_code, row.id),
+    companyName: toStringValue(row.company_name, '') || null,
+    recipientName: toStringValue(row.recipient_name, '') || null,
+    bankName: toStringValue(row.bank_name, '') || null,
+    bankBranch: toStringValue(row.bank_branch, '') || null,
+    bankAccountNumber: toStringValue(row.bank_account_number, '') || null,
+    isActive: row.is_active ?? true,
+    allocationTargets,
+  };
+};
+
+const mapSupabaseAllocationDivisionRow = (row: SupabaseAllocationDivisionRow): AllocationDivision => {
+  const nowIso = new Date().toISOString();
+  return {
+    id: row.id,
+    name: toStringValue(row.name, ''),
+    isActive: row.is_active ?? true,
+    createdAt: toStringValue(row.created_at, nowIso),
+  };
+};
+
+const fetchAccountItemsFromSupabase = async (): Promise<AccountItem[] | null> => {
+  const supabaseClient = getSupabase();
+  const sources = ['v_account_items_with_mq_code', 'v_account_items', 'account_items'] as const;
+
+  for (const table of sources) {
+    const { data, error } = await supabaseClient
+      .from<SupabaseAccountItemRow>(table)
+      .select('*');
+
+    if (error) {
+      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+        continue;
+      }
+      throw error;
+    }
+
+    if (!data) {
+      continue;
+    }
+
+    const mapped = data.map(mapSupabaseAccountItemRow);
+    const demoAccountItemMap = new Map(demoState.accountItems.map(item => [item.code, item]));
+    mapped.forEach(item => {
+      const fallback = demoAccountItemMap.get(item.code);
+      if (!fallback) {
+        return;
+      }
+      if (isBlankString(item.categoryCode) && !isBlankString(fallback.categoryCode)) {
+        item.categoryCode = fallback.categoryCode;
+      }
+      if (isBlankString(item.createdAt) && !isBlankString(fallback.createdAt)) {
+        item.createdAt = fallback.createdAt;
+      }
+      if (isBlankString(item.updatedAt) && !isBlankString(fallback.updatedAt)) {
+        item.updatedAt = fallback.updatedAt;
+      }
+      if ((item.sortOrder === 0 || typeof item.sortOrder !== 'number') && typeof fallback.sortOrder === 'number' && fallback.sortOrder !== 0) {
+        item.sortOrder = fallback.sortOrder;
+      }
+      MQ_CODE_KEYS.forEach(key => {
+        if (isBlankString(item.mqCode[key]) && fallback.mqCode?.[key]) {
+          item.mqCode[key] = fallback.mqCode[key];
+        }
+      });
+    });
+    mapped.sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) {
+        return a.sortOrder - b.sortOrder;
+      }
+      return a.code.localeCompare(b.code, 'ja');
+    });
+    return mapped;
+  }
+
+  return null;
+};
+
+const fetchDepartmentsFromSupabase = async (): Promise<Department[] | null> => {
+  const supabaseClient = getSupabase();
+  const sources = [
+    { table: 'v_departments', select: 'id, name' },
+    { table: 'departments', select: 'id, name' },
+  ] as const;
+
+  for (const source of sources) {
+    const { data, error } = await supabaseClient
+      .from<SupabaseDepartmentRow>(source.table)
+      .select(source.select);
+
+    if (error) {
+      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+        continue;
+      }
+      throw error;
+    }
+
+    if (!data) {
+      continue;
+    }
+
+    const mapped = data
+      .map(mapSupabaseDepartmentRow)
+      .filter((dept): dept is Department => dept !== null);
+
+    mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    return mapped;
+  }
+
+  return null;
+};
+
+const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] | null> => {
+  const supabaseClient = getSupabase();
+  const selects = [
+    'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
+    'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active',
+    '*',
+  ] as const;
+
+  for (const select of selects) {
+    const { data, error } = await supabaseClient
+      .from<SupabasePaymentRecipientRow>('payment_recipients')
+      .select(select);
+
+    if (error) {
+      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+        continue;
+      }
+      throw error;
+    }
+
+    if (!data) {
+      continue;
+    }
+
+    const mapped = data.map(mapSupabasePaymentRecipientRow);
+    mapped.sort((a, b) => {
+      const aLabel = `${a.companyName ?? ''}${a.recipientName ?? ''}`;
+      const bLabel = `${b.companyName ?? ''}${b.recipientName ?? ''}`;
+      return aLabel.localeCompare(bLabel, 'ja');
+    });
+    return mapped;
+  }
+
+  return null;
+};
+
+const fetchAllocationDivisionsFromSupabase = async (): Promise<AllocationDivision[] | null> => {
+  const supabaseClient = getSupabase();
+  const sources = [
+    { table: 'allocation_divisions', select: 'id, name, is_active, created_at' },
+    { table: 'v_allocation_divisions', select: 'id, name, is_active, created_at' },
+  ] as const;
+
+  for (const source of sources) {
+    const { data, error } = await supabaseClient
+      .from<SupabaseAllocationDivisionRow>(source.table)
+      .select(source.select);
+
+    if (error) {
+      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+        continue;
+      }
+      throw error;
+    }
+
+    if (!data) {
+      continue;
+    }
+
+    const mapped = data.map(mapSupabaseAllocationDivisionRow);
+    mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    return mapped;
+  }
+
+  return null;
+};
+
 const isUniqueViolation = (error?: PostgrestError | null): boolean => error?.code === '23505';
 
 const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser | null> => {
@@ -697,9 +1008,20 @@ export const addJournalEntry = async (entry: Omit<JournalEntry, 'id'>): Promise<
     return deepClone(newEntry);
 };
 
-export const getAccountItems = async (): Promise<AccountItem[]> => deepClone(demoState.accountItems);
+export const getAccountItems = async (): Promise<AccountItem[]> => {
+  if (hasSupabaseCredentials()) {
+    const supabaseItems = await fetchAccountItemsFromSupabase();
+    if (supabaseItems) {
+      return supabaseItems;
+    }
+  }
+  return deepClone(demoState.accountItems);
+};
 
-export const getActiveAccountItems = async (): Promise<AccountItem[]> => deepClone(demoState.accountItems.filter(item => item.isActive));
+export const getActiveAccountItems = async (): Promise<AccountItem[]> => {
+  const items = await getAccountItems();
+  return items.filter(item => item.isActive);
+};
 
 export const saveAccountItem = async (item: Partial<AccountItem>): Promise<AccountItem> => {
     if (item.id) {
@@ -1090,7 +1412,15 @@ export const addProject = async (data: Partial<Project>, attachments: Attachment
     return deepClone(newProject);
 };
 
-export const getDepartments = async (): Promise<Department[]> => deepClone(demoState.departments);
+export const getDepartments = async (): Promise<Department[]> => {
+  if (hasSupabaseCredentials()) {
+    const supabaseDepartments = await fetchDepartmentsFromSupabase();
+    if (supabaseDepartments) {
+      return supabaseDepartments;
+    }
+  }
+  return deepClone(demoState.departments);
+};
 
 export const saveDepartment = async (department: Partial<Department>): Promise<Department> => {
     if (department.id) {
@@ -1110,7 +1440,15 @@ export const deleteDepartment = async (id: string): Promise<void> => {
     demoState.departments = demoState.departments.filter(dep => dep.id !== id);
 };
 
-export const getPaymentRecipients = async (): Promise<PaymentRecipient[]> => deepClone(demoState.paymentRecipients);
+export const getPaymentRecipients = async (): Promise<PaymentRecipient[]> => {
+  if (hasSupabaseCredentials()) {
+    const supabaseRecipients = await fetchPaymentRecipientsFromSupabase();
+    if (supabaseRecipients) {
+      return supabaseRecipients;
+    }
+  }
+  return deepClone(demoState.paymentRecipients);
+};
 
 export const savePaymentRecipient = async (recipient: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
     if (recipient.id) {
@@ -1140,7 +1478,15 @@ export const deletePaymentRecipient = async (id: string): Promise<void> => {
     demoState.paymentRecipients = demoState.paymentRecipients.filter(rec => rec.id !== id);
 };
 
-export const getAllocationDivisions = async (): Promise<AllocationDivision[]> => deepClone(allocationDivisions);
+export const getAllocationDivisions = async (): Promise<AllocationDivision[]> => {
+  if (hasSupabaseCredentials()) {
+    const supabaseDivisions = await fetchAllocationDivisionsFromSupabase();
+    if (supabaseDivisions) {
+      return supabaseDivisions;
+    }
+  }
+  return deepClone(allocationDivisions);
+};
 
 export const saveAllocationDivision = async (division: Partial<AllocationDivision>): Promise<AllocationDivision> => {
     if (division.id) {
