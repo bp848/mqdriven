@@ -122,6 +122,14 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         );
     }, [approvalRouteId, details]);
 
+    const mapDetailToPayload = (detail: TransportDetail) => ({
+        travel_date: detail.travelDate,
+        departure: detail.departure,
+        arrival: detail.arrival,
+        transport_mode: detail.transportMode,
+        amount: detail.amount,
+    });
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         firstInvalidRef.current = null;
@@ -183,9 +191,11 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         setError('');
         try {
             const submissionData = {
-                details: details.filter(d => d.departure.trim() || d.arrival.trim() || d.amount),
-                notes: notes,
-                totalAmount: totalAmount,
+                details: details
+                    .filter(d => d.departure.trim() || d.arrival.trim() || d.amount)
+                    .map(mapDetailToPayload),
+                notes,
+                total_amount: totalAmount,
             };
             await submitApplication({ applicationCodeId, formData: submissionData, approvalRouteId }, currentUser.id);
             onSuccess();

@@ -268,6 +268,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         return errors;
     };
 
+    const mapDetailToPayload = (detail: ExpenseDetail) => ({
+        payment_date: detail.paymentDate,
+        payment_recipient_id: detail.paymentRecipientId || null,
+        description: detail.description,
+        account_item_id: detail.accountItemId || null,
+        allocation_division_id: detail.allocationDivisionId || null,
+        allocation_target_id: detail.allocationTargetId || null,
+        cost_type: detail.costType,
+        amount: detail.amount,
+        customer_id: detail.customerId || null,
+        project_id: detail.projectId || null,
+        mq_code: detail.mqCode ?? null,
+    });
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const errors = validateForm();
@@ -287,10 +301,12 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         setError('');
         try {
             const submissionData = {
-                departmentId,
-                details: details.filter(d => d.description && d.amount > 0),
+                department_id: departmentId,
+                details: details
+                    .filter(d => d.description && d.amount > 0)
+                    .map(mapDetailToPayload),
                 notes,
-                totalAmount
+                total_amount: totalAmount
             };
             await submitApplication({
                 applicationCodeId,
