@@ -102,6 +102,9 @@ type SupabaseEmployeeViewRow = {
 
 const SUPABASE_VIEW_COLUMNS = 'user_id, name, department, title, email, role, can_use_anything_analysis, created_at';
 
+let hasLoggedMissingEmployeeViewWarning = false;
+let hasLoggedMissingSupabaseUserTableWarning = false;
+
 const mapViewRowToEmployeeUser = (row: SupabaseEmployeeViewRow): EmployeeUser => ({
   id: row.user_id,
   name: row.name ?? '',
@@ -431,19 +434,43 @@ const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser |
     return null;
   }
 
-  const supabaseClient = getSupabase();
+  try {
+    const supabaseClient = getSupabase();
 
-  const { data, error } = await supabaseClient
-    .from<SupabaseEmployeeViewRow>('v_employees_active')
-    .select(SUPABASE_VIEW_COLUMNS)
-    .eq('user_id', userId)
-    .maybeSingle();
+    const { data, error } = await supabaseClient
+      .from<SupabaseEmployeeViewRow>('v_employees_active')
+      .select(SUPABASE_VIEW_COLUMNS)
+      .eq('user_id', userId)
+      .maybeSingle();
 
-  if (error) {
+    if (error) {
+      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+        if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
+          console.warn(
+            'Supabase view "v_employees_active" が見つからないため、セッションユーザー情報の取得をスキップします。',
+            error
+          );
+          hasLoggedMissingEmployeeViewWarning = true;
+        }
+        return null;
+      }
+      throw error;
+    }
+
+    return data ? mapViewRowToEmployeeUser(data) : null;
+  } catch (error) {
+    if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
+      if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
+        console.warn(
+          'Supabase の従業員ビューが利用できないため、セッションユーザー情報を Supabase から取得できません。',
+          error
+        );
+        hasLoggedMissingEmployeeViewWarning = true;
+      }
+      return null;
+    }
     throw error;
   }
-
-  return data ? mapViewRowToEmployeeUser(data) : null;
 };
 
 const ensureSupabaseEmployeeUser = async (
@@ -541,6 +568,25 @@ const ensureSupabaseEmployeeUser = async (
       };
     }
   } catch (error) {
+    if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
+      if (!hasLoggedMissingSupabaseUserTableWarning && typeof console !== 'undefined') {
+        console.warn(
+          'Supabase の users / employees テーブルまたはビューが見つかりません。暫定的に認証ユーザーの情報をメタデータから生成します。セットアップスクリプトの実行をご確認ください。',
+          error
+        );
+        hasLoggedMissingSupabaseUserTableWarning = true;
+      }
+      return {
+        id: authUser.id,
+        name: displayName,
+        department: null,
+        title: null,
+        email: fallbackEmail ?? '',
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        canUseAnythingAnalysis: true,
+      };
+    }
     if (isSupabaseUnavailableError(error)) {
       const wrappedError = new Error('Supabaseへの接続に失敗しました。ネットワークまたはSupabaseの設定を確認してください。');
       (wrappedError as any).cause = error;
@@ -673,18 +719,44 @@ export const resolveUserSession = async (authUser: MinimalAuthUser): Promise<Emp
 
 export const getUsers = async (): Promise<EmployeeUser[]> => {
   if (hasSupabaseCredentials()) {
-    const supabaseClient = getSupabase();
+    try {
+      const supabaseClient = getSupabase();
 
-    const { data, error } = await supabaseClient
-      .from<SupabaseEmployeeViewRow>('v_employees_active')
-      .select(SUPABASE_VIEW_COLUMNS)
-      .order('name', { ascending: true });
+      const { data, error } = await supabaseClient
+        .from<SupabaseEmployeeViewRow>('v_employees_active')
+        .select(SUPABASE_VIEW_COLUMNS)
+        .order('name', { ascending: true });
 
-    if (error) {
+      if (error) {
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
+            console.warn(
+              'Supabase view "v_employees_active" が見つかりません。デモデータにフォールバックします。Supabase に付属のセットアップスクリプトを実行してください。',
+              error
+            );
+            hasLoggedMissingEmployeeViewWarning = true;
+          }
+          return deepClone(demoState.employeeUsers);
+        }
+        throw error;
+      }
+
+      if (data) {
+        return data.map(mapViewRowToEmployeeUser);
+      }
+    } catch (error) {
+      if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
+        if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
+          console.warn(
+            'Supabase の従業員ビューが存在しないため、ユーザー一覧をデモデータで代用します。',
+            error
+          );
+          hasLoggedMissingEmployeeViewWarning = true;
+        }
+        return deepClone(demoState.employeeUsers);
+      }
       throw error;
     }
-
-    return (data ?? []).map(mapViewRowToEmployeeUser);
   }
 
   return deepClone(demoState.employeeUsers);
