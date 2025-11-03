@@ -444,13 +444,19 @@ const App: React.FC = () => {
 
     const handleSignOut = useCallback(async () => {
         if (!hasSupabaseCredentials()) {
-            addToast('Supabaseの設定が見つかりません。', 'info');
+            setCurrentUser(null);
+            setSession(null);
+            addToast('デモモードのセッションを終了しました。', 'info');
             return;
         }
-        const supabaseClient = getSupabase();
-        await supabaseClient.auth.signOut();
-        setCurrentUser(null);
-        setSession(null);
+
+        try {
+            const supabaseClient = getSupabase();
+            await supabaseClient.auth.signOut();
+        } finally {
+            setCurrentUser(null);
+            setSession(null);
+        }
     }, [addToast]);
 
     // ... (rest of the component remains the same)

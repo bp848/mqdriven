@@ -3,6 +3,7 @@
 import {
   AccountItem,
   ApplicationCode,
+  ApplicationNotificationEmail,
   ApplicationWithDetails,
   ApprovalRoute,
   BugReport,
@@ -52,6 +53,7 @@ export interface DemoDataState {
   inboxItems: InboxItem[];
   departments: Department[];
   paymentRecipients: PaymentRecipient[];
+  applicationEmailNotifications: ApplicationNotificationEmail[];
 }
 
 const clone = <T>(value: T): T => {
@@ -551,6 +553,7 @@ export const createDemoDataState = (): DemoDataState => {
   const estimates: Estimate[] = [];
   const invoices: Invoice[] = [];
   const inboxItems: InboxItem[] = [];
+  const applicationEmailNotifications: ApplicationNotificationEmail[] = [];
   const departments: Department[] = [
     { id: 'dep-sales', name: '営業部' },
     { id: 'dep-production', name: '製造部' },
@@ -620,5 +623,6 @@ export const createDemoDataState = (): DemoDataState => {
     inboxItems,
     departments,
     paymentRecipients,
+    applicationEmailNotifications,
   };
 };

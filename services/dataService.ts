@@ -15,6 +15,9 @@ import {
   AnalysisHistory,
   Application,
   ApplicationCode,
+  ApplicationNotificationAudience,
+  ApplicationNotificationEmail,
+  ApplicationNotificationRecipient,
   ApplicationWithDetails,
   ApprovalRoute,
   BugReport,
@@ -693,6 +696,132 @@ const mapApplicationDetails = (app: Application): ApplicationWithDetails => ({
     applicationCode: demoState.applicationCodes.find(code => code.id === app.applicationCodeId),
     approvalRoute: demoState.approvalRoutes.find(route => route.id === app.approvalRouteId),
 });
+
+const APPLICATION_STATUS_LABELS: Record<Application['status'], string> = {
+  draft: '下書き',
+  pending_approval: '承認待ち',
+  approved: '承認済み',
+  rejected: '差戻し',
+};
+
+const resolveEmployeeUser = (id: string | null | undefined): EmployeeUser | undefined => {
+  if (!id) {
+    return undefined;
+  }
+  return demoState.employeeUsers.find(user => user.id === id);
+};
+
+const toNotificationRecipients = (
+  users: (EmployeeUser | undefined)[],
+): ApplicationNotificationRecipient[] => {
+  const map = new Map<string, ApplicationNotificationRecipient>();
+  users.forEach(user => {
+    if (!user) return;
+    map.set(user.id, {
+      id: user.id,
+      name: user.name,
+      email: user.email ?? '',
+    });
+  });
+  return Array.from(map.values());
+};
+
+const formatApprovalRouteSummary = (route?: ApprovalRoute): string => {
+  if (!route?.routeData?.steps?.length) {
+    return '';
+  }
+  return route.routeData.steps
+    .map((step, index) => {
+      const approver = resolveEmployeeUser(step.approverId);
+      const approverLabel = approver
+        ? `${approver.name}${approver.department ? `（${approver.department}）` : ''}`
+        : '未設定';
+      return `${index + 1}次承認: ${approverLabel}`;
+    })
+    .join('\n');
+};
+
+const recordApplicationEmail = (
+  application: Application,
+  audience: ApplicationNotificationAudience,
+  recipients: ApplicationNotificationRecipient[],
+  subject: string,
+  body: string,
+) => {
+  if (recipients.length === 0) {
+    return;
+  }
+
+  demoState.applicationEmailNotifications.push({
+    id: uuidv4(),
+    applicationId: application.id,
+    applicationCodeId: application.applicationCodeId,
+    audience,
+    subject,
+    body,
+    recipients,
+    sentAt: new Date().toISOString(),
+    status: application.status,
+  });
+};
+
+const createApplicationNotificationEmails = (application: Application) => {
+  const applicationCode = demoState.applicationCodes.find(code => code.id === application.applicationCodeId);
+  const approvalRoute = demoState.approvalRoutes.find(route => route.id === application.approvalRouteId);
+  const applicant = resolveEmployeeUser(application.applicantId);
+
+  const applicationName = applicationCode?.name ?? '申請';
+  const applicantName = applicant?.name ?? '申請者';
+  const statusLabel = APPLICATION_STATUS_LABELS[application.status] ?? application.status;
+  const routeSummary = formatApprovalRouteSummary(approvalRoute);
+
+  const summaryLines = [
+    `申請ID: ${application.id}`,
+    `申請種別: ${applicationName}`,
+    `申請者: ${applicantName}`,
+    `現在のステータス: ${statusLabel}`,
+  ];
+  if (routeSummary) {
+    summaryLines.push(`承認ルート:\n${routeSummary}`);
+  }
+  const summaryText = summaryLines.join('\n');
+
+  const approverRecipients = toNotificationRecipients(
+    approvalRoute?.routeData?.steps?.map(step => resolveEmployeeUser(step.approverId)) ?? [],
+  );
+  if (approverRecipients.length > 0) {
+    const subject = `【承認依頼】${applicationName} - ${applicantName}`;
+    const body = [
+      `${applicantName}さんから${applicationName}の承認依頼が届きました。`,
+      '',
+      summaryText,
+      '',
+      '承認対応をお願いします。',
+    ].join('\n');
+    recordApplicationEmail(application, 'approval_route', approverRecipients, subject, body);
+  }
+
+  const applicantRecipients = applicant ? toNotificationRecipients([applicant]) : [];
+  if (applicantRecipients.length > 0) {
+    const subject = `【申請受付】${applicationName} のステータス: ${statusLabel}`;
+    const bodyLines = [
+      `${applicantName}さん`,
+      '',
+      `${applicationName}の申請を受け付けました。`,
+      `現在のステータス: ${statusLabel}`,
+      '',
+    ];
+    if (routeSummary) {
+      bodyLines.push('承認ルート:');
+      bodyLines.push(routeSummary);
+      bodyLines.push('');
+    }
+    bodyLines.push('承認状況はシステムの「承認一覧」で確認できます。');
+
+    const body = bodyLines.join('\n');
+    recordApplicationEmail(application, 'applicant', applicantRecipients, subject, body);
+  }
+};
 
 
 export const isSupabaseUnavailableError = (error: any): boolean => {
@@ -1384,6 +1513,10 @@ export const getApplications = async (_currentUser: EmployeeUser | null): Promis
     return deepClone(demoState.applications.map(mapApplicationDetails));
 };
 
+export const getApplicationEmailNotifications = async (): Promise<ApplicationNotificationEmail[]> => {
+    return deepClone(demoState.applicationEmailNotifications);
+};
+
 interface SubmissionPayload {
   applicationCodeId: string;
   formData: any;
@@ -1417,6 +1550,7 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
       updatedAt: now,
     };
     demoState.applications.push(application);
+    createApplicationNotificationEmails(application);
     return deepClone(mapApplicationDetails(application));
 };
 

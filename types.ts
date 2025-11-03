@@ -493,6 +493,26 @@ export interface ApplicationWithDetails extends Application {
     approvalRoute?: ApprovalRoute;
 }
 
+export interface ApplicationNotificationRecipient {
+    id: string;
+    name: string;
+    email: string;
+}
+
+export type ApplicationNotificationAudience = 'approval_route' | 'applicant';
+
+export interface ApplicationNotificationEmail {
+    id: string;
+    applicationId: string;
+    applicationCodeId: string;
+    audience: ApplicationNotificationAudience;
+    subject: string;
+    body: string;
+    recipients: ApplicationNotificationRecipient[];
+    sentAt: string;
+    status: Application['status'];
+}
+
 export interface Employee {
     id: string;
     name: string;
