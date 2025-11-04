@@ -2145,14 +2145,20 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
       
       if (!uuidRegex.test(payload.applicationCodeId)) {
         // It's a code, not a UUID - look up the actual ID
+        // Extract the actual code (e.g., "code-lev" -> "LEV", "code-exp" -> "EXP")
+        let searchCode = payload.applicationCodeId;
+        if (searchCode.startsWith('code-')) {
+          searchCode = searchCode.substring(5).toUpperCase(); // Remove "code-" prefix and uppercase
+        }
+        
         const { data: codeData, error: codeError } = await supabaseClient
           .from('application_codes')
           .select('id')
-          .eq('code', payload.applicationCodeId)
+          .eq('code', searchCode)
           .single();
         
         if (codeError || !codeData) {
-          throw new Error(`申請コード「${payload.applicationCodeId}」が見つかりません`);
+          throw new Error(`申請コード「${payload.applicationCodeId}」(検索: ${searchCode})が見つかりません`);
         }
         
         resolvedApplicationCodeId = codeData.id;
