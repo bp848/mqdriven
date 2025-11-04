@@ -2197,7 +2197,45 @@ export const deleteAllocationDivision = async (id: string): Promise<void> => {
     allocationDivisions = allocationDivisions.filter(div => div.id !== id);
 };
 
-export const getTitles = async (): Promise<Title[]> => deepClone(titles);
+export const getTitles = async (): Promise<Title[]> => {
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('employee_titles')
+        .select('id, name, is_active, created_at')
+        .order('name', { ascending: true });
+
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('役職マスタの取得', error);
+          return deepClone(titles);
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          console.warn('employee_titlesテーブルが見つかりません。デモデータにフォールバックします。', error);
+          return deepClone(titles);
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        return data.map(row => ({
+          id: row.id,
+          name: row.name || '名称未設定',
+          isActive: row.is_active ?? true,
+          createdAt: row.created_at || new Date().toISOString(),
+        }));
+      }
+    } catch (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('役職マスタの取得', error);
+        return deepClone(titles);
+      }
+      throw error;
+    }
+  }
+  return deepClone(titles);
+};
 
 export const saveTitle = async (title: Partial<Title>): Promise<Title> => {
     if (title.id) {
