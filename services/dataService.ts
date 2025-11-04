@@ -2112,7 +2112,55 @@ export const renderPostalLabelSvg = (toName: string, toCompany?: string): string
 };
 
 export const getApplications = async (_currentUser: EmployeeUser | null): Promise<ApplicationWithDetails[]> => {
-    return deepClone(demoState.applications.map(mapApplicationDetails));
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('applications')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('申請一覧の取得', error);
+          return deepClone(demoState.applications.map(mapApplicationDetails));
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          console.warn('applicationsテーブルが見つかりません。デモデータにフォールバックします。', error);
+          return deepClone(demoState.applications.map(mapApplicationDetails));
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const applications: Application[] = data.map(row => ({
+          id: row.id,
+          applicantId: row.applicant_id,
+          applicationCodeId: row.application_code_id,
+          formData: row.form_data,
+          status: row.status,
+          submittedAt: row.submitted_at,
+          approvedAt: row.approved_at,
+          rejectedAt: row.rejected_at,
+          currentLevel: row.current_level,
+          approverId: row.approver_id,
+          rejectionReason: row.rejection_reason,
+          approvalRouteId: row.approval_route_id,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        
+        return deepClone(applications.map(mapApplicationDetails));
+      }
+    } catch (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('申請一覧の取得', error);
+        return deepClone(demoState.applications.map(mapApplicationDetails));
+      }
+      throw error;
+    }
+  }
+  return deepClone(demoState.applications.map(mapApplicationDetails));
 };
 
 export const getApplicationEmailNotifications = async (): Promise<ApplicationNotificationEmail[]> => {

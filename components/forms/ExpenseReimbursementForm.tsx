@@ -290,6 +290,39 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         mq_code: detail.mqCode ?? null,
     });
 
+    const handleSaveDraft = async () => {
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。');
+            return;
+        }
+        if (!approvalRouteId) {
+            setError('承認ルートを選択してください。');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+        try {
+            const submissionData = {
+                department_id: departmentId,
+                details: details.map(mapDetailToPayload),
+                notes,
+                total_amount: totalAmount
+            };
+            await submitApplication({
+                applicationCodeId,
+                formData: submissionData,
+                approvalRouteId,
+                status: 'draft'
+            }, currentUser.id);
+            onSuccess();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : '下書きの保存に失敗しました。');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const errors = validateForm();
@@ -623,9 +656,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                 {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
                 
                 <div className="flex justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>内容をクリア</button>
-                    <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>下書き保存</button>
-                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid}>
+                    <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting}>内容をクリア</button>
+                    <button type="button" onClick={handleSaveDraft} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting}>
+                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '下書き保存'}
+                    </button>
+                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid || isSubmitting}>
                         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '申請を送信する'}
                     </button>
                 </div>
