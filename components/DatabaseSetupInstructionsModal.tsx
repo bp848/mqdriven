@@ -7,6 +7,11 @@ interface Props {
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+=======
+const ADMIN_USER_ID = '6f66ccca-4b9b-4061-b029-fea0836775ea';
+
+>>>>>>> theirs
 =======
 const ADMIN_USER_ID = '6f66ccca-4b9b-4061-b029-fea0836775ea';
 
@@ -24,8 +29,11 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
         title: '管理者ユーザーのUUIDを確認する',
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
         description: 'SQL Editorで次のクエリを実行し、承認ルートに登録したいユーザー（通常は自分）のIDを控えてください。',
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
         description:
@@ -33,6 +41,9 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
             ADMIN_USER_ID +
             ' を埋め込んでいます。',
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -42,7 +53,11 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
         title: '以下のスクリプトを貼り付けて実行する',
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
         description: 'スクリプト全体をコピーし、必ずプレースホルダーのUUIDをステップ2で控えた値に置き換えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+=======
+        description: 'スクリプト全体をコピーし、必要に応じてステップ2で控えたUUIDに差し替えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+>>>>>>> theirs
 =======
         description: 'スクリプト全体をコピーし、必要に応じてステップ2で控えたUUIDに差し替えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
 >>>>>>> theirs
@@ -211,12 +226,92 @@ CREATE TABLE IF NOT EXISTS public.account_items (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+-- account_itemsのMQコード拡張カラムを追加
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code JSONB;
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code_p TEXT;
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code_v TEXT;
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code_m TEXT;
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code_q TEXT;
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code_f TEXT;
+ALTER TABLE public.account_items ADD COLUMN IF NOT EXISTS mq_code_g TEXT;
+
+-- 勘定科目ビューを作成
+CREATE OR REPLACE VIEW public.v_account_items AS
+SELECT
+    id,
+    code,
+    name,
+    category_code,
+    is_active,
+    sort_order,
+    created_at,
+    updated_at,
+    mq_code,
+    mq_code_p,
+    mq_code_v,
+    mq_code_m,
+    mq_code_q,
+    mq_code_f,
+    mq_code_g
+FROM public.account_items;
+
+CREATE OR REPLACE VIEW public.v_account_items_with_mq_code AS
+SELECT
+    ai.id,
+    ai.code,
+    ai.name,
+    ai.category_code,
+    ai.is_active,
+    ai.sort_order,
+    ai.created_at,
+    ai.updated_at,
+    COALESCE(
+        ai.mq_code,
+        jsonb_strip_nulls(
+            jsonb_build_object(
+                'p', NULLIF(ai.mq_code_p, ''),
+                'v', NULLIF(ai.mq_code_v, ''),
+                'm', NULLIF(ai.mq_code_m, ''),
+                'q', NULLIF(ai.mq_code_q, ''),
+                'f', NULLIF(ai.mq_code_f, ''),
+                'g', NULLIF(ai.mq_code_g, '')
+            )
+        )
+    ) AS mq_code,
+    COALESCE(ai.mq_code_p, ai.mq_code ->> 'p') AS mq_code_p,
+    COALESCE(ai.mq_code_v, ai.mq_code ->> 'v') AS mq_code_v,
+    COALESCE(ai.mq_code_m, ai.mq_code ->> 'm') AS mq_code_m,
+    COALESCE(ai.mq_code_q, ai.mq_code ->> 'q') AS mq_code_q,
+    COALESCE(ai.mq_code_f, ai.mq_code ->> 'f') AS mq_code_f,
+    COALESCE(ai.mq_code_g, ai.mq_code ->> 'g') AS mq_code_g
+FROM public.account_items ai;
+
 -- payment_recipients テーブル
 CREATE TABLE IF NOT EXISTS public.payment_recipients (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_code VARCHAR(50) UNIQUE,
     company_name TEXT,
     recipient_name TEXT,
+    bank_name TEXT,
+    bank_branch TEXT,
+    bank_account_number TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- 支払先関連の追加カラムを保証
+ALTER TABLE public.payment_recipients ADD COLUMN IF NOT EXISTS bank_name TEXT;
+ALTER TABLE public.payment_recipients ADD COLUMN IF NOT EXISTS bank_branch TEXT;
+ALTER TABLE public.payment_recipients ADD COLUMN IF NOT EXISTS bank_account_number TEXT;
+ALTER TABLE public.payment_recipients ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
+-- 支払先振分先テーブル
+CREATE TABLE IF NOT EXISTS public.payment_recipient_allocation_targets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_recipient_id UUID NOT NULL REFERENCES public.payment_recipients(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -542,6 +637,7 @@ ALTER TABLE public.approval_routes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.account_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_recipients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_recipient_allocation_targets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
@@ -564,6 +660,7 @@ DROP POLICY IF EXISTS "Allow authenticated read access" ON public.approval_route
 DROP POLICY IF EXISTS "Allow all access to authenticated users" ON public.applications;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.account_items;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.payment_recipients;
+DROP POLICY IF EXISTS "Allow all access for authenticated users (targets)" ON public.payment_recipient_allocation_targets;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.leads;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.customers;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.invoices;
@@ -582,6 +679,8 @@ DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.analy
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT ON public.v_departments TO anon, authenticated;
 GRANT SELECT ON public.v_employees_active TO authenticated;
+GRANT SELECT ON public.v_account_items TO anon, authenticated;
+GRANT SELECT ON public.v_account_items_with_mq_code TO anon, authenticated;
 
 -- 参照用テーブルにSELECT権限を付与
 CREATE POLICY "Allow authenticated read access" ON public.forms FOR SELECT TO authenticated USING (true);
@@ -598,6 +697,7 @@ CREATE POLICY "Allow all access for authenticated users" ON public.customers FOR
 CREATE POLICY "Allow all access for authenticated users" ON public.employees FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.account_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.payment_recipients FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access for authenticated users (targets)" ON public.payment_recipient_allocation_targets FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.departments FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.allocation_divisions FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.employee_titles FOR ALL TO authenticated USING (true) WITH CHECK (true);
@@ -664,6 +764,7 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
                             <div className="space-y-2 text-sm leading-relaxed">
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
                                 <p className="font-semibold">必ず UUID を差し替えてから実行してください</p>
                                 <p>
                                     スクリプト内の <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs text-amber-900 dark:bg-amber-500/30 dark:text-amber-100">'00000000-0000-0000-0000-000000000000'</code> は仮の値です。ステップ2で確認した管理者ユーザーの ID に置き換えないと承認ルートの作成に失敗し、アプリは引き続き「データベースエラー」を表示します。
@@ -674,6 +775,8 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
 =======
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
                                 <p className="font-semibold">UUID が正しいか必ず確認してください</p>
                                 <div className="rounded bg-white/70 px-2 py-1 font-mono text-xs text-amber-900 dark:bg-slate-900/40 dark:text-amber-100">
                                     <span className="font-semibold">現在の埋め込み値:</span> {ADMIN_USER_ID}
@@ -681,6 +784,9 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
                                 <p>ステップ2で控えた管理者ユーザーの ID が異なる場合は、SQL を実行する前に該当箇所を編集してください。そのまま実行すると承認ルートの作成に失敗し、アプリは引き続き「データベースエラー」を表示します。</p>
                                 <p>既にスクリプトを実行済みでも、正しい UUID に修正した上で再度実行することで状態を修復できます。</p>
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
