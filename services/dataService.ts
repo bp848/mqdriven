@@ -1535,7 +1535,85 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<Invoice> 
     return deepClone(invoice);
 };
 
-export const getCustomers = async (): Promise<Customer[]> => deepClone(demoState.customers);
+const fetchCustomersFromSupabase = async (): Promise<Customer[] | null> => {
+  try {
+    const supabaseClient = getSupabase();
+    const { data, error } = await supabaseClient
+      .from('customers')
+      .select('*')
+      .order('customer_name', { ascending: true });
+
+    if (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('顧客マスタの取得', error);
+        return null;
+      }
+      throw error;
+    }
+
+    if (!data) return [];
+
+    return data.map((row: any) => ({
+      id: row.id,
+      customerCode: row.customer_code ?? undefined,
+      customerName: row.customer_name,
+      customerNameKana: row.customer_name_kana ?? undefined,
+      representative: row.representative ?? undefined,
+      phoneNumber: row.phone_number ?? undefined,
+      address1: row.address1 ?? undefined,
+      companyContent: row.company_content ?? undefined,
+      annualSales: row.annual_sales ?? undefined,
+      employeesCount: row.employees_count ?? undefined,
+      note: row.note ?? undefined,
+      infoSalesActivity: row.info_sales_activity ?? undefined,
+      infoRequirements: row.info_requirements ?? undefined,
+      infoHistory: row.info_history ?? undefined,
+      createdAt: row.created_at,
+      postNo: row.post_no ?? undefined,
+      address2: row.address2 ?? row.address_2 ?? undefined, // 両方のカラム名に対応
+      fax: row.fax ?? undefined,
+      closingDay: row.closing_day ?? undefined,
+      monthlyPlan: row.monthly_plan ?? undefined,
+      payDay: row.pay_day ?? undefined,
+      recoveryMethod: row.recovery_method ?? undefined,
+      userId: row.user_id ?? undefined,
+      name2: row.name2 ?? undefined,
+      websiteUrl: row.website_url ?? undefined,
+      zipCode: row.zip_code ?? undefined,
+      foundationDate: row.foundation_date ?? undefined,
+      capital: row.capital ?? undefined,
+      customerRank: row.customer_rank ?? undefined,
+      customerDivision: row.customer_division ?? undefined,
+      salesType: row.sales_type ?? undefined,
+      creditLimit: row.credit_limit ?? undefined,
+      payMoney: row.pay_money ?? undefined,
+      bankName: row.bank_name ?? undefined,
+      branchName: row.branch_name ?? undefined,
+      accountNo: row.account_no ?? undefined,
+      salesUserCode: row.sales_user_code ?? undefined,
+      startDate: row.start_date ?? undefined,
+      endDate: row.end_date ?? undefined,
+      drawingDate: row.drawing_date ?? undefined,
+      salesGoal: row.sales_goal ?? undefined,
+      infoSalesIdeas: row.info_sales_ideas ?? undefined,
+      customerContactInfo: row.customer_contact_info ?? undefined,
+      aiAnalysis: row.ai_analysis ?? null,
+    }));
+  } catch (err) {
+    console.error('顧客マスタの取得に失敗しました:', err);
+    return null;
+  }
+};
+
+export const getCustomers = async (): Promise<Customer[]> => {
+  if (hasSupabaseCredentials()) {
+    const supabaseCustomers = await fetchCustomersFromSupabase();
+    if (supabaseCustomers) {
+      return supabaseCustomers;
+    }
+  }
+  return deepClone(demoState.customers);
+};
 
 export const addCustomer = async (customer: Partial<Customer>): Promise<Customer> => {
     const newCustomer: Customer = {
