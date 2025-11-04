@@ -157,6 +157,16 @@ type SupabasePaymentRecipientRow = {
   allocation_targets?: { id?: string | null; name?: string | null; target_id?: string | null; target_name?: string | null }[] | null;
 };
 
+type SupabasePaymentRecipientAllocationTargetRow = {
+  id: string;
+  payment_recipient_id?: string | null;
+  target_id?: string | null;
+  name?: string | null;
+  target_name?: string | null;
+  sort_order?: number | null;
+  created_at?: string | null;
+};
+
 type SupabaseAllocationDivisionRow = {
   id: string;
   name?: string | null;
@@ -495,13 +505,14 @@ const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] 
   try {
     const supabaseClient = getSupabase();
     const selects = [
-      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
-      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number, is_active',
-      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number',
-      'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
       'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active',
+      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number, is_active',
+      'id, recipient_code, company_name, recipient_name, bank_name, branch_name, account_number, is_active',
       '*',
     ] as const;
+
+    let recipients: SupabasePaymentRecipientRow[] | null = null;
+    let recipientsRelationMissing = false;
 
     for (const select of selects) {
       const { data, error } = await supabaseClient
@@ -513,7 +524,11 @@ const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] 
           logSupabaseUnavailableWarning('支払先マスタの取得', error);
           return null;
         }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+        if (isRelationNotFoundError(error)) {
+          recipientsRelationMissing = true;
+          break;
+        }
+        if (isColumnNotFoundError(error)) {
           continue;
         }
         throw error;
@@ -523,16 +538,108 @@ const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] 
         continue;
       }
 
-      const mapped = data.map(mapSupabasePaymentRecipientRow);
-      mapped.sort((a, b) => {
-        const aLabel = `${a.companyName ?? ''}${a.recipientName ?? ''}`;
-        const bLabel = `${b.companyName ?? ''}${b.recipientName ?? ''}`;
-        return aLabel.localeCompare(bLabel, 'ja');
-      });
-      return mapped;
+      recipients = data;
+      break;
     }
 
-    return null;
+    if (!recipients || recipientsRelationMissing) {
+      return null;
+    }
+
+    const allocationTargetsByRecipientId = new Map<
+      string,
+      { data: NonNullable<SupabasePaymentRecipientRow['allocation_targets']>[number]; sortOrder: number; createdAt: string; name: string }
+    >();
+
+    const allocationSelects = [
+      'id, payment_recipient_id, target_id, name, target_name, sort_order, created_at',
+      'id, payment_recipient_id, name, sort_order, created_at',
+      'id, payment_recipient_id, target_id, target_name, created_at',
+      '*',
+    ] as const;
+
+    for (const select of allocationSelects) {
+      const { data, error } = await supabaseClient
+        .from<SupabasePaymentRecipientAllocationTargetRow>('payment_recipient_allocation_targets')
+        .select(select);
+
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('支払先振分先マスタの取得', error);
+          break;
+        }
+        if (isRelationNotFoundError(error)) {
+          break;
+        }
+        if (isColumnNotFoundError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        allocationTargetsByRecipientId.clear();
+        break;
+      }
+
+      data.forEach(targetRow => {
+        const recipientId = toStringValue(targetRow.payment_recipient_id ?? targetRow.target_id ?? null, '').trim();
+        if (!recipientId) {
+          return;
+        }
+
+        const normalizedTarget: NonNullable<SupabasePaymentRecipientRow['allocation_targets']>[number] = {
+          id: targetRow.id,
+          name: targetRow.name ?? targetRow.target_name ?? null,
+          target_id: targetRow.target_id ?? targetRow.payment_recipient_id ?? null,
+          target_name: targetRow.target_name ?? targetRow.name ?? null,
+        };
+
+        const sortOrder = typeof targetRow.sort_order === 'number' ? targetRow.sort_order : Number.MAX_SAFE_INTEGER;
+        const createdAt = toStringValue(targetRow.created_at, '');
+        const sortName = toStringValue(normalizedTarget.name ?? normalizedTarget.target_name ?? null, '');
+
+        const existing = allocationTargetsByRecipientId.get(recipientId) ?? [];
+        existing.push({ data: normalizedTarget, sortOrder, createdAt, name: sortName });
+        allocationTargetsByRecipientId.set(recipientId, existing);
+      });
+
+      break;
+    }
+
+    allocationTargetsByRecipientId.forEach(targets => {
+      targets.sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) {
+          return a.sortOrder - b.sortOrder;
+        }
+        if (a.createdAt !== b.createdAt) {
+          return a.createdAt.localeCompare(b.createdAt);
+        }
+        return a.name.localeCompare(b.name, 'ja');
+      });
+    });
+
+    const mapped = recipients.map(row => {
+      const groupedTargets = allocationTargetsByRecipientId.get(row.id);
+      const allocationTargets =
+        groupedTargets && groupedTargets.length > 0
+          ? groupedTargets.map(target => target.data)
+          : row.allocation_targets;
+
+      const rowForMapping =
+        allocationTargets && allocationTargets.length > 0
+          ? ({ ...row, allocation_targets: allocationTargets } as SupabasePaymentRecipientRow)
+          : row;
+
+      return mapSupabasePaymentRecipientRow(rowForMapping);
+    });
+
+    mapped.sort((a, b) => {
+      const aLabel = `${a.companyName ?? ''}${a.recipientName ?? ''}`;
+      const bLabel = `${b.companyName ?? ''}${b.recipientName ?? ''}`;
+      return aLabel.localeCompare(bLabel, 'ja');
+    });
+    return mapped;
   } catch (error) {
     if (isSupabaseUnavailableError(error)) {
       logSupabaseUnavailableWarning('支払先マスタの取得', error);
