@@ -56,6 +56,7 @@ import { getEnvValue } from './utils.ts';
 
 import { Page, Job, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, Project, ApplicationCode } from './types.ts';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings, Bug } from './components/Icons.tsx';
+import packageJson from './package.json';
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ホーム',
@@ -771,6 +772,12 @@ const App: React.FC = () => {
                     />
                     {isLoading && currentPage !== 'analysis_dashboard' ? <Loader className="w-8 h-8 mx-auto animate-spin" /> : renderPage()}
                 </main>
+                <footer className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-8 py-3">
+                    <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+                        <div>© 2025 MQDriven. All rights reserved.</div>
+                        <div>Version {packageJson.version}</div>
+                    </div>
+                </footer>
             </div>
             {isCreateJobModalOpen && <CreateJobModal isOpen={isCreateJobModalOpen} onClose={() => setIsCreateJobModalOpen(false)} onAddJob={handleAddJob} />}
             {isJobDetailModalOpen && <JobDetailModal isOpen={isJobDetailModalOpen} job={selectedJob} onClose={() => setIsJobDetailModalOpen(false)} onUpdateJob={handleUpdateJob} onDeleteJob={handleDeleteJob} requestConfirmation={requestConfirmation} onNavigate={setCurrentPage} addToast={addToast} />}
