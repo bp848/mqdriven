@@ -683,44 +683,47 @@ const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser |
   try {
     const supabaseClient = getSupabase();
 
-    const { data, error } = await supabaseClient
-      .from('v_employees_active')
-      .select(SUPABASE_VIEW_COLUMNS)
-      .eq('user_id', userId)
+    // Fetch from users table directly
+    const { data: userData, error: userError } = await supabaseClient
+      .from('users')
+      .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
+      .eq('id', userId)
       .maybeSingle();
 
-    if (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('従業員ビューの取得', error);
+    if (userError) {
+      if (isSupabaseUnavailableError(userError)) {
+        logSupabaseUnavailableWarning('ユーザー情報の取得', userError);
         return null;
       }
-      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-        if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
-          console.warn(
-            'Supabase view "v_employees_active" が見つからないため、セッションユーザー情報の取得をスキップします。',
-            error
-          );
-          hasLoggedMissingEmployeeViewWarning = true;
-        }
+      if (isRelationNotFoundError(userError) || isColumnNotFoundError(userError)) {
+        console.warn('usersテーブルが見つからないため、セッションユーザー情報の取得をスキップします。', userError);
         return null;
       }
-      throw error;
+      throw userError;
     }
 
-    return data ? mapViewRowToEmployeeUser(data) : null;
+    if (!userData) {
+      return null;
+    }
+
+    // Map to EmployeeUser format
+    return {
+      id: userData.id,
+      name: userData.name || '名前未設定',
+      department: null,
+      title: null,
+      email: userData.email || '',
+      role: (userData.role as 'admin' | 'user') || 'user',
+      createdAt: userData.created_at || new Date().toISOString(),
+      canUseAnythingAnalysis: userData.can_use_anything_analysis ?? true,
+    };
   } catch (error) {
     if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
-      if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
-        console.warn(
-          'Supabase の従業員ビューが利用できないため、セッションユーザー情報を Supabase から取得できません。',
-          error
-        );
-        hasLoggedMissingEmployeeViewWarning = true;
-      }
+      console.warn('Supabase のユーザー情報が利用できないため、セッションユーザー情報を取得できません。', error);
       return null;
     }
     if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('従業員ビューの取得', error);
+      logSupabaseUnavailableWarning('ユーザー情報の取得', error);
       return null;
     }
     throw error;
@@ -766,7 +769,7 @@ const ensureSupabaseEmployeeUser = async (
   try {
     const { data: userRow, error: userError } = await supabaseClient
       .from('users')
-      .select('id, name, email, role, can_use_anything_analysis, created_at')
+      .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -790,7 +793,7 @@ const ensureSupabaseEmployeeUser = async (
           role: 'user',
           can_use_anything_analysis: true,
         })
-        .select('id, name, email, role, can_use_anything_analysis, created_at')
+        .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
         .maybeSingle();
 
       if (insertError) {
@@ -805,7 +808,7 @@ const ensureSupabaseEmployeeUser = async (
 
         const { data: refetchedUser, error: refetchError } = await supabaseClient
           .from('users')
-          .select('id, name, email, role, can_use_anything_analysis, created_at')
+          .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
           .eq('id', authUser.id)
           .maybeSingle();
 
@@ -1259,7 +1262,7 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
       // Fetch from users table (actual employee data)
       const { data: usersData, error: usersError } = await supabaseClient
         .from('users')
-        .select('id, name, email, role, can_use_anything_analysis, created_at')
+        .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
         .order('name', { ascending: true });
 
       if (usersError) {
