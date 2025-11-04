@@ -1422,17 +1422,28 @@ export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Pr
 
 export const deleteUser = async (id: string): Promise<void> => {
   if (hasSupabaseCredentials()) {
-    const supabaseClient = getSupabase();
-    const { error: employeeError } = await supabaseClient
-      .from('employees')
-      .update({ active: false })
-      .eq('user_id', id);
+    try {
+      const supabaseClient = getSupabase();
+      
+      // Delete from users table
+      const { error } = await supabaseClient
+        .from('users')
+        .delete()
+        .eq('id', id);
 
-    if (employeeError) {
-      throw employeeError;
+      if (error) {
+        console.error('ユーザー削除エラー:', error);
+        throw error;
+      }
+
+      // Also update demoState cache
+      demoState.employeeUsers = demoState.employeeUsers.filter(user => user.id !== id);
+      
+      return;
+    } catch (error) {
+      console.error('ユーザーの削除に失敗しました:', error);
+      throw error;
     }
-
-    return;
   }
 
   const removed = demoState.employeeUsers.find(user => user.id === id);
@@ -2307,31 +2318,176 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
 };
 
 export const approveApplication = async (application: ApplicationWithDetails, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
-    const stored = findById(demoState.applications, application.id, '申請');
-    stored.status = 'approved';
-    stored.approvedAt = new Date().toISOString();
-    stored.rejectedAt = null;
-    stored.rejectionReason = null;
-    stored.currentLevel = (stored.currentLevel ?? 0) + 1;
-    stored.approverId = approver.id;
-    stored.updatedAt = new Date().toISOString();
-    await createApplicationStatusChangeEmails(stored);
-    return deepClone(mapApplicationDetails(stored));
+  const now = new Date().toISOString();
+  
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('applications')
+        .update({
+          status: 'approved',
+          approved_at: now,
+          rejected_at: null,
+          rejection_reason: null,
+          current_level: (application.currentLevel ?? 0) + 1,
+          approver_id: approver.id,
+          updated_at: now,
+        })
+        .eq('id', application.id)
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const updatedApp: Application = {
+          id: data.id,
+          applicantId: data.applicant_id,
+          applicationCodeId: data.application_code_id,
+          formData: data.form_data,
+          status: data.status,
+          submittedAt: data.submitted_at,
+          approvedAt: data.approved_at,
+          rejectedAt: data.rejected_at,
+          currentLevel: data.current_level,
+          approverId: data.approver_id,
+          rejectionReason: data.rejection_reason,
+          approvalRouteId: data.approval_route_id,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+        return deepClone(mapApplicationDetails(updatedApp));
+      }
+      
+      throw new Error('承認処理後のデータ取得に失敗しました');
+    } catch (error) {
+      console.error('申請の承認に失敗しました:', error);
+      throw error;
+    }
+  }
+
+  // Fallback to demo data
+  const stored = findById(demoState.applications, application.id, '申請');
+  stored.status = 'approved';
+  stored.approvedAt = now;
+  stored.rejectedAt = null;
+  stored.rejectionReason = null;
+  stored.currentLevel = (stored.currentLevel ?? 0) + 1;
+  stored.approverId = approver.id;
+  stored.updatedAt = now;
+  await createApplicationStatusChangeEmails(stored);
+  return deepClone(mapApplicationDetails(stored));
 };
 
 export const rejectApplication = async (application: ApplicationWithDetails, reason: string, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
-    const stored = findById(demoState.applications, application.id, '申請');
-    stored.status = 'rejected';
-    stored.rejectedAt = new Date().toISOString();
-    stored.approvedAt = null;
-    stored.rejectionReason = reason;
-    stored.approverId = approver.id;
-    stored.updatedAt = new Date().toISOString();
-    await createApplicationStatusChangeEmails(stored);
-    return deepClone(mapApplicationDetails(stored));
+  const now = new Date().toISOString();
+  
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('applications')
+        .update({
+          status: 'rejected',
+          rejected_at: now,
+          approved_at: null,
+          rejection_reason: reason,
+          approver_id: approver.id,
+          updated_at: now,
+        })
+        .eq('id', application.id)
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const updatedApp: Application = {
+          id: data.id,
+          applicantId: data.applicant_id,
+          applicationCodeId: data.application_code_id,
+          formData: data.form_data,
+          status: data.status,
+          submittedAt: data.submitted_at,
+          approvedAt: data.approved_at,
+          rejectedAt: data.rejected_at,
+          currentLevel: data.current_level,
+          approverId: data.approver_id,
+          rejectionReason: data.rejection_reason,
+          approvalRouteId: data.approval_route_id,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+        return deepClone(mapApplicationDetails(updatedApp));
+      }
+    } catch (error) {
+      console.error('申請の否認に失敗しました:', error);
+      throw error;
+    }
+  }
+
+  // Fallback to demo data
+  const stored = findById(demoState.applications, application.id, '申請');
+  stored.status = 'rejected';
+  stored.rejectedAt = now;
+  stored.approvedAt = null;
+  stored.rejectionReason = reason;
+  stored.approverId = approver.id;
+  stored.updatedAt = now;
+  await createApplicationStatusChangeEmails(stored);
+  return deepClone(mapApplicationDetails(stored));
 };
 
-export const getApplicationCodes = async (): Promise<ApplicationCode[]> => deepClone(demoState.applicationCodes);
+export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('application_codes')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('申請種別の取得', error);
+          return deepClone(demoState.applicationCodes);
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          console.warn('application_codesテーブルが見つかりません。デモデータにフォールバックします。', error);
+          return deepClone(demoState.applicationCodes);
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const codes: ApplicationCode[] = data.map(row => ({
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          description: row.description || '',
+          createdAt: row.created_at,
+        }));
+        
+        // Update demoState cache
+        demoState.applicationCodes = codes;
+        
+        return deepClone(codes);
+      }
+    } catch (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('申請種別の取得', error);
+        return deepClone(demoState.applicationCodes);
+      }
+      throw error;
+    }
+  }
+  return deepClone(demoState.applicationCodes);
+};
 
 export const getInvoices = async (): Promise<Invoice[]> => deepClone(demoState.invoices);
 
