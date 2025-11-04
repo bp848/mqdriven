@@ -13,11 +13,12 @@ const LoginPage: React.FC = () => {
     event.preventDefault();
 
     if (!isSupabaseConfigured) {
-      alert('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
+      setErrorMessage('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
       return;
     }
 
-    if (!email || !password) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password.trim()) {
       setErrorMessage('メールアドレスとパスワードを入力してください。');
       return;
     }
@@ -28,7 +29,7 @@ const LoginPage: React.FC = () => {
     try {
       const supabaseClient = getSupabase();
       const { error } = await supabaseClient.auth.signInWithPassword({
-        email,
+        email: trimmedEmail,
         password,
       });
       if (error) {
@@ -47,7 +48,7 @@ const LoginPage: React.FC = () => {
 
   const handleLoginWithGoogle = async () => {
     if (!isSupabaseConfigured) {
-      alert('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
+      setErrorMessage('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
       return;
     }
 
@@ -59,9 +60,11 @@ const LoginPage: React.FC = () => {
       },
     });
     if (error) {
-      alert(`ログインエラー: ${error.message}`);
+      setErrorMessage(error.message ?? 'Googleログインに失敗しました。');
     }
   };
+
+  const formDisabled = !isSupabaseConfigured || isSubmitting;
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 font-sans">
@@ -86,7 +89,7 @@ const LoginPage: React.FC = () => {
               autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              disabled={!isSupabaseConfigured || isSubmitting}
+              disabled={formDisabled}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:border-slate-600 dark:text-white"
               placeholder="you@example.com"
             />
@@ -101,14 +104,14 @@ const LoginPage: React.FC = () => {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              disabled={!isSupabaseConfigured || isSubmitting}
+              disabled={formDisabled}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:border-slate-600 dark:text-white"
               placeholder="パスワード"
             />
           </div>
           <button
             type="submit"
-            disabled={!isSupabaseConfigured || isSubmitting}
+            disabled={formDisabled}
             className="w-full flex justify-center items-center gap-3 px-4 py-3 font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'ログイン中...' : 'メールアドレスでログイン'}
@@ -124,8 +127,9 @@ const LoginPage: React.FC = () => {
         </div>
         <div className="space-y-3">
           <button
+            type="button"
             onClick={handleLoginWithGoogle}
-            disabled={!isSupabaseConfigured || isSubmitting}
+            disabled={formDisabled}
             className="w-full flex justify-center items-center gap-3 px-4 py-3 font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <GoogleIcon className="w-5 h-5" />
