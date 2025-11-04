@@ -167,9 +167,48 @@ const isColumnNotFoundError = (error?: PostgrestError | null): boolean => error?
 
 export const isSupabaseUnavailableError = (error: any): boolean => {
   if (!error) return false;
-  const message = typeof error === 'string' ? error : error.message || error.details || error.error_description;
+
+  const candidates = [error, error?.cause];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') {
+      continue;
+    }
+
+    const code = (candidate as { code?: unknown }).code;
+    if (typeof code === 'string') {
+      if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT'].includes(code)) {
+        return true;
+      }
+    }
+
+    const status = (candidate as { status?: unknown }).status;
+    if (typeof status === 'number' && (status === 0 || status === 503 || status === 504)) {
+      return true;
+    }
+  }
+
+  const message = typeof error === 'string'
+    ? error
+    : error.message || error.details || error.error_description || error.hint;
   if (!message) return false;
-  return /fetch failed/i.test(message) || /failed to fetch/i.test(message) || /network/i.test(message);
+
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('fetch failed') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('network') ||
+    normalized.includes('timeout') ||
+    normalized.includes('supabase client is not initialized') ||
+    normalized.includes('invalid api key')
+  ) {
+    return true;
+  }
+
+  if (message.includes('Supabaseの認証情報が設定されていません')) {
+    return true;
+  }
+
+  return false;
 };
 
 const logSupabaseUnavailableWarning = (context: string, error: unknown): void => {
