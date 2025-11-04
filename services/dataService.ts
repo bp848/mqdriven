@@ -2139,6 +2139,25 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
     try {
       const supabaseClient = getSupabase();
       
+      // Resolve application_code_id: if it's not a UUID, look it up by code
+      let resolvedApplicationCodeId = payload.applicationCodeId;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(payload.applicationCodeId)) {
+        // It's a code, not a UUID - look up the actual ID
+        const { data: codeData, error: codeError } = await supabaseClient
+          .from('application_codes')
+          .select('id')
+          .eq('code', payload.applicationCodeId)
+          .single();
+        
+        if (codeError || !codeData) {
+          throw new Error(`申請コード「${payload.applicationCodeId}」が見つかりません`);
+        }
+        
+        resolvedApplicationCodeId = codeData.id;
+      }
+      
       // Get approval route to determine first approver
       const { data: routeData, error: routeError } = await supabaseClient
         .from('approval_routes')
@@ -2157,7 +2176,7 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
         .from('applications')
         .insert({
           applicant_id: applicantId,
-          application_code_id: payload.applicationCodeId,
+          application_code_id: resolvedApplicationCodeId,
           form_data: payload.formData,
           status,
           submitted_at: status === 'draft' ? null : (payload.submittedAt ?? now),
