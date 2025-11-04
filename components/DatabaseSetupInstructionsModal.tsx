@@ -1,11 +1,31 @@
 
 
 import React from 'react';
-import { X, BookOpen, ArrowRight } from './Icons.tsx';
+import { X, BookOpen, AlertTriangle } from './Icons.tsx';
 
 interface Props {
     onRetry: () => void;
 }
+
+const setupSteps: Array<{ title: string; description: string; code?: string; }> = [
+    {
+        title: 'Supabaseコンソールで対象プロジェクトを開く',
+        description: 'ナビゲーションから「SQL Editor」を開き、クエリエディターを初期化します。以前に実行した内容が残っている場合は、すべて削除して空の状態にしてください。',
+    },
+    {
+        title: '管理者ユーザーのUUIDを確認する',
+        description: 'SQL Editorで次のクエリを実行し、承認ルートに登録したいユーザー（通常は自分）のIDを控えてください。',
+        code: 'select id, email from auth.users order by created_at desc;',
+    },
+    {
+        title: '以下のスクリプトを貼り付けて実行する',
+        description: 'スクリプト全体をコピーし、必ずプレースホルダーのUUIDをステップ2で控えた値に置き換えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+    },
+    {
+        title: '実行後にアプリで「再読み込み」を押す',
+        description: '最後の NOTIFY が完了したらこのダイアログを閉じ、「実行したので再読み込み」ボタンでデータの再取得を行ってください。',
+    },
+];
 
 const sqlScript = `-- Supabase SQL Editorで以下のスクリプト全体を実行してください。
 -- このスクリプトは何度実行しても安全なように設計されています。
@@ -587,7 +607,42 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
                         <X className="h-5 w-5" />
                     </button>
                 </div>
-                <div className="px-6 py-6 overflow-y-auto">
+                <div className="px-6 py-6 overflow-y-auto space-y-6">
+                    <div className="space-y-4">
+                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                            右上の Supabase SQL Editor で順番に以下の手順を実施してください。実行順序が前後すると RLS エラーが解決されない場合があります。
+                        </p>
+                        <ol className="space-y-4">
+                            {setupSteps.map((step, index) => (
+                                <li key={step.title} className="flex items-start gap-3">
+                                    <span className="mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+                                        {index + 1}
+                                    </span>
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{step.title}</p>
+                                        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{step.description}</p>
+                                        {step.code && (
+                                            <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-slate-700 dark:text-slate-200">
+                                                <code>{step.code}</code>
+                                            </pre>
+                                        )}
+                                    </div>
+                                </li>
+                            ))}
+                        </ol>
+                        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+                            <AlertTriangle className="mt-1 h-5 w-5 flex-shrink-0" />
+                            <div className="space-y-2 text-sm leading-relaxed">
+                                <p className="font-semibold">必ず UUID を差し替えてから実行してください</p>
+                                <p>
+                                    スクリプト内の <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs text-amber-900 dark:bg-amber-500/30 dark:text-amber-100">'00000000-0000-0000-0000-000000000000'</code> は仮の値です。ステップ2で確認した管理者ユーザーの ID に置き換えないと承認ルートの作成に失敗し、アプリは引き続き「データベースエラー」を表示します。
+                                </p>
+                                <p>
+                                    既にスクリプトを実行済みでも、UUID を正しく差し替えた上で再度実行することで状態を修復できます。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                     <pre className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words font-mono">
                         <code>{sqlScript}</code>
                     </pre>
