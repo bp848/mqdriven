@@ -117,7 +117,7 @@ const mapViewRowToEmployeeUser = (row: SupabaseEmployeeViewRow): EmployeeUser =>
   email: row.email ?? '',
   role: row.role === 'admin' ? 'admin' : 'user',
   createdAt: row.created_at ?? new Date().toISOString(),
-  canUseAnythingAnalysis: row.can_use_anything_analysis ?? true,
+  canUseAnythingAnalysis: row.can_use_anything_analysis ?? false,
 });
 
 type SupabaseAccountItemRow = {
@@ -636,6 +636,7 @@ const ensureSupabaseEmployeeUser = async (
       throw userError;
     }
 
+<<<<<<< ours
     let ensuredUser = userRow;
 
     if (!ensuredUser) {
@@ -660,6 +661,10 @@ const ensureSupabaseEmployeeUser = async (
       }
 
       ensuredUser = insertedUser ?? userRow ?? null;
+=======
+    if (!userRow) {
+      throw new Error('Supabase上にユーザー情報が存在しません。管理者に問い合わせてください。');
+>>>>>>> theirs
     }
 
     const { data: employeeRow, error: employeeError } = await supabaseClient
@@ -703,18 +708,16 @@ const ensureSupabaseEmployeeUser = async (
       return viewUser;
     }
 
-    if (ensuredUser) {
-      return {
-        id: ensuredUser.id,
-        name: ensuredUser.name ?? displayName,
-        department: employeeRow?.department ?? null,
-        title: employeeRow?.title ?? null,
-        email: ensuredUser.email ?? fallbackEmail ?? '',
-        role: ensuredUser.role === 'admin' ? 'admin' : 'user',
-        createdAt: employeeRow?.created_at ?? ensuredUser.created_at ?? new Date().toISOString(),
-        canUseAnythingAnalysis: ensuredUser.can_use_anything_analysis ?? true,
-      };
-    }
+    return {
+      id: userRow.id,
+      name: userRow.name ?? displayName,
+      department: employeeRow?.department ?? null,
+      title: employeeRow?.title ?? null,
+      email: userRow.email ?? fallbackEmail ?? '',
+      role: userRow.role === 'admin' ? 'admin' : 'user',
+      createdAt: employeeRow?.created_at ?? userRow.created_at ?? new Date().toISOString(),
+      canUseAnythingAnalysis: userRow.can_use_anything_analysis ?? false,
+    };
   } catch (error) {
     if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
       if (!hasLoggedMissingSupabaseUserTableWarning && typeof console !== 'undefined') {
@@ -1181,32 +1184,14 @@ export const addUser = async (input: {
 
 export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<EmployeeUser> => {
   if (hasSupabaseCredentials()) {
+    if (
+      Object.prototype.hasOwnProperty.call(updates, 'email') ||
+      Object.prototype.hasOwnProperty.call(updates, 'role') ||
+      Object.prototype.hasOwnProperty.call(updates, 'canUseAnythingAnalysis')
+    ) {
+      throw new Error('Supabase環境ではメール・権限の更新は管理者経由で行ってください。');
+    }
     const supabaseClient = getSupabase();
-    const userUpdates: Partial<SupabaseUserRow> = {};
-    if (Object.prototype.hasOwnProperty.call(updates, 'name')) {
-      userUpdates.name = updates.name ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'email')) {
-      userUpdates.email = updates.email ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'role') && updates.role) {
-      userUpdates.role = updates.role;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'canUseAnythingAnalysis')) {
-      userUpdates.can_use_anything_analysis = updates.canUseAnythingAnalysis ?? null;
-    }
-
-    if (Object.keys(userUpdates).length > 0) {
-      const { error: userError } = await supabaseClient
-        .from('users')
-        .update(userUpdates)
-        .eq('id', id);
-
-      if (userError) {
-        throw userError;
-      }
-    }
-
     const employeeUpdates: Partial<SupabaseEmployeeRow> = {};
     if (Object.prototype.hasOwnProperty.call(updates, 'name')) {
       employeeUpdates.name = updates.name ?? null;
