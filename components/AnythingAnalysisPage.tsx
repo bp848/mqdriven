@@ -216,16 +216,15 @@ const AnythingAnalysisPage: React.FC<AnythingAnalysisPageProps> = ({ currentUser
             });
 
             const response = await ai.models.generateContent({
-                model: "gemini-2.5-pro",
+                model: "gemini-2.0-flash-exp",
                 contents: { parts: contents },
                 config: {
                     responseMimeType: "application/json",
                     responseSchema: analysisSchema,
-                    thinkingConfig: { thinkingBudget: 32768 },
                 },
             });
             
-            const jsonStr = response.text.trim().replace(/^```json\n|\n```$/g, '');
+            const jsonStr = (response.text || '').trim().replace(/^```json\n|\n```$/g, '');
             const analysisResult: AnalysisResult = JSON.parse(jsonStr);
             setResult(analysisResult);
 
