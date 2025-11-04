@@ -230,16 +230,20 @@ const App: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
+        // IMPORTANT: Load users first to populate demoState.employeeUsers
+        // This ensures resolveEmployeeUser works correctly in approval routes
+        const usersData = await dataService.getUsers();
+        
         const [
           jobsData, customersData, journalData, accountsData, leadsData, routesData,
-          poData, inventoryData, employeesData, usersData, bugReportsData, estimatesData, 
+          poData, inventoryData, employeesData, bugReportsData, estimatesData, 
           applicationsData, appCodesData, invoicesData, projectsData,
           departmentsData, paymentRecipientsData, allocationDivisionsData, titlesData
         ] = await Promise.all([
           dataService.getJobs(), dataService.getCustomers(), dataService.getJournalEntries(),
           dataService.getAccountItems(), dataService.getLeads(), dataService.getApprovalRoutes(),
           dataService.getPurchaseOrders(), dataService.getInventoryItems(), dataService.getEmployees(),
-          dataService.getUsers(), dataService.getBugReports(), dataService.getEstimates(),
+          dataService.getBugReports(), dataService.getEstimates(),
           dataService.getApplications(currentUser), dataService.getApplicationCodes(), dataService.getInvoices(),
           dataService.getProjects(), dataService.getDepartments(), dataService.getPaymentRecipients(),
           dataService.getAllocationDivisions(), dataService.getTitles()
