@@ -1802,32 +1802,153 @@ export const deleteLead = async (id: string): Promise<void> => {
     demoState.leads = demoState.leads.filter(lead => lead.id !== id);
 };
 
-export const getApprovalRoutes = async (): Promise<ApprovalRoute[]> => deepClone(demoState.approvalRoutes);
+export const getApprovalRoutes = async (): Promise<ApprovalRoute[]> => {
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('approval_routes')
+        .select('id, name, route_data, created_at')
+        .order('name', { ascending: true });
+
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('承認ルートの取得', error);
+          return deepClone(demoState.approvalRoutes);
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          console.warn('approval_routesテーブルが見つかりません。デモデータにフォールバックします。', error);
+          return deepClone(demoState.approvalRoutes);
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        return data.map(row => ({
+          id: row.id,
+          name: row.name || '名称未設定',
+          routeData: row.route_data || { steps: [] },
+          createdAt: row.created_at || new Date().toISOString(),
+        }));
+      }
+    } catch (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('承認ルートの取得', error);
+        return deepClone(demoState.approvalRoutes);
+      }
+      throw error;
+    }
+  }
+  return deepClone(demoState.approvalRoutes);
+};
 
 export const addApprovalRoute = async (route: Omit<ApprovalRoute, 'id' | 'createdAt'>): Promise<ApprovalRoute> => {
-    const newRoute: ApprovalRoute = {
-      id: uuidv4(),
-      name: route.name,
-      routeData: deepClone(route.routeData),
-      createdAt: new Date().toISOString(),
-    };
-    demoState.approvalRoutes.push(newRoute);
-    return deepClone(newRoute);
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('approval_routes')
+        .insert({
+          name: route.name,
+          route_data: route.routeData,
+        })
+        .select('id, name, route_data, created_at')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        return {
+          id: data.id,
+          name: data.name,
+          routeData: data.route_data,
+          createdAt: data.created_at,
+        };
+      }
+    } catch (error) {
+      console.error('承認ルートの作成に失敗しました:', error);
+      throw error;
+    }
+  }
+
+  // Fallback to demo data
+  const newRoute: ApprovalRoute = {
+    id: uuidv4(),
+    name: route.name,
+    routeData: deepClone(route.routeData),
+    createdAt: new Date().toISOString(),
+  };
+  demoState.approvalRoutes.push(newRoute);
+  return deepClone(newRoute);
 };
 
 export const updateApprovalRoute = async (id: string, updates: Partial<ApprovalRoute>): Promise<ApprovalRoute> => {
-    const route = findById(demoState.approvalRoutes, id, '承認ルート');
-    if (updates.routeData) {
-      route.routeData = deepClone(updates.routeData);
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const updateData: any = {};
+      if (updates.name) updateData.name = updates.name;
+      if (updates.routeData) updateData.route_data = updates.routeData;
+
+      const { data, error } = await supabaseClient
+        .from('approval_routes')
+        .update(updateData)
+        .eq('id', id)
+        .select('id, name, route_data, created_at')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        return {
+          id: data.id,
+          name: data.name,
+          routeData: data.route_data,
+          createdAt: data.created_at,
+        };
+      }
+    } catch (error) {
+      console.error('承認ルートの更新に失敗しました:', error);
+      throw error;
     }
-    if (updates.name) {
-      route.name = updates.name;
-    }
-    return deepClone(route);
+  }
+
+  // Fallback to demo data
+  const route = findById(demoState.approvalRoutes, id, '承認ルート');
+  if (updates.routeData) {
+    route.routeData = deepClone(updates.routeData);
+  }
+  if (updates.name) {
+    route.name = updates.name;
+  }
+  return deepClone(route);
 };
 
 export const deleteApprovalRoute = async (id: string): Promise<void> => {
-    demoState.approvalRoutes = demoState.approvalRoutes.filter(route => route.id !== id);
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { error } = await supabaseClient
+        .from('approval_routes')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw error;
+      }
+      return;
+    } catch (error) {
+      console.error('承認ルートの削除に失敗しました:', error);
+      throw error;
+    }
+  }
+
+  // Fallback to demo data
+  demoState.approvalRoutes = demoState.approvalRoutes.filter(route => route.id !== id);
 };
 
 export const getPurchaseOrders = async (): Promise<PurchaseOrder[]> => deepClone(demoState.purchaseOrders);
