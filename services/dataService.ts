@@ -149,6 +149,8 @@ type SupabasePaymentRecipientRow = {
   company_name?: string | null;
   recipient_name?: string | null;
   bank_name?: string | null;
+  branch_name?: string | null;
+  account_number?: string | null;
   bank_branch?: string | null;
   bank_account_number?: string | null;
   is_active?: boolean | null;
@@ -162,8 +164,52 @@ type SupabaseAllocationDivisionRow = {
   created_at?: string | null;
 };
 
-const isRelationNotFoundError = (error?: PostgrestError | null): boolean => error?.code === '42P01';
-const isColumnNotFoundError = (error?: PostgrestError | null): boolean => error?.code === '42703';
+const normalizeErrorText = (value: unknown): string => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim().toLowerCase();
+};
+
+const isRelationNotFoundError = (error?: PostgrestError | null): boolean => {
+  if (!error) {
+    return false;
+  }
+
+  if (['42P01', 'PGRST114', 'PGRST204'].includes(error.code ?? '')) {
+    return true;
+  }
+
+  const candidates = [error.message, error.details, error.hint];
+  return candidates.some(text => {
+    const normalized = normalizeErrorText(text);
+    if (!normalized) {
+      return false;
+    }
+    return (
+      normalized.includes('relation') || normalized.includes('view') || normalized.includes('schema')
+    ) && normalized.includes('does not exist');
+  });
+};
+
+const isColumnNotFoundError = (error?: PostgrestError | null): boolean => {
+  if (!error) {
+    return false;
+  }
+
+  if (['42703', 'PGRST301', 'PGRST302'].includes(error.code ?? '')) {
+    return true;
+  }
+
+  const candidates = [error.message, error.details, error.hint];
+  return candidates.some(text => {
+    const normalized = normalizeErrorText(text);
+    if (!normalized) {
+      return false;
+    }
+    return normalized.includes('column') && normalized.includes('does not exist');
+  });
+};
 
 export const isSupabaseUnavailableError = (error: any): boolean => {
   if (!error) return false;
@@ -308,8 +354,13 @@ const mapSupabasePaymentRecipientRow = (row: SupabasePaymentRecipientRow): Payme
     companyName: toStringValue(row.company_name, '') || null,
     recipientName: toStringValue(row.recipient_name, '') || null,
     bankName: toStringValue(row.bank_name, '') || null,
-    bankBranch: toStringValue(row.bank_branch, '') || null,
-    bankAccountNumber: toStringValue(row.bank_account_number, '') || null,
+    bankBranch:
+      toStringValue(row.bank_branch ?? row.branch_name ?? (row as Record<string, unknown>)['bankBranch'], '') || null,
+    bankAccountNumber:
+      toStringValue(
+        row.bank_account_number ?? row.account_number ?? (row as Record<string, unknown>)['bankAccountNumber'],
+        '',
+      ) || null,
     isActive: row.is_active ?? true,
     allocationTargets,
   };
@@ -328,7 +379,7 @@ const mapSupabaseAllocationDivisionRow = (row: SupabaseAllocationDivisionRow): A
 const fetchAccountItemsFromSupabase = async (): Promise<AccountItem[] | null> => {
   try {
     const supabaseClient = getSupabase();
-    const sources = ['v_account_items_with_mq_code', 'v_account_items', 'account_items'] as const;
+    const sources = ['account_items', 'v_account_items', 'v_account_items_with_mq_code'] as const;
 
     for (const table of sources) {
       const { data, error } = await supabaseClient
@@ -444,6 +495,9 @@ const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] 
   try {
     const supabaseClient = getSupabase();
     const selects = [
+      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
+      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number, is_active',
+      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number',
       'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
       'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active',
       '*',
