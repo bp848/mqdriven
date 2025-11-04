@@ -144,6 +144,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
         setError('');
         try {
             const codes = await getApplicationCodes();
+            console.log('取得した申請種別:', codes);
             setApplicationCodes(codes);
         } catch (err: any) {
              setError(err.message || '申請フォームの基本データの読み込みに失敗しました。');
@@ -246,6 +247,8 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
         const normalizedInput = normalizeFormCode(rawFormCode) ?? rawFormCode.toUpperCase();
         const normalizedCompact = normalizedInput.replace(/[\s_-]+/g, '');
 
+        console.log('フォームコード検索:', { rawFormCode, normalizedInput, normalizedCompact, applicationCodes });
+
         const matchesFormCode = (candidate?: string | null) => {
             if (!candidate) return false;
             const upper = candidate.toUpperCase();
@@ -266,6 +269,8 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
         const activeApplicationCode = applicationCodes.find(code =>
             matchesFormCode(code.code) || matchesFormCode(code.id) || matchesFormCode(code.name)
         );
+        
+        console.log('マッチした申請種別:', activeApplicationCode);
 
         const effectiveFormCode = activeApplicationCode?.code ?? normalizedInput;
         const displayFormCode = formCode ?? activeApplicationCode?.code ?? normalizedInput;
