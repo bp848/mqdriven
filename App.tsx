@@ -677,6 +677,7 @@ const App: React.FC = () => {
                     departments={departments}
                     allocationDivisions={allocationDivisions}
                     paymentRecipients={paymentRecipients}
+                    applicationCodes={applicationCodes}
                     onSuccess={() => { setCurrentPage('approval_list'); fetchData(); }}
                 />;
             

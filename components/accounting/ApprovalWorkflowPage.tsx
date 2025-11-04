@@ -28,6 +28,7 @@ interface ApprovalWorkflowPageProps {
     isAIOff?: boolean;
     allocationDivisions?: AllocationDivision[];
     paymentRecipients?: PaymentRecipient[];
+    applicationCodes?: ApplicationCode[];
     onSuccess?: () => void; // Added for form submission success callback
     onRefreshData?: () => void; // Added for list data refresh
 }
@@ -40,7 +41,7 @@ const TABS_CONFIG = {
 
 const USER_LOAD_ERROR_CODE = 'APPROVAL-USER-LOAD-001';
 
-const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser, view, formCode, searchTerm, addToast, customers, accountItems, projects, departments, isAIOff, allocationDivisions, paymentRecipients, onSuccess, onRefreshData }) => {
+const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser, view, formCode, searchTerm, addToast, customers, accountItems, projects, departments, isAIOff, allocationDivisions, paymentRecipients, applicationCodes: propApplicationCodes, onSuccess, onRefreshData }) => {
     // State for list view
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -50,8 +51,8 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
     const [activeTab, setActiveTab] = useState<'pending' | 'submitted' | 'completed'>('pending');
 
     // State for form view
-    const [applicationCodes, setApplicationCodes] = useState<ApplicationCode[]>([]);
-    const [isCodesLoading, setIsCodesLoading] = useState(true);
+    const [applicationCodes, setApplicationCodes] = useState<ApplicationCode[]>(propApplicationCodes || []);
+    const [isCodesLoading, setIsCodesLoading] = useState(!propApplicationCodes);
     const [resolvedUser, setResolvedUser] = useState<EmployeeUser | null>(currentUser);
     const [isUserLoading, setIsUserLoading] = useState(!currentUser && hasSupabaseCredentials());
     const [hasNotifiedUserError, setHasNotifiedUserError] = useState(false);
