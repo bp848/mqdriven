@@ -1256,45 +1256,56 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
     try {
       const supabaseClient = getSupabase();
 
-      const { data, error } = await supabaseClient
+      // Try to fetch from employees table directly
+      const { data: employeesData, error: employeesError } = await supabaseClient
+        .from('employees')
+        .select('id, user_id, name, department, title, created_at, active')
+        .eq('active', true)
+        .order('name', { ascending: true });
+
+      if (employeesError) {
+        if (isSupabaseUnavailableError(employeesError)) {
+          logSupabaseUnavailableWarning('従業員テーブルの取得', employeesError);
+          return deepClone(demoState.employeeUsers);
+        }
+        if (isRelationNotFoundError(employeesError) || isColumnNotFoundError(employeesError)) {
+          console.warn('employeesテーブルが見つかりません。デモデータにフォールバックします。', employeesError);
+          return deepClone(demoState.employeeUsers);
+        }
+        throw employeesError;
+      }
+
+      if (employeesData && employeesData.length > 0) {
+        // Map employees data to EmployeeUser format
+        return employeesData.map(emp => ({
+          id: emp.user_id || emp.id,
+          name: emp.name || '名前未設定',
+          department: emp.department || null,
+          title: emp.title || null,
+          email: '', // Email is not in employees table
+          role: 'user' as const,
+          createdAt: emp.created_at || new Date().toISOString(),
+          canUseAnythingAnalysis: true,
+        }));
+      }
+
+      // Fallback: try the view if employees table is empty
+      const { data: viewData, error: viewError } = await supabaseClient
         .from('v_employees_active')
         .select(SUPABASE_VIEW_COLUMNS)
         .order('name', { ascending: true });
 
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('従業員ビューの取得', error);
-          return deepClone(demoState.employeeUsers);
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
-            console.warn(
-              'Supabase view "v_employees_active" が見つかりません。デモデータにフォールバックします。Supabase に付属のセットアップスクリプトを実行してください。',
-              error
-            );
-            hasLoggedMissingEmployeeViewWarning = true;
-          }
-          return deepClone(demoState.employeeUsers);
-        }
-        throw error;
+      if (!viewError && viewData) {
+        return viewData.map(mapViewRowToEmployeeUser);
       }
 
-      if (data) {
-        return data.map(mapViewRowToEmployeeUser);
-      }
     } catch (error) {
       if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
-        if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
-          console.warn(
-            'Supabase の従業員ビューが存在しないため、ユーザー一覧をデモデータで代用します。',
-            error
-          );
-          hasLoggedMissingEmployeeViewWarning = true;
-        }
+        console.warn('Supabase の従業員データが存在しないため、ユーザー一覧をデモデータで代用します。', error);
         return deepClone(demoState.employeeUsers);
       }
       if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('従業員ビューの取得', error);
+        logSupabaseUnavailableWarning('従業員データの取得', error);
         return deepClone(demoState.employeeUsers);
       }
       throw error;
