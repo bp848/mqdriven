@@ -46,6 +46,33 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
         return true;
     }, [formData, approvalRouteId]);
 
+    const handleSaveDraft = async () => {
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。再度ログインしてください。');
+            return;
+        }
+        if (!approvalRouteId) {
+            setError('承認ルートを選択してください。');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+        try {
+            await submitApplication({
+                applicationCodeId: applicationCodeId,
+                formData,
+                approvalRouteId: approvalRouteId,
+                status: 'draft'
+            }, currentUser.id);
+            onSuccess();
+        } catch (err: any) {
+            setError('下書きの保存に失敗しました。');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         firstInvalidRef.current = null;
@@ -175,8 +202,10 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
                     {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg" role="alert">{error}</p>}
                     
                     <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled} aria-label="下書き保存">下書き保存</button>
-                        <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid} aria-label="申請を送信する">
+                        <button type="button" onClick={handleSaveDraft} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting} aria-label="下書き保存">
+                            {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '下書き保存'}
+                        </button>
+                        <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid || isSubmitting} aria-label="申請を送信する">
                             {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '申請を送信する'}
                         </button>
                     </div>
