@@ -149,6 +149,29 @@ EXCEPTION
 END
 $$;
 
+-- 既存テーブルに created_at カラムがない旧スキーマを補正
+ALTER TABLE IF EXISTS public.users                              ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.forms                              ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.application_codes                  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.approval_routes                    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.applications                       ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.employees                          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.account_items                      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.payment_recipients                 ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.payment_recipient_allocation_targets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.leads                              ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.customers                          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.invoices                           ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.invoice_items                      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.inbox_items                        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.departments                        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.allocation_divisions               ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.employee_titles                    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.estimates                          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.projects                           ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.project_attachments                ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+ALTER TABLE IF EXISTS public.analysis_history                   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL;
+
 -- v_employees_active ビューを修正
 CREATE OR REPLACE VIEW public.v_employees_active AS
 SELECT
