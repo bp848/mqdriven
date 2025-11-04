@@ -9,13 +9,28 @@ import { v4 as uuidv4 } from 'uuid';
 // AI機能をグローバルに制御する環境変数
 const NEXT_PUBLIC_AI_OFF = getEnvValue('NEXT_PUBLIC_AI_OFF') === '1' || getEnvValue('VITE_AI_OFF') === '1';
 
-const API_KEY = getEnvValue('API_KEY') ?? getEnvValue('GEMINI_API_KEY') ?? getEnvValue('VITE_API_KEY') ?? getEnvValue('VITE_GEMINI_API_KEY');
+const API_KEY = GEMINI_API_KEY || 
+  getEnvValue('VITE_GEMINI_API_KEY') || 
+  getEnvValue('VITE_API_KEY') || 
+  '';
 
-if (!API_KEY) {
+// Debug log to check the API key
+console.log('API Key Debug:', {
+  GEMINI_API_KEY,
+  VITE_GEMINI_API_KEY: getEnvValue('VITE_GEMINI_API_KEY'),
+  VITE_API_KEY: getEnvValue('VITE_API_KEY'),
+  finalAPIKey: API_KEY,
+  importMetaEnv: import.meta.env
+});
+
+if (!API_KEY && !IS_AI_DISABLED) {
+  console.error('API Key not found. Please set one of the following environment variables:');
+  console.error('- VITE_GEMINI_API_KEY');
+  console.error('- VITE_API_KEY');
+  console.error('Or set NEXT_PUBLIC_AI_OFF=1 to disable AI features.');
+  
   if (NEXT_PUBLIC_AI_OFF) {
     console.info('AI機能は NEXT_PUBLIC_AI_OFF によって無効化されています。');
-  } else {
-    console.warn('Gemini API キーが設定されていません。環境変数 API_KEY または GEMINI_API_KEY に有効なキーを設定してください。');
   }
 }
 
