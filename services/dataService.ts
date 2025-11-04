@@ -2172,6 +2172,12 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
         .single();
 
       if (error) {
+        console.error('Supabase INSERT error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
 
