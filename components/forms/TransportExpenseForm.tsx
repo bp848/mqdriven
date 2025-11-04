@@ -87,22 +87,40 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
             const base64String = await readFileAsBase64(file);
             const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type, accountItems, allocationDivisions);
             
-            // Heuristic to parse departure/arrival from description
+            console.log('交通費OCR結果:', ocrData);
+            
+            // Parse departure/arrival from description
+            let departure = '';
+            let arrival = '';
+            const amount = ocrData.totalAmount || 0;
+            
             const description = ocrData.description || '';
-            const parts = description.split(/から|→|～/);
-            const departure = parts[0]?.trim() || '';
-            const arrival = parts[1]?.trim() || '';
+            if (description) {
+                // Match patterns like "東京駅→大阪駅", "新宿から渋谷", "品川～横浜", "東京-大阪"
+                const routeMatch = description.match(/(.+?)(から|→|～|ー|-)(.+)/);
+                if (routeMatch) {
+                    departure = routeMatch[1].trim().replace(/駅$/, '').replace(/\s+/g, '');
+                    arrival = routeMatch[3].trim().replace(/駅$/, '').replace(/\s+/g, '');
+                } else {
+                    // If no separator found, try to split by spaces
+                    const parts = description.split(/\s+/);
+                    if (parts.length >= 2) {
+                        departure = parts[0].replace(/駅$/, '');
+                        arrival = parts[1].replace(/駅$/, '');
+                    }
+                }
+            }
 
-            setDetails(prev => [...prev.filter(d => d.departure.trim() || d.arrival.trim() || d.amount), { // Filter out empty rows if OCR data is adding a new one
+            setDetails(prev => [...prev.filter(d => d.departure.trim() || d.arrival.trim() || d.amount), {
                 id: `row_ocr_${Date.now()}`,
                 travelDate: ocrData.invoiceDate || new Date().toISOString().split('T')[0],
                 departure,
                 arrival,
                 transportMode: TRP_MODES[0],
-                amount: ocrData.totalAmount || 0,
+                amount,
             }]);
         } catch (err: any) {
-            if (err.name === 'AbortError') return; // Request was aborted, do nothing
+            if (err.name === 'AbortError') return;
             setError(err.message || 'AI-OCR処理中にエラーが発生しました。');
         } finally {
             setIsOcrLoading(false);
