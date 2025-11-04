@@ -1279,7 +1279,7 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
 
       if (usersData && usersData.length > 0) {
         // Map users data to EmployeeUser format
-        return usersData.map(user => ({
+        const mappedUsers = usersData.map(user => ({
           id: user.id,
           name: user.name || '名前未設定',
           department: null, // Not available in users table
@@ -1289,6 +1289,11 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
           createdAt: user.created_at || new Date().toISOString(),
           canUseAnythingAnalysis: user.can_use_anything_analysis ?? true,
         }));
+        
+        // Sync to demoState for resolveEmployeeUser to work
+        demoState.employeeUsers = mappedUsers;
+        
+        return deepClone(mappedUsers);
       }
 
     } catch (error) {
