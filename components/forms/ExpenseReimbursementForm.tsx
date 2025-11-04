@@ -398,12 +398,24 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                     ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20'
                                     : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30';
 
+                            const paymentDateId = `paymentDate-${item.id}`;
+                            const paymentRecipientId = `paymentRecipient-${item.id}`;
+                            const allocationTargetId = `allocationTarget-${item.id}`;
+                            const descriptionId = `description-${item.id}`;
+                            const amountId = `amount-${item.id}`;
+                            const customerId = `customer-${item.id}`;
+                            const projectId = `project-${item.id}`;
+                            const accountItemId = `accountItem-${item.id}`;
+                            const allocationDivisionId = `allocationDivision-${item.id}`;
+                            const costTypeId = `costType-${item.id}`;
+
                             return (
                                 <div key={item.id} className={`grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-3 p-4 rounded-lg border ${containerClass}`}>
                                     <div className="md:col-span-2">
-                                        <label className="text-xs font-semibold text-slate-500">支払日 *</label>
+                                        <label htmlFor={paymentDateId} className="text-xs font-semibold text-slate-500">支払日 *</label>
                                         <input
                                             type="date"
+                                            id={paymentDateId}
                                             value={item.paymentDate}
                                             onChange={e => updateDetail(item.id, { paymentDate: e.target.value })}
                                             className={`${inputClass} ${hasError(`${item.id}-paymentDate`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
@@ -414,12 +426,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         )}
                                     </div>
                                     <div className="md:col-span-3 space-y-1">
-                                        <label className="text-xs font-semibold text-slate-500">支払先 *</label>
+                                        <label htmlFor={paymentRecipientId} className="text-xs font-semibold text-slate-500">支払先 *</label>
                                         <PaymentRecipientSelect
                                             value={item.paymentRecipientId}
                                             onChange={val => updateDetail(item.id, { paymentRecipientId: val, allocationTargetId: '' })}
                                             recipients={paymentRecipients}
                                             disabled={isDisabled}
+                                            id={paymentRecipientId}
                                         />
                                         {selectedRecipient && (
                                             <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -433,8 +446,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         )}
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="text-xs font-semibold text-slate-500">振分先</label>
+                                        <label htmlFor={allocationTargetId} className="text-xs font-semibold text-slate-500">振分先</label>
                                         <select
+                                            id={allocationTargetId}
                                             value={item.allocationTargetId}
                                             onChange={e => updateDetail(item.id, { allocationTargetId: e.target.value })}
                                             className={inputClass}
@@ -447,9 +461,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         </select>
                                     </div>
                                     <div className="md:col-span-5">
-                                        <label className="text-xs font-semibold text-slate-500">内容 *</label>
+                                        <label htmlFor={descriptionId} className="text-xs font-semibold text-slate-500">内容 *</label>
                                         <input
                                             type="text"
+                                            id={descriptionId}
                                             placeholder="例: 会議費用"
                                             value={item.description}
                                             onChange={e => updateDetail(item.id, { description: e.target.value })}
@@ -458,9 +473,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="text-xs font-semibold text-slate-500">金額 *</label>
+                                        <label htmlFor={amountId} className="text-xs font-semibold text-slate-500">金額 *</label>
                                         <input
                                             type="number"
+                                            id={amountId}
                                             value={item.amount}
                                             onChange={e => updateDetail(item.id, { amount: Number(e.target.value) || 0 })}
                                             className={`${inputClass} text-right ${hasError(`${item.id}-amount`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
@@ -469,20 +485,21 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         />
                                     </div>
                                     <div className="md:col-span-3">
-                                        <label className="text-xs font-semibold text-slate-500">顧客 *</label>
+                                        <label htmlFor={customerId} className="text-xs font-semibold text-slate-500">顧客 *</label>
                                         <CustomerSearchSelect
                                             customers={customers}
                                             value={item.customerId}
                                             onChange={customerId => updateDetail(item.id, { customerId, projectId: '' })}
                                             disabled={isDisabled}
                                             required
+                                            id={customerId}
                                         />
                                         {hasError(`${item.id}-customerId`) && (
                                             <p className="text-[11px] text-red-600">顧客を選択してください。</p>
                                         )}
                                     </div>
                                     <div className="md:col-span-3">
-                                        <label className="text-xs font-semibold text-slate-500">案件 *</label>
+                                        <label htmlFor={projectId} className="text-xs font-semibold text-slate-500">案件 *</label>
                                         <ProjectSelect
                                             projects={projects}
                                             customerId={item.customerId}
@@ -490,13 +507,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                             onChange={projectId => updateDetail(item.id, { projectId })}
                                             disabled={isDisabled}
                                             required
+                                            id={projectId}
                                         />
                                         {hasError(`${item.id}-projectId`) && (
                                             <p className="text-[11px] text-red-600">案件を選択してください。</p>
                                         )}
                                     </div>
                                     <div className="md:col-span-3">
-                                        <label className="text-xs font-semibold text-slate-500">勘定科目 *</label>
+                                        <label htmlFor={accountItemId} className="text-xs font-semibold text-slate-500">勘定科目 *</label>
                                         <AccountItemSelect
                                             value={item.accountItemId}
                                             onChange={val => updateDetail(item.id, { accountItemId: val })}
@@ -504,6 +522,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                             items={accountItems}
                                             disabled={isDisabled}
                                             required
+                                            id={accountItemId}
                                         />
                                         {hasError(`${item.id}-accountItemId`) && (
                                             <p className="text-[11px] text-red-600">勘定科目を選択してください。</p>
@@ -533,8 +552,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         )}
                                     </div>
                                     <div className="md:col-span-3">
-                                        <label className="text-xs font-semibold text-slate-500">区分 *</label>
+                                        <label htmlFor={allocationDivisionId} className="text-xs font-semibold text-slate-500">区分 *</label>
                                         <select
+                                            id={allocationDivisionId}
                                             value={item.allocationDivisionId}
                                             onChange={e => updateDetail(item.id, { allocationDivisionId: e.target.value })}
                                             className={`${inputClass} ${hasError(`${item.id}-allocationDivisionId`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
@@ -547,8 +567,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         </select>
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="text-xs font-semibold text-slate-500">費用種別</label>
+                                        <label htmlFor={costTypeId} className="text-xs font-semibold text-slate-500">費用種別</label>
                                         <select
+                                            id={costTypeId}
                                             value={item.costType}
                                             onChange={e => updateDetail(item.id, { costType: e.target.value as 'V' | 'F' })}
                                             className={inputClass}
