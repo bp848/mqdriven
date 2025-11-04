@@ -1259,7 +1259,7 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
       // Fetch from users table (actual employee data)
       const { data: usersData, error: usersError } = await supabaseClient
         .from('users')
-        .select('id, name, email, role, can_use_anything_analysis, created_at, department, title')
+        .select('id, name, email, role, can_use_anything_analysis, created_at')
         .order('name', { ascending: true });
 
       if (usersError) {
@@ -1279,8 +1279,8 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
         return usersData.map(user => ({
           id: user.id,
           name: user.name || '名前未設定',
-          department: user.department || null,
-          title: user.title || null,
+          department: null, // Not available in users table
+          title: null, // Not available in users table
           email: user.email || '',
           role: (user.role as 'admin' | 'user') || 'user',
           createdAt: user.created_at || new Date().toISOString(),
