@@ -64,8 +64,8 @@ const ChatApplicationModal: React.FC<ChatApplicationModalProps> = ({ isOpen, onC
             setError('');
             try {
                 const [fetchedUsers, fetchedAppCodes, fetchedRoutes] = await Promise.all([
-                    getUsers(), 
-                    getApplicationCodes(), 
+                    getUsers(),
+                    getApplicationCodes(),
                     getApprovalRoutes()
                 ]);
                 setUsers(fetchedUsers);
@@ -77,16 +77,36 @@ const ChatApplicationModal: React.FC<ChatApplicationModalProps> = ({ isOpen, onC
                     setMessages([initialUserMessage]);
 
                     const historyForApi = [{ role: 'user' as const, content: initialMessage }];
-                    const aiResponseText = await processApplicationChat(historyForApi, fetchedAppCodes, fetchedUsers, fetchedRoutes);
-                    
-                    const newAiMessage: Message = { id: `model-init`, role: 'model', content: aiResponseText };
-                    setMessages(prev => [...prev, newAiMessage]);
+                    try {
+                        const aiResponseText = await processApplicationChat(historyForApi, fetchedAppCodes, fetchedUsers, fetchedRoutes);
+                        const newAiMessage: Message = { id: `model-init`, role: 'model', content: aiResponseText };
+                        setMessages(prev => [...prev, newAiMessage]);
+                    } catch (aiError) {
+                        const aiErrorMessage = aiError instanceof Error ? aiError.message : 'AI応答の取得に失敗しました。';
+                        setMessages(prev => [
+                            ...prev,
+                            {
+                                id: `model-init-error`,
+                                role: 'model',
+                                content: `申し訳ありません。AIの初期応答を取得できませんでした。${aiErrorMessage ? `\n理由: ${aiErrorMessage}` : ''}`
+                            }
+                        ]);
+                        setError(`AIの初期応答の取得に失敗しました: ${aiErrorMessage}`);
+                    }
                 } else {
                     setMessages([{ id: 'init', role: 'model', content: 'こんにちは。どのようなご用件でしょうか？申請したい内容を自由に入力してください。（例：「経費を申請したい」）' }]);
                 }
             } catch (e: any) {
-                if (e.name === 'AbortError') return; // Request was aborted, do nothing
-                 setError('アシスタントの初期化に失敗しました。ユーザー情報や申請種別の読み込みができませんでした。');
+                if (e?.name === 'AbortError') return; // Request was aborted, do nothing
+                const fallbackMessage = e instanceof Error ? e.message : 'ユーザーデータの読み込みに失敗しました。';
+                setMessages([
+                    {
+                        id: 'init-error',
+                        role: 'model',
+                        content: '必要なデータの読み込みに失敗しました。時間をおいてから再度お試しください。'
+                    }
+                ]);
+                setError(`アシスタントの初期化に失敗しました: ${fallbackMessage}`);
             } finally {
                 setIsPreloading(false);
                 setIsLoading(false);
