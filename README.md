@@ -12,14 +12,31 @@ View your app in AI Studio: https://ai.studio/apps/drive/1u_0P84eOgCk9nBEQJE9sCC
 
 **Prerequisites:**  Node.js
 
-
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Configure outbound email for workflow notifications by providing either:
+   ```bash
+   npm install
+   ```
+
+2. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and set your `VITE_GEMINI_API_KEY` to your Gemini API key
+   - Get your API key from: https://aistudio.google.com/app/apikey
+
+3. Configure outbound email for workflow notifications (optional):
    - `APPLICATION_EMAIL_ENDPOINT` pointing to your production mail relay (e.g. Supabase Edge Function URL)
    - optional `APPLICATION_EMAIL_API_KEY` if the relay requires authentication
-   These values can be defined in `.env.local` or environment variables at deploy time.
+   These values can be defined in `.env` or environment variables at deploy time.
+
 4. Run the app:
-   `npm run dev`
+   ```bash
+   npm run dev
+   ```
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions and security best practices.
+
+**⚠️ IMPORTANT**: Never commit API keys to Git. Always use environment variables.
 # mqdriven

@@ -347,7 +347,7 @@ const App: React.FC = () => {
                         },
                         provider_token: null,
                         provider_refresh_token: null,
-                    } as Session;
+                    } as unknown as Session;
                     setSession(demoSession);
                     setCurrentUser(demoUser);
                     setError(null);

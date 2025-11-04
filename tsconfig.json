@@ -21,10 +21,33 @@
     "resolveJsonModule": true,
     "paths": {
       "@/*": [
-        "./*"
-      ]
+        "./src/*"
+      ],
+      "../src/envShim": ["./src/envShim.js"],
+      "../types": ["./src/types.d.ts"],
+      "../utils": ["./src/utils.ts"]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

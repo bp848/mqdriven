@@ -1,36 +1,53 @@
+// Import from src with .js extension for Vite compatibility
 import { GEMINI_API_KEY, IS_AI_DISABLED } from "../src/envShim";
-// FIX: Import LiveServerMessage and Blob for Live Chat functionality.
 import { GoogleGenAI, Type, GenerateContentResponse, Chat, Modality, FunctionDeclaration, LiveServerMessage, Blob } from "@google/genai";
-// FIX: Import MarketResearchReport type.
-import { AISuggestions, Customer, CompanyAnalysis, InvoiceData, AIJournalSuggestion, User, ApplicationCode, Estimate, EstimateItem, Lead, ApprovalRoute, Job, LeadStatus, JournalEntry, LeadScore, Application, ApplicationWithDetails, CompanyInvestigation, CustomProposalContent, LeadProposalPackage, MarketResearchReport, EstimateDraft, ExtractedParty, GeneratedEmailContent, EstimateLineItem, UUID, Project, AllocationDivision, AccountItem } from '../types.ts';
-import { formatJPY, createSignature, getEnvValue } from "../utils.ts";
+import type { 
+  AISuggestions, Customer, CompanyAnalysis, InvoiceData, AIJournalSuggestion, 
+  User, ApplicationCode, Estimate, EstimateItem, Lead, ApprovalRoute, Job, 
+  LeadStatus, JournalEntry, LeadScore, Application, ApplicationWithDetails, 
+  CompanyInvestigation, CustomProposalContent, LeadProposalPackage, 
+  MarketResearchReport, EstimateDraft, ExtractedParty, GeneratedEmailContent, 
+  EstimateLineItem, UUID, Project, AllocationDivision, AccountItem 
+} from '../types';
+import { formatJPY, createSignature } from "../utils";
 import { v4 as uuidv4 } from 'uuid';
 
-// AI機能をグローバルに制御する環境変数
-const NEXT_PUBLIC_AI_OFF = getEnvValue('NEXT_PUBLIC_AI_OFF') === '1' || getEnvValue('VITE_AI_OFF') === '1';
+// Type assertion for browser globals
+declare const window: Window & typeof globalThis & {
+  GEMINI_API_KEY?: string;
+  IS_AI_DISABLED?: boolean;
+};
 
-const API_KEY = GEMINI_API_KEY || 
-  getEnvValue('VITE_GEMINI_API_KEY') || 
-  getEnvValue('VITE_API_KEY') || 
-  '';
+// Helper function to safely get text from response
+const getResponseText = async (response: Response): Promise<string> => {
+  if (!response.text) {
+    throw new Error('Response does not have a text() method');
+  }
+  return response.text();
+};
+
+// Helper function to ensure string is defined
+const ensureString = (value: string | undefined, defaultValue: string = ''): string => {
+  return value ?? defaultValue;
+};
+
+// Use the API key from envShim
+const API_KEY = GEMINI_API_KEY;
 
 // Debug log to check the API key
-console.log('API Key Debug:', {
-  GEMINI_API_KEY,
-  VITE_GEMINI_API_KEY: getEnvValue('VITE_GEMINI_API_KEY'),
-  VITE_API_KEY: getEnvValue('VITE_API_KEY'),
-  finalAPIKey: API_KEY,
-  importMetaEnv: import.meta.env
+console.log('Gemini Service Initialized:', {
+  hasApiKey: !!API_KEY,
+  isAiDisabled: IS_AI_DISABLED,
+  nodeEnv: process.env.NODE_ENV
 });
 
 if (!API_KEY && !IS_AI_DISABLED) {
-  console.error('API Key not found. Please set one of the following environment variables:');
-  console.error('- VITE_GEMINI_API_KEY');
-  console.error('- VITE_API_KEY');
-  console.error('Or set NEXT_PUBLIC_AI_OFF=1 to disable AI features.');
+  console.warn('WARNING: Gemini API key not found. AI features will be disabled.');
+  console.warn('Please set the VITE_GEMINI_API_KEY environment variable.');
+  console.warn('Or set NEXT_PUBLIC_AI_OFF=1 to disable AI features.');
   
-  if (NEXT_PUBLIC_AI_OFF) {
-    console.info('AI機能は NEXT_PUBLIC_AI_OFF によって無効化されています。');
+  if (process.env.NEXT_PUBLIC_AI_OFF === '1' || process.env.VITE_AI_OFF === '1') {
+    console.info('AI機能は無効化されています。');
   }
 }
 
@@ -38,8 +55,8 @@ const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 const model = "gemini-2.5-flash"; // Default model for low-latency
 
-const checkOnlineAndAIOff = () => {
-    if (NEXT_PUBLIC_AI_OFF) {
+const checkOnlineAndAIOff = (): void => {
+    if (IS_AI_DISABLED) {
         throw new Error('AI機能は現在無効です。');
     }
     if (!API_KEY) {
@@ -47,6 +64,11 @@ const checkOnlineAndAIOff = () => {
     }
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
         throw new Error('オフラインです。ネットワーク接続を確認してください。');
+    }
+    
+    // Additional type checking for AI instance
+    if (!ai) {
+        throw new Error('AIサービスが初期化されていません。');
     }
 };
 
@@ -92,7 +114,7 @@ export const suggestJobParameters = async (prompt: string, paperTypes: string[],
       contents: fullPrompt,
       config: { responseMimeType: "application/json", responseSchema: suggestJobSchema },
     });
-    let jsonStr = response.text.trim();
+    let jsonStr = ensureString(response.text, '').trim();
     if (jsonStr.startsWith('```json')) {
         jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
     }
@@ -131,7 +153,7 @@ JSONのフォーマットは以下のようにしてください:
             },
         });
         
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -156,33 +178,59 @@ JSONのフォーマットは以下のようにしてください:
     });
 };
 
-export const investigateLeadCompany = async (companyName: string): Promise<CompanyInvestigation> => {
-    checkOnlineAndAIOff();
-    return withRetry(async () => {
-        const prompt = `企業名「${companyName}」について、その事業内容、最近のニュース、市場での評判を調査し、簡潔にまとめてください。`;
-        const response = await ai!.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                tools: [{ googleSearch: {} }],
-            },
-        });
+export async function investigateLeadCompany(companyName: string): Promise<CompanyInvestigation> {
+  checkOnlineAndAIOff();
+  
+  try {
+    if (!ai) {
+      throw new Error('AI is not initialized');
+    }
+    
+    const prompt = `与えられた会社名について、以下の情報を調査してください。
+    会社名: ${companyName}
+    
+    以下の情報をJSON形式で返してください:
+    - companyName: 会社名
+    - industry: 業種
+    - businessType: 業態
+    - companySize: 企業規模
+    - location: 所在地
+    - website: ウェブサイト（もしあれば）
+    - summary: 会社の概要
+    - services: 提供している主なサービスや製品の配列
+    - potentialCollaboration: 当社との協業の可能性
+    - contactInfo: 連絡先情報（メール、電話番号、住所など）`;
+    
+    const response = await ai!.models.generateContent({ model: 'gemini-2.5-pro', contents: prompt, config: { responseMimeType: "application/json" } });
+    const text = ensureString(response.text, '').trim();
+    
+    // Parse the response and ensure all required fields are present
+    const data = JSON.parse(text);
+    
+    // Build summary to fit CompanyInvestigation type in ../types
+    const parts: string[] = [];
+    parts.push(`会社名: ${ensureString(data.companyName, companyName)}`);
+    parts.push(`業種: ${ensureString(data.industry, '不明')}`);
+    parts.push(`業態: ${ensureString(data.businessType, '不明')}`);
+    parts.push(`企業規模: ${ensureString(data.companySize, '不明')}`);
+    parts.push(`所在地: ${ensureString(data.location, '不明')}`);
+    if (data.website) parts.push(`Web: ${data.website}`);
+    if (Array.isArray(data.services) && data.services.length) parts.push(`主なサービス: ${data.services.join(', ')}`);
+    if (data.potentialCollaboration) parts.push(`当社との協業の可能性: ${data.potentialCollaboration}`);
+    if (data.summary) parts.push(`概要: ${data.summary}`);
 
-        const summary = response.text;
-        const rawChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        
-        // FIX: Use a more robust type guard to ensure `sources` is correctly typed.
-        const sources: { uri: string; title: string; }[] = (rawChunks || [])
-            .map((chunk: any) => chunk.web)
-            .filter((web: any): web is { uri: string; title: string } => 
-                Boolean(web && typeof web.uri === 'string' && typeof web.title === 'string')
-            );
+    const investigation: CompanyInvestigation = {
+      summary: parts.join('\n'),
+      sources: [],
+    };
 
-        const uniqueSources = Array.from(new Map(sources.map(item => [item.uri, item])).values());
-        
-        return { summary, sources: uniqueSources };
-    });
-};
+    return investigation;
+  } catch (error) {
+    console.error('会社情報の調査中にエラーが発生しました:', error);
+    throw new Error('会社情報の調査中にエラーが発生しました。後でもう一度お試しください。');
+  }
+}
+
 
 export const enrichCustomerData = async (customerName: string): Promise<Partial<Customer>> => {
     checkOnlineAndAIOff();
@@ -203,7 +251,7 @@ export const enrichCustomerData = async (customerName: string): Promise<Partial<
             },
         });
         
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -255,8 +303,9 @@ export const extractInvoiceDetails = async (imageBase64: string, mimeType: strin
             config: { responseMimeType: "application/json", responseSchema: extractInvoiceSchema }
         });
         
-        console.log('[Gemini] API応答受信:', response.text.substring(0, 100) + '...');
-        let jsonStr = response.text.trim();
+        const preview = ensureString(response.text, '');
+        console.log('[Gemini] API応答受信:', preview.substring(0, 100) + '...');
+        let jsonStr = preview.trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -287,7 +336,7 @@ export const suggestJournalEntry = async (prompt: string): Promise<AIJournalSugg
       contents: fullPrompt,
       config: { responseMimeType: "application/json", responseSchema: suggestJournalEntrySchema },
     });
-    let jsonStr = response.text.trim();
+    let jsonStr = ensureString(response.text, '').trim();
     if (jsonStr.startsWith('```json')) {
         jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
     }
@@ -300,7 +349,7 @@ export const generateSalesEmail = async (customer: Customer, senderName: string)
     return withRetry(async () => {
         const prompt = `顧客名「${customer.customerName}」向けの営業提案メールを作成してください。送信者は「${senderName}」です。`;
         const response = await ai!.models.generateContent({ model, contents: prompt, config: { } });
-        const text = response.text;
+        const text = ensureString(response.text, '');
         const subjectMatch = text.match(/件名:\s*(.*)/);
         const bodyMatch = text.match(/本文:\s*([\s\S]*)/);
         return {
@@ -339,7 +388,7 @@ export const generateLeadReplyEmail = async (lead: Lead): Promise<GeneratedEmail
                 },
             },
         });
-        const jsonStr = response.text.trim().replace(/^```json\n|\n```$/g, ''); // Clean JSON block
+        const jsonStr = ensureString(response.text, '').trim().replace(/^```json\n|\n```$/g, ''); // Clean JSON block
         return JSON.parse(jsonStr);
     });
 };
@@ -354,7 +403,7 @@ export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
         ${JSON.stringify(leads.slice(0, 3).map(l => ({ company: l.company, status: l.status, inquiryType: l.inquiryType, message: l.message })), null, 2)}
         `;
         const response = await ai!.models.generateContent({ model, contents: prompt, config: { } });
-        return response.text;
+        return ensureString(response.text, '');
     });
 };
 
@@ -423,7 +472,7 @@ Web検索を活用して、企業の事業内容、最近の動向、および�
             },
         });
 
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -457,7 +506,7 @@ export const getDashboardSuggestion = async (jobs: Job[]): Promise<string> => {
 ${JSON.stringify(recentJobs, null, 2)}
 `;
         const response = await ai!.models.generateContent({ model, contents: prompt, config: { } });
-        return response.text;
+        return ensureString(response.text, '');
     });
 };
 
@@ -468,7 +517,7 @@ export const generateDailyReportSummary = async (customerName: string, activityC
 訪問先: ${customerName}
 キーワード: ${activityContent}`;
         const response = await ai!.models.generateContent({ model, contents: prompt, config: { } });
-        return response.text;
+        return ensureString(response.text, '');
     });
 };
 
@@ -478,7 +527,7 @@ export const generateWeeklyReportSummary = async (keywords: string): Promise<str
         const prompt = `以下のキーワードを元に、週報の報告内容をビジネス文書としてまとめてください。
 キーワード: ${keywords}`;
         const response = await ai!.models.generateContent({ model, contents: prompt, config: { } });
-        return response.text;
+        return ensureString(response.text, '');
     });
 };
 
@@ -509,7 +558,7 @@ export const parseLineItems = async (prompt: string): Promise<EstimateLineItem[]
     config: { responseMimeType: "application/json", responseSchema: schema },
   });
 
-  let jsonStr = response.text.trim();
+  let jsonStr = ensureString(response.text, '').trim();
   if (jsonStr.startsWith('```json')) {
       jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
   }
@@ -652,7 +701,7 @@ export async function createDraftEstimate(inputText: string, files: { data: stri
             }
         });
 
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -699,7 +748,7 @@ ${estimate ? `関連見積情報:
 「${sectionTitle}」セクションの内容を、プロフェッショナルなビジネス文書として生成してください。
 `;
         const response = await ai!.models.generateContent({ model, contents: prompt });
-        return response.text;
+        return ensureString(response.text, '');
     });
 };
 
@@ -725,7 +774,7 @@ export const parseApprovalDocument = async (imageBase64: string, mimeType: strin
             config: { responseMimeType: "application/json", responseSchema: schema }
         });
 
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -759,7 +808,7 @@ export const processApplicationChat = async (history: { role: 'user' | 'model'; 
 
     const lastMessage = history[history.length - 1];
     const response = await chat.sendMessage({ message: lastMessage.content });
-    return response.text;
+    return ensureString(response.text, '');
 };
 
 // FIX: Add generateClosingSummary function
@@ -788,7 +837,7 @@ export const generateClosingSummary = async (
 - 限界利益(MQ): ${formatJPY(previousJobs.reduce((sum, j) => sum + (j.price - j.variableCost), 0))}
 `;
         const response = await ai!.models.generateContent({ model: "gemini-2.5-pro", contents: prompt });
-        return response.text;
+        return ensureString(response.text, '');
     });
 };
 
@@ -883,7 +932,7 @@ export const createProjectFromInputs = async (text: string, files: {name: string
             }
         });
 
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -931,7 +980,7 @@ Web検索を活用し、市場規模、成長率、主要プレイヤー、SWOT�
             },
         });
 
-        let jsonStr = response.text.trim();
+        let jsonStr = ensureString(response.text, '').trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -1016,11 +1065,11 @@ export const startLiveChatSession = async (callbacks: {
             },
             onmessage: async (message: LiveServerMessage) => {
                 if (message.serverContent?.outputTranscription) {
-                    const text = message.serverContent.outputTranscription.text;
+                    const text = ensureString(message.serverContent.outputTranscription.text, '');
                     currentOutputTranscription += text;
                     callbacks.onTranscription('output', text);
                 } else if (message.serverContent?.inputTranscription) {
-                    const text = message.serverContent.inputTranscription.text;
+                    const text = ensureString(message.serverContent.inputTranscription.text, '');
                     currentInputTranscription += text;
                     callbacks.onTranscription('input', text);
                 }
@@ -1031,7 +1080,8 @@ export const startLiveChatSession = async (callbacks: {
                     currentOutputTranscription = '';
                 }
 
-                const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+                const parts = message.serverContent?.modelTurn?.parts;
+                const base64EncodedAudioString = Array.isArray(parts) && parts[0]?.inlineData?.data ? parts[0].inlineData.data : undefined;
                 if (base64EncodedAudioString) {
                     callbacks.onAudioChunk(base64EncodedAudioString);
                 }
