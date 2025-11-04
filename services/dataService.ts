@@ -1835,12 +1835,15 @@ export const getApprovalRoutes = async (): Promise<ApprovalRoute[]> => {
       }
 
       if (data && data.length > 0) {
-        return data.map(row => ({
+        const routes = data.map(row => ({
           id: row.id,
           name: row.name || '名称未設定',
           routeData: row.route_data || { steps: [] },
           createdAt: row.created_at || new Date().toISOString(),
         }));
+        // demoStateを更新してmapApplicationDetailsで使えるようにする
+        demoState.approvalRoutes = routes;
+        return routes;
       }
     } catch (error) {
       if (isSupabaseUnavailableError(error)) {
