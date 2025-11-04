@@ -164,6 +164,19 @@ type SupabaseAllocationDivisionRow = {
 const isRelationNotFoundError = (error?: PostgrestError | null): boolean => error?.code === '42P01';
 const isColumnNotFoundError = (error?: PostgrestError | null): boolean => error?.code === '42703';
 
+export const isSupabaseUnavailableError = (error: any): boolean => {
+  if (!error) return false;
+  const message = typeof error === 'string' ? error : error.message || error.details || error.error_description;
+  if (!message) return false;
+  return /fetch failed/i.test(message) || /failed to fetch/i.test(message) || /network/i.test(message);
+};
+
+const logSupabaseUnavailableWarning = (context: string, error: unknown): void => {
+  if (typeof console !== 'undefined' && console.warn) {
+    console.warn(`Supabase に接続できないため${context}をスキップし、デモデータにフォールバックします。`, error);
+  }
+};
+
 const toStringValue = (value: unknown, fallback = ''): string => {
   if (typeof value === 'string') {
     return value;
@@ -273,161 +286,209 @@ const mapSupabaseAllocationDivisionRow = (row: SupabaseAllocationDivisionRow): A
 };
 
 const fetchAccountItemsFromSupabase = async (): Promise<AccountItem[] | null> => {
-  const supabaseClient = getSupabase();
-  const sources = ['v_account_items_with_mq_code', 'v_account_items', 'account_items'] as const;
+  try {
+    const supabaseClient = getSupabase();
+    const sources = ['v_account_items_with_mq_code', 'v_account_items', 'account_items'] as const;
 
-  for (const table of sources) {
-    const { data, error } = await supabaseClient
-      .from<SupabaseAccountItemRow>(table)
-      .select('*');
+    for (const table of sources) {
+      const { data, error } = await supabaseClient
+        .from<SupabaseAccountItemRow>(table)
+        .select('*');
 
-    if (error) {
-      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('勘定科目マスタの取得', error);
+          return null;
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!data) {
         continue;
       }
-      throw error;
-    }
 
-    if (!data) {
-      continue;
-    }
-
-    const mapped = data.map(mapSupabaseAccountItemRow);
-    const demoAccountItemMap = new Map(demoState.accountItems.map(item => [item.code, item]));
-    mapped.forEach(item => {
-      const fallback = demoAccountItemMap.get(item.code);
-      if (!fallback) {
-        return;
-      }
-      if (isBlankString(item.categoryCode) && !isBlankString(fallback.categoryCode)) {
-        item.categoryCode = fallback.categoryCode;
-      }
-      if (isBlankString(item.createdAt) && !isBlankString(fallback.createdAt)) {
-        item.createdAt = fallback.createdAt;
-      }
-      if (isBlankString(item.updatedAt) && !isBlankString(fallback.updatedAt)) {
-        item.updatedAt = fallback.updatedAt;
-      }
-      if ((item.sortOrder === 0 || typeof item.sortOrder !== 'number') && typeof fallback.sortOrder === 'number' && fallback.sortOrder !== 0) {
-        item.sortOrder = fallback.sortOrder;
-      }
-      MQ_CODE_KEYS.forEach(key => {
-        if (isBlankString(item.mqCode[key]) && fallback.mqCode?.[key]) {
-          item.mqCode[key] = fallback.mqCode[key];
+      const mapped = data.map(mapSupabaseAccountItemRow);
+      const demoAccountItemMap = new Map(demoState.accountItems.map(item => [item.code, item]));
+      mapped.forEach(item => {
+        const fallback = demoAccountItemMap.get(item.code);
+        if (!fallback) {
+          return;
         }
+        if (isBlankString(item.categoryCode) && !isBlankString(fallback.categoryCode)) {
+          item.categoryCode = fallback.categoryCode;
+        }
+        if (isBlankString(item.createdAt) && !isBlankString(fallback.createdAt)) {
+          item.createdAt = fallback.createdAt;
+        }
+        if (isBlankString(item.updatedAt) && !isBlankString(fallback.updatedAt)) {
+          item.updatedAt = fallback.updatedAt;
+        }
+        if ((item.sortOrder === 0 || typeof item.sortOrder !== 'number') && typeof fallback.sortOrder === 'number' && fallback.sortOrder !== 0) {
+          item.sortOrder = fallback.sortOrder;
+        }
+        MQ_CODE_KEYS.forEach(key => {
+          if (isBlankString(item.mqCode[key]) && fallback.mqCode?.[key]) {
+            item.mqCode[key] = fallback.mqCode[key];
+          }
+        });
       });
-    });
-    mapped.sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) {
-        return a.sortOrder - b.sortOrder;
-      }
-      return a.code.localeCompare(b.code, 'ja');
-    });
-    return mapped;
-  }
+      mapped.sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) {
+          return a.sortOrder - b.sortOrder;
+        }
+        return a.code.localeCompare(b.code, 'ja');
+      });
+      return mapped;
+    }
 
-  return null;
+    return null;
+  } catch (error) {
+    if (isSupabaseUnavailableError(error)) {
+      logSupabaseUnavailableWarning('勘定科目マスタの取得', error);
+      return null;
+    }
+    throw error;
+  }
 };
 
 const fetchDepartmentsFromSupabase = async (): Promise<Department[] | null> => {
-  const supabaseClient = getSupabase();
-  const sources = [
-    { table: 'v_departments', select: 'id, name' },
-    { table: 'departments', select: 'id, name' },
-  ] as const;
+  try {
+    const supabaseClient = getSupabase();
+    const sources = [
+      { table: 'v_departments', select: 'id, name' },
+      { table: 'departments', select: 'id, name' },
+    ] as const;
 
-  for (const source of sources) {
-    const { data, error } = await supabaseClient
-      .from<SupabaseDepartmentRow>(source.table)
-      .select(source.select);
+    for (const source of sources) {
+      const { data, error } = await supabaseClient
+        .from<SupabaseDepartmentRow>(source.table)
+        .select(source.select);
 
-    if (error) {
-      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('部門マスタの取得', error);
+          return null;
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!data) {
         continue;
       }
-      throw error;
+
+      const mapped = data
+        .map(mapSupabaseDepartmentRow)
+        .filter((dept): dept is Department => dept !== null);
+
+      mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      return mapped;
     }
 
-    if (!data) {
-      continue;
+    return null;
+  } catch (error) {
+    if (isSupabaseUnavailableError(error)) {
+      logSupabaseUnavailableWarning('部門マスタの取得', error);
+      return null;
     }
-
-    const mapped = data
-      .map(mapSupabaseDepartmentRow)
-      .filter((dept): dept is Department => dept !== null);
-
-    mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    return mapped;
+    throw error;
   }
-
-  return null;
 };
 
 const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] | null> => {
-  const supabaseClient = getSupabase();
-  const selects = [
-    'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
-    'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active',
-    '*',
-  ] as const;
+  try {
+    const supabaseClient = getSupabase();
+    const selects = [
+      'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active, allocation_targets:payment_recipient_allocation_targets(id, name)',
+      'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active',
+      '*',
+    ] as const;
 
-  for (const select of selects) {
-    const { data, error } = await supabaseClient
-      .from<SupabasePaymentRecipientRow>('payment_recipients')
-      .select(select);
+    for (const select of selects) {
+      const { data, error } = await supabaseClient
+        .from<SupabasePaymentRecipientRow>('payment_recipients')
+        .select(select);
 
-    if (error) {
-      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('支払先マスタの取得', error);
+          return null;
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!data) {
         continue;
       }
-      throw error;
+
+      const mapped = data.map(mapSupabasePaymentRecipientRow);
+      mapped.sort((a, b) => {
+        const aLabel = `${a.companyName ?? ''}${a.recipientName ?? ''}`;
+        const bLabel = `${b.companyName ?? ''}${b.recipientName ?? ''}`;
+        return aLabel.localeCompare(bLabel, 'ja');
+      });
+      return mapped;
     }
 
-    if (!data) {
-      continue;
+    return null;
+  } catch (error) {
+    if (isSupabaseUnavailableError(error)) {
+      logSupabaseUnavailableWarning('支払先マスタの取得', error);
+      return null;
     }
-
-    const mapped = data.map(mapSupabasePaymentRecipientRow);
-    mapped.sort((a, b) => {
-      const aLabel = `${a.companyName ?? ''}${a.recipientName ?? ''}`;
-      const bLabel = `${b.companyName ?? ''}${b.recipientName ?? ''}`;
-      return aLabel.localeCompare(bLabel, 'ja');
-    });
-    return mapped;
+    throw error;
   }
-
-  return null;
 };
 
 const fetchAllocationDivisionsFromSupabase = async (): Promise<AllocationDivision[] | null> => {
-  const supabaseClient = getSupabase();
-  const sources = [
-    { table: 'allocation_divisions', select: 'id, name, is_active, created_at' },
-    { table: 'v_allocation_divisions', select: 'id, name, is_active, created_at' },
-  ] as const;
+  try {
+    const supabaseClient = getSupabase();
+    const sources = [
+      { table: 'allocation_divisions', select: 'id, name, is_active, created_at' },
+      { table: 'v_allocation_divisions', select: 'id, name, is_active, created_at' },
+    ] as const;
 
-  for (const source of sources) {
-    const { data, error } = await supabaseClient
-      .from<SupabaseAllocationDivisionRow>(source.table)
-      .select(source.select);
+    for (const source of sources) {
+      const { data, error } = await supabaseClient
+        .from<SupabaseAllocationDivisionRow>(source.table)
+        .select(source.select);
 
-    if (error) {
-      if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+      if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('配賦区分マスタの取得', error);
+          return null;
+        }
+        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!data) {
         continue;
       }
-      throw error;
+
+      const mapped = data.map(mapSupabaseAllocationDivisionRow);
+      mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      return mapped;
     }
 
-    if (!data) {
-      continue;
+    return null;
+  } catch (error) {
+    if (isSupabaseUnavailableError(error)) {
+      logSupabaseUnavailableWarning('配賦区分マスタの取得', error);
+      return null;
     }
-
-    const mapped = data.map(mapSupabaseAllocationDivisionRow);
-    mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    return mapped;
+    throw error;
   }
-
-  return null;
 };
 
 const isUniqueViolation = (error?: PostgrestError | null): boolean => error?.code === '23505';
@@ -447,6 +508,10 @@ const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser |
       .maybeSingle();
 
     if (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('従業員ビューの取得', error);
+        return null;
+      }
       if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
         if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
           console.warn(
@@ -472,6 +537,10 @@ const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser |
       }
       return null;
     }
+    if (isSupabaseUnavailableError(error)) {
+      logSupabaseUnavailableWarning('従業員ビューの取得', error);
+      return null;
+    }
     throw error;
   }
 };
@@ -492,6 +561,26 @@ const ensureSupabaseEmployeeUser = async (
     fallbackEmail ||
     'ゲストユーザー';
 
+  const buildFallbackEmployeeUser = (): EmployeeUser => {
+    const fallbackFromDemo =
+      demoState.employeeUsers.find((user) => user.id === authUser.id) ??
+      (fallbackEmail ? demoState.employeeUsers.find((user) => user.email === fallbackEmail) : undefined);
+    if (fallbackFromDemo) {
+      return { ...fallbackFromDemo };
+    }
+    const nowIso = new Date().toISOString();
+    return {
+      id: authUser.id,
+      name: displayName,
+      department: null,
+      title: null,
+      email: fallbackEmail || '',
+      role: 'user',
+      createdAt: nowIso,
+      canUseAnythingAnalysis: true,
+    };
+  };
+
   try {
     const { data: userRow, error: userError } = await supabaseClient
       .from<SupabaseUserRow>('users')
@@ -500,6 +589,10 @@ const ensureSupabaseEmployeeUser = async (
       .maybeSingle();
 
     if (userError) {
+      if (isSupabaseUnavailableError(userError)) {
+        logSupabaseUnavailableWarning('ユーザー情報の取得', userError);
+        return buildFallbackEmployeeUser();
+      }
       throw userError;
     }
 
@@ -519,6 +612,10 @@ const ensureSupabaseEmployeeUser = async (
         .maybeSingle();
 
       if (insertError && !isUniqueViolation(insertError)) {
+        if (isSupabaseUnavailableError(insertError)) {
+          logSupabaseUnavailableWarning('ユーザー情報の作成', insertError);
+          return buildFallbackEmployeeUser();
+        }
         throw insertError;
       }
 
@@ -532,6 +629,10 @@ const ensureSupabaseEmployeeUser = async (
       .maybeSingle();
 
     if (employeeError && !isUniqueViolation(employeeError)) {
+      if (isSupabaseUnavailableError(employeeError)) {
+        logSupabaseUnavailableWarning('従業員レコードの取得', employeeError);
+        return buildFallbackEmployeeUser();
+      }
       throw employeeError;
     }
 
@@ -549,6 +650,10 @@ const ensureSupabaseEmployeeUser = async (
         });
 
       if (insertEmployeeError && !isUniqueViolation(insertEmployeeError)) {
+        if (isSupabaseUnavailableError(insertEmployeeError)) {
+          logSupabaseUnavailableWarning('従業員レコードの作成', insertEmployeeError);
+          return buildFallbackEmployeeUser();
+        }
         throw insertEmployeeError;
       }
     }
@@ -579,21 +684,11 @@ const ensureSupabaseEmployeeUser = async (
         );
         hasLoggedMissingSupabaseUserTableWarning = true;
       }
-      return {
-        id: authUser.id,
-        name: displayName,
-        department: null,
-        title: null,
-        email: fallbackEmail ?? '',
-        role: 'user',
-        createdAt: new Date().toISOString(),
-        canUseAnythingAnalysis: true,
-      };
+      return buildFallbackEmployeeUser();
     }
     if (isSupabaseUnavailableError(error)) {
-      const wrappedError = new Error('Supabaseへの接続に失敗しました。ネットワークまたはSupabaseの設定を確認してください。');
-      (wrappedError as any).cause = error;
-      throw wrappedError;
+      logSupabaseUnavailableWarning('ユーザー情報の確保', error);
+      return buildFallbackEmployeeUser();
     }
     throw error;
   }
@@ -824,13 +919,6 @@ const createApplicationNotificationEmails = (application: Application) => {
 };
 
 
-export const isSupabaseUnavailableError = (error: any): boolean => {
-  if (!error) return false;
-  const message = typeof error === 'string' ? error : error.message || error.details || error.error_description;
-  if (!message) return false;
-  return /fetch failed/i.test(message) || /failed to fetch/i.test(message) || /network/i.test(message);
-};
-
 export const resolveUserSession = async (authUser: MinimalAuthUser): Promise<EmployeeUser> => {
   const fallbackEmail = authUser.email ?? '';
 
@@ -838,12 +926,45 @@ export const resolveUserSession = async (authUser: MinimalAuthUser): Promise<Emp
     throw new Error('Supabaseの認証情報が設定されていません。');
   }
 
-  const supabaseUser = await ensureSupabaseEmployeeUser(authUser, fallbackEmail);
-  if (supabaseUser) {
-    return supabaseUser;
+  const buildFallbackUser = (): EmployeeUser => {
+    const fallbackFromDemo =
+      demoState.employeeUsers.find((user) => user.id === authUser.id) ??
+      (fallbackEmail ? demoState.employeeUsers.find((user) => user.email === fallbackEmail) : undefined) ??
+      demoState.employeeUsers[0];
+    if (fallbackFromDemo) {
+      return { ...fallbackFromDemo };
+    }
+    const displayName =
+      authUser.user_metadata?.full_name?.trim() ||
+      authUser.user_metadata?.name?.trim?.() ||
+      fallbackEmail ||
+      'ゲストユーザー';
+    return {
+      id: authUser.id,
+      name: displayName,
+      department: null,
+      title: null,
+      email: fallbackEmail,
+      role: 'user',
+      createdAt: new Date().toISOString(),
+      canUseAnythingAnalysis: true,
+    };
+  };
+
+  try {
+    const supabaseUser = await ensureSupabaseEmployeeUser(authUser, fallbackEmail);
+    if (supabaseUser) {
+      return supabaseUser;
+    }
+  } catch (error) {
+    if (isSupabaseUnavailableError(error)) {
+      logSupabaseUnavailableWarning('ユーザーセッションの解決', error);
+      return buildFallbackUser();
+    }
+    throw error;
   }
 
-  throw new Error('Supabase上にユーザー情報が見つかりません。管理者にお問い合わせください。');
+  return buildFallbackUser();
 };
 
 export const getUsers = async (): Promise<EmployeeUser[]> => {
@@ -857,6 +978,10 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
         .order('name', { ascending: true });
 
       if (error) {
+        if (isSupabaseUnavailableError(error)) {
+          logSupabaseUnavailableWarning('従業員ビューの取得', error);
+          return deepClone(demoState.employeeUsers);
+        }
         if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
           if (!hasLoggedMissingEmployeeViewWarning && typeof console !== 'undefined') {
             console.warn(
@@ -882,6 +1007,10 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
           );
           hasLoggedMissingEmployeeViewWarning = true;
         }
+        return deepClone(demoState.employeeUsers);
+      }
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('従業員ビューの取得', error);
         return deepClone(demoState.employeeUsers);
       }
       throw error;
