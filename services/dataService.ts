@@ -636,8 +636,7 @@ const ensureSupabaseEmployeeUser = async (
       throw userError;
     }
 
-<<<<<<< ours
-    let ensuredUser = userRow;
+    let ensuredUser = userRow ?? null;
 
     if (!ensuredUser) {
       const { data: insertedUser, error: insertError } = await supabaseClient
@@ -652,19 +651,38 @@ const ensureSupabaseEmployeeUser = async (
         .select('id, name, email, role, can_use_anything_analysis, created_at')
         .maybeSingle();
 
-      if (insertError && !isUniqueViolation(insertError)) {
+      if (insertError) {
         if (isSupabaseUnavailableError(insertError)) {
           logSupabaseUnavailableWarning('ユーザー情報の作成', insertError);
           return buildFallbackEmployeeUser();
         }
-        throw insertError;
-      }
 
-      ensuredUser = insertedUser ?? userRow ?? null;
-=======
-    if (!userRow) {
+        if (!isUniqueViolation(insertError)) {
+          throw insertError;
+        }
+
+        const { data: refetchedUser, error: refetchError } = await supabaseClient
+          .from<SupabaseUserRow>('users')
+          .select('id, name, email, role, can_use_anything_analysis, created_at')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        if (refetchError) {
+          if (isSupabaseUnavailableError(refetchError)) {
+            logSupabaseUnavailableWarning('ユーザー情報の再取得', refetchError);
+            return buildFallbackEmployeeUser();
+          }
+          throw refetchError;
+        }
+
+        ensuredUser = refetchedUser ?? null;
+      } else {
+        ensuredUser = insertedUser ?? null;
+      }
+    }
+
+    if (!ensuredUser) {
       throw new Error('Supabase上にユーザー情報が存在しません。管理者に問い合わせてください。');
->>>>>>> theirs
     }
 
     const { data: employeeRow, error: employeeError } = await supabaseClient
@@ -709,14 +727,14 @@ const ensureSupabaseEmployeeUser = async (
     }
 
     return {
-      id: userRow.id,
-      name: userRow.name ?? displayName,
+      id: ensuredUser.id,
+      name: ensuredUser.name ?? displayName,
       department: employeeRow?.department ?? null,
       title: employeeRow?.title ?? null,
-      email: userRow.email ?? fallbackEmail ?? '',
-      role: userRow.role === 'admin' ? 'admin' : 'user',
-      createdAt: employeeRow?.created_at ?? userRow.created_at ?? new Date().toISOString(),
-      canUseAnythingAnalysis: userRow.can_use_anything_analysis ?? false,
+      email: ensuredUser.email ?? fallbackEmail ?? '',
+      role: ensuredUser.role === 'admin' ? 'admin' : 'user',
+      createdAt: employeeRow?.created_at ?? ensuredUser.created_at ?? new Date().toISOString(),
+      canUseAnythingAnalysis: ensuredUser.can_use_anything_analysis ?? false,
     };
   } catch (error) {
     if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {

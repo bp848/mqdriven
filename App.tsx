@@ -265,9 +265,17 @@ const App: React.FC = () => {
         setTitles(titlesData);
       } catch (err: any) {
         console.error("Data fetching error:", err);
-        setError("データの読み込みに失敗しました。");
         if (dataService.isSupabaseUnavailableError(err)) {
             setError('データベースに接続できません。オフラインまたは Supabase の認証情報が正しく設定されていない可能性があります。');
+            setShowSetupModal(true);
+            return;
+        }
+        if (err instanceof Error && typeof err.message === 'string' && err.message.trim().length > 0) {
+            setError(err.message.trim());
+        } else if (typeof err === 'string' && err.trim().length > 0) {
+            setError(err.trim());
+        } else {
+            setError("データの読み込みに失敗しました。");
         }
       } finally {
         setIsLoading(false);
