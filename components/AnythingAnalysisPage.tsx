@@ -4,6 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { User, AnalysisResult, AnalysisHistory } from '../types';
 import { getAnalysisHistory, addAnalysisHistory } from '../services/dataService';
 import { getEnvValue } from '../utils.ts';
+import { GEMINI_API_KEY } from '../src/envShim';
 import { Loader, Sparkles, FileText, Link as LinkIcon, Trash2, Copy, History, X } from './Icons';
 
 interface AnythingAnalysisPageProps {
@@ -187,7 +188,12 @@ const AnythingAnalysisPage: React.FC<AnythingAnalysisPageProps> = ({ currentUser
         setResult(null);
 
         try {
-            const apiKey = getEnvValue('API_KEY') ?? getEnvValue('GEMINI_API_KEY');
+            // Use GEMINI_API_KEY from envShim (already configured for both dev and prod)
+            const apiKey = GEMINI_API_KEY || getEnvValue('GEMINI_API_KEY') || getEnvValue('API_KEY');
+            console.log('AnythingAnalysisPage API Key check:', {
+                fromEnvShim: GEMINI_API_KEY ? '***SET***' : 'NOT SET',
+                fromUtils: apiKey ? '***SET***' : 'NOT SET'
+            });
             if (!apiKey) {
                 throw new Error('AI APIキーが設定されていません。');
             }
