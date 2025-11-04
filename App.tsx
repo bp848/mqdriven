@@ -230,21 +230,23 @@ const App: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // IMPORTANT: Load users first to populate demoState.employeeUsers
-        // This ensures resolveEmployeeUser works correctly in approval routes
+        // IMPORTANT: Load users, approval routes, and application codes first
+        // This ensures mapApplicationDetails works correctly
         const usersData = await dataService.getUsers();
+        const routesData = await dataService.getApprovalRoutes();
+        const appCodesData = await dataService.getApplicationCodes();
         
         const [
-          jobsData, customersData, journalData, accountsData, leadsData, routesData,
+          jobsData, customersData, journalData, accountsData, leadsData,
           poData, inventoryData, employeesData, bugReportsData, estimatesData, 
-          applicationsData, appCodesData, invoicesData, projectsData,
+          applicationsData, invoicesData, projectsData,
           departmentsData, paymentRecipientsData, allocationDivisionsData, titlesData
         ] = await Promise.all([
           dataService.getJobs(), dataService.getCustomers(), dataService.getJournalEntries(),
-          dataService.getAccountItems(), dataService.getLeads(), dataService.getApprovalRoutes(),
+          dataService.getAccountItems(), dataService.getLeads(),
           dataService.getPurchaseOrders(), dataService.getInventoryItems(), dataService.getEmployees(),
           dataService.getBugReports(), dataService.getEstimates(),
-          dataService.getApplications(currentUser), dataService.getApplicationCodes(), dataService.getInvoices(),
+          dataService.getApplications(currentUser), dataService.getInvoices(),
           dataService.getProjects(), dataService.getDepartments(), dataService.getPaymentRecipients(),
           dataService.getAllocationDivisions(), dataService.getTitles()
         ]);

@@ -2425,6 +2425,8 @@ export const rejectApplication = async (application: ApplicationWithDetails, rea
         };
         return deepClone(mapApplicationDetails(updatedApp));
       }
+      
+      throw new Error('否認処理後のデータ取得に失敗しました');
     } catch (error) {
       console.error('申請の否認に失敗しました:', error);
       throw error;
