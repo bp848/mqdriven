@@ -176,31 +176,48 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
 
         let tempId = `temp-${Date.now()}`;
         try {
+            console.log('[OCR] ファイルアップロード開始:', file.name, 'タイプ:', file.type, 'サイズ:', file.size);
+            
             const tempItem: InboxItem = {
                 id: tempId, fileName: file.name, filePath: '', fileUrl: URL.createObjectURL(file), mimeType: file.type,
                 status: InboxItemStatus.Processing, extractedData: null, errorMessage: null, createdAt: new Date().toISOString(),
             };
             setItems(prev => [tempItem, ...prev]);
 
+            console.log('[OCR] ファイルをストレージにアップロード中...');
             const { path } = await uploadFile(file, 'inbox');
+            console.log('[OCR] ストレージアップロード完了:', path);
+            
             // FIX: Add missing properties errorMessage and extractedData when calling addInboxItem
             const newDbItem = await addInboxItem({ fileName: file.name, filePath: path, mimeType: file.type, status: InboxItemStatus.Processing, extractedData: null, errorMessage: null });
+            console.log('[OCR] DBアイテム作成完了:', newDbItem.id);
             tempId = newDbItem.id; 
             setItems(prev => prev.map(i => i.id.startsWith('temp-') ? { ...newDbItem, fileUrl: URL.createObjectURL(file) } : i));
 
             if (isAIOff) {
+                console.log('[OCR] AI機能が無効です。自動解析をスキップします。');
                 await updateInboxItem(newDbItem.id, { status: InboxItemStatus.PendingReview, errorMessage: 'AI機能無効のため自動解析スキップ' });
                 await loadItems();
+                addToast('AI機能が無効のため、自動解析をスキップしました', 'info');
                 return;
             }
 
+            console.log('[OCR] ファイルをBase64に変換中...');
             const base64String = await readFileAsBase64(file);
+            console.log('[OCR] Base64変換完了。文字列長:', base64String.length);
+            
+            console.log('[OCR] AI-OCR解析開始...');
             const ocrData = await extractInvoiceDetails(base64String, file.type, accountItems, allocationDivisions);
+            console.log('[OCR] AI-OCR解析完了:', ocrData);
+            
             await updateInboxItem(newDbItem.id, { status: InboxItemStatus.PendingReview, extractedData: ocrData });
             await loadItems();
+            addToast('OCR解析が完了しました', 'success');
         } catch (err: any) {
-            setError(err.message || 'ファイルのアップロードまたは解析中にエラーが発生しました。');
-            addToast('ファイル処理エラー', 'error');
+            console.error('[OCR] エラー発生:', err);
+            const errorMessage = err.message || 'ファイルのアップロードまたは解析中にエラーが発生しました。';
+            setError(errorMessage);
+            addToast(`ファイル処理エラー: ${errorMessage}`, 'error');
             if (tempId && !tempId.startsWith('temp-')) {
                 await updateInboxItem(tempId, { status: InboxItemStatus.Error, errorMessage: err.message });
             }

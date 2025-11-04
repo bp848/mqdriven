@@ -7,9 +7,9 @@ import { formatJPY, createSignature, getEnvValue } from "../utils.ts";
 import { v4 as uuidv4 } from 'uuid';
 
 // AI機能をグローバルに制御する環境変数
-const NEXT_PUBLIC_AI_OFF = getEnvValue('NEXT_PUBLIC_AI_OFF') === '1';
+const NEXT_PUBLIC_AI_OFF = getEnvValue('NEXT_PUBLIC_AI_OFF') === '1' || getEnvValue('VITE_AI_OFF') === '1';
 
-const API_KEY = getEnvValue('API_KEY') ?? getEnvValue('GEMINI_API_KEY');
+const API_KEY = getEnvValue('API_KEY') ?? getEnvValue('GEMINI_API_KEY') ?? getEnvValue('VITE_API_KEY') ?? getEnvValue('VITE_GEMINI_API_KEY');
 
 if (!API_KEY) {
   if (NEXT_PUBLIC_AI_OFF) {
@@ -198,7 +198,7 @@ export const enrichCustomerData = async (customerName: string): Promise<Partial<
         const cleanedData: Partial<Customer> = {};
         for (const key in parsed) {
             if (parsed[key] !== null && parsed[key] !== undefined) {
-                cleanedData[key as keyof Customer] = parsed[key];
+                (cleanedData as any)[key] = parsed[key];
             }
         }
         return cleanedData;
@@ -225,20 +225,30 @@ const extractInvoiceSchema = {
 export const extractInvoiceDetails = async (imageBase64: string, mimeType: string, accountItems: AccountItem[], allocationDivisions: AllocationDivision[]): Promise<InvoiceData> => {
     checkOnlineAndAIOff();
     return withRetry(async () => {
+        console.log('[Gemini] OCR解析開始 - mimeType:', mimeType, 'base64長:', imageBase64.length);
+        console.log('[Gemini] 勘定科目数:', accountItems.length, '振分区分数:', allocationDivisions.length);
+        
         const imagePart = { inlineData: { data: imageBase64, mimeType } };
         const textPart = { text: `この画像から請求書の詳細情報を抽出してください。
 勘定科目は次のリストから選択してください: ${accountItems.map(i => i.name).join(', ')}
 振分区分は次のリストから選択してください: ${allocationDivisions.map(d => d.name).join(', ')}` };
+        
+        console.log('[Gemini] Gemini APIを呼び出し中...');
         const response = await ai!.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [imagePart, textPart] },
             config: { responseMimeType: "application/json", responseSchema: extractInvoiceSchema }
         });
+        
+        console.log('[Gemini] API応答受信:', response.text.substring(0, 100) + '...');
         let jsonStr = response.text.trim();
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
-        return JSON.parse(jsonStr);
+        
+        const parsedData = JSON.parse(jsonStr);
+        console.log('[Gemini] JSON解析成功:', parsedData);
+        return parsedData;
     });
 };
 

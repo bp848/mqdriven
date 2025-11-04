@@ -393,7 +393,7 @@ const fetchAccountItemsFromSupabase = async (): Promise<AccountItem[] | null> =>
 
     for (const table of sources) {
       const { data, error } = await supabaseClient
-        .from<SupabaseAccountItemRow>(table)
+        .from(table)
         .select('*');
 
       if (error) {
@@ -465,7 +465,7 @@ const fetchDepartmentsFromSupabase = async (): Promise<Department[] | null> => {
 
     for (const source of sources) {
       const { data, error } = await supabaseClient
-        .from<SupabaseDepartmentRow>(source.table)
+        .from(source.table)
         .select(source.select);
 
       if (error) {
@@ -516,7 +516,7 @@ const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] 
 
     for (const select of selects) {
       const { data, error } = await supabaseClient
-        .from<SupabasePaymentRecipientRow>('payment_recipients')
+        .from('payment_recipients')
         .select(select);
 
       if (error) {
@@ -551,60 +551,41 @@ const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] 
       { data: NonNullable<SupabasePaymentRecipientRow['allocation_targets']>[number]; sortOrder: number; createdAt: string; name: string }
     >();
 
-    const allocationSelects = [
-      'id, payment_recipient_id, target_id, name, target_name, sort_order, created_at',
-      'id, payment_recipient_id, name, sort_order, created_at',
-      'id, payment_recipient_id, target_id, target_name, created_at',
-      '*',
-    ] as const;
+    // 指示書に従い、存在する6カラムのみを取得
+    const { data, error } = await supabaseClient
+      .from('payment_recipient_allocation_targets')
+      .select('id, payment_recipient_id, name, sort_order, created_at, updated_at')
+      .order('sort_order', { ascending: true });
 
-    for (const select of allocationSelects) {
-      const { data, error } = await supabaseClient
-        .from<SupabasePaymentRecipientAllocationTargetRow>('payment_recipient_allocation_targets')
-        .select(select);
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('支払先振分先マスタの取得', error);
-          break;
-        }
-        if (isRelationNotFoundError(error)) {
-          break;
-        }
-        if (isColumnNotFoundError(error)) {
-          continue;
-        }
+    if (error) {
+      if (isSupabaseUnavailableError(error)) {
+        logSupabaseUnavailableWarning('支払先振分先マスタの取得', error);
+      } else if (!isRelationNotFoundError(error)) {
         throw error;
       }
-
-      if (!data || data.length === 0) {
-        allocationTargetsByRecipientId.clear();
-        break;
-      }
-
-      data.forEach(targetRow => {
-        const recipientId = toStringValue(targetRow.payment_recipient_id ?? targetRow.target_id ?? null, '').trim();
+    } else if (data && data.length > 0) {
+      (data as any[]).forEach((targetRow: any) => {
+        const recipientId = toStringValue(targetRow.payment_recipient_id, '').trim();
         if (!recipientId) {
           return;
         }
 
+        // target_id, target_name は存在しないため、name のみを使用
         const normalizedTarget: NonNullable<SupabasePaymentRecipientRow['allocation_targets']>[number] = {
           id: targetRow.id,
-          name: targetRow.name ?? targetRow.target_name ?? null,
-          target_id: targetRow.target_id ?? targetRow.payment_recipient_id ?? null,
-          target_name: targetRow.target_name ?? targetRow.name ?? null,
+          name: targetRow.name ?? null,
+          target_id: null, // カラムが存在しないため null
+          target_name: null, // カラムが存在しないため null
         };
 
         const sortOrder = typeof targetRow.sort_order === 'number' ? targetRow.sort_order : Number.MAX_SAFE_INTEGER;
         const createdAt = toStringValue(targetRow.created_at, '');
-        const sortName = toStringValue(normalizedTarget.name ?? normalizedTarget.target_name ?? null, '');
+        const sortName = toStringValue(targetRow.name, '');
 
         const existing = allocationTargetsByRecipientId.get(recipientId) ?? [];
         existing.push({ data: normalizedTarget, sortOrder, createdAt, name: sortName });
         allocationTargetsByRecipientId.set(recipientId, existing);
       });
-
-      break;
     }
 
     allocationTargetsByRecipientId.forEach(targets => {
@@ -659,7 +640,7 @@ const fetchAllocationDivisionsFromSupabase = async (): Promise<AllocationDivisio
 
     for (const source of sources) {
       const { data, error } = await supabaseClient
-        .from<SupabaseAllocationDivisionRow>(source.table)
+        .from(source.table)
         .select(source.select);
 
       if (error) {
@@ -703,7 +684,7 @@ const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser |
     const supabaseClient = getSupabase();
 
     const { data, error } = await supabaseClient
-      .from<SupabaseEmployeeViewRow>('v_employees_active')
+      .from('v_employees_active')
       .select(SUPABASE_VIEW_COLUMNS)
       .eq('user_id', userId)
       .maybeSingle();
@@ -784,7 +765,7 @@ const ensureSupabaseEmployeeUser = async (
 
   try {
     const { data: userRow, error: userError } = await supabaseClient
-      .from<SupabaseUserRow>('users')
+      .from('users')
       .select('id, name, email, role, can_use_anything_analysis, created_at')
       .eq('id', authUser.id)
       .maybeSingle();
@@ -801,7 +782,7 @@ const ensureSupabaseEmployeeUser = async (
 
     if (!ensuredUser) {
       const { data: insertedUser, error: insertError } = await supabaseClient
-        .from<SupabaseUserRow>('users')
+        .from('users')
         .insert({
           id: authUser.id,
           name: displayName,
@@ -823,7 +804,7 @@ const ensureSupabaseEmployeeUser = async (
         }
 
         const { data: refetchedUser, error: refetchError } = await supabaseClient
-          .from<SupabaseUserRow>('users')
+          .from('users')
           .select('id, name, email, role, can_use_anything_analysis, created_at')
           .eq('id', authUser.id)
           .maybeSingle();
@@ -847,7 +828,7 @@ const ensureSupabaseEmployeeUser = async (
     }
 
     const { data: employeeRow, error: employeeError } = await supabaseClient
-      .from<SupabaseEmployeeRow>('employees')
+      .from('employees')
       .select('id, user_id, name, department, title, created_at')
       .eq('user_id', authUser.id)
       .maybeSingle();
@@ -1276,7 +1257,7 @@ export const getUsers = async (): Promise<EmployeeUser[]> => {
       const supabaseClient = getSupabase();
 
       const { data, error } = await supabaseClient
-        .from<SupabaseEmployeeViewRow>('v_employees_active')
+        .from('v_employees_active')
         .select(SUPABASE_VIEW_COLUMNS)
         .order('name', { ascending: true });
 
@@ -1384,7 +1365,7 @@ export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Pr
 
     if (Object.keys(employeeUpdates).length > 0) {
       const { data: employeeRow, error: employeeSelectError } = await supabaseClient
-        .from<SupabaseEmployeeRow>('employees')
+        .from('employees')
         .select('id')
         .eq('user_id', id)
         .maybeSingle();
@@ -2152,9 +2133,62 @@ export const deleteTitle = async (id: string): Promise<void> => {
     titles = titles.filter(title => title.id !== id);
 };
 
-export const getInboxItems = async (): Promise<InboxItem[]> => deepClone(demoState.inboxItems);
+export const getInboxItems = async (): Promise<InboxItem[]> => {
+    if (hasSupabaseCredentials()) {
+        const supabaseClient = getSupabase();
+        const { data, error } = await supabaseClient
+            .from('inbox_items')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw new Error(`インボックスアイテムの取得に失敗しました: ${error.message}`);
+        
+        return (data || []).map(item => ({
+            id: item.id,
+            fileName: item.file_name,
+            filePath: item.file_path,
+            fileUrl: supabaseClient.storage.from('inbox').getPublicUrl(item.file_path).data.publicUrl,
+            mimeType: item.mime_type,
+            status: item.status as InboxItemStatus,
+            extractedData: item.extracted_data,
+            errorMessage: item.error_message,
+            createdAt: item.created_at,
+        }));
+    }
+    return deepClone(demoState.inboxItems);
+};
 
 export const addInboxItem = async (item: Omit<InboxItem, 'id' | 'createdAt' | 'fileUrl'> & { fileUrl?: string }): Promise<InboxItem> => {
+    if (hasSupabaseCredentials()) {
+        const supabaseClient = getSupabase();
+        const { data, error } = await supabaseClient
+            .from('inbox_items')
+            .insert({
+                file_name: item.fileName,
+                file_path: item.filePath,
+                mime_type: item.mimeType,
+                status: item.status,
+                extracted_data: item.extractedData,
+                error_message: item.errorMessage,
+            })
+            .select()
+            .single();
+        
+        if (error) throw new Error(`インボックスアイテムの追加に失敗しました: ${error.message}`);
+        
+        return {
+            id: data.id,
+            fileName: data.file_name,
+            filePath: data.file_path,
+            fileUrl: supabaseClient.storage.from('inbox').getPublicUrl(data.file_path).data.publicUrl,
+            mimeType: data.mime_type,
+            status: data.status as InboxItemStatus,
+            extractedData: data.extracted_data,
+            errorMessage: data.error_message,
+            createdAt: data.created_at,
+        };
+    }
+    
     const newItem: InboxItem = {
       id: uuidv4(),
       fileName: item.fileName,
@@ -2171,16 +2205,88 @@ export const addInboxItem = async (item: Omit<InboxItem, 'id' | 'createdAt' | 'f
 };
 
 export const updateInboxItem = async (id: string, updates: Partial<InboxItem>): Promise<InboxItem> => {
+    if (hasSupabaseCredentials()) {
+        const supabaseClient = getSupabase();
+        const dbUpdates: any = {};
+        if (updates.status) dbUpdates.status = updates.status;
+        if (updates.extractedData !== undefined) dbUpdates.extracted_data = updates.extractedData;
+        if (updates.errorMessage !== undefined) dbUpdates.error_message = updates.errorMessage;
+        
+        const { data, error } = await supabaseClient
+            .from('inbox_items')
+            .update(dbUpdates)
+            .eq('id', id)
+            .select()
+            .single();
+        
+        if (error) throw new Error(`インボックスアイテムの更新に失敗しました: ${error.message}`);
+        
+        return {
+            id: data.id,
+            fileName: data.file_name,
+            filePath: data.file_path,
+            fileUrl: supabaseClient.storage.from('inbox').getPublicUrl(data.file_path).data.publicUrl,
+            mimeType: data.mime_type,
+            status: data.status as InboxItemStatus,
+            extractedData: data.extracted_data,
+            errorMessage: data.error_message,
+            createdAt: data.created_at,
+        };
+    }
+    
     const item = findById(demoState.inboxItems, id, 'インボックス項目');
     Object.assign(item, updates);
     return deepClone(item);
 };
 
 export const deleteInboxItem = async (item: InboxItem): Promise<void> => {
+    if (hasSupabaseCredentials()) {
+        const supabaseClient = getSupabase();
+        
+        // Delete file from storage
+        const { error: storageError } = await supabaseClient.storage
+            .from('inbox')
+            .remove([item.filePath]);
+        
+        if (storageError) console.warn('ストレージからのファイル削除に失敗しました:', storageError);
+        
+        // Delete record from database
+        const { error } = await supabaseClient
+            .from('inbox_items')
+            .delete()
+            .eq('id', item.id);
+        
+        if (error) throw new Error(`インボックスアイテムの削除に失敗しました: ${error.message}`);
+        return;
+    }
+    
     demoState.inboxItems = demoState.inboxItems.filter(i => i.id !== item.id);
 };
 
 export const uploadFile = async (file: File, bucket: string): Promise<{ path: string; url: string }> => {
+    if (hasSupabaseCredentials()) {
+        const supabaseClient = getSupabase();
+        const identifier = uuidv4();
+        const fileName = file.name ?? `${identifier}.bin`;
+        const path = `${identifier}-${fileName}`;
+        
+        const { data, error } = await supabaseClient.storage
+            .from(bucket)
+            .upload(path, file, {
+                cacheControl: '3600',
+                upsert: false,
+            });
+        
+        if (error) throw new Error(`ファイルのアップロードに失敗しました: ${error.message}`);
+        
+        const { data: urlData } = supabaseClient.storage.from(bucket).getPublicUrl(path);
+        
+        return {
+            path,
+            url: urlData.publicUrl,
+        };
+    }
+    
     const identifier = uuidv4();
     const fileName = file.name ?? `${identifier}.bin`;
     const path = `${bucket}/${identifier}-${fileName}`;

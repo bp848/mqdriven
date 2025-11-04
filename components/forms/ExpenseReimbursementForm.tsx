@@ -199,14 +199,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         setIsOcrLoading(true);
         setError('');
         try {
+            console.log('[経費申請OCR] ファイル読み取り開始:', file.name, 'タイプ:', file.type);
             const base64String = await readFileAsBase64(file);
+            console.log('[経費申請OCR] Base64変換完了。AI解析開始...');
+            
             const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type, accountItems, allocationDivisions);
+            console.log('[経費申請OCR] AI解析完了:', ocrData);
             
             const matchedAccountItem = accountItems.find(item => item.name === ocrData.account);
             const matchedAllocDivision = allocationDivisions.find(div => div.name === ocrData.allocationDivision);
             const matchedCustomer = customers.find(customer => customer.customerName === ocrData.relatedCustomer);
             const matchedProject = projects.find(project => project.projectName === ocrData.project);
             const resolvedProject = matchedCustomer && matchedProject && matchedProject.customerId === matchedCustomer.id ? matchedProject : null;
+
+            console.log('[経費申請OCR] マッチング結果 - 勘定科目:', matchedAccountItem?.name, '振分区分:', matchedAllocDivision?.name);
 
             const newDetail: ExpenseDetail = {
                 id: `row_ocr_${Date.now()}`,
@@ -223,9 +229,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                 mqCode: matchedAccountItem?.mqCode ?? null,
             };
             setDetails(prev => [...prev, newDetail]);
+            console.log('[経費申請OCR] 新しい明細行を追加しました');
 
         } catch (err: any) {
             if (err.name === 'AbortError') return;
+            console.error('[経費申請OCR] エラー:', err);
             setError(err.message || 'AI-OCR処理中にエラーが発生しました。');
         } finally {
             setIsOcrLoading(false);
