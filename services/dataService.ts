@@ -2,6 +2,7 @@ import { normalizeFormCode } from "./normalizeFormCode";
 import { v4 as uuidv4 } from 'uuid';
 import type { PostgrestError, User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { createDemoDataState, DemoDataState } from './demoData.ts';
+import { sendEmail } from './emailService.ts';
 import { getSupabase, hasSupabaseCredentials } from './supabaseClient.ts';
 import {
   EmployeeUser,
@@ -836,31 +837,47 @@ const formatApprovalRouteSummary = (route?: ApprovalRoute): string => {
     .join('\n');
 };
 
-const recordApplicationEmail = (
+const filterDeliverableRecipients = (
+  recipients: ApplicationNotificationRecipient[],
+): ApplicationNotificationRecipient[] => {
+  return recipients.filter((recipient) => recipient.email && /.+@.+\..+/.test(recipient.email));
+};
+
+const recordApplicationEmail = async (
   application: Application,
   audience: ApplicationNotificationAudience,
   recipients: ApplicationNotificationRecipient[],
   subject: string,
   body: string,
-) => {
-  if (recipients.length === 0) {
-    return;
+): Promise<ApplicationNotificationEmail | null> => {
+  const deliverable = filterDeliverableRecipients(recipients);
+  if (deliverable.length === 0) {
+    return null;
   }
 
-  demoState.applicationEmailNotifications.push({
-    id: uuidv4(),
+  const { id: messageId, sentAt } = await sendEmail({
+    to: deliverable.map((recipient) => recipient.email),
+    subject,
+    body,
+  });
+
+  const record: ApplicationNotificationEmail = {
+    id: messageId,
     applicationId: application.id,
     applicationCodeId: application.applicationCodeId,
     audience,
     subject,
     body,
-    recipients,
-    sentAt: new Date().toISOString(),
+    recipients: deliverable,
+    sentAt,
     status: application.status,
-  });
+  };
+
+  demoState.applicationEmailNotifications.push(record);
+  return record;
 };
 
-const createApplicationNotificationEmails = (application: Application) => {
+const createApplicationNotificationEmails = async (application: Application) => {
   const applicationCode = demoState.applicationCodes.find(code => code.id === application.applicationCodeId);
   const approvalRoute = demoState.approvalRoutes.find(route => route.id === application.approvalRouteId);
   const applicant = resolveEmployeeUser(application.applicantId);
@@ -893,7 +910,7 @@ const createApplicationNotificationEmails = (application: Application) => {
       '',
       '承認対応をお願いします。',
     ].join('\n');
-    recordApplicationEmail(application, 'approval_route', approverRecipients, subject, body);
+    await recordApplicationEmail(application, 'approval_route', approverRecipients, subject, body);
   }
 
   const applicantRecipients = applicant ? toNotificationRecipients([applicant]) : [];
@@ -914,7 +931,72 @@ const createApplicationNotificationEmails = (application: Application) => {
     bodyLines.push('承認状況はシステムの「承認一覧」で確認できます。');
 
     const body = bodyLines.join('\n');
-    recordApplicationEmail(application, 'applicant', applicantRecipients, subject, body);
+    await recordApplicationEmail(application, 'applicant', applicantRecipients, subject, body);
+  }
+};
+
+const createApplicationStatusChangeEmails = async (application: Application) => {
+  const applicationCode = demoState.applicationCodes.find(code => code.id === application.applicationCodeId);
+  const approvalRoute = demoState.approvalRoutes.find(route => route.id === application.approvalRouteId);
+  const applicant = resolveEmployeeUser(application.applicantId);
+
+  const applicationName = applicationCode?.name ?? '申請';
+  const applicantName = applicant?.name ?? '申請者';
+  const statusLabel = APPLICATION_STATUS_LABELS[application.status] ?? application.status;
+  const routeSummary = formatApprovalRouteSummary(approvalRoute);
+
+  const baseSummaryLines = [
+    `申請ID: ${application.id}`,
+    `申請種別: ${applicationName}`,
+    `申請者: ${applicantName}`,
+    `最終ステータス: ${statusLabel}`,
+  ];
+
+  if (application.rejectionReason) {
+    baseSummaryLines.push(`差戻し理由: ${application.rejectionReason}`);
+  }
+
+  if (routeSummary) {
+    baseSummaryLines.push(`承認ルート:\n${routeSummary}`);
+  }
+
+  const summaryText = baseSummaryLines.join('\n');
+
+  const applicantRecipients = applicant ? toNotificationRecipients([applicant]) : [];
+  if (applicantRecipients.length > 0) {
+    const subjectPrefix = application.status === 'approved' ? '【承認完了】' : application.status === 'rejected' ? '【差戻し】' : '【ステータス更新】';
+    const subject = `${subjectPrefix}${applicationName}`;
+    const bodyLines = [
+      `${applicantName}さん`,
+      '',
+      `${applicationName}の申請ステータスが「${statusLabel}」になりました。`,
+      '',
+      summaryText,
+      '',
+      '詳細は承認ワークフロー画面から確認できます。',
+    ];
+
+    await recordApplicationEmail(application, 'applicant', applicantRecipients, subject, bodyLines.join('\n'));
+  }
+
+  const approverRecipients = toNotificationRecipients(
+    (approvalRoute?.routeData?.steps ?? [])
+      .map(step => resolveEmployeeUser(step.approverId))
+      .filter(user => (user?.id ?? '') !== (applicant?.id ?? '')),
+  );
+
+  if (approverRecipients.length > 0) {
+    const subjectPrefix = application.status === 'approved' ? '【対応完了】' : application.status === 'rejected' ? '【差戻し完了】' : '【ステータス更新】';
+    const subject = `${subjectPrefix}${applicationName} - ${applicantName}`;
+    const bodyLines = [
+      `${applicantName}さんの${applicationName}が「${statusLabel}」になりました。`,
+      '',
+      summaryText,
+      '',
+      '必要に応じて申請内容の確認をお願いします。',
+    ];
+
+    await recordApplicationEmail(application, 'approval_route', approverRecipients, subject, bodyLines.join('\n'));
   }
 };
 
@@ -1679,7 +1761,7 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
       updatedAt: now,
     };
     demoState.applications.push(application);
-    createApplicationNotificationEmails(application);
+    await createApplicationNotificationEmails(application);
     return deepClone(mapApplicationDetails(application));
 };
 
@@ -1692,6 +1774,7 @@ export const approveApplication = async (application: ApplicationWithDetails, ap
     stored.currentLevel = (stored.currentLevel ?? 0) + 1;
     stored.approverId = approver.id;
     stored.updatedAt = new Date().toISOString();
+    await createApplicationStatusChangeEmails(stored);
     return deepClone(mapApplicationDetails(stored));
 };
 
@@ -1703,6 +1786,7 @@ export const rejectApplication = async (application: ApplicationWithDetails, rea
     stored.rejectionReason = reason;
     stored.approverId = approver.id;
     stored.updatedAt = new Date().toISOString();
+    await createApplicationStatusChangeEmails(stored);
     return deepClone(mapApplicationDetails(stored));
 };
 
