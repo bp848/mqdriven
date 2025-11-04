@@ -6,6 +6,11 @@ interface Props {
 }
 
 <<<<<<< ours
+<<<<<<< ours
+=======
+const ADMIN_USER_ID = '6f66ccca-4b9b-4061-b029-fea0836775ea';
+
+>>>>>>> theirs
 =======
 const ADMIN_USER_ID = '6f66ccca-4b9b-4061-b029-fea0836775ea';
 
@@ -18,19 +23,29 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
     {
         title: '管理者ユーザーのUUIDを確認する',
 <<<<<<< ours
+<<<<<<< ours
         description: 'SQL Editorで次のクエリを実行し、承認ルートに登録したいユーザー（通常は自分）のIDを控えてください。',
 =======
+=======
+>>>>>>> theirs
         description:
             'SQL Editorで次のクエリを実行し、承認ルートに登録したいユーザー（通常は自分）のIDを控えてください。既定では ' +
             ADMIN_USER_ID +
             ' を埋め込んでいます。',
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
         code: 'select id, email from auth.users order by created_at desc;',
     },
     {
         title: '以下のスクリプトを貼り付けて実行する',
 <<<<<<< ours
+<<<<<<< ours
         description: 'スクリプト全体をコピーし、必ずプレースホルダーのUUIDをステップ2で控えた値に置き換えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+=======
+        description: 'スクリプト全体をコピーし、必要に応じてステップ2で控えたUUIDに差し替えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+>>>>>>> theirs
 =======
         description: 'スクリプト全体をコピーし、必要に応じてステップ2で控えたUUIDに差し替えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
 >>>>>>> theirs
@@ -648,6 +663,7 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
                             <AlertTriangle className="mt-1 h-5 w-5 flex-shrink-0" />
                             <div className="space-y-2 text-sm leading-relaxed">
 <<<<<<< ours
+<<<<<<< ours
                                 <p className="font-semibold">必ず UUID を差し替えてから実行してください</p>
                                 <p>
                                     スクリプト内の <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs text-amber-900 dark:bg-amber-500/30 dark:text-amber-100">'00000000-0000-0000-0000-000000000000'</code> は仮の値です。ステップ2で確認した管理者ユーザーの ID に置き換えないと承認ルートの作成に失敗し、アプリは引き続き「データベースエラー」を表示します。
@@ -656,12 +672,17 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
                                     既にスクリプトを実行済みでも、UUID を正しく差し替えた上で再度実行することで状態を修復できます。
                                 </p>
 =======
+=======
+>>>>>>> theirs
                                 <p className="font-semibold">UUID が正しいか必ず確認してください</p>
                                 <div className="rounded bg-white/70 px-2 py-1 font-mono text-xs text-amber-900 dark:bg-slate-900/40 dark:text-amber-100">
                                     <span className="font-semibold">現在の埋め込み値:</span> {ADMIN_USER_ID}
                                 </div>
                                 <p>ステップ2で控えた管理者ユーザーの ID が異なる場合は、SQL を実行する前に該当箇所を編集してください。そのまま実行すると承認ルートの作成に失敗し、アプリは引き続き「データベースエラー」を表示します。</p>
                                 <p>既にスクリプトを実行済みでも、正しい UUID に修正した上で再度実行することで状態を修復できます。</p>
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
                             </div>
                         </div>
