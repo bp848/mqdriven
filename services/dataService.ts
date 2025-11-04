@@ -2131,29 +2131,100 @@ interface SubmissionPayload {
 }
 
 export const submitApplication = async (payload: SubmissionPayload, applicantId: string): Promise<ApplicationWithDetails> => {
-    const route = findById(demoState.approvalRoutes, payload.approvalRouteId, '承認ルート');
-    const now = new Date().toISOString();
-    const status = payload.status ?? 'pending_approval';
-    const currentLevel = payload.currentLevel ?? (status === 'pending_approval' ? 1 : 0);
-    const application: Application = {
-      id: uuidv4(),
-      applicantId,
-      applicationCodeId: payload.applicationCodeId,
-      formData: payload.formData,
-      status,
-      submittedAt: status === 'draft' ? null : (payload.submittedAt ?? now),
-      approvedAt: null,
-      rejectedAt: null,
-      currentLevel,
-      approverId: payload.approverId ?? route.routeData.steps[currentLevel - 1]?.approverId ?? null,
-      rejectionReason: payload.rejectionReason ?? null,
-      approvalRouteId: payload.approvalRouteId,
-      createdAt: now,
-      updatedAt: now,
-    };
-    demoState.applications.push(application);
-    await createApplicationNotificationEmails(application);
-    return deepClone(mapApplicationDetails(application));
+  const now = new Date().toISOString();
+  const status = payload.status ?? 'pending_approval';
+  const currentLevel = payload.currentLevel ?? (status === 'pending_approval' ? 1 : 0);
+
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      
+      // Get approval route to determine first approver
+      const { data: routeData, error: routeError } = await supabaseClient
+        .from('approval_routes')
+        .select('route_data')
+        .eq('id', payload.approvalRouteId)
+        .single();
+
+      if (routeError) {
+        throw new Error(`承認ルートの取得に失敗しました: ${routeError.message}`);
+      }
+
+      const approverId = payload.approverId ?? routeData?.route_data?.steps?.[currentLevel - 1]?.approverId ?? null;
+
+      // Insert application
+      const { data, error } = await supabaseClient
+        .from('applications')
+        .insert({
+          applicant_id: applicantId,
+          application_code_id: payload.applicationCodeId,
+          form_data: payload.formData,
+          status,
+          submitted_at: status === 'draft' ? null : (payload.submittedAt ?? now),
+          approved_at: null,
+          rejected_at: null,
+          current_level: currentLevel,
+          approver_id: approverId,
+          rejection_reason: payload.rejectionReason ?? null,
+          approval_route_id: payload.approvalRouteId,
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const application: Application = {
+          id: data.id,
+          applicantId: data.applicant_id,
+          applicationCodeId: data.application_code_id,
+          formData: data.form_data,
+          status: data.status,
+          submittedAt: data.submitted_at,
+          approvedAt: data.approved_at,
+          rejectedAt: data.rejected_at,
+          currentLevel: data.current_level,
+          approverId: data.approver_id,
+          rejectionReason: data.rejection_reason,
+          approvalRouteId: data.approval_route_id,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+        
+        // Note: Email notifications would need to be implemented separately
+        // await createApplicationNotificationEmails(application);
+        
+        return deepClone(mapApplicationDetails(application));
+      }
+    } catch (error) {
+      console.error('申請の提出に失敗しました:', error);
+      throw error;
+    }
+  }
+
+  // Fallback to demo data
+  const route = findById(demoState.approvalRoutes, payload.approvalRouteId, '承認ルート');
+  const application: Application = {
+    id: uuidv4(),
+    applicantId,
+    applicationCodeId: payload.applicationCodeId,
+    formData: payload.formData,
+    status,
+    submittedAt: status === 'draft' ? null : (payload.submittedAt ?? now),
+    approvedAt: null,
+    rejectedAt: null,
+    currentLevel,
+    approverId: payload.approverId ?? route.routeData.steps[currentLevel - 1]?.approverId ?? null,
+    rejectionReason: payload.rejectionReason ?? null,
+    approvalRouteId: payload.approvalRouteId,
+    createdAt: now,
+    updatedAt: now,
+  };
+  demoState.applications.push(application);
+  await createApplicationNotificationEmails(application);
+  return deepClone(mapApplicationDetails(application));
 };
 
 export const approveApplication = async (application: ApplicationWithDetails, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
