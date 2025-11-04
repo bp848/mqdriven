@@ -8,6 +8,11 @@ interface Props {
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+=======
+const ADMIN_USER_ID = '6f66ccca-4b9b-4061-b029-fea0836775ea';
+
+>>>>>>> theirs
 =======
 const ADMIN_USER_ID = '6f66ccca-4b9b-4061-b029-fea0836775ea';
 
@@ -30,8 +35,11 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
         description: 'SQL Editorで次のクエリを実行し、承認ルートに登録したいユーザー（通常は自分）のIDを控えてください。',
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 =======
@@ -42,6 +50,9 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
             ' を埋め込んでいます。',
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -54,7 +65,11 @@ const setupSteps: Array<{ title: string; description: string; code?: string; }> 
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
         description: 'スクリプト全体をコピーし、必ずプレースホルダーのUUIDをステップ2で控えた値に置き換えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+=======
+        description: 'スクリプト全体をコピーし、必要に応じてステップ2で控えたUUIDに差し替えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
+>>>>>>> theirs
 =======
         description: 'スクリプト全体をコピーし、必要に応じてステップ2で控えたUUIDに差し替えてから実行します。何度実行しても安全なように作られているため、失敗した場合は再実行してください。',
 >>>>>>> theirs
@@ -765,6 +780,7 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
                                 <p className="font-semibold">必ず UUID を差し替えてから実行してください</p>
                                 <p>
                                     スクリプト内の <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-xs text-amber-900 dark:bg-amber-500/30 dark:text-amber-100">'00000000-0000-0000-0000-000000000000'</code> は仮の値です。ステップ2で確認した管理者ユーザーの ID に置き換えないと承認ルートの作成に失敗し、アプリは引き続き「データベースエラー」を表示します。
@@ -777,6 +793,8 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
 >>>>>>> theirs
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
                                 <p className="font-semibold">UUID が正しいか必ず確認してください</p>
                                 <div className="rounded bg-white/70 px-2 py-1 font-mono text-xs text-amber-900 dark:bg-slate-900/40 dark:text-amber-100">
                                     <span className="font-semibold">現在の埋め込み値:</span> {ADMIN_USER_ID}
@@ -785,6 +803,9 @@ const DatabaseSetupInstructionsModal: React.FC<Props> = ({ onRetry }) => {
                                 <p>既にスクリプトを実行済みでも、正しい UUID に修正した上で再度実行することで状態を修復できます。</p>
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
