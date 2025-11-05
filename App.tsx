@@ -722,6 +722,7 @@ const App: React.FC = () => {
                 return <BugReportList reports={bugReports} onUpdateReport={handleUpdateBugReport} searchTerm={searchTerm} />;
             case 'admin_audit_log': return <AuditLogPage />;
             case 'admin_journal_queue': return <JournalQueuePage />;
+            case 'purchasing_suppliers':
             case 'admin_master_management': 
                 return <MasterManagementPage 
                     accountItems={accountItems}
