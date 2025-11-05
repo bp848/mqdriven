@@ -243,7 +243,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
 
     const validateForm = () => {
         const errors = new Set<string>();
-        if (!departmentId) errors.add('departmentId');
+        const warnings = new Set<string>();
+        
+        // 必須チェック（送信を止める）
         if (!approvalRouteId) errors.add('approvalRouteId');
         if (details.length === 0) errors.add('details');
 
@@ -251,22 +253,25 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         today.setHours(0, 0, 0, 0);
 
         details.forEach(detail => {
+            // 必須：名前と金額のみ
+            if (!detail.description.trim()) errors.add(`${detail.id}-description`);
+            if (!detail.amount || detail.amount <= 0) errors.add(`${detail.id}-amount`);
+            
+            // 警告のみ（送信は止めない）
             if (!detail.paymentDate) {
-                errors.add(`${detail.id}-paymentDate`);
+                warnings.add(`${detail.id}-paymentDate`);
             } else {
                 const paymentDate = new Date(detail.paymentDate);
                 if (Number.isNaN(paymentDate.getTime()) || paymentDate.getTime() > today.getTime()) {
-                    errors.add(`${detail.id}-paymentDate`);
+                    warnings.add(`${detail.id}-paymentDate`);
                 }
             }
-            if (!detail.paymentRecipientId) errors.add(`${detail.id}-paymentRecipientId`);
-            if (!detail.description.trim()) errors.add(`${detail.id}-description`);
-            if (!detail.accountItemId) errors.add(`${detail.id}-accountItemId`);
-            if (!detail.allocationDivisionId) errors.add(`${detail.id}-allocationDivisionId`);
-            if (!detail.amount || detail.amount <= 0) errors.add(`${detail.id}-amount`);
-            if (!detail.customerId) errors.add(`${detail.id}-customerId`);
-            if (!detail.projectId) errors.add(`${detail.id}-projectId`);
-            if (!isMqCodeComplete(detail.mqCode)) errors.add(`${detail.id}-mqCode`);
+            if (!detail.paymentRecipientId) warnings.add(`${detail.id}-paymentRecipientId`);
+            if (!detail.accountItemId) warnings.add(`${detail.id}-accountItemId`);
+            if (!detail.allocationDivisionId) warnings.add(`${detail.id}-allocationDivisionId`);
+            if (!detail.customerId) warnings.add(`${detail.id}-customerId`);
+            if (!detail.projectId) warnings.add(`${detail.id}-projectId`);
+            if (!isMqCodeComplete(detail.mqCode)) warnings.add(`${detail.id}-mqCode`);
         });
 
         const { duplicates, message } = evaluateDuplicateWarnings(details);
@@ -329,7 +334,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         setValidationErrors(errors);
         
         if (errors.size > 0) {
-            setError("必須項目をすべて入力してください。");
+            setError("必須項目（承認ルート、明細の名前・金額）を入力してください。");
             return;
         }
 

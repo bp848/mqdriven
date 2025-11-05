@@ -59,12 +59,11 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     };
 
     const handleReject = async () => {
-        if (!application || !rejectionReason.trim()) {
-            alert('差し戻し理由を入力してください。');
+        if (!application) {
             return;
         }
         setIsProcessing(true);
-        await onReject(application, rejectionReason);
+        await onReject(application, rejectionReason || '（理由なし）');
         if (mounted.current) {
             setIsProcessing(false);
         }
@@ -213,7 +212,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                     <div className="flex-shrink-0 p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 space-y-3">
                          <div>
                             <label htmlFor="rejection_reason" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                                コメント・差し戻し理由
+                                コメント・差し戻し理由（任意）
                             </label>
                             <textarea
                                 id="rejection_reason"
@@ -228,7 +227,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={handleReject}
-                                disabled={isProcessing || !rejectionReason.trim()}
+                                disabled={isProcessing}
                                 className="flex items-center gap-2 bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 disabled:bg-slate-400"
                             >
                                 {isProcessing ? <Loader className="w-5 h-5 animate-spin"/> : <Send className="w-5 h-5" />}
