@@ -411,15 +411,22 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                 </details>
                 
                 <div>
-                    <label htmlFor="departmentId" className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">部門 *</label>
-                    <DepartmentSelect
-                        id="departmentId"
-                        value={departmentId}
-                        onChange={setDepartmentId}
-                        required
-                        disabled={isDisabled}
-                        departments={departments}
-                    />
+                    <label htmlFor="departmentId" className={`block text-base font-semibold mb-2 ${!departmentId ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                        部門 * {!departmentId && '⚠️'}
+                    </label>
+                    <div className={!departmentId ? 'border-2 border-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg shadow-lg shadow-red-500/50 animate-pulse' : ''}>
+                        <DepartmentSelect
+                            id="departmentId"
+                            value={departmentId}
+                            onChange={setDepartmentId}
+                            required
+                            disabled={isDisabled}
+                            departments={departments}
+                        />
+                    </div>
+                    {!departmentId && (
+                        <p className="mt-1 text-sm text-red-600 font-semibold">部門を選択してください</p>
+                    )}
                 </div>
                 
                 <div>
@@ -661,10 +668,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                     <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={inputClass} placeholder="補足事項があれば入力してください。" disabled={isDisabled} />
                 </div>
                 
-                <div className={!approvalRouteId ? 'p-4 border-2 border-red-600 bg-red-100 dark:bg-red-900/30 rounded-lg shadow-lg shadow-red-500/50 animate-pulse' : ''}>
+                <div className={
+                    !approvalRouteId 
+                        ? 'p-4 border-2 border-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg shadow-lg shadow-red-500/50 animate-pulse' 
+                        : 'p-4 border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg shadow-md shadow-blue-500/30'
+                }>
                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
-                    {!approvalRouteId && (
+                    {!approvalRouteId ? (
                         <p className="mt-2 text-sm text-red-600 font-semibold">⚠️ 承認ルートを選択してください（必須）</p>
+                    ) : (
+                        <p className="mt-2 text-sm text-blue-600 dark:text-blue-400 font-semibold">✓ 承認ルートが設定されています</p>
                     )}
                 </div>
 
