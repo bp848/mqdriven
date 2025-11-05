@@ -298,9 +298,13 @@ export const extractInvoiceDetails = async (imageBase64: string, mimeType: strin
         
         console.log('[Gemini] Gemini APIを呼び出し中...');
         const response = await ai!.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-pro',
             contents: { parts: [imagePart, textPart] },
-            config: { responseMimeType: "application/json", responseSchema: extractInvoiceSchema }
+            config: { 
+                responseMimeType: "application/json", 
+                responseSchema: extractInvoiceSchema,
+                thinkingConfig: { thinkingBudget: 32768 }
+            }
         });
         
         const preview = ensureString(response.text, '');

@@ -360,7 +360,23 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
     };
     
     const inputClass = "w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
-    const hasError = (fieldId: string) => validationErrors.has(fieldId);
+    
+    // 必須項目が空の場合も赤く表示
+    const hasError = (fieldId: string) => {
+        if (validationErrors.has(fieldId)) return true;
+        
+        // 必須項目のチェック（デフォルトで赤く表示）
+        const match = fieldId.match(/^(.+)-(description|amount)$/);
+        if (match) {
+            const [, rowId, field] = match;
+            const detail = details.find(d => d.id === rowId);
+            if (detail) {
+                if (field === 'description' && !detail.description.trim()) return true;
+                if (field === 'amount' && (!detail.amount || detail.amount <= 0)) return true;
+            }
+        }
+        return false;
+    };
 
     // FIX: Add return statement to make this a valid React component
     return (
@@ -431,7 +447,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                             ].some(hasError);
                             const rowHasWarning = duplicateWarnings.has(item.id);
                             const containerClass = rowHasError
-                                ? 'border-red-400 bg-red-50 dark:bg-red-900/20'
+                                ? 'border-red-600 bg-red-100 dark:bg-red-900/30 shadow-lg shadow-red-500/50 animate-pulse'
                                 : rowHasWarning
                                     ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20'
                                     : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30';
@@ -456,7 +472,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                             id={paymentDateId}
                                             value={item.paymentDate}
                                             onChange={e => updateDetail(item.id, { paymentDate: e.target.value })}
-                                            className={`${inputClass} ${hasError(`${item.id}-paymentDate`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+                                            className={`${inputClass} ${hasError(`${item.id}-paymentDate`) ? 'border-red-600 focus:border-red-600 focus:ring-red-600 bg-red-50 dark:bg-red-900/20 shadow-red-500/50 shadow-md' : ''}`}
                                             disabled={isDisabled}
                                         />
                                         {hasError(`${item.id}-paymentDate`) && (
@@ -506,7 +522,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                             placeholder="例: 会議費用"
                                             value={item.description}
                                             onChange={e => updateDetail(item.id, { description: e.target.value })}
-                                            className={`${inputClass} ${hasError(`${item.id}-description`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+                                            className={`${inputClass} ${hasError(`${item.id}-description`) ? 'border-red-600 focus:border-red-600 focus:ring-red-600 bg-red-50 dark:bg-red-900/20 shadow-red-500/50 shadow-md' : ''}`}
                                             disabled={isDisabled}
                                         />
                                     </div>
@@ -517,7 +533,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                             id={amountId}
                                             value={item.amount}
                                             onChange={e => updateDetail(item.id, { amount: Number(e.target.value) || 0 })}
-                                            className={`${inputClass} text-right ${hasError(`${item.id}-amount`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+                                            className={`${inputClass} text-right ${hasError(`${item.id}-amount`) ? 'border-red-600 focus:border-red-600 focus:ring-red-600 bg-red-50 dark:bg-red-900/20 shadow-red-500/50 shadow-md' : ''}`}
                                             disabled={isDisabled}
                                             min="1"
                                         />
@@ -565,7 +581,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                     </div>
                                     <div className="md:col-span-3">
                                         <label className="text-xs font-semibold text-slate-500">MQコード *</label>
-                                        <div className={`rounded-md border p-2 ${hasError(`${item.id}-mqCode`) ? 'border-red-400 bg-red-50 dark:bg-red-900/20' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800'}`}>
+                                        <div className={`rounded-md border p-2 ${hasError(`${item.id}-mqCode`) ? 'border-red-600 bg-red-100 dark:bg-red-900/30 shadow-red-500/50 shadow-md animate-pulse' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800'}`}>
                                             {item.mqCode ? (
                                                 <dl className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs">
                                                     {(['P', 'V', 'M', 'Q', 'F', 'G'] as const).map(label => {
@@ -645,7 +661,12 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                     <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={inputClass} placeholder="補足事項があれば入力してください。" disabled={isDisabled} />
                 </div>
                 
-                <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
+                <div className={!approvalRouteId ? 'p-4 border-2 border-red-600 bg-red-100 dark:bg-red-900/30 rounded-lg shadow-lg shadow-red-500/50 animate-pulse' : ''}>
+                    <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
+                    {!approvalRouteId && (
+                        <p className="mt-2 text-sm text-red-600 font-semibold">⚠️ 承認ルートを選択してください（必須）</p>
+                    )}
+                </div>
 
                 {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
                 
