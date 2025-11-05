@@ -723,6 +723,27 @@ const App: React.FC = () => {
             case 'admin_audit_log': return <AuditLogPage />;
             case 'admin_journal_queue': return <JournalQueuePage />;
             case 'purchasing_suppliers':
+                return <MasterManagementPage 
+                    accountItems={accountItems}
+                    paymentRecipients={paymentRecipients}
+                    allocationDivisions={allocationDivisions}
+                    departments={departments}
+                    titles={titles}
+                    onSaveAccountItem={masterSaveHandler(dataService.saveAccountItem, '勘定科目')}
+                    onDeleteAccountItem={masterDeleteHandler(dataService.deactivateAccountItem, '勘定科目')}
+                    onSavePaymentRecipient={masterSaveHandler(dataService.savePaymentRecipient, '支払先')}
+                    onDeletePaymentRecipient={masterDeleteHandler(dataService.deletePaymentRecipient, '支払先')}
+                    onSaveAllocationDivision={masterSaveHandler(dataService.saveAllocationDivision, '振分区分')}
+                    onDeleteAllocationDivision={masterDeleteHandler(dataService.deleteAllocationDivision, '振分区分')}
+                    onSaveDepartment={masterSaveHandler(dataService.saveDepartment, '部署')}
+                    onDeleteDepartment={masterDeleteHandler(dataService.deleteDepartment, '部署')}
+                    onSaveTitle={masterSaveHandler(dataService.saveTitle, '役職')}
+                    onDeleteTitle={masterDeleteHandler(dataService.deleteTitle, '役職')}
+                    addToast={addToast}
+                    requestConfirmation={requestConfirmation}
+                    initialTab="recipients"
+                    visibleTabs={['recipients']}
+                />;
             case 'admin_master_management': 
                 return <MasterManagementPage 
                     accountItems={accountItems}

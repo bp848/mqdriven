@@ -111,14 +111,27 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 }
             }
 
-            setDetails(prev => [...prev.filter(d => d.departure.trim() || d.arrival.trim() || d.amount), {
-                id: `row_ocr_${Date.now()}`,
+            // 既存の空行を探す（出発地、到着地、金額が空の行）
+            const emptyRowIndex = details.findIndex(d => !d.departure.trim() && !d.arrival.trim() && !d.amount);
+            
+            const ocrDetail = {
+                id: emptyRowIndex >= 0 ? details[emptyRowIndex].id : `row_ocr_${Date.now()}`,
                 travelDate: ocrData.invoiceDate || new Date().toISOString().split('T')[0],
                 departure,
                 arrival,
                 transportMode: TRP_MODES[0],
                 amount,
-            }]);
+            };
+            
+            if (emptyRowIndex >= 0) {
+                // 既存の空行に入力
+                setDetails(prev => prev.map((d, i) => i === emptyRowIndex ? ocrDetail : d));
+                console.log('[交通費OCR] 既存の空行に入力しました');
+            } else {
+                // 空行がない場合は新しい行を追加
+                setDetails(prev => [...prev, ocrDetail]);
+                console.log('[交通費OCR] 新しい明細行を追加しました');
+            }
         } catch (err: any) {
             if (err.name === 'AbortError') return;
             setError(err.message || 'AI-OCR処理中にエラーが発生しました。');

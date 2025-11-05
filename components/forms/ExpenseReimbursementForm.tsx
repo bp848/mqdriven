@@ -206,8 +206,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
 
             console.log('[経費申請OCR] マッチング結果 - 勘定科目:', matchedAccountItem?.name, '振分区分:', matchedAllocDivision?.name);
 
-            const newDetail: ExpenseDetail = {
-                id: `row_ocr_${Date.now()}`,
+            // 既存の空行を探す（名前と金額が空の行）
+            const emptyRowIndex = details.findIndex(d => !d.description.trim() && (!d.amount || d.amount <= 0));
+            
+            const ocrDetail: ExpenseDetail = {
+                id: emptyRowIndex >= 0 ? details[emptyRowIndex].id : `row_ocr_${Date.now()}`,
                 paymentDate: ocrData.invoiceDate || new Date().toISOString().split('T')[0],
                 paymentRecipientId: '', // User needs to select this
                 description: `【OCR読取: ${ocrData.vendorName}】${ocrData.description}`,
@@ -220,8 +223,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                 projectId: resolvedProject?.id || '',
                 mqCode: matchedAccountItem?.mqCode ?? null,
             };
-            setDetails(prev => [...prev, newDetail]);
-            console.log('[経費申請OCR] 新しい明細行を追加しました');
+            
+            if (emptyRowIndex >= 0) {
+                // 既存の空行に入力
+                setDetails(prev => prev.map((d, i) => i === emptyRowIndex ? ocrDetail : d));
+                console.log('[経費申請OCR] 既存の空行に入力しました');
+            } else {
+                // 空行がない場合は新しい行を追加
+                setDetails(prev => [...prev, ocrDetail]);
+                console.log('[経費申請OCR] 新しい明細行を追加しました');
+            }
 
         } catch (err: any) {
             if (err.name === 'AbortError') return;

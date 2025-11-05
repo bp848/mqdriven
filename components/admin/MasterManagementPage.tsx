@@ -25,20 +25,27 @@ interface MasterManagementPageProps {
   onDeleteTitle: (id: string) => Promise<void>;
   addToast: (message: string, type: Toast['type']) => void;
   requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
+  initialTab?: Tab;
+  visibleTabs?: Tab[];
 }
 
 type Tab = 'accounts' | 'recipients' | 'allocations' | 'departments' | 'titles';
 
 const MasterManagementPage: React.FC<MasterManagementPageProps> = (props) => {
-  const [activeTab, setActiveTab] = useState<Tab>('accounts');
+  const { initialTab = 'accounts', visibleTabs } = props;
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
-  const tabs: {id: Tab, label: string}[] = [
+  const allTabs: {id: Tab, label: string}[] = [
       { id: 'accounts', label: '勘定科目管理' },
       { id: 'recipients', label: '支払先管理' },
       { id: 'allocations', label: '振分区分管理' },
       { id: 'departments', label: '部署管理' },
       { id: 'titles', label: '役職管理' },
   ];
+  
+  const tabs = visibleTabs 
+    ? allTabs.filter(tab => visibleTabs.includes(tab.id))
+    : allTabs;
 
   return (
     <div className="space-y-6">
