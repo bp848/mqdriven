@@ -76,6 +76,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
     const [error, setError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<EmployeeUser | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const loadUsers = useCallback(async () => {
         try {
@@ -135,17 +136,50 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
         });
     };
 
+    // フィルタリングされたユーザーリスト
+    const filteredUsers = users.filter(user => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+            user.name.toLowerCase().includes(query) ||
+            (user.email && user.email.toLowerCase().includes(query)) ||
+            (user.department && user.department.toLowerCase().includes(query)) ||
+            (user.title && user.title.toLowerCase().includes(query))
+        );
+    });
+
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                <div>
-                    <h2 className="text-xl font-semibold">ユーザー管理</h2>
-                    <p className="mt-1 text-base text-slate-500">ユーザーの追加、編集、役割の変更を行います。</p>
+            <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 className="text-xl font-semibold">ユーザー管理</h2>
+                        <p className="mt-1 text-base text-slate-500">ユーザーの追加、編集、役割の変更を行います。</p>
+                    </div>
+                    <button onClick={() => handleOpenModal()} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                        <PlusCircle className="w-5 h-5" />
+                        新規ユーザー追加
+                    </button>
                 </div>
-                <button onClick={() => handleOpenModal()} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">
-                    <PlusCircle className="w-5 h-5" />
-                    新規ユーザー追加
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="relative flex-1 max-w-md">
+                        <input
+                            type="text"
+                            placeholder="氏名、メールアドレス、部門、役職で検索..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    {searchQuery && (
+                        <div className="text-sm text-slate-500">
+                            {filteredUsers.length}件 / {users.length}件
+                        </div>
+                    )}
+                </div>
             </div>
             {isLoading ? (
                 <div className="p-16 text-center"><Loader className="w-8 h-8 mx-auto animate-spin" /></div>
@@ -164,7 +198,14 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                         </tr>
                     </thead>
                     <tbody>
-                        {users.map(user => (
+                        {filteredUsers.length === 0 ? (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-16 text-center text-slate-500">
+                                    {searchQuery ? '検索条件に一致するユーザーが見つかりませんでした。' : 'ユーザーが登録されていません。'}
+                                </td>
+                            </tr>
+                        ) : (
+                            filteredUsers.map(user => (
                             <tr key={user.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-6 py-4 font-medium">{user.name}</td>
                                 <td className="px-6 py-4 text-slate-500">{user.email}</td>
@@ -184,7 +225,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                        )))}
                     </tbody>
                 </table>
             )}
