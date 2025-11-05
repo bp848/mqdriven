@@ -2320,6 +2320,60 @@ export const submitApplication = async (payload: SubmissionPayload, applicantId:
   return deepClone(mapApplicationDetails(application));
 };
 
+// 経費申請承認後の会計処理
+const processExpenseApproval = async (application: ApplicationWithDetails) => {
+  const formData = application.formData as any;
+  const details = formData.details || [];
+  
+  // 各明細行から仕訳を生成
+  for (const detail of details) {
+    if (!detail.accountItemId || !detail.amount) continue;
+    
+    const paymentDate = detail.paymentDate || new Date().toISOString().split('T')[0];
+    
+    // 仕訳エントリーを生成
+    const journalEntry: Omit<JournalEntry, 'id'> = {
+      date: paymentDate,
+      account: detail.accountItemId,
+      debit: detail.amount,
+      credit: 0,
+      description: detail.description || '経費精算',
+    };
+    
+    await addJournalEntry(journalEntry);
+    
+    // 貸方（未払金）の仕訳も追加
+    const creditEntry: Omit<JournalEntry, 'id'> = {
+      date: paymentDate,
+      account: '2110', // 未払金
+      debit: 0,
+      credit: detail.amount,
+      description: detail.description || '経費精算',
+    };
+    
+    await addJournalEntry(creditEntry);
+    
+    // MQ計算用のジョブを追加（mqCodeが完全な場合）
+    if (detail.mqCode && detail.mqCode.p && detail.mqCode.v && detail.mqCode.m && detail.mqCode.q) {
+      const mqJob = {
+        id: `mq_${application.id}_${detail.id}`,
+        applicationId: application.id,
+        detailId: detail.id,
+        mqCode: detail.mqCode,
+        amount: detail.amount,
+        paymentDate: paymentDate,
+        status: 'pending' as const,
+        createdAt: new Date().toISOString(),
+      };
+      
+      // MQジョブキューに追加（実装されている場合）
+      console.log('[MQ計算] ジョブ追加:', mqJob);
+    }
+  }
+  
+  console.log(`[経費承認] ${details.length}件の明細を処理しました`);
+};
+
 export const approveApplication = async (application: ApplicationWithDetails, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
   const now = new Date().toISOString();
   
@@ -2362,7 +2416,14 @@ export const approveApplication = async (application: ApplicationWithDetails, ap
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         };
-        return deepClone(mapApplicationDetails(updatedApp));
+        
+        // 経費申請の場合は会計処理を実行
+        const appDetails = mapApplicationDetails(updatedApp);
+        if (appDetails.applicationCode?.code === 'EXP' || appDetails.applicationCode?.code === 'TRP') {
+          await processExpenseApproval(appDetails);
+        }
+        
+        return deepClone(appDetails);
       }
       
       throw new Error('承認処理後のデータ取得に失敗しました');
@@ -2382,7 +2443,14 @@ export const approveApplication = async (application: ApplicationWithDetails, ap
   stored.approverId = approver.id;
   stored.updatedAt = now;
   await createApplicationStatusChangeEmails(stored);
-  return deepClone(mapApplicationDetails(stored));
+  
+  // 経費申請の場合は会計処理を実行
+  const appDetails = mapApplicationDetails(stored);
+  if (appDetails.applicationCode?.code === 'EXP' || appDetails.applicationCode?.code === 'TRP') {
+    await processExpenseApproval(appDetails);
+  }
+  
+  return deepClone(appDetails);
 };
 
 export const rejectApplication = async (application: ApplicationWithDetails, reason: string, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
