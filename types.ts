@@ -674,7 +674,9 @@ export interface PaymentRecipient {
   recipientName: string | null;
   bankName?: string | null;
   bankBranch?: string | null;
+  bankAccountType?: '普通' | '当座' | null;
   bankAccountNumber?: string | null;
+  myNumber?: string | null;
   isActive?: boolean;
   allocationTargets?: { id: string; name: string }[];
 }

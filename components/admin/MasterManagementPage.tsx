@@ -152,26 +152,46 @@ const PaymentRecipientsManager: React.FC<MasterManagementPageProps> = ({ payment
                  <h3 className="text-lg font-semibold">支払先マスタ</h3>
                  <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg" aria-label="新規支払先を追加"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
-             <table className="w-full text-base">
-                 <thead className="text-sm bg-slate-50 dark:bg-slate-700"><tr>{['コード', '会社名', '受取人名', '銀行情報', '有効', '操作'].map(h => <th key={h} className="px-6 py-3 text-left font-medium">{h}</th>)}</tr></thead>
-                 <tbody>
-                    {paymentRecipients.map(item => (
-                        <tr key={item.id} className="border-b dark:border-slate-700">
-                            <td className="px-6 py-4">{item.recipientCode}</td>
-                            <td className="px-6 py-4 font-medium">{item.companyName}</td>
-                            <td className="px-6 py-4">{item.recipientName}</td>
-                            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                                {[item.bankName, item.bankBranch, item.bankAccountNumber].filter(Boolean).join(' / ') || '---'}
-                            </td>
-                            <td className="px-6 py-4">{item.isActive === false ? '無効' : '有効'}</td>
-                            <td className="px-6 py-4 flex items-center gap-2">
-                                <button onClick={() => handleOpenModal(item)} className="p-1" aria-label={`支払先「${item.companyName || item.recipientName}」を編集`}><Pencil className="w-5 h-5"/></button>
-                                <button onClick={() => handleDelete(item)} className="p-1" aria-label={`支払先「${item.companyName || item.recipientName}」を削除`}><Trash2 className="w-5 h-5 text-red-500"/></button>
-                            </td>
-                        </tr>
-                    ))}
-                 </tbody>
-             </table>
+             <div className="overflow-x-auto">
+                 <table className="w-full text-base">
+                     <thead className="text-sm bg-slate-50 dark:bg-slate-700">
+                         <tr>
+                             {['コード', '会社名', '受取人名', '金融機関', '支店', '種別', '口座番号', 'マイナンバー', '有効', '操作'].map(h => 
+                                 <th key={h} className="px-4 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                             )}
+                         </tr>
+                     </thead>
+                     <tbody>
+                        {paymentRecipients.map(item => (
+                            <tr key={item.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                <td className="px-4 py-4 text-sm">{item.recipientCode}</td>
+                                <td className="px-4 py-4 font-medium">{item.companyName || '---'}</td>
+                                <td className="px-4 py-4">{item.recipientName || '---'}</td>
+                                <td className="px-4 py-4 text-sm">{item.bankName || '---'}</td>
+                                <td className="px-4 py-4 text-sm">{item.bankBranch || '---'}</td>
+                                <td className="px-4 py-4 text-sm">{item.bankAccountType || '---'}</td>
+                                <td className="px-4 py-4 text-sm font-mono">{item.bankAccountNumber || '---'}</td>
+                                <td className="px-4 py-4 text-sm font-mono">{item.myNumber ? `****${item.myNumber.slice(-4)}` : '---'}</td>
+                                <td className="px-4 py-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${item.isActive === false ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                        {item.isActive === false ? '無効' : '有効'}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-4">
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => handleOpenModal(item)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded" aria-label={`支払先「${item.companyName || item.recipientName}」を編集`}>
+                                            <Pencil className="w-5 h-5 text-blue-600"/>
+                                        </button>
+                                        <button onClick={() => handleDelete(item)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded" aria-label={`支払先「${item.companyName || item.recipientName}」を削除`}>
+                                            <Trash2 className="w-5 h-5 text-red-500"/>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                     </tbody>
+                 </table>
+             </div>
              {isModalOpen && <PaymentRecipientModal item={selectedItem} onClose={() => setIsModalOpen(false)} onSave={handleSave} />}
         </div>
     );

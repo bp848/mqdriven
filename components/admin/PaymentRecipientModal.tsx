@@ -9,15 +9,25 @@ interface PaymentRecipientModalProps {
 }
 
 const PaymentRecipientModal: React.FC<PaymentRecipientModalProps> = ({ item, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Partial<PaymentRecipient>>(item || { recipientCode: '', companyName: '', recipientName: '', bankName: '', bankBranch: '', bankAccountNumber: '', isActive: true });
+  const [formData, setFormData] = useState<Partial<PaymentRecipient>>(item || { 
+    recipientCode: '', 
+    companyName: '', 
+    recipientName: '', 
+    bankName: '', 
+    bankBranch: '', 
+    bankAccountType: null,
+    bankAccountNumber: '', 
+    myNumber: '',
+    isActive: true 
+  });
   const [allocationTargetsText, setAllocationTargetsText] = useState<string>(() =>
     (item?.allocationTargets ?? []).map(target => target.name).join('\n')
   );
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value || null }));
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,8 +89,20 @@ const PaymentRecipientModal: React.FC<PaymentRecipientModalProps> = ({ item, onC
             <input id="bankBranch" name="bankBranch" type="text" value={formData.bankBranch || ''} onChange={handleChange} className={inputClass} />
           </div>
           <div>
+            <label htmlFor="bankAccountType" className={labelClass}>口座種別</label>
+            <select id="bankAccountType" name="bankAccountType" value={formData.bankAccountType || ''} onChange={handleChange} className={inputClass}>
+              <option value="">選択してください</option>
+              <option value="普通">普通</option>
+              <option value="当座">当座</option>
+            </select>
+          </div>
+          <div>
             <label htmlFor="bankAccountNumber" className={labelClass}>口座番号</label>
-            <input id="bankAccountNumber" name="bankAccountNumber" type="text" value={formData.bankAccountNumber || ''} onChange={handleChange} className={inputClass} />
+            <input id="bankAccountNumber" name="bankAccountNumber" type="text" value={formData.bankAccountNumber || ''} onChange={handleChange} className={inputClass} placeholder="1234567" />
+          </div>
+          <div>
+            <label htmlFor="myNumber" className={labelClass}>マイナンバー</label>
+            <input id="myNumber" name="myNumber" type="text" value={formData.myNumber || ''} onChange={handleChange} className={inputClass} placeholder="123456789012" maxLength={12} />
           </div>
           <div>
             <label htmlFor="allocationTargets" className={labelClass}>振分先候補（1行1件）</label>
