@@ -2,10 +2,10 @@ import React, { useMemo } from 'react';
 import {
   ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line,
 } from 'recharts';
-import { Job, JournalEntry, AccountItem, JobStatus } from '../types.ts';
+import { Job, JournalEntry, AccountItem, JobStatus, ApplicationWithDetails, EmployeeUser } from '../types.ts';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants.ts';
 import { formatJPY } from '../utils.ts';
-import { Loader, AlertTriangle } from './Icons.tsx';
+import { Loader, AlertTriangle, CheckCircle, FileText } from './Icons.tsx';
 
 const ActionItemsCard: React.FC<{
   jobs: Job[];
@@ -53,6 +53,81 @@ const ActionItemsCard: React.FC<{
     );
 };
 
+
+const ApplicationsSummaryCard: React.FC<{
+  applications: ApplicationWithDetails[];
+  currentUser: EmployeeUser | null;
+  onNavigateToApplications: () => void;
+}> = ({ applications, currentUser, onNavigateToApplications }) => {
+    const summary = useMemo(() => {
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+
+        const pendingApproval = applications.filter(app => 
+            app.status === 'pending_approval' && 
+            app.approverId === currentUser?.id
+        ).length;
+
+        const mySubmitted = applications.filter(app => 
+            app.applicantId === currentUser?.id && 
+            app.status === 'pending_approval'
+        ).length;
+
+        const thisMonthSubmitted = applications.filter(app => {
+            if (!app.submittedAt) return false;
+            const submittedDate = new Date(app.submittedAt);
+            return submittedDate.getMonth() === currentMonth && 
+                   submittedDate.getFullYear() === currentYear;
+        }).length;
+
+        const thisMonthApproved = applications.filter(app => {
+            if (!app.approvedAt) return false;
+            const approvedDate = new Date(app.approvedAt);
+            return approvedDate.getMonth() === currentMonth && 
+                   approvedDate.getFullYear() === currentYear &&
+                   app.status === 'approved';
+        }).length;
+
+        return { pendingApproval, mySubmitted, thisMonthSubmitted, thisMonthApproved };
+    }, [applications, currentUser]);
+
+    return (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-slate-800 dark:text-white">申請サマリ</h3>
+                <button
+                    onClick={onNavigateToApplications}
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                    承認一覧へ →
+                </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl">
+                    <AlertTriangle className="w-8 h-8 mx-auto text-yellow-600 dark:text-yellow-400 mb-2" />
+                    <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-300">{summary.pendingApproval}</p>
+                    <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">承認待ち</p>
+                </div>
+                <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                    <FileText className="w-8 h-8 mx-auto text-blue-600 dark:text-blue-400 mb-2" />
+                    <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{summary.mySubmitted}</p>
+                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">申請中</p>
+                </div>
+                <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+                    <FileText className="w-8 h-8 mx-auto text-purple-600 dark:text-purple-400 mb-2" />
+                    <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">{summary.thisMonthSubmitted}</p>
+                    <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">今月の申請</p>
+                </div>
+                <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                    <CheckCircle className="w-8 h-8 mx-auto text-green-600 dark:text-green-400 mb-2" />
+                    <p className="text-3xl font-bold text-green-700 dark:text-green-300">{summary.thisMonthApproved}</p>
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1">今月の承認</p>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const Meter: React.FC<{ value: number; goal: number; }> = ({ value, goal }) => {
     const percentage = goal > 0 ? Math.min((value / goal) * 100, 100) : 0;
@@ -113,11 +188,13 @@ interface DashboardProps {
   jobs: Job[];
   journalEntries: JournalEntry[];
   accountItems: AccountItem[];
+  applications: ApplicationWithDetails[];
+  currentUser: EmployeeUser | null;
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, pendingApprovalCount, onNavigateToApprovals }) => {
+const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, applications, currentUser, pendingApprovalCount, onNavigateToApprovals }) => {
     
     const mqData = useMemo(() => {
         const today = new Date();
@@ -215,6 +292,12 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
     return (
         <div className="space-y-6">
             <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
+            
+            <ApplicationsSummaryCard 
+                applications={applications} 
+                currentUser={currentUser} 
+                onNavigateToApplications={onNavigateToApprovals} 
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <MQCard title="PQ (売上高)" value={pq} colorClass="bg-sky-700 dark:bg-sky-800" meterGoal={MONTHLY_GOALS.pq} />

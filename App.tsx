@@ -613,7 +613,15 @@ const App: React.FC = () => {
     const renderPage = () => {
         switch (currentPage) {
             case 'analysis_dashboard':
-                return <Dashboard jobs={jobs} journalEntries={journalEntries} accountItems={accountItems} pendingApprovalCount={applications.filter(a => a.approverId === currentUser?.id && a.status === 'pending_approval').length} onNavigateToApprovals={() => setCurrentPage('approval_list')} />;
+                return <Dashboard 
+                    jobs={jobs} 
+                    journalEntries={journalEntries} 
+                    accountItems={accountItems} 
+                    applications={applications}
+                    currentUser={currentUser}
+                    pendingApprovalCount={applications.filter(a => a.approverId === currentUser?.id && a.status === 'pending_approval').length} 
+                    onNavigateToApprovals={() => setCurrentPage('approval_list')} 
+                />;
             case 'sales_orders':
                 return <JobList jobs={jobs} searchTerm={searchTerm} onSelectJob={(job) => { setSelectedJob(job); setIsJobDetailModalOpen(true); }} onNewJob={() => setIsCreateJobModalOpen(true)} />;
             case 'sales_customers':
