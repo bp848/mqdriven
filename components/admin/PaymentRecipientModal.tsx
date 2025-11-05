@@ -10,6 +10,7 @@ interface PaymentRecipientModalProps {
 
 const PaymentRecipientModal: React.FC<PaymentRecipientModalProps> = ({ item, onClose, onSave }) => {
   const [formData, setFormData] = useState<Partial<PaymentRecipient>>(item || { 
+    id: crypto.randomUUID(),
     recipientCode: '', 
     companyName: '', 
     recipientName: '', 
@@ -127,7 +128,7 @@ const PaymentRecipientModal: React.FC<PaymentRecipientModalProps> = ({ item, onC
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="myNumber" className={labelClass}>マイナンバー</label>
-                  <input id="myNumber" name="myNumber" type="text" value={formData.myNumber || ''} onChange={handleChange} className={inputClass} placeholder="123456789012" maxLength={12} />
+                  <input id="myNumber" name="myNumber" type="text" value={formData.myNumber || ''} onChange={handleChange} className={inputClass} placeholder="1234567890123" maxLength={13} />
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">12桁の個人番号または13桁の法人番号</p>
                 </div>
               </div>
