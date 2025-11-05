@@ -124,18 +124,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         today.setHours(0, 0, 0, 0);
         return !details.some(detail => {
             const paymentDate = detail.paymentDate ? new Date(detail.paymentDate) : null;
-            const isFutureDate = paymentDate ? paymentDate.getTime() > today.getTime() : true;
+            // 必須項目：名前と金額のみ
             return (
-                !detail.paymentDate ||
-                isFutureDate ||
-                !detail.paymentRecipientId ||
                 !detail.description.trim() ||
-                !detail.accountItemId ||
-                !detail.allocationDivisionId ||
-                !detail.amount || detail.amount <= 0 ||
-                !detail.customerId ||
-                !detail.projectId ||
-                !isMqCodeComplete(detail.mqCode)
+                !detail.amount || detail.amount <= 0
             );
         });
     }, [departmentId, approvalRouteId, details]);
@@ -545,19 +537,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                                         )}
                                     </div>
                                     <div className="md:col-span-3">
-                                        <label htmlFor={projectId} className="text-xs font-semibold text-slate-500">案件 *</label>
+                                        <label htmlFor={projectId} className="text-xs font-semibold text-slate-500">案件</label>
                                         <ProjectSelect
                                             projects={projects}
                                             customerId={item.customerId}
                                             value={item.projectId}
                                             onChange={projectId => updateDetail(item.id, { projectId })}
                                             disabled={isDisabled}
-                                            required
+                                            required={false}
                                             id={projectId}
                                         />
-                                        {hasError(`${item.id}-projectId`) && (
-                                            <p className="text-[11px] text-red-600">案件を選択してください。</p>
-                                        )}
                                     </div>
                                     <div className="md:col-span-3">
                                         <label htmlFor={accountItemId} className="text-xs font-semibold text-slate-500">勘定科目 *</label>
