@@ -270,7 +270,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
             if (!detail.accountItemId) warnings.add(`${detail.id}-accountItemId`);
             if (!detail.allocationDivisionId) warnings.add(`${detail.id}-allocationDivisionId`);
             if (!detail.customerId) warnings.add(`${detail.id}-customerId`);
-            if (!detail.projectId) warnings.add(`${detail.id}-projectId`);
+            // 案件は任意（警告も出さない）
             if (!isMqCodeComplete(detail.mqCode)) warnings.add(`${detail.id}-mqCode`);
         });
 
