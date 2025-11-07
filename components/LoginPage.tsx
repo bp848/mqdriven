@@ -96,7 +96,7 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  const handleLoginWithGoogle = async () => {
+  const handleGoogleLogin = async () => {
     if (!isSupabaseConfigured) {
       setErrorMessage('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
       return;
@@ -105,13 +105,31 @@ const LoginPage: React.FC = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
+    // iPhoneでのループ防止: 既存セッションをクリア
     const supabaseClient = getSupabase();
+    
+    // iPhone/Safari対応: ループ防止のためセッションを一度クリア
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      try {
+        await supabaseClient.auth.signOut();
+        // モバイルでは少し待ってからOAuthを実行
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (signOutError) {
+        console.warn('Sign out before OAuth failed:', signOutError);
+      }
+    }
+    
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          prompt: 'select_account', // アカウント選択を強制
+        },
       },
     });
+    
     if (error) {
       setErrorMessage(error.message ?? 'Googleログインに失敗しました。');
     }
@@ -236,7 +254,7 @@ const LoginPage: React.FC = () => {
         <div className="space-y-3">
           <button
             type="button"
-            onClick={handleLoginWithGoogle}
+            onClick={handleGoogleLogin}
             disabled={formDisabled}
             className="w-full flex justify-center items-center gap-3 px-4 py-4 text-base font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
           >

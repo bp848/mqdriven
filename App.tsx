@@ -424,8 +424,15 @@ const App: React.FC = () => {
         initializeAuth();
 
         const supabaseClient = getSupabase();
-        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (_event, nextSession) => {
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, nextSession) => {
             if (!isMounted) return;
+            
+            // iPhone Googleログインループ防止
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (isMobile && event === 'SIGNED_OUT' && window.location.pathname === '/') {
+                console.log('iPhone: サインアウトイベントを無視してループを防止');
+                return;
+            }
             
             // 新規登録フローの場合、メールアドレス付きで管理者に通知
             const urlParams = new URLSearchParams(window.location.search);
