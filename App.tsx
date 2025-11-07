@@ -462,26 +462,51 @@ const App: React.FC = () => {
         initializeAuth();
 
         const supabaseClient = getSupabase();
+        
+        // ループ防止のためのフラグ
+        let isProcessingAuth = false;
+        let lastAuthEventTime = 0;
+        
         const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, nextSession) => {
             if (!isMounted) return;
             
-            // iPhone Googleログインループ防止を強化
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            const isGoogleCallback = window.location.search.includes('code=') || window.location.hash.includes('access_token=');
+            // 短時間での重複イベントを防止
+            const now = Date.now();
+            if (now - lastAuthEventTime < 500) {
+                console.log('認証イベントの重複を防止:', event);
+                return;
+            }
+            lastAuthEventTime = now;
             
-            // iPhoneでのGoogle OAuthコールバック中はSIGNED_OUTイベントを無視
-            if (isMobile && event === 'SIGNED_OUT') {
-                if (window.location.pathname === '/' || isGoogleCallback) {
+            // 既に処理中の場合はスキップ
+            if (isProcessingAuth) {
+                console.log('認証処理中のため新しいイベントをスキップ:', event);
+                return;
+            }
+            
+            // モバイルデバイス検出の強化
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const isiPhone = /iPhone|iPod/i.test(navigator.userAgent);
+            const isGoogleCallback = window.location.search.includes('code=') || window.location.hash.includes('access_token=');
+            const isCallbackPage = window.location.pathname === '/auth/callback';
+            
+            // iPhoneでの特別なループ防止処理
+            if (isiPhone && event === 'SIGNED_OUT') {
+                // コールバックページまたはGoogle認証中はサインアウトイベントを無視
+                if (isCallbackPage || isGoogleCallback || window.location.pathname === '/') {
                     console.log('iPhone: サインアウトイベントを無視してループを防止');
                     return;
                 }
             }
             
-            // iPhoneでの空のセッションイベントも無視
-            if (isMobile && !nextSession && !event) {
-                console.log('iPhone: 空のセッションイベントを無視');
+            // モバイルでの空のセッションイベントを無視
+            if (isMobile && !nextSession && (!event || event === 'INITIAL_SESSION')) {
+                console.log('モバイル: 空のセッションイベントを無視');
                 return;
             }
+            
+            // 認証処理開始フラグを設定
+            isProcessingAuth = true;
             
             // 新規登録フローの場合、メールアドレス付きで管理者に通知
             const urlParams = new URLSearchParams(window.location.search);
@@ -639,6 +664,9 @@ const App: React.FC = () => {
                     setCurrentUser(null);
                 }
             }
+            
+            // 認証処理完了フラグをリセット
+            isProcessingAuth = false;
         });
 
         return () => {

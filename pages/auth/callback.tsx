@@ -95,28 +95,49 @@ export default function AuthCallbackPage() {
         
         // iPhone/Safari対応: ループ防止と確実なリダイレクト
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isiPhone = /iPhone|iPod/i.test(navigator.userAgent);
         
         // マジックリンクの場合はより長い待機時間でユーザー情報の取得を待つ
         const redirectDelay = isMagicLink ? (isMobile ? 2000 : 1500) : (isMobile ? 300 : 1000);
         
+        // ループ防止のためのマーカーを設定
+        const redirectMarker = 'auth_redirect_' + Date.now();
+        sessionStorage.setItem(redirectMarker, 'true');
+        sessionStorage.setItem('last_auth_callback', Date.now().toString());
+        
         if (isMobile) {
-          // iPhone特別処理: ループ防止のためのマーカーを設定
-          const redirectMarker = 'iphone_redirect_' + Date.now();
-          sessionStorage.setItem(redirectMarker, 'true');
+          console.log(`モバイル: ${isMagicLink ? 'マジックリンク' : 'OAuth'}リダイレクト準備完了`);
           
-          console.log(`iPhone: ${isMagicLink ? 'マジックリンク' : 'OAuth'}リダイレクト準備完了`);
+          // iPhoneの場合は特別な処理
+          if (isiPhone) {
+            // iPhone専用ページが使用されていた場合は記録を残す
+            const wasUsingiPhonePage = localStorage.getItem('mq_iphone_login_used');
+            if (wasUsingiPhonePage) {
+              sessionStorage.setItem('return_to_iphone_page', 'true');
+            }
+          }
           
           setTimeout(() => {
-            window.location.replace('/');
+            // 複数のリダイレクト方法を試す
+            try {
+              window.location.replace('/');
+            } catch (e) {
+              console.warn('replace failed, trying href:', e);
+              window.location.href = '/';
+            }
           }, redirectDelay);
           
           // フォールバック
           setTimeout(() => {
             if (window.location.pathname === '/auth/callback') {
-              console.warn('iPhone: フォールバックリダイレクト実行');
-              window.location.replace('/');
+              console.warn('モバイル: フォールバックリダイレクト実行');
+              try {
+                window.location.replace('/');
+              } catch (e) {
+                window.location.href = '/';
+              }
             }
-          }, redirectDelay + 2000);
+          }, redirectDelay + 3000);
         } else {
           // デスクトップは通常の処理
           setTimeout(() => {

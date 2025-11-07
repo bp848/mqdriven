@@ -66,6 +66,10 @@ if (credentialsConfigured) {
             autoRefreshToken: true,
             detectSessionInUrl: true,
             flowType: 'pkce',
+            // モバイルでのセッション管理を改善
+            storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+            storageKey: 'supabase.auth.token',
+            debug: false,
         },
     });
 } else if (typeof console !== 'undefined' && console.warn) {
