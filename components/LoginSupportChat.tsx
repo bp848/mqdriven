@@ -13,6 +13,7 @@ interface LoginSupportChatProps {
 }
 
 const LoginSupportChat: React.FC<LoginSupportChatProps> = ({ onLoginAssist }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -179,17 +180,39 @@ const LoginSupportChat: React.FC<LoginSupportChatProps> = ({ onLoginAssist }) =>
   };
 
   return (
-    <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl flex flex-col border-2 border-blue-500 z-50">
+    <>
+      {/* モバイル用チャットボタン */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="lg:hidden fixed bottom-4 right-4 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center z-50 transition-all duration-200"
+      >
+        {isOpen ? '✕' : '💬'}
+      </button>
+
+      {/* チャットウィンドウ */}
+      <div className={`fixed z-40 transition-all duration-300 ${
+        isOpen 
+          ? 'bottom-0 left-0 right-0 top-0 lg:bottom-6 lg:right-6 lg:left-auto lg:top-auto lg:w-96 lg:h-[600px]' 
+          : 'bottom-6 right-6 w-96 h-[600px] hidden lg:flex'
+      } bg-white dark:bg-slate-800 lg:rounded-2xl shadow-2xl flex-col border-2 border-blue-500`}>
       {/* ヘッダー */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-2xl">
-            👋
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 lg:rounded-t-2xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-2xl">
+              👋
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">ログインサポート</h3>
+              <p className="text-xs text-blue-100">お困りですか？お手伝いします</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-lg">ログインサポート</h3>
-            <p className="text-xs text-blue-100">お困りですか？お手伝いします</p>
-          </div>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
+          >
+            ✕
+          </button>
         </div>
       </div>
 
@@ -218,7 +241,7 @@ const LoginSupportChat: React.FC<LoginSupportChatProps> = ({ onLoginAssist }) =>
       </div>
 
       {/* 入力エリア */}
-      <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 rounded-b-2xl">
+      <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 lg:rounded-b-2xl">
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -277,7 +300,8 @@ const LoginSupportChat: React.FC<LoginSupportChatProps> = ({ onLoginAssist }) =>
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 
