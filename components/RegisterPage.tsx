@@ -145,7 +145,7 @@ const RegisterPage: React.FC = () => {
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/?registration=google`,
+          redirectTo: `${window.location.origin}/auth/callback?registration=google`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

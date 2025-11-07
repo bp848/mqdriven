@@ -389,33 +389,6 @@ const App: React.FC = () => {
         const initializeAuth = async () => {
             try {
                 const supabaseClient = getSupabase();
-                
-                // マジックリンクのURLフラグメントからセッションを取得
-                const currentUrl = window.location.href;
-                if (currentUrl.includes('#access_token=') || currentUrl.includes('#error=')) {
-                    console.log('マジックリンクのセッション交換を実行中...');
-                    const { data, error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(currentUrl);
-                    
-                    if (exchangeError) {
-                        console.error('セッション交換エラー:', exchangeError);
-                        // URLフラグメントをクリア
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                        
-                        if (exchangeError.message?.includes('expired') || exchangeError.message?.includes('invalid')) {
-                            const message = 'ログインリンクが無効または期限切れです。\n\n新しいリンクを送信してください。';
-                            setError(message);
-                            addToast(message, 'error');
-                        } else {
-                            handleAuthFailure('ログイン処理に失敗しました。', exchangeError);
-                        }
-                        return;
-                    }
-                    
-                    // 成功時はURLをクリア
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                    console.log('マジックリンクセッション交換成功');
-                }
-                
                 const { data, error } = await withTimeout(supabaseClient.auth.getSession(), AUTH_TIMEOUT_MS);
                 if (!isMounted) return;
 

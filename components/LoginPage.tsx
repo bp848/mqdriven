@@ -81,7 +81,7 @@ const LoginPage: React.FC = () => {
       const { error } = await supabaseClient.auth.signInWithOtp({
         email: trimmedEmail,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       
@@ -110,7 +110,7 @@ const LoginPage: React.FC = () => {
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     if (error) {
