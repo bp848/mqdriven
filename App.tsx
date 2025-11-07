@@ -465,10 +465,27 @@ const App: React.FC = () => {
                         if (!isMounted) return;
                         if (isSigningOut) return; // 既にサインアウト処理中なら何もしない
                         
-                        // コールバック処理中はサインアウトしない（コード交換後の一時的エラーを防ぐ）
+                        // コールバック処理中やiPhoneでの初回ロード時はサインアウトしない
                         const isCallbackPage = window.location.pathname === '/auth/callback';
-                        if (isCallbackPage) {
-                            console.warn('コールバックページでのユーザー情報取得エラーを無視:', err);
+                        const isMobileAuth = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && 
+                                           (window.location.search.includes('code=') || window.location.hash.includes('access_token='));
+                        
+                        if (isCallbackPage || isMobileAuth) {
+                            console.warn('コールバックまたはモバイル認証中のユーザー情報取得エラーを無視:', err);
+                            // セッションを保持してユーザー情報の取得を再試行
+                            setTimeout(async () => {
+                                try {
+                                    const resolvedUser = await dataService.resolveUserSession(nextSession.user);
+                                    if (isMounted) {
+                                        setCurrentUser(resolvedUser);
+                                        setError(null);
+                                        setShowSetupModal(false);
+                                        console.log('ユーザー情報取得再試行成功');
+                                    }
+                                } catch (retryError) {
+                                    console.warn('ユーザー情報取得再試行失敗:', retryError);
+                                }
+                            }, 2000); // 2秒後に再試行
                             return;
                         }
                         
@@ -488,15 +505,15 @@ const App: React.FC = () => {
                             // ユーザーが登録されていない場合 - 新規登録の可能性を提示
                             message = `ℹ️ 新規ユーザー登録が必要です\n\n${userEmail} はまだシステムに登録されていません。\n\n✅ 管理者に通知済みです。ユーザー登録後に再度ログインしてください。\n\n右下のチャットからもお問い合わせいただけます。`;
                             
-                            // 新規ユーザーの場合はサインアウトせずにメッセージだけ表示
+                            // 新規ユーザーの場合はセッションを保持してメッセージだけ表示
                             setError((prev) => prev ?? message);
                             const toastType = 'info';
                             addToast(message, toastType);
                             setCurrentUser(null);
-                            setSession(null);
+                            // setSession(null); // セッションを保持してログイン状態を維持
                             
                             // サインアウトはしない（ユーザー登録待ち状態を維持）
-                            console.log('新規ユーザー登録待ち: サインアウトせずにメッセージ表示');
+                            console.log('新規ユーザー登録待ち: セッションを保持してメッセージ表示');
                             return; // サインアウト処理をスキップ
                         } else if (dataService.isSupabaseUnavailableError(err)) {
                             message = 'Supabase からユーザー情報を取得できません。ネットワークを確認してください。';
