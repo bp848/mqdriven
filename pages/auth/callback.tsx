@@ -82,26 +82,41 @@ export default function AuthCallbackPage() {
           console.warn('ローカルストレージエラー:', storageError);
         }
         
-        // iPhone/Safari対応: 即座リダイレクトで真っ白を防ぐ
+        // iPhone/Safari対応: ループ防止と確実なリダイレクト
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const redirectDelay = isMobile ? 500 : 1000;
         
-        setTimeout(() => {
-          // モバイルでは強制リロードで確実にリダイレクト
-          if (isMobile) {
-            window.location.href = '/';
-          } else {
+        if (isMobile) {
+          // iPhone特別処理: ループ防止のためのマーカーを設定
+          const redirectMarker = 'iphone_redirect_' + Date.now();
+          sessionStorage.setItem(redirectMarker, 'true');
+          
+          console.log('iPhone: ループ防止マーカー設定完了');
+          
+          // 短い遅延で強制リダイレクト
+          setTimeout(() => {
+            window.location.replace('/');
+          }, 300);
+          
+          // フォールバック: 2秒後に再度強制リダイレクト
+          setTimeout(() => {
+            if (window.location.pathname === '/auth/callback') {
+              console.warn('iPhone: フォールバックリダイレクト実行');
+              window.location.replace('/');
+            }
+          }, 2000);
+        } else {
+          // デスクトップは通常の処理
+          setTimeout(() => {
             router.replace('/');
-          }
-        }, redirectDelay);
-        
-        // フォールバック: 3秒後に強制リダイレクト
-        setTimeout(() => {
-          if (window.location.pathname === '/auth/callback') {
-            console.warn('リダイレクトが失敗、強制リロード実行');
-            window.location.href = '/';
-          }
-        }, 3000);
+          }, 1000);
+          
+          setTimeout(() => {
+            if (window.location.pathname === '/auth/callback') {
+              console.warn('リダイレクトが失敗、強制リロード実行');
+              window.location.href = '/';
+            }
+          }, 3000);
+        }
         
       } catch (error: any) {
         console.error('予期しないエラー:', error);

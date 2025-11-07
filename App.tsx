@@ -465,10 +465,21 @@ const App: React.FC = () => {
         const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, nextSession) => {
             if (!isMounted) return;
             
-            // iPhone Googleログインループ防止
+            // iPhone Googleログインループ防止を強化
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            if (isMobile && event === 'SIGNED_OUT' && window.location.pathname === '/') {
-                console.log('iPhone: サインアウトイベントを無視してループを防止');
+            const isGoogleCallback = window.location.search.includes('code=') || window.location.hash.includes('access_token=');
+            
+            // iPhoneでのGoogle OAuthコールバック中はSIGNED_OUTイベントを無視
+            if (isMobile && event === 'SIGNED_OUT') {
+                if (window.location.pathname === '/' || isGoogleCallback) {
+                    console.log('iPhone: サインアウトイベントを無視してループを防止');
+                    return;
+                }
+            }
+            
+            // iPhoneでの空のセッションイベントも無視
+            if (isMobile && !nextSession && !event) {
+                console.log('iPhone: 空のセッションイベントを無視');
                 return;
             }
             

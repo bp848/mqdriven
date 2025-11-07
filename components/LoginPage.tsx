@@ -105,33 +105,61 @@ const LoginPage: React.FC = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    // iPhoneでのループ防止: 既存セッションをクリア
     const supabaseClient = getSupabase();
-    
-    // iPhone/Safari対応: ループ防止のためセッションを一度クリア
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // iPhone特別対応: ループ防止のための強力な処理
     if (isMobile) {
       try {
+        // 1. ローカルストレージをクリア
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('supabase.') || key.startsWith('sb-')) {
+            localStorage.removeItem(key);
+          }
+        });
+        
+        // 2. セッションストレージをクリア
+        if (typeof sessionStorage !== 'undefined') {
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('supabase.') || key.startsWith('sb-')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+        }
+        
+        // 3. Supabaseセッションを強制クリア
         await supabaseClient.auth.signOut();
-        // モバイルでは少し待ってからOAuthを実行
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (signOutError) {
-        console.warn('Sign out before OAuth failed:', signOutError);
+        
+        // 4. モバイルでは長めの待機時間
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        console.log('iPhone: ループ防止のためのクリーンアップ完了');
+      } catch (cleanupError) {
+        console.warn('iPhone cleanup failed:', cleanupError);
       }
     }
+    
+    // OAuthリダイレクトURLにタイムスタンプを追加してキャッシュを防ぐ
+    const timestamp = Date.now();
+    const redirectUrl = `${window.location.origin}/auth/callback?t=${timestamp}`;
     
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: redirectUrl,
         queryParams: {
-          prompt: 'select_account', // アカウント選択を強制
+          prompt: 'select_account',
+          access_type: 'offline', // リフレッシュトークンを取得
+          ...(isMobile && { hd: '' }), // iPhoneではドメイン制限を無効化
         },
       },
     });
     
     if (error) {
-      setErrorMessage(error.message ?? 'Googleログインに失敗しました。');
+      console.error('Google OAuth error:', error);
+      setErrorMessage(`Googleログインエラー: ${error.message}`);
+    } else {
+      console.log('Google OAuth initiated successfully');
     }
   };
 
