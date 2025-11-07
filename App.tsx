@@ -888,13 +888,15 @@ const App: React.FC = () => {
             
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* モバイル用ヘッダー */}
-                <MobileHeader 
-                    title={PAGE_TITLES[currentPage] || 'Dashboard'}
-                    currentUser={currentUser}
-                    currentPage={currentPage}
-                    onNavigate={setCurrentPage}
-                    onSignOut={handleSignOut}
-                />
+                <div className="lg:hidden">
+                    <MobileHeader 
+                        title={PAGE_TITLES[currentPage] || 'Dashboard'}
+                        currentUser={currentUser}
+                        currentPage={currentPage}
+                        onNavigate={setCurrentPage}
+                        onSignOut={handleSignOut}
+                    />
+                </div>
                 
                 {error && <GlobalErrorBanner error={error} onRetry={fetchData} onShowSetup={() => setShowSetupModal(true)} />}
                 

@@ -37,7 +37,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   return (
     <>
       {/* ヘッダー */}
-      <div className="lg:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-4 flex items-center justify-between sticky top-0 z-30">
         {/* ハンバーガーメニューボタン */}
         <button
           onClick={() => setIsMenuOpen(true)}
