@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Sidebar from './components/Sidebar.tsx';
 import Header from './components/Header.tsx';
+import MobileHeader from './components/MobileHeader.tsx';
 import Dashboard from './components/Dashboard.tsx';
 import JobList from './components/JobList.tsx';
 import CreateJobModal from './components/CreateJobModal.tsx';
@@ -871,28 +872,46 @@ const App: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-slate-100 dark:bg-[#0d1117] text-slate-900 dark:text-slate-100">
-            <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} currentUser={currentUser} onSignOut={handleSignOut} />
+            {/* デスクトップ用サイドバー */}
+            <div className="hidden lg:block">
+                <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} currentUser={currentUser} onSignOut={handleSignOut} />
+            </div>
+            
             <div className="flex-1 flex flex-col overflow-hidden">
-                {error && <GlobalErrorBanner error={error} onRetry={fetchData} onShowSetup={() => setShowSetupModal(true)}/>}
-                <main className="flex-1 overflow-y-auto p-8 space-y-6">
-                    <Header
-                        title={PAGE_TITLES[currentPage] || 'Dashboard'}
-                        primaryAction={
-                          currentPage === 'sales_orders' ? { label: '新規案件作成', onClick: () => setIsCreateJobModalOpen(true), icon: PlusCircle } :
-                          currentPage === 'sales_customers' ? { label: '新規顧客登録', onClick: () => { setCustomerModalMode('new'); setIsCustomerDetailModalOpen(true); }, icon: PlusCircle } :
-                          currentPage === 'sales_leads' ? { label: '新規リード作成', onClick: () => setIsCreateLeadModalOpen(true), icon: PlusCircle } :
-                          currentPage === 'purchasing_orders' ? { label: '新規発注作成', onClick: () => setIsCreatePurchaseOrderModalOpen(true), icon: PlusCircle } :
-                          currentPage === 'inventory_management' ? { label: '新規品目登録', onClick: () => { setSelectedInventoryItem(null); setIsCreateInventoryItemModalOpen(true); }, icon: PlusCircle } :
-                          undefined
-                        }
-                        search={
-                          ['sales_orders', 'sales_customers', 'sales_leads', 'admin_bug_reports', 'approval_list'].includes(currentPage) ? {
-                            value: searchTerm,
-                            onChange: setSearchTerm,
-                            placeholder: `${PAGE_TITLES[currentPage]}を検索...`
-                          } : undefined
-                        }
-                    />
+                {/* モバイル用ヘッダー */}
+                <MobileHeader 
+                    title={PAGE_TITLES[currentPage] || 'Dashboard'}
+                    currentUser={currentUser}
+                    currentPage={currentPage}
+                    onNavigate={setCurrentPage}
+                    onSignOut={handleSignOut}
+                />
+                
+                {error && <GlobalErrorBanner error={error} onRetry={fetchData} onShowSetup={() => setShowSetupModal(true)} />}
+                
+                <main className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-4 lg:space-y-6">
+                    {/* デスクトップ用ヘッダー */}
+                    <div className="hidden lg:block">
+                        <Header
+                            title={PAGE_TITLES[currentPage] || 'Dashboard'}
+                            primaryAction={
+                              currentPage === 'sales_orders' ? { label: '新規案件作成', onClick: () => setIsCreateJobModalOpen(true), icon: PlusCircle } :
+                              currentPage === 'sales_customers' ? { label: '新規顧客登録', onClick: () => { setCustomerModalMode('new'); setIsCustomerDetailModalOpen(true); }, icon: PlusCircle } :
+                              currentPage === 'sales_leads' ? { label: '新規リード作成', onClick: () => setIsCreateLeadModalOpen(true), icon: PlusCircle } :
+                              currentPage === 'purchasing_orders' ? { label: '新規発注作成', onClick: () => setIsCreatePurchaseOrderModalOpen(true), icon: PlusCircle } :
+                              currentPage === 'inventory_management' ? { label: '新規品目登録', onClick: () => { setSelectedInventoryItem(null); setIsCreateInventoryItemModalOpen(true); }, icon: PlusCircle } :
+                              undefined
+                            }
+                            search={
+                              ['sales_orders', 'sales_customers', 'sales_leads', 'admin_bug_reports', 'approval_list'].includes(currentPage) ? {
+                                value: searchTerm,
+                                onChange: setSearchTerm,
+                                placeholder: `${PAGE_TITLES[currentPage]}を検索...`
+                              } : undefined
+                            }
+                        />
+                    </div>
+                    
                     {isLoading && currentPage !== 'analysis_dashboard' ? <Loader className="w-8 h-8 mx-auto animate-spin" /> : renderPage()}
                 </main>
                 <footer className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-8 py-3">

@@ -128,8 +128,8 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 font-sans">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-xl dark:bg-slate-800">
+    <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 font-sans px-4 py-8">
+      <div className="w-full max-w-md p-6 sm:p-8 space-y-6 sm:space-y-8 bg-white rounded-2xl shadow-xl dark:bg-slate-800">
         <div className="flex flex-col items-center">
           <div className="flex items-center gap-2 text-slate-800 dark:text-white">
             <Package className="w-10 h-10 text-blue-600" />
@@ -150,7 +150,7 @@ const LoginPage: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
               placeholder="your@company.com"
             />
           </div>
@@ -158,7 +158,7 @@ const LoginPage: React.FC = () => {
             type="button"
             onClick={handleSendMagicLink}
             disabled={magicLinkDisabled}
-            className="w-full px-4 py-3 font-semibold text-white bg-green-600 border border-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full px-4 py-4 text-base font-semibold text-white bg-green-600 border border-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
           >
             {isSendingMagicLink ? '送信中...' : '📧 マジックリンクでログイン'}
           </button>
@@ -180,14 +180,14 @@ const LoginPage: React.FC = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
               placeholder="パスワードを入力"
             />
           </div>
           <button
             type="submit"
             disabled={formDisabled}
-            className="w-full px-4 py-3 font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full px-4 py-4 text-base font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
           >
             {isSubmitting ? 'ログイン中...' : 'パスワードでログイン'}
           </button>
@@ -205,7 +205,7 @@ const LoginPage: React.FC = () => {
             type="button"
             onClick={handleLoginWithGoogle}
             disabled={formDisabled}
-            className="w-full flex justify-center items-center gap-3 px-4 py-3 font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full flex justify-center items-center gap-3 px-4 py-4 text-base font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
           >
             <GoogleIcon className="w-5 h-5" />
             Googleでログイン
