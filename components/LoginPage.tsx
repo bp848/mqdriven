@@ -8,8 +8,9 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleLoginWithEmail = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -27,6 +28,7 @@ const LoginPage: React.FC = () => {
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
       const supabaseClient = getSupabase();
@@ -48,17 +50,67 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  const handleSendMagicLink = async () => {
+    if (!isSupabaseConfigured) {
+      setErrorMessage('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
+      return;
+    }
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('メールアドレスを入力してください。');
+      return;
+    }
+
+    // ドメインチェック
+    const allowedDomains = ['@bunsyodo.jp', '@b-p.co.jp'];
+    const isAllowedDomain = allowedDomains.some(domain => trimmedEmail.endsWith(domain));
+    
+    if (!isAllowedDomain) {
+      const domainsList = allowedDomains.join(' / ');
+      setErrorMessage(`許可されたドメインのメールアドレスを使用してください。\n許可ドメイン: ${domainsList}`);
+      return;
+    }
+
+    setIsSendingMagicLink(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const supabaseClient = getSupabase();
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email: trimmedEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+      
+      if (error) {
+        setErrorMessage(`マジックリンク送信エラー: ${error.message}`);
+      } else {
+        setSuccessMessage(`✅ マジックリンクを送信しました\n\n${trimmedEmail} にログイン用のリンクを送信しました。\nメールを確認してリンクをクリックしてください。`);
+      }
+    } catch (error: any) {
+      setErrorMessage(`マジックリンク送信に失敗しました: ${error.message}`);
+    } finally {
+      setIsSendingMagicLink(false);
+    }
+  };
+
   const handleLoginWithGoogle = async () => {
     if (!isSupabaseConfigured) {
       setErrorMessage('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
       return;
     }
 
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
     const supabaseClient = getSupabase();
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/`,
       },
     });
     if (error) {
@@ -67,64 +119,12 @@ const LoginPage: React.FC = () => {
   };
 
   const formDisabled = !isSupabaseConfigured || isSubmitting;
+  const magicLinkDisabled = !isSupabaseConfigured || isSendingMagicLink || isSubmitting;
 
   const handleLoginAssist = async (email: string, employeeNumber?: string) => {
     // ログイン支援処理（将来的にSupabaseでユーザー検索や管理者通知を実装）
     console.log('Login assist requested:', { email, employeeNumber });
     // TODO: 管理者に通知を送る、またはユーザー情報を検証する
-  };
-
-  const handleTempRegister = async () => {
-    if (!isSupabaseConfigured) {
-      setErrorMessage('Supabaseの認証情報が設定されていません。');
-      return;
-    }
-
-    setIsRegistering(true);
-    setErrorMessage(null);
-
-    try {
-      const supabaseClient = getSupabase();
-      
-      // 管理者に通知を送信
-      const adminNotification = {
-        type: 'new_user_registration',
-        timestamp: new Date().toISOString(),
-        message: '新しいユーザーがGoogleアカウントでの登録を試行しました。',
-        source: 'login_page_temp_register_button',
-        user_agent: navigator.userAgent,
-        ip_info: 'client_side_registration'
-      };
-      
-      // 管理者テーブルに通知を記録（エラーでも続行）
-      try {
-        await supabaseClient.from('admin_notifications').insert([adminNotification]);
-        console.log('管理者に新規登録通知を送信しました');
-      } catch (notifyError) {
-        console.warn('管理者通知の送信に失敗しました:', notifyError);
-      }
-      
-      const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-      
-      if (error) {
-        setErrorMessage(`登録エラー: ${error.message}`);
-      } else {
-        setErrorMessage('✅ Googleアカウントでの登録を開始しています...管理者に通知済み');
-      }
-    } catch (error: any) {
-      setErrorMessage(`登録失敗: ${error.message}`);
-    } finally {
-      setIsRegistering(false);
-    }
   };
 
   return (
@@ -139,43 +139,57 @@ const LoginPage: React.FC = () => {
             ログイン方法を選択してください
           </p>
         </div>
-        <form className="space-y-4" onSubmit={handleLoginWithEmail}>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="email">
+        <form onSubmit={handleLoginWithEmail} className="space-y-6">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               メールアドレス
             </label>
             <input
-              id="email"
               type="email"
-              autoComplete="email"
+              id="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={formDisabled}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-              placeholder="you@example.com"
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+              placeholder="your@company.com"
             />
           </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="password">
+          <button
+            type="button"
+            onClick={handleSendMagicLink}
+            disabled={magicLinkDisabled}
+            className="w-full px-4 py-3 font-semibold text-white bg-green-600 border border-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSendingMagicLink ? '送信中...' : '📧 マジックリンクでログイン'}
+          </button>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-300 dark:border-slate-600" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white dark:bg-slate-800 text-slate-500">または</span>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               パスワード
             </label>
             <input
-              id="password"
               type="password"
-              autoComplete="current-password"
+              id="password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={formDisabled}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-              placeholder="パスワード"
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+              placeholder="パスワードを入力"
             />
           </div>
           <button
             type="submit"
             disabled={formDisabled}
-            className="w-full flex justify-center items-center gap-3 px-4 py-3 font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 font-semibold text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? 'ログイン中...' : 'メールアドレスでログイン'}
+            {isSubmitting ? 'ログイン中...' : 'パスワードでログイン'}
           </button>
         </form>
         <div className="relative py-2">
@@ -196,34 +210,38 @@ const LoginPage: React.FC = () => {
             <GoogleIcon className="w-5 h-5" />
             Googleでログイン
           </button>
-          
-          {/* 一時的な登録ボタン */}
-          <button
-            type="button"
-            onClick={handleTempRegister}
-            disabled={isRegistering || !isSupabaseConfigured}
-            className="w-full flex justify-center items-center gap-3 px-4 py-2 font-semibold text-white bg-orange-600 border border-orange-600 rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <GoogleIcon className="w-5 h-5" />
-            {isRegistering ? '登録中...' : '🔧 Googleで新規登録'}
-          </button>
           {!isSupabaseConfigured && (
             <p className="mt-3 text-sm text-red-600 text-center">
               Supabaseの接続情報が未設定のため、デモモードでご利用ください。
             </p>
           )}
-          <p className="mt-2 text-xs text-slate-500 text-center">
-            🔧 一時的な登録ボタンです。@b-p.co.jp ドメインのGoogleアカウントで登録してください。
-            <br />
-            📧 登録時に管理者に自動通知されます。
-          </p>
-          {errorMessage && (
-            <p className={`text-sm text-center whitespace-pre-line ${
-              errorMessage.startsWith('✅') ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {errorMessage}
-            </p>
+          {successMessage && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-800 whitespace-pre-line">
+                {successMessage}
+              </p>
+            </div>
           )}
+          {errorMessage && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800 whitespace-pre-line">
+                {errorMessage}
+              </p>
+            </div>
+          )}
+        </div>
+        
+        {/* 新規登録リンク */}
+        <div className="text-center">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            アカウントをお持ちでない方は{' '}
+            <button
+              onClick={() => window.location.href = '/register'}
+              className="text-blue-600 hover:text-blue-700 font-medium underline"
+            >
+              新規登録申請
+            </button>
+          </p>
         </div>
       </div>
       

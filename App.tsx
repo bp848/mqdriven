@@ -389,6 +389,33 @@ const App: React.FC = () => {
         const initializeAuth = async () => {
             try {
                 const supabaseClient = getSupabase();
+                
+                // マジックリンクのURLフラグメントからセッションを取得
+                const currentUrl = window.location.href;
+                if (currentUrl.includes('#access_token=') || currentUrl.includes('#error=')) {
+                    console.log('マジックリンクのセッション交換を実行中...');
+                    const { data, error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(currentUrl);
+                    
+                    if (exchangeError) {
+                        console.error('セッション交換エラー:', exchangeError);
+                        // URLフラグメントをクリア
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        
+                        if (exchangeError.message?.includes('expired') || exchangeError.message?.includes('invalid')) {
+                            const message = 'ログインリンクが無効または期限切れです。\n\n新しいリンクを送信してください。';
+                            setError(message);
+                            addToast(message, 'error');
+                        } else {
+                            handleAuthFailure('ログイン処理に失敗しました。', exchangeError);
+                        }
+                        return;
+                    }
+                    
+                    // 成功時はURLをクリア
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    console.log('マジックリンクセッション交換成功');
+                }
+                
                 const { data, error } = await withTimeout(supabaseClient.auth.getSession(), AUTH_TIMEOUT_MS);
                 if (!isMounted) return;
 
@@ -423,8 +450,34 @@ const App: React.FC = () => {
         initializeAuth();
 
         const supabaseClient = getSupabase();
-        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (_event, nextSession) => {
             if (!isMounted) return;
+            
+            // 新規登録フローの場合、メールアドレス付きで管理者に通知
+            const urlParams = new URLSearchParams(window.location.search);
+            const isRegistrationFlow = urlParams.get('registration') === 'true';
+            
+            if (nextSession && isRegistrationFlow && nextSession.user?.email) {
+                try {
+                    const adminNotification = {
+                        type: 'new_user_oauth_completed',
+                        timestamp: new Date().toISOString(),
+                        message: `新規ユーザー ${nextSession.user.email} がGoogle OAuthを完了しました。ユーザー登録が必要です。`,
+                        source: 'auth_state_change',
+                        user_email: nextSession.user.email,
+                        user_id: nextSession.user.id,
+                        provider: nextSession.user.app_metadata?.provider || 'google'
+                    };
+                    await supabaseClient.from('admin_notifications').insert([adminNotification]);
+                    console.log(`管理者にOAuth完了通知を送信: ${nextSession.user.email}`);
+                    
+                    // URLパラメータをクリア
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (notifyError) {
+                    console.warn('管理者通知の送信に失敗:', notifyError);
+                }
+            }
+            
             setSession(nextSession);
             if (nextSession) {
                 dataService.resolveUserSession(nextSession.user)
@@ -451,8 +504,8 @@ const App: React.FC = () => {
                             const domainsList = allowedDomains.join(' / ');
                             message = `❌ ログインできません\n\n現在、${userEmail} でログインしようとされています。\n\n申し訳ございませんが、このシステムは社員専用です。\n\n許可ドメイン: ${domainsList}\n\n該当の会社メールアドレスでGoogleログインしてください。`;
                         } else if (err.message && err.message.includes('not found')) {
-                            // ユーザーが登録されていない場合
-                            message = `❌ ログインできません\n\n${userEmail} は、まだシステムに登録されていません。\n\n管理者に連絡して、ユーザー登録を依頼してください。\n\n右下のチャットからもお問い合わせいただけます。`;
+                            // ユーザーが登録されていない場合 - 新規登録の可能性を提示
+                            message = `ℹ️ 新規ユーザー登録が必要です\n\n${userEmail} はまだシステムに登録されていません。\n\n✅ 管理者に通知済みです。ユーザー登録後に再度ログインしてください。\n\n右下のチャットからもお問い合わせいただけます。`;
                         } else if (dataService.isSupabaseUnavailableError(err)) {
                             message = 'Supabase からユーザー情報を取得できません。ネットワークを確認してください。';
                         } else {
@@ -460,23 +513,36 @@ const App: React.FC = () => {
                         }
                         
                         setError((prev) => prev ?? message);
-                        addToast(message, 'error');
+                        const toastType = message.includes('ℹ️') ? 'info' : 'error';
+                        addToast(message, toastType);
                         setCurrentUser(null);
                         setSession(null);
                         
-                        // ログアウトして再試行できるようにする（ループ防止）
-                        setIsSigningOut(true);
-                        try {
-                            const supabaseClient = getSupabase();
-                            await supabaseClient.auth.signOut();
-                            // 強制的にログインページにリダイレクト
-                            window.location.href = '/';
-                        } catch (signOutError) {
-                            console.error('Sign out failed:', signOutError);
-                            // サインアウトに失敗した場合も強制リダイレクト
-                            window.location.href = '/';
-                        } finally {
-                            setIsSigningOut(false);
+                        // 新規ユーザーの場合は即座リダイレクトせず、登録完了を待つ
+                        if (!message.includes('ℹ️')) {
+                            // ログアウトして再試行できるようにする（ループ防止）
+                            setIsSigningOut(true);
+                            try {
+                                const supabaseClient = getSupabase();
+                                await supabaseClient.auth.signOut();
+                                // 強制的にログインページにリダイレクト
+                                window.location.href = '/';
+                            } catch (signOutError) {
+                                console.error('Sign out failed:', signOutError);
+                                // サインアウトに失敗した場合も強制リダイレクト
+                                window.location.href = '/';
+                            } finally {
+                                setIsSigningOut(false);
+                            }
+                        } else {
+                            // 新規ユーザーの場合はサインアウトのみ実行（リダイレクトなし）
+                            try {
+                                const supabaseClient = getSupabase();
+                                await supabaseClient.auth.signOut();
+                                console.log('新規ユーザー登録待ち: リダイレクトせずにログインページで待機');
+                            } catch (signOutError) {
+                                console.error('Sign out failed:', signOutError);
+                            }
                         }
                     });
             } else {
