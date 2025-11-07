@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient.ts';
 import { Package, GoogleIcon } from './Icons';
-import LoginSupportChat from './LoginSupportChat';
 
 const LoginPage: React.FC = () => {
   const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
@@ -121,11 +120,6 @@ const LoginPage: React.FC = () => {
   const formDisabled = !isSupabaseConfigured || isSubmitting;
   const magicLinkDisabled = !isSupabaseConfigured || isSendingMagicLink || isSubmitting;
 
-  const handleLoginAssist = async (email: string, employeeNumber?: string) => {
-    // ログイン支援処理（将来的にSupabaseでユーザー検索や管理者通知を実装）
-    console.log('Login assist requested:', { email, employeeNumber });
-    // TODO: 管理者に通知を送る、またはユーザー情報を検証する
-  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 font-sans px-4 py-8">
@@ -245,8 +239,6 @@ const LoginPage: React.FC = () => {
         </div>
       </div>
       
-      {/* 常時開いているログインサポートチャット */}
-      <LoginSupportChat onLoginAssist={handleLoginAssist} />
     </div>
   );
 };
