@@ -297,6 +297,78 @@ const App: React.FC = () => {
 
     useEffect(() => {
         let isMounted = true;
+        
+        // キャッシュクリア機能
+        const clearAllCaches = async () => {
+            try {
+                // Service Workerキャッシュクリア
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                    console.log('キャッシュをクリアしました');
+                }
+                
+                // ローカルストレージの古いデータをクリーンアップ
+                const now = Date.now();
+                const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+                Object.keys(localStorage).forEach(key => {
+                    if (key.startsWith('auth_processed_') || key.startsWith('supabase.')) {
+                        const item = localStorage.getItem(key);
+                        if (item) {
+                            try {
+                                const timestamp = parseInt(item);
+                                if (timestamp && timestamp < oneWeekAgo) {
+                                    localStorage.removeItem(key);
+                                }
+                            } catch (e) {
+                                // パースできない場合は古いデータとみなして削除
+                                localStorage.removeItem(key);
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.warn('キャッシュクリアに失敗:', error);
+            }
+        };
+        
+        const initializeAuth = async () => {
+            try {
+                // キャッシュクリアを最初に実行
+                await clearAllCaches();
+                
+                const supabaseClient = getSupabase();
+                const { data, error } = await withTimeout(supabaseClient.auth.getSession(), AUTH_TIMEOUT_MS);
+                if (!isMounted) return;
+
+                if (error) {
+                    throw error;
+                }
+
+                const sessionData = data.session ?? null;
+                setSession(sessionData);
+
+                if (sessionData) {
+                    const resolvedUser = await dataService.resolveUserSession(sessionData.user);
+                    if (!isMounted) return;
+                    setCurrentUser(resolvedUser);
+                    setError(null);
+                    setShowSetupModal(false);
+                } else {
+                    setCurrentUser(null);
+                }
+            } catch (authError: any) {
+                const message = dataService.isSupabaseUnavailableError(authError)
+                    ? 'Supabase 認証に接続できません。ネットワークまたは設定を確認してください。'
+                    : 'ログイン状態の確認に失敗しました。再度ログインしてください。';
+                handleAuthFailure(message, authError);
+            } finally {
+                if (isMounted) {
+                    setAuthLoading(false);
+                }
+            }
+        };
+
         const credentialsConfigured = hasSupabaseCredentials();
         const AUTH_TIMEOUT_MS = 8000;
 
@@ -386,40 +458,6 @@ const App: React.FC = () => {
                 isMounted = false;
             };
         }
-
-        const initializeAuth = async () => {
-            try {
-                const supabaseClient = getSupabase();
-                const { data, error } = await withTimeout(supabaseClient.auth.getSession(), AUTH_TIMEOUT_MS);
-                if (!isMounted) return;
-
-                if (error) {
-                    throw error;
-                }
-
-                const sessionData = data.session ?? null;
-                setSession(sessionData);
-
-                if (sessionData) {
-                    const resolvedUser = await dataService.resolveUserSession(sessionData.user);
-                    if (!isMounted) return;
-                    setCurrentUser(resolvedUser);
-                    setError(null);
-                    setShowSetupModal(false);
-                } else {
-                    setCurrentUser(null);
-                }
-            } catch (authError: any) {
-                const message = dataService.isSupabaseUnavailableError(authError)
-                    ? 'Supabase 認証に接続できません。ネットワークまたは設定を確認してください。'
-                    : 'ログイン状態の確認に失敗しました。再度ログインしてください。';
-                handleAuthFailure(message, authError);
-            } finally {
-                if (isMounted) {
-                    setAuthLoading(false);
-                }
-            }
-        };
 
         initializeAuth();
 
