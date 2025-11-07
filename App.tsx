@@ -465,6 +465,13 @@ const App: React.FC = () => {
                         if (!isMounted) return;
                         if (isSigningOut) return; // 既にサインアウト処理中なら何もしない
                         
+                        // コールバック処理中はサインアウトしない（コード交換後の一時的エラーを防ぐ）
+                        const isCallbackPage = window.location.pathname === '/auth/callback';
+                        if (isCallbackPage) {
+                            console.warn('コールバックページでのユーザー情報取得エラーを無視:', err);
+                            return;
+                        }
+                        
                         // ユーザーのメールアドレスを取得
                         const userEmail = nextSession.user?.email || '';
                         
@@ -480,6 +487,17 @@ const App: React.FC = () => {
                         } else if (err.message && err.message.includes('not found')) {
                             // ユーザーが登録されていない場合 - 新規登録の可能性を提示
                             message = `ℹ️ 新規ユーザー登録が必要です\n\n${userEmail} はまだシステムに登録されていません。\n\n✅ 管理者に通知済みです。ユーザー登録後に再度ログインしてください。\n\n右下のチャットからもお問い合わせいただけます。`;
+                            
+                            // 新規ユーザーの場合はサインアウトせずにメッセージだけ表示
+                            setError((prev) => prev ?? message);
+                            const toastType = 'info';
+                            addToast(message, toastType);
+                            setCurrentUser(null);
+                            setSession(null);
+                            
+                            // サインアウトはしない（ユーザー登録待ち状態を維持）
+                            console.log('新規ユーザー登録待ち: サインアウトせずにメッセージ表示');
+                            return; // サインアウト処理をスキップ
                         } else if (dataService.isSupabaseUnavailableError(err)) {
                             message = 'Supabase からユーザー情報を取得できません。ネットワークを確認してください。';
                         } else {
@@ -487,14 +505,13 @@ const App: React.FC = () => {
                         }
                         
                         setError((prev) => prev ?? message);
-                        const toastType = message.includes('ℹ️') ? 'info' : 'error';
+                        const toastType = 'error';
                         addToast(message, toastType);
                         setCurrentUser(null);
                         setSession(null);
                         
-                        // 新規ユーザーの場合は即座リダイレクトせず、登録完了を待つ
-                        if (!message.includes('ℹ️')) {
-                            // ログアウトして再試行できるようにする（ループ防止）
+                        // ドメインエラーの場合のみサインアウトしてリダイレクト
+                        if (userEmail && !isAllowedDomain) {
                             setIsSigningOut(true);
                             try {
                                 const supabaseClient = getSupabase();
@@ -508,16 +525,8 @@ const App: React.FC = () => {
                             } finally {
                                 setIsSigningOut(false);
                             }
-                        } else {
-                            // 新規ユーザーの場合はサインアウトのみ実行（リダイレクトなし）
-                            try {
-                                const supabaseClient = getSupabase();
-                                await supabaseClient.auth.signOut();
-                                console.log('新規ユーザー登録待ち: リダイレクトせずにログインページで待機');
-                            } catch (signOutError) {
-                                console.error('Sign out failed:', signOutError);
-                            }
                         }
+                        // その他のエラーはサインアウトせずにメッセージだけ表示
                     });
             } else {
                 if (!isSigningOut) { // サインアウト処理中でなければ

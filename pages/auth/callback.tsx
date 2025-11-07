@@ -7,12 +7,17 @@ export default function AuthCallbackPage() {
   const [message, setMessage] = useState('ログイン処理中...');
   const [isError, setIsError] = useState(false);
   const hasProcessed = useRef(false);
+  const isProcessing = useRef(false);
 
   useEffect(() => {
     const handleAuthCallback = async () => {
-      // 重複実行防止
-      if (hasProcessed.current) return;
+      // 重複実行防止（より強化）
+      if (hasProcessed.current || isProcessing.current) {
+        console.log('コールバック処理は既に実行済みまたは実行中');
+        return;
+      }
       hasProcessed.current = true;
+      isProcessing.current = true;
       
       try {
         const supabaseClient = getSupabase();
@@ -24,6 +29,17 @@ export default function AuthCallbackPage() {
         if (!currentUrl.includes('code=') && !currentUrl.includes('#access_token=')) {
           setIsError(true);
           setMessage('無効なコールバックURLです。\n\nログインページから再度お試しください。');
+          isProcessing.current = false;
+          return;
+        }
+        
+        // 既に使用済みのコードかチェック（ローカルストレージで管理）
+        const urlHash = currentUrl.split('#')[1] || currentUrl.split('?')[1] || '';
+        const processedKey = `auth_processed_${btoa(urlHash).slice(0, 20)}`;
+        if (localStorage.getItem(processedKey)) {
+          setIsError(true);
+          setMessage('このログインリンクは既に使用済みです。\n\n新しいリンクを取得してください。');
+          isProcessing.current = false;
           return;
         }
         
@@ -32,9 +48,12 @@ export default function AuthCallbackPage() {
         if (error) {
           console.error('セッション交換エラー:', error);
           setIsError(true);
+          isProcessing.current = false;
           
           if (error.message?.includes('expired') || error.message?.includes('invalid') || error.message?.includes('not found')) {
             setMessage('ログインリンクが無効または期限切れです。\n\n最新のメールから再度お試しください。\n\nヒント: メールクライアントのプレビュー機能でリンクが先に開かれた可能性があります。');
+          } else if (error.message?.includes('both auth code and code verifier should be non-empty')) {
+            setMessage('コード交換エラーです。\n\nこのリンクは既に使用済みか、無効です。\n\n新しいログインリンクを取得してください。');
           } else {
             setMessage(`ログイン処理に失敗しました。\n\nエラー: ${error.message}`);
           }
@@ -44,6 +63,21 @@ export default function AuthCallbackPage() {
         console.log('セッション交換成功:', data);
         setMessage('ログイン成功！リダイレクト中...');
         
+        // 成功したコードをローカルストレージに記録（重複使用防止）
+        const timestamp = Date.now();
+        localStorage.setItem(processedKey, timestamp.toString());
+        
+        // 古いキーをクリーンアップ（24時間以上前のもの）
+        const cleanupThreshold = 24 * 60 * 60 * 1000; // 24時間
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('auth_processed_')) {
+            const storedTime = parseInt(localStorage.getItem(key) || '0');
+            if (timestamp - storedTime > cleanupThreshold) {
+              localStorage.removeItem(key);
+            }
+          }
+        });
+        
         // 成功時はメインページにリダイレクト
         setTimeout(() => {
           router.replace('/');
@@ -52,6 +86,7 @@ export default function AuthCallbackPage() {
       } catch (error: any) {
         console.error('予期しないエラー:', error);
         setIsError(true);
+        isProcessing.current = false;
         setMessage(`予期しないエラーが発生しました。\n\n${error.message || 'Unknown error'}`);
       }
     };
