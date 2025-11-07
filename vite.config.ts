@@ -6,10 +6,18 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
-    base: command === "build" ? "./" : "/",
+    base: "/", // Always use absolute paths for SPA routing
     define: {
       "process.env.NODE_ENV": JSON.stringify(mode),
     },
     plugins: [react()],
+    build: {
+      assetsDir: 'assets',
+      rollupOptions: {
+        output: {
+          manualChunks: undefined,
+        },
+      },
+    },
   };
 });
