@@ -116,8 +116,8 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
               extracted = await extractDocumentText(base64, mime);
             }
             await updateInboxItem(item.id, {
-              extractedData: extracted || null,
-              status: extracted ? InboxItemStatus.PendingReview : InboxItemStatus.Processing,
+              extractedData: extracted ? (extracted as any) : null,
+              status: InboxItemStatus.Processing, // 手動確認が必要
               errorMessage: extracted ? null : '抽出結果が空でした',
             });
             log(`INBOX OK: ${item.fileName}`);
@@ -322,7 +322,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
                 mimeType: 'text/plain',
-                status: InboxItemStatus.PendingReview,
+                status: InboxItemStatus.Processing,
                 extractedData: null,
                 errorMessage: null,
               });
@@ -342,7 +342,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
                 mimeType: 'text/plain',
-                status: InboxItemStatus.PendingReview,
+                status: InboxItemStatus.Processing,
                 extractedData: null,
                 errorMessage: null,
               });
@@ -362,7 +362,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
                 mimeType: 'text/plain',
-                status: InboxItemStatus.PendingReview,
+                status: InboxItemStatus.Processing,
                 extractedData: null,
                 errorMessage: null,
               });
@@ -394,7 +394,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
                 mimeType: 'text/plain',
-                status: InboxItemStatus.PendingReview,
+                status: InboxItemStatus.Processing,
                 extractedData: null,
                 errorMessage: null,
               });
@@ -419,7 +419,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
               fileName: `${f.name}.meta.json`,
               filePath: metaPath,
               mimeType: 'application/json',
-              status: InboxItemStatus.PendingReview,
+              status: InboxItemStatus.Processing,
               extractedData: null,
               errorMessage: null,
             });
@@ -472,7 +472,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             fileName: `${f.name}.txt`,
             filePath: txtPath,
             mimeType: 'text/plain',
-            status: InboxItemStatus.PendingReview,
+            status: InboxItemStatus.Processing,
             extractedData: null,
             errorMessage: null,
           });
@@ -508,14 +508,19 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
   ], []);
 
   // 動的材料ベース: 分類は抽出テキストのみで行う（ファイル名は使わない）
-  type DocEntry = { name: string; createdAt?: string; text: string; usable: boolean; reason?: string };
+  // 確認済み（Approved）のもののみを「提出済み」として扱う
+  type DocEntry = { name: string; createdAt?: string; text: string; usable: boolean; reason?: string; status: InboxItemStatus };
   const docEntriesFromInbox: DocEntry[] = useMemo(() => {
     return inbox.map(i => ({
       name: i.fileName,
       createdAt: i.createdAt || undefined,
       text: `${i.extractedData || ''}`.toLowerCase(),
-      usable: !!(i.extractedData && String(i.extractedData).trim().length > 0),
-      reason: i.errorMessage || (i.extractedData ? undefined : '抽出データなし'),
+      usable: !!(i.extractedData && String(i.extractedData).trim().length > 0 && i.status === InboxItemStatus.Approved),
+      reason: i.status === InboxItemStatus.Approved ? undefined : 
+              i.status === InboxItemStatus.PendingReview ? '確認待ち' :
+              i.status === InboxItemStatus.Processing ? '処理中' :
+              i.errorMessage || '未確認',
+      status: i.status,
     }));
   }, [inbox]);
 
@@ -526,6 +531,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
       text: `${sf.extractedText || ''}`.toLowerCase(),
       usable: !!(sf.extractedText && sf.extractedText.trim().length > 0),
       reason: sf.extractedText ? undefined : '抽出データなし',
+      status: InboxItemStatus.Processing, // シミュレーターは処理中扱い
     }));
   }, [simFiles]);
 

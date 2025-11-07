@@ -85,6 +85,25 @@ const LoginPage: React.FC = () => {
 
     try {
       const supabaseClient = getSupabase();
+      
+      // 管理者に通知を送信
+      const adminNotification = {
+        type: 'new_user_registration',
+        timestamp: new Date().toISOString(),
+        message: '新しいユーザーがGoogleアカウントでの登録を試行しました。',
+        source: 'login_page_temp_register_button',
+        user_agent: navigator.userAgent,
+        ip_info: 'client_side_registration'
+      };
+      
+      // 管理者テーブルに通知を記録（エラーでも続行）
+      try {
+        await supabaseClient.from('admin_notifications').insert([adminNotification]);
+        console.log('管理者に新規登録通知を送信しました');
+      } catch (notifyError) {
+        console.warn('管理者通知の送信に失敗しました:', notifyError);
+      }
+      
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -99,7 +118,7 @@ const LoginPage: React.FC = () => {
       if (error) {
         setErrorMessage(`登録エラー: ${error.message}`);
       } else {
-        setErrorMessage('✅ Googleアカウントでの登録を開始しています...');
+        setErrorMessage('✅ Googleアカウントでの登録を開始しています...管理者に通知済み');
       }
     } catch (error: any) {
       setErrorMessage(`登録失敗: ${error.message}`);
@@ -195,6 +214,8 @@ const LoginPage: React.FC = () => {
           )}
           <p className="mt-2 text-xs text-slate-500 text-center">
             🔧 一時的な登録ボタンです。@b-p.co.jp ドメインのGoogleアカウントで登録してください。
+            <br />
+            📧 登録時に管理者に自動通知されます。
           </p>
           {errorMessage && (
             <p className={`text-sm text-center whitespace-pre-line ${
