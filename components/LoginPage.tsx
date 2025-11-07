@@ -107,41 +107,59 @@ const LoginPage: React.FC = () => {
 
     const supabaseClient = getSupabase();
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isiPhone = /iPhone|iPod/i.test(navigator.userAgent);
     
-    // iPhone特別対応: ループ防止のための強力な処理
+    // iPhone最終兵器: マジックリンクを推奨
+    if (isiPhone) {
+      setSuccessMessage('📱 iPhoneではGoogleログインに問題があります。\n\nマジックリンクログインをお試しください。\n\nメールアドレスを入力して「マジックリンクでログイン」をクリックしてください。');
+      
+      // iPhoneでも一応試すが、特別な処理をする
+      try {
+        // 完全クリーンアップ
+        await supabaseClient.auth.signOut();
+        
+        // ストレージを完全クリア
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // 長い待機
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // ポップアップで開くことでループを回避
+        const popup = window.open('', '_blank', 'width=500,height=600,scrollbars=yes,resizable=yes');
+        if (popup) {
+          popup.document.write('<h1>ローディング中...</h1><p>Googleログインを開いています。</p>');
+          popup.focus();
+          
+          setTimeout(() => {
+            popup.close();
+            setErrorMessage('📱 iPhoneではGoogleログインが不安定です。\n\nマジックリンクログインをご利用ください。');
+          }, 3000);
+        }
+      } catch (error) {
+        console.warn('iPhone special handling failed:', error);
+      }
+      return;
+    }
+    
+    // Androidやその他のモバイル用の処理
     if (isMobile) {
       try {
-        // 1. ローカルストレージをクリア
+        await supabaseClient.auth.signOut();
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith('supabase.') || key.startsWith('sb-')) {
             localStorage.removeItem(key);
           }
         });
-        
-        // 2. セッションストレージをクリア
-        if (typeof sessionStorage !== 'undefined') {
-          Object.keys(sessionStorage).forEach(key => {
-            if (key.startsWith('supabase.') || key.startsWith('sb-')) {
-              sessionStorage.removeItem(key);
-            }
-          });
-        }
-        
-        // 3. Supabaseセッションを強制クリア
-        await supabaseClient.auth.signOut();
-        
-        // 4. モバイルでは長めの待機時間
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        console.log('iPhone: ループ防止のためのクリーンアップ完了');
       } catch (cleanupError) {
-        console.warn('iPhone cleanup failed:', cleanupError);
+        console.warn('Mobile cleanup failed:', cleanupError);
       }
     }
     
-    // OAuthリダイレクトURLにタイムスタンプを追加してキャッシュを防ぐ
+    // デスクトップとAndroid用のOAuth
     const timestamp = Date.now();
-    const redirectUrl = `${window.location.origin}/auth/callback?t=${timestamp}`;
+    const redirectUrl = `${window.location.origin}/auth/callback?t=${timestamp}&mobile=${isMobile ? '1' : '0'}`;
     
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
@@ -149,8 +167,7 @@ const LoginPage: React.FC = () => {
         redirectTo: redirectUrl,
         queryParams: {
           prompt: 'select_account',
-          access_type: 'offline', // リフレッシュトークンを取得
-          ...(isMobile && { hd: '' }), // iPhoneではドメイン制限を無効化
+          access_type: 'offline',
         },
       },
     });
@@ -289,6 +306,19 @@ const LoginPage: React.FC = () => {
             <GoogleIcon className="w-5 h-5" />
             Googleでログイン
           </button>
+          
+          {/* iPhone用の特別な案内 */}
+          {/iPhone|iPod/i.test(navigator.userAgent) && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-600 text-lg">📱</span>
+                <div className="text-sm text-yellow-800">
+                  <p className="font-medium mb-1">iPhoneユーザーの方へ</p>
+                  <p>Googleログインが不安定な場合は、<strong>マジックリンクログイン</strong>をお試しください。</p>
+                </div>
+              </div>
+            </div>
+          )}
           {!isSupabaseConfigured && (
             <p className="mt-3 text-sm text-red-600 text-center">
               Supabaseの接続情報が未設定のため、デモモードでご利用ください。
