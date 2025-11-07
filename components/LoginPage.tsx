@@ -156,6 +156,45 @@ const LoginPage: React.FC = () => {
           >
             {isSendingMagicLink ? '送信中...' : '📧 マジックリンクでログイン'}
           </button>
+          
+          {/* マジックリンク送信後のメッセージ */}
+          {successMessage && (
+            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200 whitespace-pre-line">
+                    {successMessage}
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                    メールが届かない場合は、迷惑メールフォルダを確認してください。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* エラーメッセージ */}
+          {errorMessage && (
+            <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200 whitespace-pre-line">
+                    {errorMessage}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-300 dark:border-slate-600" />
@@ -208,20 +247,6 @@ const LoginPage: React.FC = () => {
             <p className="mt-3 text-sm text-red-600 text-center">
               Supabaseの接続情報が未設定のため、デモモードでご利用ください。
             </p>
-          )}
-          {successMessage && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-800 whitespace-pre-line">
-                {successMessage}
-              </p>
-            </div>
-          )}
-          {errorMessage && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800 whitespace-pre-line">
-                {errorMessage}
-              </p>
-            </div>
           )}
         </div>
         

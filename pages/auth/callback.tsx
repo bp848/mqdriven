@@ -64,24 +64,44 @@ export default function AuthCallbackPage() {
         setMessage('ログイン成功！リダイレクト中...');
         
         // 成功したコードをローカルストレージに記録（重複使用防止）
-        const timestamp = Date.now();
-        localStorage.setItem(processedKey, timestamp.toString());
-        
-        // 古いキーをクリーンアップ（24時間以上前のもの）
-        const cleanupThreshold = 24 * 60 * 60 * 1000; // 24時間
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith('auth_processed_')) {
-            const storedTime = parseInt(localStorage.getItem(key) || '0');
-            if (timestamp - storedTime > cleanupThreshold) {
-              localStorage.removeItem(key);
+        try {
+          const timestamp = Date.now();
+          localStorage.setItem(processedKey, timestamp.toString());
+          
+          // 古いキーをクリーンアップ（24時間以上前のもの）
+          const cleanupThreshold = 24 * 60 * 60 * 1000; // 24時間
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('auth_processed_')) {
+              const storedTime = parseInt(localStorage.getItem(key) || '0');
+              if (timestamp - storedTime > cleanupThreshold) {
+                localStorage.removeItem(key);
+              }
             }
-          }
-        });
+          });
+        } catch (storageError) {
+          console.warn('ローカルストレージエラー:', storageError);
+        }
         
-        // 成功時はメインページにリダイレクト
+        // iPhone/Safari対応: 即座リダイレクトで真っ白を防ぐ
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const redirectDelay = isMobile ? 500 : 1000;
+        
         setTimeout(() => {
-          router.replace('/');
-        }, 1000);
+          // モバイルでは強制リロードで確実にリダイレクト
+          if (isMobile) {
+            window.location.href = '/';
+          } else {
+            router.replace('/');
+          }
+        }, redirectDelay);
+        
+        // フォールバック: 3秒後に強制リダイレクト
+        setTimeout(() => {
+          if (window.location.pathname === '/auth/callback') {
+            console.warn('リダイレクトが失敗、強制リロード実行');
+            window.location.href = '/';
+          }
+        }, 3000);
         
       } catch (error: any) {
         console.error('予期しないエラー:', error);
@@ -98,33 +118,42 @@ export default function AuthCallbackPage() {
   }, [router]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-xl dark:bg-slate-800">
+    <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 px-4">
+      <div className="w-full max-w-md p-6 sm:p-8 space-y-6 bg-white rounded-2xl shadow-xl dark:bg-slate-800">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white mb-4">
             {isError ? 'ログインエラー' : 'ログイン処理中'}
           </h2>
           
           {!isError && (
             <div className="flex justify-center mb-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
             </div>
           )}
           
-          <p className={`text-sm whitespace-pre-line ${
-            isError ? 'text-red-600' : 'text-slate-600 dark:text-slate-400'
+          <p className={`text-sm sm:text-base whitespace-pre-line leading-relaxed ${
+            isError ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-400'
           }`}>
             {message}
           </p>
           
+          {!isError && (
+            <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+              iPhoneでは数秒かかる場合があります。しばらくお待ちください...
+            </div>
+          )}
+          
           {isError && (
-            <div className="mt-6">
+            <div className="mt-6 space-y-3">
               <button
-                onClick={() => router.push('/')}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onClick={() => window.location.href = '/'}
+                className="w-full px-4 py-3 text-base font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 touch-manipulation"
               >
                 ログインページに戻る
               </button>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                問題が続く場合は、ブラウザを再起動してください。
+              </p>
             </div>
           )}
         </div>
