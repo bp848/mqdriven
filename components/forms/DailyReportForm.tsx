@@ -1,10 +1,8 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { submitApplication } from '../../services/dataService.ts';
-import { generateDailyReportSummary } from '../../services/geminiService.ts';
 import ApprovalRouteSelector from './ApprovalRouteSelector.tsx';
-import { Loader, Sparkles, AlertTriangle } from '../Icons.tsx';
+import { Loader, PlusCircle, Trash2, AlertTriangle, Copy } from '../Icons.tsx';
 import { User, Toast } from '../../types.ts';
-import ChatApplicationModal from '../ChatApplicationModal.tsx';
 
 interface DailyReportFormProps {
     onSuccess: () => void;
@@ -16,29 +14,41 @@ interface DailyReportFormProps {
     error: string;
 }
 
+interface TimeEntry {
+    id: string;
+    timeRange: string;
+    activity: string;
+}
+
 interface DailyReportData {
     reportDate: string;
-    startTime: string;
-    endTime: string;
-    customerName: string;
-    activityContent: string;
-    nextDayPlan: string;
+    pqTarget: string;
+    pqCurrent: string;
+    pqLastYear: string;
+    mqTarget: string;
+    mqCurrent: string;
+    mqLastYear: string;
+    planEntries: TimeEntry[];
+    actualEntries: TimeEntry[];
+    notes: string;
 }
 
 const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicationCodeId, currentUser, addToast, isAIOff, isLoading, error: formLoadError }) => {
     const [formData, setFormData] = useState<DailyReportData>({
         reportDate: new Date().toISOString().split('T')[0],
-        startTime: '09:00',
-        endTime: '18:00',
-        customerName: '',
-        activityContent: '',
-        nextDayPlan: '',
+        pqTarget: '',
+        pqCurrent: '',
+        pqLastYear: '',
+        mqTarget: '',
+        mqCurrent: '',
+        mqLastYear: '',
+        planEntries: [{ id: '1', timeRange: '', activity: '' }],
+        actualEntries: [{ id: '1', timeRange: '', activity: '' }],
+        notes: '',
     });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isSummaryLoading, setIsSummaryLoading] = useState(false);
     const [error, setError] = useState('');
-    const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     const firstInvalidRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>(null);
     
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
@@ -48,32 +58,91 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleGenerateSummary = async () => {
-        if (isAIOff) {
-            addToast('AI機能は現在無効です。', 'error');
-            return;
-        }
-        if (!formData.customerName && !formData.activityContent.trim()) {
-            addToast('AIが下書きを作成するために、顧客名または活動内容のキーワードを入力してください。', 'info');
-            return;
-        }
-        setIsSummaryLoading(true);
-        try {
-            const summary = await generateDailyReportSummary(formData.customerName, formData.activityContent);
-            setFormData(prev => ({ ...prev, activityContent: summary }));
-            addToast('AIが活動内容の下書きを作成しました。', 'success');
-        } catch (e: any) {
-            if (e.name === 'AbortError') return; // Request was aborted, do nothing
-            const errorMessage = e instanceof Error ? e.message : '不明なエラーが発生しました。';
-            addToast(errorMessage, 'error');
-        } finally {
-            setIsSummaryLoading(false);
+    const handlePlanEntryChange = (id: string, field: 'timeRange' | 'activity', value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            planEntries: prev.planEntries.map(entry =>
+                entry.id === id ? { ...entry, [field]: value } : entry
+            )
+        }));
+    };
+
+    const handleActualEntryChange = (id: string, field: 'timeRange' | 'activity', value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            actualEntries: prev.actualEntries.map(entry =>
+                entry.id === id ? { ...entry, [field]: value } : entry
+            )
+        }));
+    };
+
+    const addPlanEntry = () => {
+        setFormData(prev => ({
+            ...prev,
+            planEntries: [...prev.planEntries, { id: Date.now().toString(), timeRange: '', activity: '' }]
+        }));
+    };
+
+    const removePlanEntry = (id: string) => {
+        if (formData.planEntries.length <= 1) return;
+        setFormData(prev => ({
+            ...prev,
+            planEntries: prev.planEntries.filter(entry => entry.id !== id)
+        }));
+    };
+
+    const addActualEntry = () => {
+        setFormData(prev => ({
+            ...prev,
+            actualEntries: [...prev.actualEntries, { id: Date.now().toString(), timeRange: '', activity: '' }]
+        }));
+    };
+
+    const removeActualEntry = (id: string) => {
+        if (formData.actualEntries.length <= 1) return;
+        setFormData(prev => ({
+            ...prev,
+            actualEntries: prev.actualEntries.filter(entry => entry.id !== id)
+        }));
+    };
+
+    // Excel/テキストからの貼り付け処理
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>, type: 'plan' | 'actual') => {
+        e.preventDefault();
+        const pastedText = e.clipboardData.getData('text');
+        const lines = pastedText.split('\n').filter(line => line.trim());
+        
+        const entries: TimeEntry[] = lines.map((line, index) => {
+            // "8:20～8:40　朝礼" のような形式を解析
+            const match = line.match(/^([0-9:：～〜\-]+)\s+(.+)$/);
+            if (match) {
+                return {
+                    id: `${Date.now()}_${index}`,
+                    timeRange: match[1].replace(/：/g, ':').replace(/〜/g, '～'),
+                    activity: match[2].trim()
+                };
+            }
+            return {
+                id: `${Date.now()}_${index}`,
+                timeRange: '',
+                activity: line.trim()
+            };
+        });
+
+        if (entries.length > 0) {
+            if (type === 'plan') {
+                setFormData(prev => ({ ...prev, planEntries: entries }));
+            } else {
+                setFormData(prev => ({ ...prev, actualEntries: entries }));
+            }
+            addToast(`${entries.length}件の項目を読み込みました`, 'success');
         }
     };
 
     // Form validation for submit button activation
     const isFormValid = useMemo(() => {
-        return !!formData.reportDate && !!formData.activityContent.trim() && !!approvalRouteId;
+        const hasActualEntries = formData.actualEntries.some(e => e.activity.trim());
+        return !!formData.reportDate && hasActualEntries && !!approvalRouteId;
     }, [formData, approvalRouteId]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -93,17 +162,13 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
         }
         if (!formData.reportDate) {
             setError('報告日は必須です。');
-            firstInvalidRef.current = document.getElementById('reportDate') as HTMLInputElement;
-            firstInvalidRef.current?.focus();
             return;
         }
-        if (!formData.activityContent.trim()) {
-            setError('活動内容は必須です。');
-            firstInvalidRef.current = document.getElementById('activityContent') as HTMLTextAreaElement;
-            firstInvalidRef.current?.focus();
+        const hasActualEntries = formData.actualEntries.some(e => e.activity.trim());
+        if (!hasActualEntries) {
+            setError('実績を少なくとも1件入力してください。');
             return;
         }
-
 
         setIsSubmitting(true);
         setError('');
@@ -113,6 +178,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
                 formData,
                 approvalRouteId
             }, currentUser.id);
+            addToast('日報を提出しました', 'success');
             onSuccess();
         } catch (err: any) {
             setError('日報の提出に失敗しました。');
@@ -123,108 +189,228 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
 
     const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1";
     const inputClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+    const smallInputClass = "w-24 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm focus:ring-blue-500 focus:border-blue-500";
 
     return (
-        <>
-            <div className="relative">
-                {(isLoading || formLoadError) && (
-                    <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8" aria-live="polite" aria-busy={isLoading}>
-                        {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" aria-hidden="true" />}
+        <div className="relative">
+            {(isLoading || formLoadError) && (
+                <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8" aria-live="polite" aria-busy={isLoading}>
+                    {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" aria-hidden="true" />}
+                </div>
+            )}
+            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6" aria-labelledby="form-title">
+                <div className="flex justify-between items-center">
+                    <h2 id="form-title" className="text-2xl font-bold text-slate-800 dark:text-white">日報作成</h2>
+                </div>
+                
+                {formLoadError && (
+                    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
+                        <p className="font-bold">フォーム読み込みエラー</p>
+                        <p>{formLoadError}</p>
                     </div>
                 )}
-                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6" aria-labelledby="form-title">
-                    <div className="flex justify-between items-center">
-                        <h2 id="form-title" className="text-2xl font-bold text-slate-800 dark:text-white">日報作成</h2>
-                        <button 
-                            type="button" 
-                            onClick={() => setIsChatModalOpen(true)} 
-                            className="flex items-center gap-2 bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={isAIOff || isDisabled}
-                            aria-label="AIチャットで申請"
+
+                {/* 報告日 */}
+                <div>
+                    <label htmlFor="reportDate" className={labelClass}>報告日 *</label>
+                    <input 
+                        type="date" 
+                        id="reportDate" 
+                        name="reportDate" 
+                        value={formData.reportDate} 
+                        onChange={handleChange} 
+                        className={inputClass} 
+                        required 
+                        disabled={isDisabled} 
+                    />
+                </div>
+
+                {/* PQ/MQ目標 */}
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">PQ/MQ目標</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                            <label htmlFor="pqTarget" className={labelClass}>PQ目標</label>
+                            <input type="text" id="pqTarget" name="pqTarget" value={formData.pqTarget} onChange={handleChange} className={smallInputClass} placeholder="22.5" disabled={isDisabled} />
+                        </div>
+                        <div>
+                            <label htmlFor="pqCurrent" className={labelClass}>今期現在</label>
+                            <input type="text" id="pqCurrent" name="pqCurrent" value={formData.pqCurrent} onChange={handleChange} className={smallInputClass} placeholder="8.8" disabled={isDisabled} />
+                        </div>
+                        <div>
+                            <label htmlFor="pqLastYear" className={labelClass}>前年</label>
+                            <input type="text" id="pqLastYear" name="pqLastYear" value={formData.pqLastYear} onChange={handleChange} className={smallInputClass} placeholder="11.0" disabled={isDisabled} />
+                        </div>
+                        <div>
+                            <label htmlFor="mqTarget" className={labelClass}>MQ目標</label>
+                            <input type="text" id="mqTarget" name="mqTarget" value={formData.mqTarget} onChange={handleChange} className={smallInputClass} placeholder="13.5" disabled={isDisabled} />
+                        </div>
+                        <div>
+                            <label htmlFor="mqCurrent" className={labelClass}>今期現在</label>
+                            <input type="text" id="mqCurrent" name="mqCurrent" value={formData.mqCurrent} onChange={handleChange} className={smallInputClass} placeholder="4.6" disabled={isDisabled} />
+                        </div>
+                        <div>
+                            <label htmlFor="mqLastYear" className={labelClass}>前年</label>
+                            <input type="text" id="mqLastYear" name="mqLastYear" value={formData.mqLastYear} onChange={handleChange} className={smallInputClass} placeholder="5.7" disabled={isDisabled} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* 計画 */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-slate-800 dark:text-white">計画</h3>
+                        <button
+                            type="button"
+                            onClick={addPlanEntry}
+                            className="flex items-center gap-2 text-sm bg-blue-600 text-white font-semibold py-1.5 px-3 rounded-lg hover:bg-blue-700 transition-colors"
+                            disabled={isDisabled}
                         >
-                            <Sparkles className="w-5 h-5" aria-hidden="true" />
-                            <span>AIチャットで申請</span>
+                            <PlusCircle className="w-4 h-4" />
+                            行追加
                         </button>
                     </div>
-                    {isAIOff && <p className="text-sm text-red-500 dark:text-red-400">AI機能無効のため、AIチャットは利用できません。</p>}
-                    
-                    {formLoadError && (
-                        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
-                            <p className="font-bold">フォーム読み込みエラー</p>
-                            <p>{formLoadError}</p>
-                        </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label htmlFor="reportDate" className={labelClass}>報告日 *</label>
-                            <input type="date" id="reportDate" name="reportDate" value={formData.reportDate} onChange={handleChange} className={inputClass} required disabled={isDisabled} autoComplete="on" aria-required="true" />
-                        </div>
-                        <div>
-                            <label htmlFor="startTime" className={labelClass}>業務開始</label>
-                            <input type="time" id="startTime" name="startTime" value={formData.startTime} onChange={handleChange} className={inputClass} disabled={isDisabled} autoComplete="on" aria-label="業務開始時間" />
-                        </div>
-                        <div>
-                            <label htmlFor="endTime" className={labelClass}>業務終了</label>
-                            <input type="time" id="endTime" name="endTime" value={formData.endTime} onChange={handleChange} className={inputClass} disabled={isDisabled} autoComplete="on" aria-label="業務終了時間" />
-                        </div>
+                    <div className="mb-2">
+                        <textarea
+                            placeholder="Excelやテキストから貼り付け（例: 8:20～8:40　朝礼）"
+                            onPaste={(e) => handlePaste(e, 'plan')}
+                            className="w-full bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm"
+                            rows={2}
+                            disabled={isDisabled}
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            <Copy className="w-3 h-3 inline mr-1" />
+                            Excelやメールからコピー＆ペーストできます
+                        </p>
                     </div>
-                    
-                    <div>
-                        <label htmlFor="customerName" className={labelClass}>訪問先・顧客名</label>
-                        <input type="text" id="customerName" name="customerName" value={formData.customerName} onChange={handleChange} className={inputClass} disabled={isDisabled} placeholder="例: 株式会社〇〇" autoComplete="organization" aria-label="訪問先または顧客名" />
+                    <div className="space-y-2">
+                        {formData.planEntries.map((entry) => (
+                            <div key={entry.id} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={entry.timeRange}
+                                    onChange={(e) => handlePlanEntryChange(entry.id, 'timeRange', e.target.value)}
+                                    placeholder="8:20～8:40"
+                                    className="w-32 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm"
+                                    disabled={isDisabled}
+                                />
+                                <input
+                                    type="text"
+                                    value={entry.activity}
+                                    onChange={(e) => handlePlanEntryChange(entry.id, 'activity', e.target.value)}
+                                    placeholder="朝礼"
+                                    className="flex-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm"
+                                    disabled={isDisabled}
+                                />
+                                {formData.planEntries.length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removePlanEntry(entry.id)}
+                                        className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                        disabled={isDisabled}
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
                     </div>
+                </div>
 
-
-                    <div>
-                        <div className="flex justify-between items-center mb-1">
-                            <label htmlFor="activityContent" className={labelClass}>活動内容 *</label>
-                            <button
-                                type="button"
-                                onClick={handleGenerateSummary}
-                                disabled={isSummaryLoading || isDisabled || isAIOff}
-                                className="flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                aria-label="AIで活動内容の下書きを作成"
-                            >
-                                {isSummaryLoading ? <Loader className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Sparkles className="w-4 h-4" aria-hidden="true" />}
-                                AIで下書きを作成
-                            </button>
-                        </div>
-                        <textarea id="activityContent" name="activityContent" rows={8} value={formData.activityContent} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="本日の業務内容、進捗、課題などを具体的に記述してください。または、キーワードを入力してAIに下書き作成を依頼してください。" autoComplete="on" aria-required="true" />
-                        {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 mt-1">AI機能無効のため、AI下書き作成は利用できません。</p>}
-                    </div>
-                    
-                    <div>
-                        <label htmlFor="nextDayPlan" className={labelClass}>翌日予定</label>
-                        <textarea id="nextDayPlan" name="nextDayPlan" rows={3} value={formData.nextDayPlan} onChange={handleChange} className={inputClass} disabled={isDisabled} placeholder="明日のタスクやアポイントなどを記述してください。" autoComplete="on" aria-label="翌日予定" />
-                    </div>
-
-                    <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
-
-                    {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg" role="alert">{error}</p>}
-
-                    <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled} aria-label="下書き保存">下書き保存</button>
-                        <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid} aria-label="報告を提出する">
-                            {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '報告を提出する'}
+                {/* 実績 */}
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-slate-800 dark:text-white">実績 *</h3>
+                        <button
+                            type="button"
+                            onClick={addActualEntry}
+                            className="flex items-center gap-2 text-sm bg-green-600 text-white font-semibold py-1.5 px-3 rounded-lg hover:bg-green-700 transition-colors"
+                            disabled={isDisabled}
+                        >
+                            <PlusCircle className="w-4 h-4" />
+                            行追加
                         </button>
                     </div>
-                </form>
-            </div>
-            {isChatModalOpen && (
-                <ChatApplicationModal
-                    isOpen={isChatModalOpen}
-                    onClose={() => setIsChatModalOpen(false)}
-                    onSuccess={() => {
-                        setIsChatModalOpen(false);
-                        onSuccess();
-                    }}
-                    currentUser={currentUser}
-                    initialMessage="日報を提出したいです。"
-                    isAIOff={isAIOff}
-                />
-            )}
-        </>
+                    <div className="mb-2">
+                        <textarea
+                            placeholder="Excelやテキストから貼り付け（例: 8:20～8:40　朝礼）"
+                            onPaste={(e) => handlePaste(e, 'actual')}
+                            className="w-full bg-white dark:bg-slate-700 border border-green-300 dark:border-green-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm"
+                            rows={2}
+                            disabled={isDisabled}
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            <Copy className="w-3 h-3 inline mr-1" />
+                            Excelやメールからコピー＆ペーストできます
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        {formData.actualEntries.map((entry) => (
+                            <div key={entry.id} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={entry.timeRange}
+                                    onChange={(e) => handleActualEntryChange(entry.id, 'timeRange', e.target.value)}
+                                    placeholder="8:20～8:40"
+                                    className="w-32 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm"
+                                    disabled={isDisabled}
+                                />
+                                <input
+                                    type="text"
+                                    value={entry.activity}
+                                    onChange={(e) => handleActualEntryChange(entry.id, 'activity', e.target.value)}
+                                    placeholder="朝礼"
+                                    className="flex-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2 text-sm"
+                                    disabled={isDisabled}
+                                />
+                                {formData.actualEntries.length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeActualEntry(entry.id)}
+                                        className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                        disabled={isDisabled}
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* 備考・特記事項 */}
+                <div>
+                    <label htmlFor="notes" className={labelClass}>備考・特記事項</label>
+                    <textarea 
+                        id="notes" 
+                        name="notes" 
+                        rows={4} 
+                        value={formData.notes} 
+                        onChange={handleChange} 
+                        className={inputClass} 
+                        disabled={isDisabled} 
+                        placeholder="顧客からのコメントや特記事項があれば記入してください。"
+                    />
+                </div>
+
+                <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
+
+                {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg flex items-center gap-2" role="alert">
+                    <AlertTriangle className="w-5 h-5" />
+                    {error}
+                </p>}
+
+                <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <button 
+                        type="submit" 
+                        className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400 transition-colors" 
+                        disabled={isDisabled || !isFormValid}
+                    >
+                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '報告を提出する'}
+                    </button>
+                </div>
+            </form>
+        </div>
     );
 };
 

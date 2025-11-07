@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { startBusinessConsultantChat } from '../services/geminiService';
 import { Chat } from '@google/genai';
-import { Loader, Send, Sparkles } from './Icons';
+import { Loader, Send, Sparkles, Lightbulb } from './Icons';
 import { Job, Customer, JournalEntry, EmployeeUser } from '../types';
+import InteractivePromptBuilder from './InteractivePromptBuilder';
 
 interface AIChatPageProps {
     currentUser: EmployeeUser | null;
@@ -22,6 +23,7 @@ const AIChatPage: React.FC<AIChatPageProps> = ({ currentUser, jobs, customers, j
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [showPromptBuilder, setShowPromptBuilder] = useState(false);
     const chatRef = useRef<Chat | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const mounted = useRef(true);
@@ -148,6 +150,20 @@ ${input}
                 <div ref={messagesEndRef} />
             </div>
             <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+                {/* プロンプトビルダーボタン */}
+                <div className="mb-3 flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <Lightbulb className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200 flex-1">
+                        <strong>質問の仕方がわからない？</strong> AIアシスタントが質問を手伝います
+                    </p>
+                    <button
+                        onClick={() => setShowPromptBuilder(true)}
+                        className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                        質問を手伝ってもらう
+                    </button>
+                </div>
+
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                     <input
                         type="text"
@@ -166,6 +182,17 @@ ${input}
                     </button>
                 </form>
             </div>
+
+            {/* プロンプトビルダーモーダル */}
+            {showPromptBuilder && (
+                <InteractivePromptBuilder
+                    onPromptGenerated={(prompt) => {
+                        setInput(prompt);
+                        setShowPromptBuilder(false);
+                    }}
+                    onClose={() => setShowPromptBuilder(false)}
+                />
+            )}
         </div>
     );
 };

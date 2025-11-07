@@ -136,6 +136,25 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
         });
     };
 
+    const handleToggleRole = async (user: EmployeeUser) => {
+        const newRole = user.role === 'admin' ? 'user' : 'admin';
+        const roleText = newRole === 'admin' ? '管理者' : '一般ユーザー';
+        
+        requestConfirmation({
+            title: '権限変更の確認',
+            message: `${user.name} さんの権限を「${roleText}」に変更しますか？`,
+            onConfirm: async () => {
+                try {
+                    await updateUser(user.id, { role: newRole });
+                    addToast(`${user.name} さんの権限を${roleText}に変更しました。`, 'success');
+                    await loadUsers();
+                } catch (err: any) {
+                    addToast(`権限変更に失敗しました: ${err.message}`, 'error');
+                }
+            }
+        });
+    };
+
     // フィルタリングされたユーザーリスト
     const filteredUsers = users.filter(user => {
         if (!searchQuery.trim()) return true;
@@ -210,11 +229,18 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                 <td className="px-6 py-4 font-medium">{user.name}</td>
                                 <td className="px-6 py-4 text-slate-500">{user.email}</td>
                                 <td className="px-6 py-4">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'}`}>
-                                        {user.role === 'admin' ? '管理者' : '一般ユーザー'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-center">
+                                    <button
+                                        onClick={() => handleToggleRole(user)}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:scale-105 ${
+                                            user.role === 'admin' 
+                                                ? 'bg-purple-100 text-purple-800 hover:bg-purple-200' 
+                                                : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                                        }`}
+                                        title="クリックして権限を変更"
+                                    >
+                                        {user.role === 'admin' ? '👑 管理者' : '👤 一般ユーザー'}
+                                    </button>
+                                </td>                                <td className="px-6 py-4 text-center">
                                     {user.canUseAnythingAnalysis ? '✅' : '❌'}
                                 </td>
                                 <td className="px-6 py-4">{new Date(user.createdAt).toLocaleDateString()}</td>

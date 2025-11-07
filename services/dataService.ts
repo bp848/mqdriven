@@ -1352,14 +1352,32 @@ export const addUser = async (input: {
 
 export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<EmployeeUser> => {
   if (hasSupabaseCredentials()) {
-    if (
-      Object.prototype.hasOwnProperty.call(updates, 'email') ||
-      Object.prototype.hasOwnProperty.call(updates, 'role') ||
-      Object.prototype.hasOwnProperty.call(updates, 'canUseAnythingAnalysis')
-    ) {
-      throw new Error('Supabase環境ではメール・権限の更新は管理者経由で行ってください。');
-    }
     const supabaseClient = getSupabase();
+    
+    // Update users table (role, email, can_use_anything_analysis)
+    const userUpdates: any = {};
+    if (Object.prototype.hasOwnProperty.call(updates, 'role')) {
+      userUpdates.role = updates.role;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'email')) {
+      userUpdates.email = updates.email;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'canUseAnythingAnalysis')) {
+      userUpdates.can_use_anything_analysis = updates.canUseAnythingAnalysis;
+    }
+
+    if (Object.keys(userUpdates).length > 0) {
+      const { error: userUpdateError } = await supabaseClient
+        .from('users')
+        .update(userUpdates)
+        .eq('id', id);
+
+      if (userUpdateError) {
+        throw userUpdateError;
+      }
+    }
+
+    // Update employees table (name, department, title)
     const employeeUpdates: Partial<SupabaseEmployeeRow> = {};
     if (Object.prototype.hasOwnProperty.call(updates, 'name')) {
       employeeUpdates.name = updates.name ?? null;
@@ -1755,7 +1773,66 @@ export const deactivateAccountItem = async (id: string): Promise<AccountItem> =>
     return deepClone(item);
 };
 
-export const getLeads = async (): Promise<Lead[]> => deepClone(demoState.leads);
+export const getLeads = async (): Promise<Lead[]> => {
+  if (hasSupabaseCredentials()) {
+    try {
+      const supabaseClient = getSupabase();
+      const { data, error } = await supabaseClient
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        return data.map((row: any) => ({
+          id: row.id,
+          status: row.status as LeadStatus,
+          createdAt: row.created_at,
+          name: row.name || '',
+          email: row.email || '',
+          phone: row.phone || '',
+          company: row.company || '',
+          source: row.source || '',
+          tags: Array.isArray(row.tags) ? row.tags : [],
+          message: row.message || '',
+          updatedAt: row.updated_at || row.created_at,
+          referrer: row.referrer,
+          referrerUrl: row.referrer_url,
+          landingPageUrl: row.landing_page_url,
+          searchKeywords: row.search_keywords,
+          utmSource: row.utm_source,
+          utmMedium: row.utm_medium,
+          utmCampaign: row.utm_campaign,
+          utmTerm: row.utm_term,
+          utmContent: row.utm_content,
+          userAgent: row.user_agent,
+          ipAddress: row.ip_address,
+          deviceType: row.device_type,
+          browserName: row.browser_name,
+          osName: row.os_name,
+          country: row.country,
+          city: row.city,
+          region: row.region,
+          employees: row.employees,
+          budget: row.budget,
+          timeline: row.timeline,
+          inquiryType: row.inquiry_type,
+          inquiryTypes: Array.isArray(row.inquiry_types) ? row.inquiry_types : [],
+          infoSalesActivity: row.info_sales_activity,
+          score: row.score,
+          aiAnalysisReport: row.ai_analysis_report,
+          aiDraftProposal: row.ai_draft_proposal,
+          aiInvestigation: row.ai_investigation,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch leads from Supabase:', error);
+    }
+  }
+  
+  return deepClone(demoState.leads);
+};
 
 export const addLead = async (lead: Partial<Lead>): Promise<Lead> => {
     const now = new Date().toISOString();
@@ -1799,17 +1876,170 @@ export const addLead = async (lead: Partial<Lead>): Promise<Lead> => {
       aiDraftProposal: lead.aiDraftProposal,
       aiInvestigation: lead.aiInvestigation,
     };
+    
+    if (hasSupabaseCredentials()) {
+      try {
+        const supabaseClient = getSupabase();
+        const { data, error } = await supabaseClient
+          .from('leads')
+          .insert({
+            id: newLead.id,
+            status: newLead.status,
+            created_at: newLead.createdAt,
+            name: newLead.name,
+            email: newLead.email,
+            phone: newLead.phone,
+            company: newLead.company,
+            source: newLead.source,
+            tags: newLead.tags,
+            message: newLead.message,
+            updated_at: newLead.updatedAt,
+            referrer: newLead.referrer,
+            referrer_url: newLead.referrerUrl,
+            landing_page_url: newLead.landingPageUrl,
+            search_keywords: newLead.searchKeywords,
+            utm_source: newLead.utmSource,
+            utm_medium: newLead.utmMedium,
+            utm_campaign: newLead.utmCampaign,
+            utm_term: newLead.utmTerm,
+            utm_content: newLead.utmContent,
+            user_agent: newLead.userAgent,
+            ip_address: newLead.ipAddress,
+            device_type: newLead.deviceType,
+            browser_name: newLead.browserName,
+            os_name: newLead.osName,
+            country: newLead.country,
+            city: newLead.city,
+            region: newLead.region,
+            employees: newLead.employees,
+            budget: newLead.budget,
+            timeline: newLead.timeline,
+            inquiry_type: newLead.inquiryType,
+            inquiry_types: newLead.inquiryTypes,
+            info_sales_activity: newLead.infoSalesActivity,
+            score: newLead.score,
+            ai_analysis_report: newLead.aiAnalysisReport,
+            ai_draft_proposal: newLead.aiDraftProposal,
+            ai_investigation: newLead.aiInvestigation,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        if (data) return deepClone(newLead);
+      } catch (error) {
+        console.error('Failed to add lead to Supabase:', error);
+        throw error;
+      }
+    }
+    
     demoState.leads.push(newLead);
     return deepClone(newLead);
 };
 
 export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Lead> => {
+    const now = new Date().toISOString();
+    
+    if (hasSupabaseCredentials()) {
+      try {
+        const supabaseClient = getSupabase();
+        const updateData: any = {
+          updated_at: now,
+        };
+        
+        if (updates.status !== undefined) updateData.status = updates.status;
+        if (updates.name !== undefined) updateData.name = updates.name;
+        if (updates.email !== undefined) updateData.email = updates.email;
+        if (updates.phone !== undefined) updateData.phone = updates.phone;
+        if (updates.company !== undefined) updateData.company = updates.company;
+        if (updates.source !== undefined) updateData.source = updates.source;
+        if (updates.tags !== undefined) updateData.tags = updates.tags;
+        if (updates.message !== undefined) updateData.message = updates.message;
+        if (updates.infoSalesActivity !== undefined) updateData.info_sales_activity = updates.infoSalesActivity;
+        if (updates.score !== undefined) updateData.score = updates.score;
+        if (updates.aiAnalysisReport !== undefined) updateData.ai_analysis_report = updates.aiAnalysisReport;
+        if (updates.aiDraftProposal !== undefined) updateData.ai_draft_proposal = updates.aiDraftProposal;
+        if (updates.aiInvestigation !== undefined) updateData.ai_investigation = updates.aiInvestigation;
+        
+        const { data, error } = await supabaseClient
+          .from('leads')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        
+        if (data) {
+          return {
+            id: data.id,
+            status: data.status as LeadStatus,
+            createdAt: data.created_at,
+            name: data.name || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            company: data.company || '',
+            source: data.source || '',
+            tags: Array.isArray(data.tags) ? data.tags : [],
+            message: data.message || '',
+            updatedAt: data.updated_at || data.created_at,
+            referrer: data.referrer,
+            referrerUrl: data.referrer_url,
+            landingPageUrl: data.landing_page_url,
+            searchKeywords: data.search_keywords,
+            utmSource: data.utm_source,
+            utmMedium: data.utm_medium,
+            utmCampaign: data.utm_campaign,
+            utmTerm: data.utm_term,
+            utmContent: data.utm_content,
+            userAgent: data.user_agent,
+            ipAddress: data.ip_address,
+            deviceType: data.device_type,
+            browserName: data.browser_name,
+            osName: data.os_name,
+            country: data.country,
+            city: data.city,
+            region: data.region,
+            employees: data.employees,
+            budget: data.budget,
+            timeline: data.timeline,
+            inquiryType: data.inquiry_type,
+            inquiryTypes: Array.isArray(data.inquiry_types) ? data.inquiry_types : [],
+            infoSalesActivity: data.info_sales_activity,
+            score: data.score,
+            aiAnalysisReport: data.ai_analysis_report,
+            aiDraftProposal: data.ai_draft_proposal,
+            aiInvestigation: data.ai_investigation,
+          };
+        }
+      } catch (error) {
+        console.error('Failed to update lead in Supabase:', error);
+        throw error;
+      }
+    }
+    
     const lead = findById(demoState.leads, id, 'リード');
-    Object.assign(lead, updates, { updatedAt: new Date().toISOString() });
+    Object.assign(lead, updates, { updatedAt: now });
     return deepClone(lead);
 };
 
 export const deleteLead = async (id: string): Promise<void> => {
+    if (hasSupabaseCredentials()) {
+      try {
+        const supabaseClient = getSupabase();
+        const { error } = await supabaseClient
+          .from('leads')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        return;
+      } catch (error) {
+        console.error('Failed to delete lead from Supabase:', error);
+        throw error;
+      }
+    }
+    
     demoState.leads = demoState.leads.filter(lead => lead.id !== id);
 };
 
@@ -2936,4 +3166,75 @@ export const addAnalysisHistory = async (entry: Omit<AnalysisHistory, 'id' | 'cr
     };
     analysisHistory.unshift(newEntry);
     return deepClone(newEntry);
+};
+
+export const updateUserRole = async (email: string, role: 'admin' | 'user'): Promise<void> => {
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Supabase環境でのみ利用可能です。');
+  }
+
+  const supabaseClient = getSupabase();
+  
+  const { error } = await supabaseClient
+    .from('users')
+    .update({ role })
+    .eq('email', email);
+
+  if (error) {
+    throw new Error(`ユーザーロールの更新に失敗しました: ${error.message}`);
+  }
+};
+
+export const findDuplicateAccounts = async (email: string): Promise<EmployeeUser[]> => {
+  if (!hasSupabaseCredentials()) {
+    return [];
+  }
+
+  const supabaseClient = getSupabase();
+  
+  const { data, error } = await supabaseClient
+    .from('users')
+    .select('id, name, email, role, can_use_anything_analysis, created_at')
+    .eq('email', email)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map(user => ({
+    id: user.id,
+    name: user.name || '名前未設定',
+    department: null,
+    title: null,
+    email: user.email || '',
+    role: (user.role as 'admin' | 'user') || 'user',
+    createdAt: user.created_at || new Date().toISOString(),
+    canUseAnythingAnalysis: user.can_use_anything_analysis ?? true,
+  }));
+};
+
+export const selectUserAccount = async (userId: string): Promise<EmployeeUser | null> => {
+  if (!hasSupabaseCredentials()) {
+    return null;
+  }
+
+  return await fetchSupabaseEmployeeUser(userId);
+};
+
+export const registerEmployeeNumber = async (userId: string, employeeNumber: string): Promise<void> => {
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Supabase環境でのみ利用可能です。');
+  }
+
+  const supabaseClient = getSupabase();
+  
+  const { error } = await supabaseClient
+    .from('users')
+    .update({ employee_number: employeeNumber })
+    .eq('id', userId);
+
+  if (error) {
+    throw new Error(`社員番号の登録に失敗しました: ${error.message}`);
+  }
 };

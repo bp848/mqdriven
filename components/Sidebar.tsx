@@ -128,6 +128,7 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
             { page: 'accounting_tax_summary', name: '消費税集計' },
             { page: 'accounting_period_closing', name: '締処理' },
             { page: 'accounting_business_plan', name: '経営計画' },
+            { page: 'accounting_bulk_upload', name: '一括アップロード' },
         ]
     },
     {
@@ -230,9 +231,19 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
     })
     .filter(category => {
         if (category.items.length === 0) return false;
-        if (!category.adminOnly) return true;
-        if (currentUser && currentUser.role === 'admin') return true;
-        return false;
+        
+        const isAdmin = currentUser?.role === 'admin';
+        
+        // 管理者は全て表示
+        if (isAdmin) return true;
+        
+        // 一般ユーザーの場合
+        // 人事労務と会計のみ非表示、それ以外は全て表示
+        if (category.id === 'hr' || category.id === 'accounting') {
+            return false;
+        }
+        
+        return true;
     });
   }, [currentUser]);
 

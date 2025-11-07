@@ -45,7 +45,10 @@ import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructio
 import OrganizationChartPage from './components/hr/OrganizationChartPage.tsx';
 import LoginPage from './components/LoginPage.tsx';
 import BugReportModal from './components/BugReportModal.tsx';
-
+import PermissionRequestButton from './components/PermissionRequestButton.tsx';
+import OtsuboneAI from './components/OtsuboneAI.tsx';
+import RoleIssueHelper from './components/RoleIssueHelper.tsx';
+import AccountingBulkUploadPage from './components/accounting/AccountingBulkUploadPage.tsx';
 
 import * as dataService from './services/dataService.ts';
 import { normalizeFormCode } from './services/normalizeFormCode.ts';
@@ -99,6 +102,7 @@ const PAGE_TITLES: Record<Page, string> = {
     ai_business_consultant: 'AI業務支援',
     ai_market_research: 'AI市場調査',
     ai_live_chat: 'AIライブチャット',
+    accounting_bulk_upload: '一括アップロード',
     estimate_creation: '新規見積作成',
     project_list: '案件一覧',
     project_creation: '新規案件作成',
@@ -431,12 +435,34 @@ const App: React.FC = () => {
                     })
                     .catch(err => {
                         if (!isMounted) return;
-                        const message = dataService.isSupabaseUnavailableError(err)
-                            ? 'Supabase からユーザー情報を取得できません。ネットワークを確認してください。'
-                            : 'ユーザー情報の取得に失敗しました。再度ログインしてください。';
+                        
+                        // ユーザーのメールアドレスを取得
+                        const userEmail = nextSession.user?.email || '';
+                        
+                        // ドメインチェック
+                        const allowedDomain = '@bunsyodo.jp'; // 許可されたドメイン
+                        let message = '';
+                        
+                        if (userEmail && !userEmail.endsWith(allowedDomain)) {
+                            // ドメインが違う場合
+                            message = `❌ ログインできません\n\n現在、${userEmail} でログインしようとされていますね。\n\n申し訳ございませんが、このシステムは文章堂の社員専用です。\n\n${allowedDomain} のメールアドレスでGoogleログインしてください。\n\n例：yamada${allowedDomain}\n\n個人のGmailアドレスではログインできません。\n\n会社のメールアドレスでもう一度お試しください。`;
+                        } else if (err.message && err.message.includes('not found')) {
+                            // ユーザーが登録されていない場合
+                            message = `❌ ログインできません\n\n${userEmail} は、まだシステムに登録されていません。\n\n管理者に連絡して、ユーザー登録を依頼してください。\n\n右下のチャットからもお問い合わせいただけます。`;
+                        } else if (dataService.isSupabaseUnavailableError(err)) {
+                            message = 'Supabase からユーザー情報を取得できません。ネットワークを確認してください。';
+                        } else {
+                            message = `ユーザー情報の取得に失敗しました。\n\nエラー内容：${err.message}\n\n右下のチャットでお問い合わせください。`;
+                        }
+                        
                         setError((prev) => prev ?? message);
+                        addToast(message, 'error');
                         setShowSetupModal(true);
                         setCurrentUser(null);
+                        
+                        // ログアウトして再試行できるようにする
+                        const supabaseClient = getSupabase();
+                        supabaseClient.auth.signOut();
                     });
             } else {
                 setCurrentUser(null);
@@ -650,6 +676,10 @@ const App: React.FC = () => {
                 return <SalesRanking jobs={jobs} />;
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
+            case 'accounting_bulk_upload':
+                return currentUser?.role === 'admin'
+                    ? <AccountingBulkUploadPage addToast={addToast} isAIOff={isAIOff} />
+                    : <PlaceholderPage title="管理者のみ利用可能" />;
             case 'manufacturing_cost':
                 return <ManufacturingCostManagement jobs={jobs} />;
             case 'business_support_proposal':
@@ -828,12 +858,35 @@ const App: React.FC = () => {
             {showSetupModal && <DatabaseSetupInstructionsModal onRetry={() => { setShowSetupModal(false); fetchData(); }} />}
             <button
                 onClick={() => setIsBugReportModalOpen(true)}
-                className="fixed bottom-8 right-8 bg-purple-600 text-white p-4 rounded-full shadow-lg hover:bg-purple-700 transition-transform transform hover:scale-110"
+                className="fixed bottom-8 right-24 bg-purple-600 text-white p-4 rounded-full shadow-lg hover:bg-purple-700 transition-transform transform hover:scale-110"
                 title="バグ報告・改善要望"
             >
                 <Bug className="w-6 h-6"/>
             </button>
             {isBugReportModalOpen && <BugReportModal isOpen={isBugReportModalOpen} onClose={() => setIsBugReportModalOpen(false)} currentUser={currentUser} onReportSubmit={handleAddBugReport} />}
+            
+            {/* 権限リクエストボタン（一般ユーザーのみ表示） */}
+            {currentUser && <PermissionRequestButton currentUser={currentUser} addToast={addToast} />}
+            
+            {/* おつぼねさんAI - 常に開きっぱなし（邪魔なら閉じてください） */}
+            {currentUser && (
+                <OtsuboneAI
+                    currentUser={currentUser}
+                    onDataSubmit={async (type, data) => {
+                        // データ登録処理
+                        console.log('Data submitted:', type, data);
+                        addToast('データを登録しました！', 'success');
+                    }}
+                />
+            )}
+            
+            {/* メニューが少ない問題を解決するヘルパー */}
+            {currentUser && (
+                <RoleIssueHelper
+                    currentUser={currentUser}
+                    onRefresh={() => window.location.reload()}
+                />
+            )}
         </div>
     );
 };

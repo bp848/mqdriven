@@ -178,7 +178,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
         }
     };
 
-    const handleGeneratePdf = async () => {
+    const handleDownloadProposalPdf = async () => {
         if (!lead || !lastProposalPackage?.proposal) return;
         setIsGeneratingPdf(true);
         try {
@@ -188,6 +188,23 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                 `提案書_${lead.company}_${lead.name}.pdf`
             );
             addToast('提案書PDFが正常に生成されました。', 'success');
+        } catch (e) {
+            addToast(e instanceof Error ? e.message : 'PDFの生成に失敗しました。', 'error');
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
+
+    const handleDownloadInvestigationPdf = async () => {
+        if (!lead || !companyInvestigation) return;
+        setIsGeneratingPdf(true);
+        try {
+            await new Promise(resolve => setTimeout(resolve, 100)); // allow content to render
+            await generateMultipagePdf(
+                'investigation-pdf-content',
+                `企業調査レポート_${lead.company}.pdf`
+            );
+            addToast('企業調査レポートPDFが正常に生成されました。', 'success');
         } catch (e) {
             addToast(e instanceof Error ? e.message : 'PDFの生成に失敗しました。', 'error');
         } finally {
@@ -322,7 +339,192 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                         </div>
                         {/* Right Column */}
                         <div className="h-full bg-slate-900 rounded-lg p-4 flex flex-col overflow-hidden">
-                           {/* AI Assistant UI Here */}
+                            {/* Tab Navigation */}
+                            <div className="flex border-b border-slate-700 mb-4 flex-shrink-0">
+                                <button onClick={() => setActiveTab('companyInfo')} className={`px-4 py-2 text-sm font-semibold ${activeTab === 'companyInfo' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}>企業情報</button>
+                                <button onClick={() => setActiveTab('estimateDraft')} className={`px-4 py-2 text-sm font-semibold ${activeTab === 'estimateDraft' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}>見積もり案</button>
+                                <button onClick={() => setActiveTab('proposalDraft')} className={`px-4 py-2 text-sm font-semibold ${activeTab === 'proposalDraft' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}>提案書案</button>
+                                <button onClick={() => setActiveTab('emailReplyDraft')} className={`px-4 py-2 text-sm font-semibold ${activeTab === 'emailReplyDraft' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}>返信メール案</button>
+                            </div>
+
+                            {/* Tab Content */}
+                            <div className="flex-1 overflow-y-auto">
+                                {activeTab === 'companyInfo' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-sm font-semibold text-slate-300">企業調査</h4>
+                                            <button onClick={handleInvestigateCompany} disabled={isInvestigating || isAIOff} className="text-xs font-semibold text-blue-400 flex items-center gap-1 disabled:opacity-50 hover:text-blue-300">
+                                                {isInvestigating ? <Loader className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                                                {companyInvestigation ? '再調査' : 'AIで企業調査'}
+                                            </button>
+                                        </div>
+                                        {isInvestigating ? (
+                                            <div className="text-sm text-slate-400">Web検索を用いて調査中...</div>
+                                        ) : companyInvestigation ? (
+                                            <div className="space-y-3">
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <h5 className="text-xs font-semibold text-slate-300 mb-2">概要</h5>
+                                                    <p className="text-sm text-slate-400 whitespace-pre-wrap">{companyInvestigation.summary}</p>
+                                                </div>
+                                                {companyInvestigation.businessOverview && (
+                                                    <div className="bg-slate-800 p-3 rounded-lg">
+                                                        <h5 className="text-xs font-semibold text-slate-300 mb-2">事業概要</h5>
+                                                        <p className="text-sm text-slate-400 whitespace-pre-wrap">{companyInvestigation.businessOverview}</p>
+                                                    </div>
+                                                )}
+                                                {companyInvestigation.recentNews && companyInvestigation.recentNews.length > 0 && (
+                                                    <div className="bg-slate-800 p-3 rounded-lg">
+                                                        <h5 className="text-xs font-semibold text-slate-300 mb-2">最近のニュース</h5>
+                                                        <ul className="space-y-2">
+                                                            {companyInvestigation.recentNews.map((news: string, idx: number) => (
+                                                                <li key={idx} className="text-sm text-slate-400">• {news}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                                <button onClick={handleDownloadInvestigationPdf} disabled={isGeneratingPdf} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
+                                                    {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                                                    調査レポートPDF
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-slate-500">企業の基本情報や最新ニュースを調査します。</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'estimateDraft' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-sm font-semibold text-slate-300">AI見積もり</h4>
+                                            <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="text-xs font-semibold text-blue-400 flex items-center gap-1 disabled:opacity-50 hover:text-blue-300">
+                                                {isGeneratingPackage ? <Loader className="w-3 h-3 animate-spin" /> : <Lightbulb className="w-3 h-3" />}
+                                                AI提案パッケージ作成
+                                            </button>
+                                        </div>
+                                        {isGeneratingPackage ? (
+                                            <div className="text-sm text-slate-400">AIが提案書と見積を作成中です...</div>
+                                        ) : lastProposalPackage?.estimate && lastProposalPackage.estimate.length > 0 ? (
+                                            <div className="space-y-3">
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="border-b border-slate-700">
+                                                                <th className="text-left text-xs text-slate-400 pb-2">項目</th>
+                                                                <th className="text-right text-xs text-slate-400 pb-2">金額</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {lastProposalPackage.estimate.map((item: EstimateItem, idx: number) => (
+                                                                <tr key={idx} className="border-b border-slate-700/50">
+                                                                    <td className="py-2 text-slate-300">{item.content}</td>
+                                                                    <td className="py-2 text-right text-slate-300">{formatJPY(item.unitPrice * item.quantity)}</td>
+                                                                </tr>
+                                                            ))}
+                                                            <tr className="font-semibold">
+                                                                <td className="pt-2 text-slate-200">合計</td>
+                                                                <td className="pt-2 text-right text-slate-200">
+                                                                    {formatJPY(lastProposalPackage.estimate.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0))}
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <button onClick={handleSaveEstimate} disabled={isSavingEstimate} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
+                                                    {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                    見積を保存
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-slate-500">AI提案パッケージを作成すると、見積もり案が表示されます。</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'proposalDraft' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-sm font-semibold text-slate-300">AI提案書</h4>
+                                            <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="text-xs font-semibold text-blue-400 flex items-center gap-1 disabled:opacity-50 hover:text-blue-300">
+                                                {isGeneratingPackage ? <Loader className="w-3 h-3 animate-spin" /> : <Lightbulb className="w-3 h-3" />}
+                                                AI提案パッケージ作成
+                                            </button>
+                                        </div>
+                                        {isGeneratingPackage ? (
+                                            <div className="text-sm text-slate-400">AIが提案書と見積を作成中です...</div>
+                                        ) : lastProposalPackage?.proposal ? (
+                                            <div className="space-y-3">
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <h5 className="text-xs font-semibold text-slate-300 mb-2">タイトル</h5>
+                                                    <p className="text-sm text-slate-200">{lastProposalPackage.proposal.coverTitle}</p>
+                                                </div>
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <h5 className="text-xs font-semibold text-slate-300 mb-2">提案内容</h5>
+                                                    <div className="text-sm text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto space-y-3">
+                                                        <div>
+                                                            <h6 className="font-semibold text-slate-300 mb-1">事業理解</h6>
+                                                            <p>{lastProposalPackage.proposal.businessUnderstanding}</p>
+                                                        </div>
+                                                        <div>
+                                                            <h6 className="font-semibold text-slate-300 mb-1">課題</h6>
+                                                            <p>{lastProposalPackage.proposal.challenges}</p>
+                                                        </div>
+                                                        <div>
+                                                            <h6 className="font-semibold text-slate-300 mb-1">提案</h6>
+                                                            <p>{lastProposalPackage.proposal.proposal}</p>
+                                                        </div>
+                                                        <div>
+                                                            <h6 className="font-semibold text-slate-300 mb-1">まとめ</h6>
+                                                            <p>{lastProposalPackage.proposal.conclusion}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button onClick={handleDownloadProposalPdf} disabled={isGeneratingPdf} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
+                                                    {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                                                    提案書PDF
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-slate-500">AI提案パッケージを作成すると、提案書案が表示されます。</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {activeTab === 'emailReplyDraft' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-sm font-semibold text-slate-300">AI返信メール</h4>
+                                            <button onClick={handleGenerateReplyEmail} disabled={isGeneratingEmail || isAIOff} className="text-xs font-semibold text-blue-400 flex items-center gap-1 disabled:opacity-50 hover:text-blue-300">
+                                                {isGeneratingEmail ? <Loader className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                                                AIで返信作成
+                                            </button>
+                                        </div>
+                                        {isGeneratingEmail ? (
+                                            <div className="text-sm text-slate-400">AIが返信メールを作成中です...</div>
+                                        ) : aiReplyEmail ? (
+                                            <div className="space-y-3">
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <h5 className="text-xs font-semibold text-slate-300 mb-2">件名</h5>
+                                                    <p className="text-sm text-slate-200">{aiReplyEmail.subject}</p>
+                                                </div>
+                                                <div className="bg-slate-800 p-3 rounded-lg">
+                                                    <h5 className="text-xs font-semibold text-slate-300 mb-2">本文</h5>
+                                                    <p className="text-sm text-slate-400 whitespace-pre-wrap">{aiReplyEmail.bodyText}</p>
+                                                </div>
+                                                <button onClick={() => {
+                                                    navigator.clipboard.writeText(`件名: ${aiReplyEmail.subject}\n\n${aiReplyEmail.bodyText}`);
+                                                    addToast('メール内容をクリップボードにコピーしました', 'success');
+                                                }} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm">
+                                                    <Mail className="w-4 h-4" />
+                                                    クリップボードにコピー
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-slate-500">AIで返信メールを作成します。</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 

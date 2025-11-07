@@ -36,6 +36,7 @@ export type Page =
   | 'accounting_tax_summary'
   | 'accounting_period_closing'
   | 'accounting_business_plan'
+  | 'accounting_bulk_upload'
   | 'business_support_proposal'
   | 'ai_business_consultant'
   | 'ai_market_research'
@@ -246,6 +247,8 @@ export interface CompanyAnalysis {
 
 export interface CompanyInvestigation {
     summary: string;
+    businessOverview?: string;
+    recentNews?: string[];
     sources: {
         uri: string;
         title: string;

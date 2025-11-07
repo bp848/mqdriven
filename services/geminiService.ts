@@ -18,6 +18,21 @@ declare const window: Window & typeof globalThis & {
   IS_AI_DISABLED?: boolean;
 };
 
+// Generic document text extraction (PDF/Images). Returns plain text for downstream regeneration.
+export const extractDocumentText = async (base64Data: string, mimeType: string): Promise<string> => {
+    checkOnlineAndAIOff();
+    return withRetry(async () => {
+        const parts: any[] = [{ inlineData: { data: base64Data, mimeType } }];
+        const instruction = { text: '以下のファイルからテキストを抽出し、プレーンテキストのみを出力してください。余計な説明やフォーマットは不要です。' };
+        const response = await ai!.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: { parts: [...parts, instruction] },
+            config: { responseMimeType: 'text/plain', thinkingConfig: { thinkingBudget: 4096 } },
+        });
+        return ensureString(response.text, '').trim();
+    });
+};
+
 // Helper function to safely get text from response
 const getResponseText = async (response: Response): Promise<string> => {
   if (!response.text) {
