@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Lead, LeadStatus, Toast, ConfirmationDialogProps, EmployeeUser, CustomProposalContent, LeadProposalPackage, EstimateStatus, EstimateItem, CompanyInvestigation } from '../../types.ts';
-import { X, Save, Loader, Pencil, Trash2, Mail, CheckCircle, Lightbulb, Search, FileText, ArrowRight, ArrowLeft, AlertTriangle, RefreshCw, Sparkles } from '../Icons.tsx';
+import { X, Save, Loader, Pencil, Trash2, Mail, CheckCircle, Lightbulb, Search, FileText, ArrowRight, ArrowLeft, AlertTriangle, RefreshCw, Sparkles, Eye } from '../Icons.tsx';
 import LeadStatusBadge from './LeadStatusBadge.tsx';
 import { INQUIRY_TYPES } from '../../constants.ts';
 import LeadScoreBadge from '../ui/LeadScoreBadge.tsx';
@@ -80,6 +80,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
     const [isGeneratingPackage, setIsGeneratingPackage] = useState(false);
     const [lastProposalPackage, setLastProposalPackage] = useState<LeadProposalPackage | null>(null);
     const [showProposalPreview, setShowProposalPreview] = useState(false);
+    const [showInvestigationPreview, setShowInvestigationPreview] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isSavingEstimate, setIsSavingEstimate] = useState(false);
     const [activeTab, setActiveTab] = useState<'companyInfo' | 'estimateDraft' | 'proposalDraft' | 'emailReplyDraft'>('companyInfo');
@@ -201,7 +202,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
         try {
             await new Promise(resolve => setTimeout(resolve, 100)); // allow content to render
             await generateMultipagePdf(
-                'investigation-pdf-content',
+                'investigation-report-pdf-content',
                 `企業調査レポート_${lead.company}.pdf`
             );
             addToast('企業調査レポートPDFが正常に生成されました。', 'success');
@@ -382,10 +383,21 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                                         </ul>
                                                     </div>
                                                 )}
-                                                <button onClick={handleDownloadInvestigationPdf} disabled={isGeneratingPdf} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
-                                                    {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                                                    調査レポートPDF
-                                                </button>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button onClick={() => setShowInvestigationPreview(v => !v)} className="w-full flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-500 text-white py-2 px-4 rounded-lg text-sm">
+                                                        <Eye className="w-4 h-4" />
+                                                        {showInvestigationPreview ? 'プレビューを隠す' : 'プレビュー表示'}
+                                                    </button>
+                                                    <button onClick={handleDownloadInvestigationPdf} disabled={isGeneratingPdf} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
+                                                        {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                                                        調査レポートPDF
+                                                    </button>
+                                                </div>
+                                                {showInvestigationPreview && (
+                                                    <div className="mt-3 bg-white rounded-md overflow-hidden">
+                                                        <InvestigationReportPdfContent report={{ title: `企業調査レポート: ${lead.company}` , sections: companyInvestigation }} />
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             <p className="text-sm text-slate-500">企業の基本情報や最新ニュースを調査します。</p>
@@ -479,10 +491,21 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <button onClick={handleDownloadProposalPdf} disabled={isGeneratingPdf} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
-                                                    {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                                                    提案書PDF
-                                                </button>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button onClick={() => setShowProposalPreview(v => !v)} className="w-full flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-500 text-white py-2 px-4 rounded-lg text-sm">
+                                                        <Eye className="w-4 h-4" />
+                                                        {showProposalPreview ? 'プレビューを隠す' : 'プレビュー表示'}
+                                                    </button>
+                                                    <button onClick={handleDownloadProposalPdf} disabled={isGeneratingPdf} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm disabled:opacity-50">
+                                                        {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                                                        提案書PDF
+                                                    </button>
+                                                </div>
+                                                {showProposalPreview && (
+                                                    <div className="mt-3 bg-white rounded-md overflow-hidden">
+                                                        <ProposalPdfContent content={lastProposalPackage.proposal} lead={lead} />
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             <p className="text-sm text-slate-500">AI提案パッケージを作成すると、提案書案が表示されます。</p>

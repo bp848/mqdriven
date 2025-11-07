@@ -159,6 +159,7 @@ const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSe
 const App: React.FC = () => {
     const [session, setSession] = useState<Session | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
+    const [isSigningOut, setIsSigningOut] = useState(false);
 
     const [currentPage, setCurrentPage] = useState<Page>('analysis_dashboard');
     const [currentUser, setCurrentUser] = useState<EmployeeUser | null>(null);
@@ -433,19 +434,22 @@ const App: React.FC = () => {
                         setError(null);
                         setShowSetupModal(false);
                     })
-                    .catch(err => {
+                    .catch(async (err) => {
                         if (!isMounted) return;
+                        if (isSigningOut) return; // 既にサインアウト処理中なら何もしない
                         
                         // ユーザーのメールアドレスを取得
                         const userEmail = nextSession.user?.email || '';
                         
-                        // ドメインチェック
-                        const allowedDomain = '@bunsyodo.jp'; // 許可されたドメイン
+                        // ドメインチェック（許可ドメインのいずれかに一致）
+                        const allowedDomains = ['@bunsyodo.jp', '@b-p.co.jp'];
                         let message = '';
-                        
-                        if (userEmail && !userEmail.endsWith(allowedDomain)) {
+
+                        const isAllowedDomain = userEmail ? allowedDomains.some(d => userEmail.endsWith(d)) : false;
+                        if (userEmail && !isAllowedDomain) {
                             // ドメインが違う場合
-                            message = `❌ ログインできません\n\n現在、${userEmail} でログインしようとされていますね。\n\n申し訳ございませんが、このシステムは文章堂の社員専用です。\n\n${allowedDomain} のメールアドレスでGoogleログインしてください。\n\n例：yamada${allowedDomain}\n\n個人のGmailアドレスではログインできません。\n\n会社のメールアドレスでもう一度お試しください。`;
+                            const domainsList = allowedDomains.join(' / ');
+                            message = `❌ ログインできません\n\n現在、${userEmail} でログインしようとされています。\n\n申し訳ございませんが、このシステムは社員専用です。\n\n許可ドメイン: ${domainsList}\n\n該当の会社メールアドレスでGoogleログインしてください。`;
                         } else if (err.message && err.message.includes('not found')) {
                             // ユーザーが登録されていない場合
                             message = `❌ ログインできません\n\n${userEmail} は、まだシステムに登録されていません。\n\n管理者に連絡して、ユーザー登録を依頼してください。\n\n右下のチャットからもお問い合わせいただけます。`;
@@ -457,15 +461,28 @@ const App: React.FC = () => {
                         
                         setError((prev) => prev ?? message);
                         addToast(message, 'error');
-                        setShowSetupModal(true);
                         setCurrentUser(null);
+                        setSession(null);
                         
-                        // ログアウトして再試行できるようにする
-                        const supabaseClient = getSupabase();
-                        supabaseClient.auth.signOut();
+                        // ログアウトして再試行できるようにする（ループ防止）
+                        setIsSigningOut(true);
+                        try {
+                            const supabaseClient = getSupabase();
+                            await supabaseClient.auth.signOut();
+                            // 強制的にログインページにリダイレクト
+                            window.location.href = '/';
+                        } catch (signOutError) {
+                            console.error('Sign out failed:', signOutError);
+                            // サインアウトに失敗した場合も強制リダイレクト
+                            window.location.href = '/';
+                        } finally {
+                            setIsSigningOut(false);
+                        }
                     });
             } else {
-                setCurrentUser(null);
+                if (!isSigningOut) { // サインアウト処理中でなければ
+                    setCurrentUser(null);
+                }
             }
         });
 

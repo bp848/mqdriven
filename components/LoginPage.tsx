@@ -9,6 +9,7 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const handleLoginWithEmail = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -71,6 +72,40 @@ const LoginPage: React.FC = () => {
     // ログイン支援処理（将来的にSupabaseでユーザー検索や管理者通知を実装）
     console.log('Login assist requested:', { email, employeeNumber });
     // TODO: 管理者に通知を送る、またはユーザー情報を検証する
+  };
+
+  const handleTempRegister = async () => {
+    if (!isSupabaseConfigured) {
+      setErrorMessage('Supabaseの認証情報が設定されていません。');
+      return;
+    }
+
+    setIsRegistering(true);
+    setErrorMessage(null);
+
+    try {
+      const supabaseClient = getSupabase();
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+      
+      if (error) {
+        setErrorMessage(`登録エラー: ${error.message}`);
+      } else {
+        setErrorMessage('✅ Googleアカウントでの登録を開始しています...');
+      }
+    } catch (error: any) {
+      setErrorMessage(`登録失敗: ${error.message}`);
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   return (
@@ -142,13 +177,29 @@ const LoginPage: React.FC = () => {
             <GoogleIcon className="w-5 h-5" />
             Googleでログイン
           </button>
+          
+          {/* 一時的な登録ボタン */}
+          <button
+            type="button"
+            onClick={handleTempRegister}
+            disabled={isRegistering || !isSupabaseConfigured}
+            className="w-full flex justify-center items-center gap-3 px-4 py-2 font-semibold text-white bg-orange-600 border border-orange-600 rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <GoogleIcon className="w-5 h-5" />
+            {isRegistering ? '登録中...' : '🔧 Googleで新規登録'}
+          </button>
           {!isSupabaseConfigured && (
             <p className="mt-3 text-sm text-red-600 text-center">
               Supabaseの接続情報が未設定のため、デモモードでご利用ください。
             </p>
           )}
+          <p className="mt-2 text-xs text-slate-500 text-center">
+            🔧 一時的な登録ボタンです。@b-p.co.jp ドメインのGoogleアカウントで登録してください。
+          </p>
           {errorMessage && (
-            <p className="text-sm text-red-600 text-center">
+            <p className={`text-sm text-center whitespace-pre-line ${
+              errorMessage.startsWith('✅') ? 'text-green-600' : 'text-red-600'
+            }`}>
               {errorMessage}
             </p>
           )}

@@ -94,7 +94,7 @@ const LoginSupportChat: React.FC<LoginSupportChatProps> = ({ onLoginAssist }) =>
         // よくある名前パターンを検出
         if (namePart.includes('hashimoto') || namePart.includes('橋本')) {
           guessedName = '橋本';
-          guessedTitle = '社長';
+          guessedTitle = '様';
         } else if (namePart.includes('ikeya') || namePart.includes('池谷')) {
           guessedName = '池谷';
           guessedTitle = '様';

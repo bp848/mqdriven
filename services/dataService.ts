@@ -3121,8 +3121,23 @@ export const uploadFile = async (file: File, bucket: string): Promise<{ path: st
     if (hasSupabaseCredentials()) {
         const supabaseClient = getSupabase();
         const identifier = uuidv4();
-        const fileName = file.name ?? `${identifier}.bin`;
-        const path = `${identifier}-${fileName}`;
+        const rawName = file.name ?? `${identifier}.bin`;
+        const sanitizeKey = (name: string): string => {
+            try {
+                // Normalize and keep letters/numbers from all locales + common filename symbols
+                const normalized = name.normalize('NFKC');
+                // Replace disallowed characters with underscore
+                const cleaned = normalized.replace(/[^\p{L}\p{N}._-]+/gu, '_');
+                // Collapse repeats and trim
+                return cleaned.replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(-180) || 'file';
+            } catch {
+                // Fallback without Unicode property escapes
+                const fallback = name.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(-180) || 'file';
+                return fallback;
+            }
+        };
+        const safeName = sanitizeKey(rawName);
+        const path = `${identifier}-${safeName}`;
         
         const { data, error } = await supabaseClient.storage
             .from(bucket)

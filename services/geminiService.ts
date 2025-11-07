@@ -484,26 +484,35 @@ Web検索を活用して、企業の事業内容、最近の動向、および�
             model: "gemini-2.5-pro",
             contents: prompt,
             config: {
+                // NOTE: Some runtimes do not support responseMimeType with tools. We avoid forcing JSON here
                 tools: [{ googleSearch: {} }],
-                responseMimeType: "application/json",
-                responseSchema: proposalPackageSchema,
                 thinkingConfig: { thinkingBudget: 32768 },
             },
         });
 
-        let jsonStr = ensureString(response.text, '').trim();
-        if (jsonStr.startsWith('```json')) {
-            jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-        }
-        
+        // Try to parse JSON from the returned text
+        let raw = ensureString(response.text, '').trim();
+        if (raw.startsWith('```json')) raw = raw.replace(/^```json\n|\n```$/g, '').trim();
+        if (raw.startsWith('```')) raw = raw.replace(/^```[a-zA-Z]*\n|\n```$/g, '').trim();
+
         try {
-            return JSON.parse(jsonStr);
-        } catch (e) {
-            console.error("Failed to parse JSON from Gemini for proposal package:", e, "Raw text:", jsonStr);
-            return {
-                isSalesLead: false,
-                reason: `AIからの応答を解析できませんでした。応答: ${jsonStr}`,
-            };
+            return JSON.parse(raw);
+        } catch (primaryError) {
+            console.warn('Primary parse failed with tools. Retrying without tools...', primaryError, 'Raw:', raw);
+            // Fallback: retry without tools and without enforced schema
+            const fallback = await ai!.models.generateContent({ model: 'gemini-2.5-pro', contents: prompt, config: {} });
+            let text = ensureString(fallback.text, '').trim();
+            if (text.startsWith('```json')) text = text.replace(/^```json\n|\n```$/g, '').trim();
+            if (text.startsWith('```')) text = text.replace(/^```[a-zA-Z]*\n|\n```$/g, '').trim();
+            try {
+                return JSON.parse(text);
+            } catch (secondaryError) {
+                console.error('Fallback parse also failed:', secondaryError, 'Raw text:', text);
+                return {
+                    isSalesLead: false,
+                    reason: `AIからの応答を解析できませんでした。応答: ${text}`,
+                };
+            }
         }
     });
 };

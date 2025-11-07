@@ -18,7 +18,7 @@ interface OtsuboneAIProps {
 const OtsuboneAI: React.FC<OtsuboneAIProps> = ({ currentUser, onDataSubmit }) => {
   // ユーザー名と敬称を取得
   const userName = currentUser?.name || 'お客';
-  const userTitle = currentUser?.role === 'admin' ? '社長' : '様';
+  const userTitle = '様';
   
   const [messages, setMessages] = useState<Message[]>([
     {
