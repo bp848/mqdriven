@@ -457,6 +457,22 @@ const App: React.FC = () => {
                 dataService.resolveUserSession(nextSession.user)
                     .then(user => {
                         if (!isMounted) return;
+                        
+                        // 新規ユーザーの場合はメッセージを表示
+                        if ((user as any).isNewUser) {
+                            const userEmail = nextSession.user?.email || '';
+                            const message = `ℹ️ 新規ユーザー登録が必要です\n\n${userEmail} はまだシステムに登録されていません。\n\n✅ 管理者に通知済みです。ユーザー登録後に再度ログインしてください。`;
+                            setError(message);
+                            addToast(message, 'info');
+                            setCurrentUser(null);
+                            setSession(null);
+                            
+                            // サインアウトしてログインページに戻す
+                            const supabaseClient = getSupabase();
+                            supabaseClient.auth.signOut();
+                            return;
+                        }
+                        
                         setCurrentUser(user);
                         setError(null);
                         setShowSetupModal(false);

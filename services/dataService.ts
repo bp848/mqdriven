@@ -828,7 +828,8 @@ const ensureSupabaseEmployeeUser = async (
 
     if (!ensuredUser) {
       console.warn('Supabase上にユーザー情報が存在しません。フォールバックユーザーを使用します。');
-      return buildFallbackEmployeeUser();
+      const fallbackUser = buildFallbackEmployeeUser();
+      return { ...fallbackUser, isNewUser: true };
     }
 
     const { data: employeeRow, error: employeeError } = await supabaseClient
@@ -1207,7 +1208,7 @@ const createApplicationStatusChangeEmails = async (application: Application) => 
 };
 
 
-export const resolveUserSession = async (authUser: MinimalAuthUser): Promise<EmployeeUser> => {
+export const resolveUserSession = async (authUser: MinimalAuthUser): Promise<EmployeeUser & { isNewUser?: boolean }> => {
   const fallbackEmail = authUser.email ?? '';
 
   if (!hasSupabaseCredentials()) {
