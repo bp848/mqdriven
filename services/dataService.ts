@@ -827,7 +827,8 @@ const ensureSupabaseEmployeeUser = async (
     }
 
     if (!ensuredUser) {
-      throw new Error('Supabase上にユーザー情報が存在しません。管理者に問い合わせてください。');
+      console.warn('Supabase上にユーザー情報が存在しません。フォールバックユーザーを使用します。');
+      return buildFallbackEmployeeUser();
     }
 
     const { data: employeeRow, error: employeeError } = await supabaseClient
