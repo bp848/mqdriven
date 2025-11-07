@@ -61,7 +61,18 @@ export default function AuthCallbackPage() {
         }
         
         console.log('セッション交換成功:', data);
-        setMessage('ログイン成功！リダイレクト中...');
+        
+        // マジックリンクかどうかを判定
+        const isMagicLink = currentUrl.includes('type=magiclink') || 
+                           !currentUrl.includes('provider=google') && 
+                           (currentUrl.includes('code=') || currentUrl.includes('access_token='));
+        
+        if (isMagicLink) {
+          setMessage('🚀 マジックリンクログイン成功！\n\nダッシュボードに移動中...');
+          console.log('マジックリンクログイン成功');
+        } else {
+          setMessage('ログイン成功！リダイレクト中...');
+        }
         
         // 成功したコードをローカルストレージに記録（重複使用防止）
         try {
@@ -85,37 +96,39 @@ export default function AuthCallbackPage() {
         // iPhone/Safari対応: ループ防止と確実なリダイレクト
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         
+        // マジックリンクの場合はより長い待機時間でユーザー情報の取得を待つ
+        const redirectDelay = isMagicLink ? (isMobile ? 2000 : 1500) : (isMobile ? 300 : 1000);
+        
         if (isMobile) {
           // iPhone特別処理: ループ防止のためのマーカーを設定
           const redirectMarker = 'iphone_redirect_' + Date.now();
           sessionStorage.setItem(redirectMarker, 'true');
           
-          console.log('iPhone: ループ防止マーカー設定完了');
+          console.log(`iPhone: ${isMagicLink ? 'マジックリンク' : 'OAuth'}リダイレクト準備完了`);
           
-          // 短い遅延で強制リダイレクト
           setTimeout(() => {
             window.location.replace('/');
-          }, 300);
+          }, redirectDelay);
           
-          // フォールバック: 2秒後に再度強制リダイレクト
+          // フォールバック
           setTimeout(() => {
             if (window.location.pathname === '/auth/callback') {
               console.warn('iPhone: フォールバックリダイレクト実行');
               window.location.replace('/');
             }
-          }, 2000);
+          }, redirectDelay + 2000);
         } else {
           // デスクトップは通常の処理
           setTimeout(() => {
             router.replace('/');
-          }, 1000);
+          }, redirectDelay);
           
           setTimeout(() => {
             if (window.location.pathname === '/auth/callback') {
               console.warn('リダイレクトが失敗、強制リロード実行');
               window.location.href = '/';
             }
-          }, 3000);
+          }, redirectDelay + 2000);
         }
         
       } catch (error: any) {

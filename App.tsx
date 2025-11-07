@@ -537,14 +537,15 @@ const App: React.FC = () => {
                         if (!isMounted) return;
                         if (isSigningOut) return; // 既にサインアウト処理中なら何もしない
                         
-                        // コールバック処理中やiPhoneでの初回ロード時はサインアウトしない
+                        // コールバック処理中やマジックリンク認証中はサインアウトしない
                         const isCallbackPage = window.location.pathname === '/auth/callback';
                         const isMobileAuth = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && 
                                            (window.location.search.includes('code=') || window.location.hash.includes('access_token='));
+                        const isMagicLinkAuth = window.location.search.includes('code=') || window.location.hash.includes('access_token=');
                         
-                        if (isCallbackPage || isMobileAuth) {
-                            console.warn('コールバックまたはモバイル認証中のユーザー情報取得エラーを無視:', err);
-                            // セッションを保持してユーザー情報の取得を再試行
+                        if (isCallbackPage || isMobileAuth || isMagicLinkAuth) {
+                            console.warn('コールバック/マジックリンク認証中のユーザー情報取得エラーを無視:', err);
+                            // セッションを保持してユーザー情報の取得を再試行（マジックリンク用に延長）
                             setTimeout(async () => {
                                 try {
                                     const resolvedUser = await dataService.resolveUserSession(nextSession.user);
@@ -552,10 +553,26 @@ const App: React.FC = () => {
                                         setCurrentUser(resolvedUser);
                                         setError(null);
                                         setShowSetupModal(false);
-                                        console.log('ユーザー情報取得再試行成功');
+                                        console.log('マジックリンク: ユーザー情報取得再試行成功');
                                     }
                                 } catch (retryError) {
-                                    console.warn('ユーザー情報取得再試行失敗:', retryError);
+                                    console.warn('マジックリンク: ユーザー情報取得再試行失敗:', retryError);
+                                    // マジックリンクの場合は更に再試行
+                                    if (isMagicLinkAuth) {
+                                        setTimeout(async () => {
+                                            try {
+                                                const finalUser = await dataService.resolveUserSession(nextSession.user);
+                                                if (isMounted) {
+                                                    setCurrentUser(finalUser);
+                                                    setError(null);
+                                                    setShowSetupModal(false);
+                                                    console.log('マジックリンク: 最終再試行成功');
+                                                }
+                                            } catch (finalError) {
+                                                console.error('マジックリンク: 最終再試行も失敗:', finalError);
+                                            }
+                                        }, 3000);
+                                    }
                                 }
                             }, 2000); // 2秒後に再試行
                             return;
