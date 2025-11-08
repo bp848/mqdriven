@@ -85,4 +85,5 @@ export const getSupabase = (): SupabaseClient => {
     return supabaseInstance;
 };
 
+// Expose a simple predicate for other modules to check configuration state
 export const hasSupabaseCredentials = (): boolean => credentialsConfigured;

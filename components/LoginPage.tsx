@@ -1,36 +1,48 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient.ts';
+import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient';
 import { Package, GoogleIcon } from './Icons';
-import IPhoneLoginPage from './iPhoneLoginPage';
 
 const LoginPage: React.FC = () => {
   const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showIphonePage, setShowIphonePage] = useState(false);
   
-  // iPhone検出とリダイレクト
+  
+  // Surface explicit errors passed from auth flow (e.g., domain_not_allowed)
   useEffect(() => {
-    const isiPhone = /iPhone|iPod/i.test(navigator.userAgent);
-    const forceNormal = new URLSearchParams(window.location.search).get('force') === 'normal';
-    const isCallbackPage = window.location.pathname === '/auth/callback';
-    
-    // コールバックページでは通常のログインページを表示しない
-    if (isiPhone && !forceNormal && !isCallbackPage) {
-      // ローカルストレージでiPhone専用ページの使用を記録
-      localStorage.setItem('mq_iphone_login_used', 'true');
-      setShowIphonePage(true);
-    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const loginError = params.get('login_error');
+      const emailParam = params.get('email') || '';
+      if (loginError === 'domain_not_allowed') {
+        const allowed = ['@bunsyodo.jp', '@b-p.co.jp'];
+        const domainsList = allowed.join(' / ');
+        setErrorMessage(
+          `❌ ログインできません\n\n現在、${emailParam} でログインしようとされています。\n\n申し訳ございませんが、このシステムは社員専用です。\n\n許可ドメイン: ${domainsList}\n\n会社メールアドレスでログインしてください。`
+        );
+        // Clean query to avoid persisting the message on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+      // Fallback: read last stored error
+      const raw = localStorage.getItem('mq.lastLoginError');
+      if (raw) {
+        const payload = JSON.parse(raw);
+        if (payload?.type === 'domain_not_allowed') {
+          const allowed = Array.isArray(payload.allowed) ? payload.allowed : ['@bunsyodo.jp', '@b-p.co.jp'];
+          const domainsList = allowed.join(' / ');
+          setErrorMessage(
+            `❌ ログインできません\n\n現在、${payload.email || ''} でログインしようとされています。\n\n申し訳ございませんが、このシステムは社員専用です。\n\n許可ドメイン: ${domainsList}\n\n会社メールアドレスでログインしてください。`
+          );
+        }
+        localStorage.removeItem('mq.lastLoginError');
+      }
+    } catch {}
   }, []);
   
-  // iPhone専用ページを表示
-  if (showIphonePage) {
-    return <IPhoneLoginPage />;
-  }
 
   const handleLoginWithEmail = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -70,52 +82,7 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  const handleSendMagicLink = async () => {
-    if (!isSupabaseConfigured) {
-      setErrorMessage('Supabaseの認証情報が設定されていません。管理者に連絡してください。');
-      return;
-    }
-
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      setErrorMessage('メールアドレスを入力してください。');
-      return;
-    }
-
-    // ドメインチェック
-    const allowedDomains = ['@bunsyodo.jp', '@b-p.co.jp'];
-    const isAllowedDomain = allowedDomains.some(domain => trimmedEmail.endsWith(domain));
-    
-    if (!isAllowedDomain) {
-      const domainsList = allowedDomains.join(' / ');
-      setErrorMessage(`許可されたドメインのメールアドレスを使用してください。\n許可ドメイン: ${domainsList}`);
-      return;
-    }
-
-    setIsSendingMagicLink(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    try {
-      const supabaseClient = getSupabase();
-      const { error } = await supabaseClient.auth.signInWithOtp({
-        email: trimmedEmail,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      
-      if (error) {
-        setErrorMessage(`マジックリンク送信エラー: ${error.message}`);
-      } else {
-        setSuccessMessage(`✅ マジックリンクを送信しました\n\n${trimmedEmail} にログイン用のリンクを送信しました。\nメールを確認してリンクをクリックしてください。`);
-      }
-    } catch (error: any) {
-      setErrorMessage(`マジックリンク送信に失敗しました: ${error.message}`);
-    } finally {
-      setIsSendingMagicLink(false);
-    }
-  };
+  
 
   const handleGoogleLogin = async () => {
     if (!isSupabaseConfigured) {
@@ -170,7 +137,6 @@ const LoginPage: React.FC = () => {
   };
 
   const formDisabled = !isSupabaseConfigured || isSubmitting;
-  const magicLinkDisabled = !isSupabaseConfigured || isSendingMagicLink || isSubmitting;
 
 
   return (
@@ -185,6 +151,15 @@ const LoginPage: React.FC = () => {
             ログイン方法を選択してください
           </p>
         </div>
+        {/* 成功メッセージ */}
+        {successMessage && (
+          <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <p className="text-sm font-medium text-green-800 dark:text-green-200 whitespace-pre-line">
+              {successMessage}
+            </p>
+          </div>
+        )}
+
         <form onSubmit={handleLoginWithEmail} className="space-y-6">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -200,36 +175,6 @@ const LoginPage: React.FC = () => {
               placeholder="your@company.com"
             />
           </div>
-          <button
-            type="button"
-            onClick={handleSendMagicLink}
-            disabled={magicLinkDisabled}
-            className="w-full px-4 py-4 text-base font-semibold text-white bg-green-600 border border-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
-          >
-            {isSendingMagicLink ? '送信中...' : '📧 マジックリンクでログイン'}
-          </button>
-          
-          {/* マジックリンク送信後のメッセージ */}
-          {successMessage && (
-            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200 whitespace-pre-line">
-                    {successMessage}
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-                    メールが届かない場合は、迷惑メールフォルダを確認してください。
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          
           {/* エラーメッセージ */}
           {errorMessage && (
             <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -247,14 +192,6 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
           )}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-300 dark:border-slate-600" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-slate-800 text-slate-500">または</span>
-            </div>
-          </div>
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               パスワード
@@ -301,19 +238,6 @@ const LoginPage: React.FC = () => {
               Supabaseの接続情報が未設定のため、デモモードでご利用ください。
             </p>
           )}
-        </div>
-        
-        {/* 新規登録リンク */}
-        <div className="text-center">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            アカウントをお持ちでない方は{' '}
-            <button
-              onClick={() => window.location.href = '/register'}
-              className="text-blue-600 hover:text-blue-700 font-medium underline"
-            >
-              新規登録申請
-            </button>
-          </p>
         </div>
       </div>
       

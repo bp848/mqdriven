@@ -198,6 +198,27 @@ const App: React.FC = () => {
 
     const [isCreateCustomerModalOpen, setIsCreateCustomerModalOpen] = useState(false);
     const [isCustomerDetailModalOpen, setIsCustomerDetailModalOpen] = useState(false);
+
+    // Guard: Redirect legacy magic-link-only login routes and clear stale SW caches
+    useEffect(() => {
+        try {
+            const path = window.location.pathname;
+            const legacyMagicPaths = new Set(['/login-magic', '/magic-login', '/magiclink-login']);
+            if (legacyMagicPaths.has(path)) {
+                window.location.replace('/');
+                return;
+            }
+        } catch {}
+
+        try {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations?.().then((regs) => {
+                    regs.forEach((r) => r.unregister().catch(() => {}));
+                }).catch(() => {});
+            }
+        } catch {}
+    }, []);
+
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [customerModalMode, setCustomerModalMode] = useState<'view' | 'edit' | 'new'>('view');
 
@@ -612,7 +633,7 @@ const App: React.FC = () => {
 
                         const isAllowedDomain = userEmail ? allowedDomains.some(d => userEmail.endsWith(d)) : false;
                         if (userEmail && !isAllowedDomain) {
-                            // ドメインが違う場合
+                            // ドメインが違う場合（ユーザーに明確なエラーを表示するため、ログインページへエラー付きでリダイレクト）
                             const domainsList = allowedDomains.join(' / ');
                             message = `❌ ログインできません\n\n現在、${userEmail} でログインしようとされています。\n\n申し訳ございませんが、このシステムは社員専用です。\n\n許可ドメイン: ${domainsList}\n\n該当の会社メールアドレスでGoogleログインしてください。`;
                         } else if (err.message && err.message.includes('not found')) {
@@ -647,13 +668,25 @@ const App: React.FC = () => {
                             try {
                                 const supabaseClient = getSupabase();
                                 await supabaseClient.auth.signOut();
-                                // 強制的にログインページにリダイレクト
-                                window.location.href = '/';
                             } catch (signOutError) {
                                 console.error('Sign out failed:', signOutError);
-                                // サインアウトに失敗した場合も強制リダイレクト
-                                window.location.href = '/';
                             } finally {
+                                try {
+                                    // ログインページで明確なメッセージを出すため情報を保存
+                                    const payload = {
+                                        type: 'domain_not_allowed',
+                                        email: userEmail,
+                                        allowed: allowedDomains,
+                                        ts: Date.now(),
+                                    };
+                                    localStorage.setItem('mq.lastLoginError', JSON.stringify(payload));
+                                } catch {}
+                                // エラー内容をクエリに付与してログインページへ
+                                const params = new URLSearchParams({
+                                    login_error: 'domain_not_allowed',
+                                    email: userEmail,
+                                });
+                                window.location.replace('/?' + params.toString());
                                 setIsSigningOut(false);
                             }
                         }
@@ -1020,7 +1053,7 @@ const App: React.FC = () => {
                 <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} currentUser={currentUser} onSignOut={handleSignOut} />
             </div>
             
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 {/* モバイル用ヘッダー */}
                 <div className="lg:hidden">
                     <MobileHeader 
@@ -1031,10 +1064,7 @@ const App: React.FC = () => {
                         onSignOut={handleSignOut}
                     />
                 </div>
-                
-                {error && <GlobalErrorBanner error={error} onRetry={fetchData} onShowSetup={() => setShowSetupModal(true)} />}
-                
-                <main className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-4 lg:space-y-6">
+                <main className="flex-1 overflow-y-auto overflow-x-auto lg:overflow-x-visible p-4 lg:p-8 space-y-4 lg:space-y-6 min-w-0">
                     {/* デスクトップ用ヘッダー */}
                     <div className="hidden lg:block">
                         <Header

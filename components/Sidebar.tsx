@@ -22,7 +22,7 @@ type NavCategoryType = {
   adminOnly?: boolean;
 };
 
-const ALL_NAV_CATEGORIES: NavCategoryType[] = [
+export const ALL_NAV_CATEGORIES: NavCategoryType[] = [
     {
         id: 'sales',
         name: '販売管理',
@@ -213,39 +213,34 @@ const CollapsibleNavItem: React.FC<{
 };
 
 
+export const buildNavCategories = (currentUser: EmployeeUser | null): NavCategoryType[] => {
+  return ALL_NAV_CATEGORIES.map(category => {
+      let items = category.items;
+      if (category.id === 'ai_consultant') {
+          items = category.items.filter(item => {
+              if (item.page === 'ai_anything_analysis') {
+                  return !!currentUser?.canUseAnythingAnalysis;
+              }
+              return true;
+          });
+      }
+      return { ...category, items };
+  })
+  .filter(category => {
+      if (category.items.length === 0) return false;
+      const isAdmin = currentUser?.role === 'admin';
+      if (isAdmin) return true;
+      if (category.id === 'hr' || category.id === 'accounting') {
+          return false;
+      }
+      return true;
+  });
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser, onSignOut }) => {
   const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>({});
 
-  const navCategories = React.useMemo(() => {
-    return ALL_NAV_CATEGORIES.map(category => {
-        let items = category.items;
-        if (category.id === 'ai_consultant') {
-            items = category.items.filter(item => {
-                if (item.page === 'ai_anything_analysis') {
-                    return !!currentUser?.canUseAnythingAnalysis;
-                }
-                return true;
-            });
-        }
-        return { ...category, items };
-    })
-    .filter(category => {
-        if (category.items.length === 0) return false;
-        
-        const isAdmin = currentUser?.role === 'admin';
-        
-        // 管理者は全て表示
-        if (isAdmin) return true;
-        
-        // 一般ユーザーの場合
-        // 人事労務と会計のみ非表示、それ以外は全て表示
-        if (category.id === 'hr' || category.id === 'accounting') {
-            return false;
-        }
-        
-        return true;
-    });
-  }, [currentUser]);
+  const navCategories = React.useMemo(() => buildNavCategories(currentUser), [currentUser]);
 
 
   React.useEffect(() => {
