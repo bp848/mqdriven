@@ -4,6 +4,7 @@ import { Upload, FileText, Loader, X, AlertTriangle, CheckCircle } from '../Icon
 import { Toast, InboxItem, InboxItemStatus } from '../../types.ts';
 import { uploadFile, addInboxItem, getInboxItems, updateInboxItem } from '../../services/dataService.ts';
 import { extractDocumentText } from '../../services/geminiService.ts';
+import { hasSupabaseCredentials } from '../../services/supabaseClient.ts';
 
 interface AccountingBulkUploadPageProps {
   addToast: (message: string, type: Toast['type']) => void;
@@ -22,7 +23,8 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
   const [isReloading, setIsReloading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastSyncAt, setLastSyncAt] = useState<string>('');
-  const [simulatorMode, setSimulatorMode] = useState<boolean>(true);
+  const [simulatorMode, setSimulatorMode] = useState<boolean>(false);
+  const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
   type SimFile = { file: File; extractedText?: string };
   const [simFiles, setSimFiles] = useState<SimFile[]>([]);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
@@ -35,8 +37,8 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
       const items = await getInboxItems();
       setInbox(items);
       setLastSyncAt(new Date().toLocaleString());
-    } catch {
-      // ignore
+    } catch (e) {
+      setError('受信箱の更新に失敗しました');
     } finally {
       setIsReloading(false);
     }
@@ -714,6 +716,15 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
 
   return (
     <div className="space-y-6">
+      {!isSupabaseConfigured && (
+        <div className="flex items-start gap-2 text-amber-700 bg-amber-50 dark:bg-amber-900/30 p-3 rounded-md text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <div>
+            <div className="font-medium">現在はデモモードです</div>
+            <div>Supabaseの接続情報が未設定のため、実際の保存は行われません。管理者に接続設定を依頼してください。</div>
+          </div>
+        </div>
+      )}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 space-y-4">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <Upload className="w-6 h-6 text-blue-500" />
@@ -733,7 +744,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             className="sr-only"
             accept="*/*"
             onChange={(e) => handleFileChange(e.target.files)}
-            disabled={isUploading}
+            disabled={isUploading || !isSupabaseConfigured && !simulatorMode}
           />
           <label htmlFor="accounting-bulk-upload" className="cursor-pointer select-none">
             <Upload className="w-10 h-10 mx-auto text-slate-400" />
@@ -753,7 +764,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
 
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={simulatorMode} onChange={e => setSimulatorMode(e.target.checked)} /> シミュレーター（DB登録せず可視化）
+            <input type="checkbox" checked={simulatorMode} onChange={e => setSimulatorMode(e.target.checked)} /> シミュレーター（ONの間はDB保存されません）
           </label>
           {simulatorMode && simFiles.length > 0 && (
             <button onClick={persistSimulation} disabled={isUploading} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-50">確定アップロード（{simFiles.length}件）</button>
@@ -849,7 +860,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
         <div className="flex justify-end">
           <button
             onClick={handleUpload}
-            disabled={isUploading || files.length === 0}
+            disabled={isUploading || files.length === 0 || (!isSupabaseConfigured && !simulatorMode)}
             className="min-w-40 flex items-center justify-center bg-blue-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
           >
             {isUploading ? <Loader className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5 mr-2" />}
