@@ -1445,15 +1445,33 @@ export const deleteUser = async (id: string): Promise<void> => {
     try {
       const supabaseClient = getSupabase();
       
-      // Delete from users table
-      const { error } = await supabaseClient
+      // Step 1: Delete dependent rows from employees table (user_id FK) if exists
+      try {
+        const { error: empDelError } = await supabaseClient
+          .from('employees')
+          .delete()
+          .eq('user_id', id);
+        if (empDelError && !isRelationNotFoundError(empDelError)) {
+          // If table exists and deletion fails, surface the error
+          throw empDelError;
+        }
+      } catch (empErr) {
+        // Log and continue only if it's relation not found; otherwise rethrow
+        if (!isRelationNotFoundError(empErr as any)) {
+          console.error('従業員テーブルの関連削除に失敗:', empErr);
+          throw empErr;
+        }
+      }
+
+      // Step 2: Delete from users table
+      const { error: userDelError } = await supabaseClient
         .from('users')
         .delete()
         .eq('id', id);
 
-      if (error) {
-        console.error('ユーザー削除エラー:', error);
-        throw error;
+      if (userDelError) {
+        console.error('ユーザー削除エラー:', userDelError);
+        throw userDelError;
       }
 
       // Also update demoState cache
