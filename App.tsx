@@ -36,6 +36,7 @@ import AIChatPage from './components/AIChatPage.tsx';
 import MarketResearchPage from './components/MarketResearchPage.tsx';
 import LiveChatPage from './components/LiveChatPage.tsx';
 import AnythingAnalysisPage from './components/AnythingAnalysisPage.tsx';
+import AITranscriptionPage from './components/AITranscriptionPage.tsx';
 import { ToastContainer } from './components/Toast.tsx';
 import ConfirmationDialog from './components/ConfirmationDialog.tsx';
 import ManufacturingCostManagement from './components/accounting/ManufacturingCostManagement.tsx';
@@ -104,6 +105,7 @@ const PAGE_TITLES: Record<Page, string> = {
     ai_business_consultant: 'AI業務支援',
     ai_market_research: 'AI市場調査',
     ai_live_chat: 'AIライブチャット',
+    ai_transcription: 'AI文字起こし',
     accounting_bulk_upload: '一括アップロード',
     estimate_creation: '新規見積作成',
     project_list: '案件一覧',
@@ -924,6 +926,8 @@ const App: React.FC = () => {
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
             case 'ai_live_chat':
                 return <LiveChatPage addToast={addToast} isAIOff={isAIOff} />;
+            case 'ai_transcription':
+                return <AITranscriptionPage addToast={addToast} isAIOff={isAIOff} />;
             case 'ai_anything_analysis':
                 return currentUser?.canUseAnythingAnalysis ? <AnythingAnalysisPage currentUser={currentUser} addToast={addToast} isAIOff={isAIOff} /> : <PlaceholderPage title="なんでも分析" />;
             

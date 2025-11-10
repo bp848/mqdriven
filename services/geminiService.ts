@@ -18,6 +18,21 @@ declare const window: Window & typeof globalThis & {
   IS_AI_DISABLED?: boolean;
 };
 
+// Transcribe audio to text using Gemini 2.5 Pro
+export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
+    checkOnlineAndAIOff();
+    return withRetry(async () => {
+        const audioPart = { inlineData: { data: audioBase64, mimeType } };
+        const instruction = { text: 'この音声の日本語文字起こしを行い、プレーンテキストのみを出力してください。タイムスタンプや話者タグは不要です。' };
+        const response = await ai!.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: { parts: [audioPart, instruction] },
+            config: { responseMimeType: 'text/plain', thinkingConfig: { thinkingBudget: 4096 } },
+        });
+        return ensureString(response.text, '').trim();
+    });
+};
+
 // Generic document text extraction (PDF/Images). Returns plain text for downstream regeneration.
 export const extractDocumentText = async (base64Data: string, mimeType: string): Promise<string> => {
     checkOnlineAndAIOff();

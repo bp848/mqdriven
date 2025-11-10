@@ -148,6 +148,7 @@ export const ALL_NAV_CATEGORIES: NavCategoryType[] = [
             { page: 'ai_business_consultant', name: 'AI業務支援' },
             { page: 'ai_market_research', name: 'AI市場調査' },
             { page: 'ai_live_chat', name: 'AIライブチャット' },
+            { page: 'ai_transcription', name: 'AI文字起こし' },
         ]
     },
     {
