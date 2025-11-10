@@ -92,6 +92,7 @@ const PAGE_TITLES: Record<Page, string> = {
     approval_form_daily: '日報',
     approval_form_weekly: '週報',
     report_other: '営業・セミナー・その他報告',
+    knowledge_base: 'ナレッジベース',
     accounting_journal: '仕訳帳',
     accounting_general_ledger: '総勘定元帳',
     accounting_trial_balance: '試算表',

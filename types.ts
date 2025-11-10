@@ -30,6 +30,7 @@ export type Page =
   | 'approval_form_daily'
   | 'approval_form_weekly'
   | 'report_other'
+  | 'knowledge_base'
   | 'accounting_journal'
   | 'accounting_general_ledger'
   | 'accounting_trial_balance'

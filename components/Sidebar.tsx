@@ -117,6 +117,14 @@ export const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         ]
     },
     {
+        id: 'knowledge',
+        name: 'ナレッジ',
+        icon: BookOpen,
+        items: [
+            { page: 'knowledge_base', name: 'ナレッジベース' },
+        ]
+    },
+    {
         id: 'accounting',
         name: '会計',
         icon: BookOpen,
