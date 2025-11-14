@@ -19,3 +19,15 @@ This nodejs proxy server lets you run your AI Studio Gemini application unmodifi
     ```
     gcloud run deploy my-app --source=. --update-secrets=GEMINI_API_KEY=gemini_api_key:latest
     ```
+
+## Supabase Auth Configuration
+
+To keep Supabase authentication aligned with the production domain, set the following values in **Project Settings → Authentication → URL Configuration**:
+
+1. **Site URL**: `https://erp.b-p.co.jp`
+2. **Redirect URLs**: Add each line below exactly as written (wildcards are allowed by Supabase):
+   - `https://*.b-p.co.jp`
+   - `https://erp.b-p.co.jp/auth/callback`
+   - `https://erp.b-p.co.jp`
+
+Save the changes after updating the Site URL and redirect allow list. These values ensure the email templates and Google OAuth callbacks used by the app match the production ERP hostname.

@@ -299,35 +299,25 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
 
 export async function getUsers(): Promise<EmployeeUser[]> {
     const supabase = getSupabase();
-    let data: any[] | null = null;
-    let error: any = null;
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, role, created_at')
+        .order('name', { ascending: true });
 
-    const { data: viewData, error: viewError } = await supabase
-      .from('v_employees_active')
-      .select('user_id, name, department, title, email, role, created_at')
-      .order('name', { ascending: true });
-
-    if (viewError) {
-        console.warn("Could not fetch from 'v_employees_active' view, falling back to 'users' table. Error:", viewError.message);
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('id, name, email, role, created_at')
-            .order('name', { ascending: true });
-        
-        data = userData?.map(u => ({
-            user_id: u.id, name: u.name, department: null, title: u.role === 'admin' ? '管理者' : 'スタッフ',
-            email: u.email, role: u.role, created_at: u.created_at
-        })) || [];
-        error = userError;
-    } else {
-        data = viewData;
-    }
-  
     if (error) throw new Error(`Failed to fetch users: ${error.message}`);
-    return (data || []).map(u => ({
-        id: u.user_id, name: u.name, department: u.department, title: u.title,
-        email: u.email, role: u.role, createdAt: u.created_at
-    }));
+
+    return (data || []).map((user: any) => {
+        const role: 'admin' | 'user' = user.role === 'admin' ? 'admin' : 'user';
+        return {
+            id: user.id,
+            name: user.name || '（未設定）',
+            department: null,
+            title: role === 'admin' ? '管理者' : 'スタッフ',
+            email: user.email || '',
+            role,
+            createdAt: user.created_at,
+        };
+    });
 }
 
 export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user' }): Promise<void> => {
@@ -341,15 +331,12 @@ export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Pr
     const supabase = getSupabase();
     const { error: userError } = await supabase.from('users').update({ name: updates.name, email: updates.email, role: updates.role }).eq('id', id);
     if (userError) throw new Error(`Failed to update user: ${userError.message}`);
-
-    const { error: employeeError } = await supabase.from('employees').update({ department: updates.department, title: updates.title }).eq('user_id', id);
-    if (employeeError) throw new Error(`Failed to update employee details: ${employeeError.message}`);
 };
 
 export const deleteUser = async (userId: string): Promise<void> => {
     const supabase = getSupabase();
-    const { error } = await supabase.from('employees').update({ active: false }).eq('user_id', userId);
-    if (error) throw new Error(`Failed to delete user (deactivate employee): ${error.message}`);
+    const { error } = await supabase.from('users').delete().eq('id', userId);
+    if (error) throw new Error(`Failed to delete user: ${error.message}`);
 };
 
 export const getLeads = async (): Promise<Lead[]> => {
@@ -612,9 +599,25 @@ export const updateInventoryItem = async (id: string, item: Partial<InventoryIte
 
 export const getEmployees = async (): Promise<Employee[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('employees').select('*');
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, role, created_at')
+        .order('name', { ascending: true });
+
     if (error) throw new Error(`Failed to fetch employees: ${error.message}`);
-    return (data || []).map(d => ({...d, hireDate: d.hire_date, createdAt: d.created_at}));
+
+    return (data || []).map((user: any) => {
+        const role: 'admin' | 'user' = user.role === 'admin' ? 'admin' : 'user';
+        return {
+            id: user.id,
+            name: user.name || '（未設定）',
+            department: role === 'admin' ? '経営' : 'スタッフ',
+            title: role === 'admin' ? '管理者' : 'スタッフ',
+            hireDate: user.created_at,
+            salary: 0,
+            createdAt: user.created_at,
+        };
+    });
 };
 export const getBugReports = async (): Promise<BugReport[]> => {
     const supabase = getSupabase();

@@ -1,8 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient.ts';
+import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient';
 import { Package, GoogleIcon, User, Mail, Building, Phone } from './Icons';
 
-const RegisterPage: React.FC = () => {
+interface RegisterPageProps {
+  onBackToLogin?: () => void;
+}
+
+const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
   const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
   
   // フォーム状態
@@ -376,18 +380,18 @@ const RegisterPage: React.FC = () => {
           )}
         </form>
 
-        {/* ログインページへのリンク */}
-        <div className="text-center">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+        {onBackToLogin && (
+          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             既にアカウントをお持ちの方は{' '}
             <button
-              onClick={() => window.location.href = '/'}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              type="button"
+              onClick={onBackToLogin}
+              className="text-blue-600 hover:text-blue-700 font-semibold"
             >
-              ログインページ
+              ログインページへ
             </button>
           </p>
-        </div>
+        )}
       </div>
     </div>
   );
