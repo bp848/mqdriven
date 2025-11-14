@@ -8,37 +8,15 @@ type Props = {
   required?: boolean;
   name?: string;
   id?: string;
-  // FIX: Add disabled prop to allow disabling the component.
-  disabled?: boolean;
-  departments?: Department[];
 };
 
-export default function DepartmentSelect({ value, onChange, required, name = 'departmentId', id = 'departmentId', disabled, departments }: Props) {
-  const [list, setList] = useState<Department[]>(departments ?? []);
-  const [loading, setLoading] = useState(!departments);
+export default function DepartmentSelect({ value, onChange, required, name = 'departmentId', id = 'departmentId' }: Props) {
+  const [list, setList] = useState<Department[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
-    if (!departments) {
-      getDepartments()
-        .then(items => {
-          if (isMounted) {
-            setList(items);
-          }
-        })
-        .finally(() => {
-          if (isMounted) {
-            setLoading(false);
-          }
-        });
-    } else {
-      setList(departments);
-      setLoading(false);
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [departments]);
+    getDepartments().then(setList).finally(() => setLoading(false));
+  }, []);
 
   return (
     <select
@@ -47,7 +25,7 @@ export default function DepartmentSelect({ value, onChange, required, name = 'de
       required={required}
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      disabled={disabled || loading}
+      disabled={loading}
       className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500"
     >
       <option value="">部門を選択</option>

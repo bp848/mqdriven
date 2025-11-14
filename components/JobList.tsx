@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Job, SortConfig } from '../types.ts';
-import JobStatusBadge from './JobStatusBadge.tsx';
-import { formatJPY, formatDate } from '../utils.ts';
-import EmptyState from './ui/EmptyState.tsx';
-import { Briefcase, PlusCircle } from './Icons.tsx';
-import SortableHeader from './ui/SortableHeader.tsx';
+import { Job, SortConfig } from '../types';
+import JobStatusBadge from './JobStatusBadge';
+import { formatJPY, formatDate } from '../utils';
+import EmptyState from './ui/EmptyState';
+import { Briefcase, PlusCircle } from './Icons';
+import SortableHeader from './ui/SortableHeader';
 
 interface JobListProps {
   jobs: Job[];

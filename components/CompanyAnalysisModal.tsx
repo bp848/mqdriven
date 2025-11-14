@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { CompanyAnalysis, Customer, EmployeeUser } from '../types.ts';
-import { X, Loader, AlertTriangle, Lightbulb, Mail, RefreshCw, FileText } from './Icons.tsx';
-import { generateMultipagePdf } from '../utils.ts';
-import InvestigationReportPdfContent from './reports/InvestigationReportPdfContent.tsx';
+import { CompanyAnalysis, Customer, EmployeeUser } from '../types';
+import { X, Loader, AlertTriangle, Lightbulb, Mail, RefreshCw, FileText } from './Icons';
+import { generateMultipagePdf } from '../utils';
+import InvestigationReportPdfContent from './reports/InvestigationReportPdfContent';
 
 interface CompanyAnalysisModalProps {
     isOpen: boolean;

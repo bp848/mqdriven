@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Customer, SortConfig, Toast, EmployeeUser } from '../types.ts';
-import { Pencil, Eye, Mail, Lightbulb, Users, PlusCircle, Loader, Save, X, Search } from './Icons.tsx';
-import EmptyState from './ui/EmptyState.tsx';
-import SortableHeader from './ui/SortableHeader.tsx';
-import { generateSalesEmail, enrichCustomerData } from '../services/geminiService.ts';
-import { createSignature } from '../utils.ts';
+import { Customer, SortConfig, Toast, EmployeeUser } from '../types';
+import { Pencil, Eye, Mail, Lightbulb, Users, PlusCircle, Loader, Save, X, Search } from './Icons';
+import EmptyState from './ui/EmptyState';
+import SortableHeader from './ui/SortableHeader';
+import { generateSalesEmail, enrichCustomerData } from '../services/geminiService';
+import { createSignature } from '../utils';
 
 interface CustomerListProps {
   customers: Customer[];
@@ -159,9 +159,9 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
       return <EmptyState icon={Users} title="顧客が登録されていません" message="最初の顧客を登録して、取引を開始しましょう。" action={{ label: "新規顧客登録", onClick: onNewCustomer, icon: PlusCircle }} />;
   }
 
-  const InlineEditInput: React.FC<{name: keyof Customer, value: any, onChange: (e:React.ChangeEvent<HTMLInputElement>) => void, type?: string}> = ({ name, value, onChange, type = 'text'}) => (
+  const InlineEditInput: React.FC<{name: keyof Customer, value: any, onChange: (e:React.ChangeEvent<HTMLInputElement>) => void}> = ({ name, value, onChange}) => (
     <input
-      type={type}
+      type="text"
       name={name}
       value={value || ''}
       onChange={onChange}
@@ -192,20 +192,13 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
                   {isEditing ? <InlineEditInput name="customerName" value={editedData.customerName} onChange={handleFieldChange} /> : customer.customerName}
                 </td>
                 <td className="px-6 py-4">
-                    {isEditing ? <InlineEditInput name="phoneNumber" value={editedData.phoneNumber} onChange={handleFieldChange} type="tel" /> : customer.phoneNumber || '-'}
+                    {isEditing ? <InlineEditInput name="phoneNumber" value={editedData.phoneNumber} onChange={handleFieldChange} /> : customer.phoneNumber || '-'}
                 </td>
                 <td className="px-6 py-4 truncate max-w-sm">
-                    {/* Display combined address */}
-                    {customer.zipCode || customer.address1 || customer.address2 ? (
-                        <>
-                            {customer.zipCode && `〒${customer.zipCode} `}
-                            {customer.address1 || ''}
-                            {customer.address2 || ''}
-                        </>
-                    ) : '-'}
+                    {isEditing ? <InlineEditInput name="address1" value={editedData.address1} onChange={handleFieldChange} /> : customer.address1 || '-'}
                 </td>
                 <td className="px-6 py-4 truncate max-w-xs">
-                    {isEditing ? <InlineEditInput name="websiteUrl" value={editedData.websiteUrl} onChange={handleFieldChange} type="url" /> : (
+                    {isEditing ? <InlineEditInput name="websiteUrl" value={editedData.websiteUrl} onChange={handleFieldChange} /> : (
                       customer.websiteUrl ? <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 hover:underline">{customer.websiteUrl}</a> : '-'
                     )}
                 </td>
@@ -213,22 +206,22 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
                     <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {isEditing ? (
                             <>
-                                <button onClick={handleSaveEdit} disabled={isSaving} className="p-2 rounded-full text-slate-500 hover:bg-green-100 hover:text-green-600 dark:hover:bg-green-900/50" title="保存" aria-label="編集を保存">
+                                <button onClick={handleSaveEdit} disabled={isSaving} className="p-2 rounded-full text-slate-500 hover:bg-green-100 hover:text-green-600 dark:hover:bg-green-900/50" title="保存">
                                     {isSaving ? <Loader className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
                                 </button>
-                                <button onClick={handleCancelEdit} className="p-2 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/50" title="キャンセル" aria-label="編集をキャンセル">
+                                <button onClick={handleCancelEdit} className="p-2 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/50" title="キャンセル">
                                     <X className="w-5 h-5"/>
                                 </button>
                             </>
                         ) : (
                             <>
-                                <button onClick={() => onSelectCustomer(customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="詳細表示" aria-label={`顧客「${customer.customerName}」の詳細を表示`}><Eye className="w-5 h-5"/></button>
-                                <button onClick={(e) => handleEditClick(e, customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="インライン編集" aria-label={`顧客「${customer.customerName}」をインライン編集`}><Pencil className="w-5 h-5"/></button>
-                                {!isAIOff && <button onClick={(e) => handleEnrich(e, customer)} disabled={enrichingId === customer.id} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="AIで企業情報補完" aria-label={`顧客「${customer.customerName}」の企業情報をAIで補完`}>
+                                <button onClick={() => onSelectCustomer(customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="詳細表示"><Eye className="w-5 h-5"/></button>
+                                <button onClick={(e) => handleEditClick(e, customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="インライン編集"><Pencil className="w-5 h-5"/></button>
+                                {!isAIOff && <button onClick={(e) => handleEnrich(e, customer)} disabled={enrichingId === customer.id} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="AIで企業情報補完">
                                     {enrichingId === customer.id ? <Loader className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
                                 </button>}
-                                <button onClick={(e) => {e.stopPropagation(); onAnalyzeCustomer(customer)}} disabled={isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="AI企業分析" aria-label={`顧客「${customer.customerName}」をAIで分析`}><Lightbulb className="w-5 h-5"/></button>
-                                <button onClick={(e) => handleGenerateProposal(e, customer)} disabled={isGeneratingEmail === customer.id || isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="提案メール作成" aria-label={`顧客「${customer.customerName}」向け提案メールを作成`}>
+                                <button onClick={(e) => {e.stopPropagation(); onAnalyzeCustomer(customer)}} disabled={isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="AI企業分析"><Lightbulb className="w-5 h-5"/></button>
+                                <button onClick={(e) => handleGenerateProposal(e, customer)} disabled={isGeneratingEmail === customer.id || isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="提案メール作成">
                                   {isGeneratingEmail === customer.id ? <Loader className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
                                 </button>
                             </>

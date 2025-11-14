@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { ApplicationWithDetails, SortConfig } from '../types.ts';
-import ApplicationStatusBadge from './ApplicationStatusBadge.tsx';
-import { ArrowUpDown, ChevronDown, Eye } from './Icons.tsx';
-import { formatDateTime } from '../utils.ts';
+import { ApplicationWithDetails, SortConfig } from '../types';
+import ApplicationStatusBadge from './ApplicationStatusBadge';
+import { ArrowUpDown, ChevronDown, Eye } from './Icons';
+import { formatDateTime } from '../utils';
 
 interface ApplicationListProps {
   applications: ApplicationWithDetails[];

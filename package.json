@@ -1,32 +1,24 @@
 {
   "name": "mqdriven",
-  "version": "1.0.0",
   "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "node ./scripts/build-with-esbuild.mjs",
-    "preview": "vite preview --host 0.0.0.0 --strictPort --port 8080",
-    "start": "vite preview --host 0.0.0.0 --strictPort --port ${PORT:-8080}"
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@axe-core/playwright": "^4.11.0",
-    "@google/genai": "^1.27.0",
-    "@playwright/test": "^1.56.1",
-    "@supabase/supabase-js": "^2.77.0",
-    "jszip": "^3.10.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^3.3.0",
-    "uuid": "^13.0.0"
+    "@google/genai": "^1.15.0",
+    "recharts": "^3.1.2",
+    "react-dom": "^19.1.1",
+    "react": "^19.1.1",
+    "@supabase/supabase-js": "^2.44.4"
   },
   "devDependencies": {
-    "@types/node": "^22.19.0",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "@types/uuid": "^10.0.0",
-    "@vitejs/plugin-react": "^5.1.0",
-    "dotenv": "^17.2.3",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.4.1"
+    "vite": "^6.2.0"
   }
 }

@@ -1,8 +1,7 @@
 
-
 import React from 'react';
-import { ConfirmationDialogProps } from '../types.ts';
-import { X, AlertTriangle } from './Icons.tsx';
+import { ConfirmationDialogProps } from '../types';
+import { X, AlertTriangle } from './Icons';
 
 const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({ isOpen, title, message, onConfirm, onClose }) => {
   if (!isOpen) return null;

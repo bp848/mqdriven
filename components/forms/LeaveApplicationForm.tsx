@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { submitApplication } from '../../services/dataService.ts';
-import { Loader, Sparkles, AlertTriangle } from '../Icons.tsx';
-import { User } from '../../types.ts';
-import ChatApplicationModal from '../ChatApplicationModal.tsx';
-import ApprovalRouteSelector from './ApprovalRouteSelector.tsx';
+import React, { useState, useEffect, useMemo } from 'react';
+import { submitApplication } from '../../services/dataService';
+import { Loader, Sparkles, AlertTriangle } from '../Icons';
+import { User } from '../../types';
+import ChatApplicationModal from '../ChatApplicationModal';
+import ApprovalRouteSelector from './ApprovalRouteSelector';
 
 interface LeaveApplicationFormProps {
     onSuccess: () => void;
@@ -25,7 +25,6 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-    const firstInvalidRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>(null);
     
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
 
@@ -34,91 +33,17 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    // Form validation for submit button activation
-    const isFormValid = useMemo(() => {
-        if (!formData.leaveType || !formData.startDate || !formData.endDate || !formData.reason.trim() || !approvalRouteId) {
-            return false;
-        }
-        // Check for endDate < startDate
-        if (new Date(formData.startDate) > new Date(formData.endDate)) {
-            return false;
-        }
-        return true;
-    }, [formData, approvalRouteId]);
-
-    const handleSaveDraft = async () => {
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。再度ログインしてください。');
-            return;
-        }
-        if (!approvalRouteId) {
-            setError('承認ルートを選択してください。');
-            return;
-        }
-
-        setIsSubmitting(true);
-        setError('');
-        try {
-            await submitApplication({
-                applicationCodeId: applicationCodeId,
-                formData,
-                approvalRouteId: approvalRouteId,
-                status: 'draft'
-            }, currentUser.id);
-            onSuccess();
-        } catch (err: any) {
-            setError('下書きの保存に失敗しました。');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        firstInvalidRef.current = null;
-        setError('');
         
         if (!approvalRouteId) {
             setError('承認ルートを選択してください。');
-            firstInvalidRef.current = document.getElementById('approval-route-selector') as HTMLSelectElement;
-            firstInvalidRef.current?.focus();
             return;
         }
         if (!currentUser) {
             setError('ユーザー情報が見つかりません。再度ログインしてください。');
             return;
         }
-        if (!formData.leaveType) {
-            setError('休暇の種類は必須です。');
-            firstInvalidRef.current = document.getElementById('leaveType') as HTMLSelectElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-        if (!formData.startDate) {
-            setError('開始日は必須です。');
-            firstInvalidRef.current = document.getElementById('startDate') as HTMLInputElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-        if (!formData.endDate) {
-            setError('終了日は必須です。');
-            firstInvalidRef.current = document.getElementById('endDate') as HTMLInputElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-        if (new Date(formData.startDate) > new Date(formData.endDate)) {
-            setError('終了日は開始日以降の日付を選択してください。');
-            firstInvalidRef.current = document.getElementById('endDate') as HTMLInputElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-        if (!formData.reason.trim()) {
-            setError('理由は必須です。');
-            firstInvalidRef.current = document.getElementById('reason') as HTMLTextAreaElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-
 
         setIsSubmitting(true);
         setError('');
@@ -143,21 +68,20 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
         <>
             <div className="relative">
                 {(isLoading || formLoadError) && (
-                    <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8" aria-live="polite" aria-busy={isLoading}>
-                        {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" aria-hidden="true" />}
+                    <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8">
+                        {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                     </div>
                 )}
-                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6" aria-labelledby="form-title">
+                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6">
                     <div className="flex justify-between items-center">
-                        <h2 id="form-title" className="text-2xl font-bold text-slate-800 dark:text-white">休暇申請フォーム</h2>
+                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">休暇申請フォーム</h2>
                         <button 
                             type="button" 
                             onClick={() => setIsChatModalOpen(true)} 
                             className="flex items-center gap-2 bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={isAIOff || isDisabled}
-                            aria-label="AIチャットで申請"
                         >
-                            <Sparkles className="w-5 h-5" aria-hidden="true" />
+                            <Sparkles className="w-5 h-5" />
                             <span>AIチャットで申請</span>
                         </button>
                     </div>
@@ -172,7 +96,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
 
                     <div>
                         <label htmlFor="leaveType" className={labelClass}>休暇の種類 *</label>
-                        <select id="leaveType" name="leaveType" value={formData.leaveType} onChange={handleChange} className={inputClass} required disabled={isDisabled} aria-required="true">
+                        <select id="leaveType" name="leaveType" value={formData.leaveType} onChange={handleChange} className={inputClass} required disabled={isDisabled}>
                             <option>有給休暇</option>
                             <option>午前半休</option>
                             <option>午後半休</option>
@@ -184,29 +108,27 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label htmlFor="startDate" className={labelClass}>開始日 *</label>
-                            <input type="date" id="startDate" name="startDate" value={formData.startDate} onChange={handleChange} className={inputClass} required disabled={isDisabled} autoComplete="on" aria-required="true" />
+                            <input type="date" id="startDate" name="startDate" value={formData.startDate} onChange={handleChange} className={inputClass} required disabled={isDisabled} autoComplete="on" />
                         </div>
                         <div>
                             <label htmlFor="endDate" className={labelClass}>終了日 *</label>
-                            <input type="date" id="endDate" name="endDate" value={formData.endDate} onChange={handleChange} className={inputClass} required disabled={isDisabled} autoComplete="on" aria-required="true" />
+                            <input type="date" id="endDate" name="endDate" value={formData.endDate} onChange={handleChange} className={inputClass} required disabled={isDisabled} autoComplete="on" />
                         </div>
                     </div>
 
                     <div>
                         <label htmlFor="reason" className={labelClass}>理由 *</label>
-                        <textarea id="reason" name="reason" rows={4} value={formData.reason} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="例: 私用のため" autoComplete="on" aria-required="true" />
+                        <textarea id="reason" name="reason" rows={4} value={formData.reason} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="例: 私用のため" autoComplete="on" />
                     </div>
                     
                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
 
-                    {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg" role="alert">{error}</p>}
+                    {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
                     
                     <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <button type="button" onClick={handleSaveDraft} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting} aria-label="下書き保存">
-                            {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '下書き保存'}
-                        </button>
-                        <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid || isSubmitting} aria-label="申請を送信する">
-                            {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '申請を送信する'}
+                        <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>下書き保存</button>
+                        <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
+                            {isSubmitting ? <Loader className="w-5 h-5 animate-spin"/> : '申請を送信する'}
                         </button>
                     </div>
                 </form>

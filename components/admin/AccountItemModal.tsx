@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AccountItem, MQCode } from '../../types';
+import { AccountItem } from '../../types';
 import { Loader, Save, X } from '../Icons';
 
 interface AccountItemModalProps {
@@ -9,24 +9,12 @@ interface AccountItemModalProps {
 }
 
 const AccountItemModal: React.FC<AccountItemModalProps> = ({ item, onClose, onSave }) => {
-  const emptyMqCode: MQCode = { p: '', v: '', m: '', q: '', f: '', g: '' };
-  const [formData, setFormData] = useState<Partial<AccountItem>>(
-    item
-      ? { ...item, mqCode: item.mqCode ?? { ...emptyMqCode } }
-      : { code: '', name: '', categoryCode: '', isActive: true, sortOrder: 0, mqCode: { ...emptyMqCode } }
-  );
+  const [formData, setFormData] = useState<Partial<AccountItem>>(item || { code: '', name: '', categoryCode: '', isActive: true, sortOrder: 0 });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type, checked } = e.target as HTMLInputElement;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : (type === 'number' ? Number(value) : value) }));
-  };
-
-  const handleMqCodeChange = (key: keyof MQCode, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      mqCode: { ...(prev.mqCode ?? emptyMqCode), [key]: value },
-    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,30 +50,6 @@ const AccountItemModal: React.FC<AccountItemModalProps> = ({ item, onClose, onSa
           <div>
             <label htmlFor="sortOrder" className={labelClass}>表示順</label>
             <input id="sortOrder" name="sortOrder" type="number" value={formData.sortOrder || 0} onChange={handleChange} className={inputClass} />
-          </div>
-          <div>
-            <span className="block text-sm font-medium mb-1">MQコード</span>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                ['p', 'P コード'],
-                ['v', 'V コード'],
-                ['m', 'M コード'],
-                ['q', 'Q コード'],
-                ['f', 'F コード'],
-                ['g', 'G コード'],
-              ] as [keyof MQCode, string][]).map(([key, label]) => (
-                <div key={key}>
-                  <label className="text-xs font-medium text-slate-500" htmlFor={`mq-${key}`}>{label}</label>
-                  <input
-                    id={`mq-${key}`}
-                    type="text"
-                    value={formData.mqCode?.[key] ?? ''}
-                    onChange={event => handleMqCodeChange(key, event.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              ))}
-            </div>
           </div>
           <div className="flex items-center gap-2">
             <input id="isActive" name="isActive" type="checkbox" checked={formData.isActive} onChange={handleChange} className="h-4 w-4 rounded" />

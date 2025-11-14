@@ -1,3275 +1,774 @@
-import { normalizeFormCode } from "./normalizeFormCode";
-import { v4 as uuidv4 } from 'uuid';
-import type { PostgrestError, User as SupabaseAuthUser } from '@supabase/supabase-js';
-import { createDemoDataState, DemoDataState } from './demoData.ts';
-import { sendEmail } from './emailService.ts';
-import { getSupabase, hasSupabaseCredentials } from './supabaseClient.ts';
+import { getSupabase } from './supabaseClient';
 import {
-  EmployeeUser,
-  Job,
-  Customer,
-  JournalEntry,
-  User,
-  AccountItem,
-  Lead,
-  AllocationDivision,
-  AnalysisHistory,
-  Application,
-  ApplicationCode,
-  ApplicationNotificationAudience,
-  ApplicationNotificationEmail,
-  ApplicationNotificationRecipient,
-  ApplicationWithDetails,
-  ApprovalRoute,
-  BugReport,
-  BugReportStatus,
-  Department,
-  Employee,
-  Estimate,
-  EstimateLineItem,
-  EstimateStatus,
-  InboxItem,
-  InboxItemStatus,
-  InventoryItem,
-  Invoice,
-  InvoiceData,
-  InvoiceItem,
-  InvoiceStatus,
-  JobStatus,
-  LeadStatus,
-  MailOpenStatus,
-  ManufacturingStatus,
-  MasterAccountItem,
-  PaymentRecipient,
-  PostalInfo,
-  PostalStatus,
-  Project,
-  ProjectAttachment,
-  ProjectStatus,
-  PurchaseOrder,
-  PurchaseOrderStatus,
-  Title,
-  Toast,
-  TrackingInfo,
-  UUID,
-  ConfirmationDialogProps,
-} from '../types.ts';
+    EmployeeUser,
+    Job,
+    Customer,
+    JournalEntry,
+    User,
+    AccountItem,
+    Lead,
+    ApprovalRoute,
+    PurchaseOrder,
+    InventoryItem,
+    Employee,
+    Toast,
+    ConfirmationDialogProps,
+    BugReport,
+    Estimate,
+    ApplicationWithDetails,
+    Application,
+    Invoice,
+    InboxItem,
+    InvoiceData,
+    InboxItemStatus,
+    ApplicationCode,
+    BugReportStatus,
+    ManufacturingStatus,
+    InvoiceItem,
+    EstimateStatus,
+    MasterAccountItem,
+    PaymentRecipient,
+    Department,
+    InvoiceStatus,
+    LeadStatus,
+    AllocationDivision,
+    Title,
+} from '../types';
 
-type MinimalAuthUser = Pick<SupabaseAuthUser, 'id'> & {
-  email?: string | null;
-  user_metadata?: { [key: string]: any; full_name?: string | null } | null;
-};
-
-const DEMO_AUTH_USER: MinimalAuthUser = {
-  id: 'demo-user',
-  email: 'demo.user@mqprint.co.jp',
-  user_metadata: { full_name: 'デモユーザー' },
-};
-
-export const createDemoAuthUser = (): MinimalAuthUser => ({
-  ...DEMO_AUTH_USER,
-  user_metadata: DEMO_AUTH_USER.user_metadata
-    ? { ...DEMO_AUTH_USER.user_metadata }
-    : undefined,
+// Mappers from snake_case (DB) to camelCase (JS)
+const dbJobToJob = (dbJob: any): Job => ({
+    id: dbJob.id,
+    jobNumber: dbJob.job_number,
+    clientName: dbJob.client_name,
+    title: dbJob.title,
+    status: dbJob.status,
+    dueDate: dbJob.due_date,
+    quantity: dbJob.quantity,
+    paperType: dbJob.paper_type,
+    finishing: dbJob.finishing,
+    details: dbJob.details,
+    createdAt: dbJob.created_at,
+    price: dbJob.price,
+    variableCost: dbJob.variable_cost,
+    invoiceStatus: dbJob.invoice_status,
+    invoicedAt: dbJob.invoiced_at,
+    paidAt: dbJob.paid_at,
+    readyToInvoice: dbJob.ready_to_invoice,
+    invoiceId: dbJob.invoice_id,
+    manufacturingStatus: dbJob.manufacturing_status,
 });
 
-const demoState: DemoDataState = createDemoDataState();
-
-type SupabaseUserRow = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  role: 'admin' | 'user' | null;
-  created_at: string;
-  can_use_anything_analysis: boolean | null;
-};
-
-type SupabaseEmployeeRow = {
-  id: string;
-  user_id: string | null;
-  name: string | null;
-  department: string | null;
-  title: string | null;
-  created_at: string;
-};
-
-type SupabaseEmployeeViewRow = {
-  user_id: string;
-  name: string | null;
-  department: string | null;
-  title: string | null;
-  email: string | null;
-  role: 'admin' | 'user' | null;
-  can_use_anything_analysis: boolean | null;
-  created_at: string | null;
-};
-
-const SUPABASE_VIEW_COLUMNS = 'user_id, name, department, title, email, role, can_use_anything_analysis, created_at';
-
-let hasLoggedMissingEmployeeViewWarning = false;
-let hasLoggedMissingSupabaseUserTableWarning = false;
-
-const mapViewRowToEmployeeUser = (row: SupabaseEmployeeViewRow): EmployeeUser => ({
-  id: row.user_id,
-  name: row.name ?? '',
-  department: row.department,
-  title: row.title,
-  email: row.email ?? '',
-  role: row.role === 'admin' ? 'admin' : 'user',
-  createdAt: row.created_at ?? new Date().toISOString(),
-  canUseAnythingAnalysis: row.can_use_anything_analysis ?? false,
+const jobToDbJob = (job: Partial<Job>): any => ({
+    job_number: job.jobNumber,
+    client_name: job.clientName,
+    title: job.title,
+    status: job.status,
+    due_date: job.dueDate,
+    quantity: job.quantity,
+    paper_type: job.paperType,
+    finishing: job.finishing,
+    details: job.details,
+    price: job.price,
+    variable_cost: job.variableCost,
+    invoice_status: job.invoiceStatus,
+    invoiced_at: job.invoicedAt,
+    paid_at: job.paidAt,
+    ready_to_invoice: job.readyToInvoice,
+    invoice_id: job.invoiceId,
+    manufacturing_status: job.manufacturingStatus,
 });
 
-type SupabaseAccountItemRow = {
-  id: string;
-  code?: string | null;
-  name?: string | null;
-  category_code?: string | null;
-  is_active?: boolean | null;
-  sort_order?: number | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  mq_code?: Record<string, string | null> | null;
-  mq_code_p?: string | null;
-  mq_code_v?: string | null;
-  mq_code_m?: string | null;
-  mq_code_q?: string | null;
-  mq_code_f?: string | null;
-  mq_code_g?: string | null;
-};
+const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
+    id: dbCustomer.id,
+    customerCode: dbCustomer.customer_code,
+    customerName: dbCustomer.customer_name,
+    customerNameKana: dbCustomer.customer_name_kana,
+    representative: dbCustomer.representative,
+    phoneNumber: dbCustomer.phone_number,
+    address1: dbCustomer.address_1,
+    companyContent: dbCustomer.company_content,
+    annualSales: dbCustomer.annual_sales,
+    employeesCount: dbCustomer.employees_count,
+    note: dbCustomer.note,
+    infoSalesActivity: dbCustomer.info_sales_activity,
+    infoRequirements: dbCustomer.info_requirements,
+    infoHistory: dbCustomer.info_history,
+    createdAt: dbCustomer.created_at,
+    postNo: dbCustomer.post_no,
+    address2: dbCustomer.address_2,
+    fax: dbCustomer.fax,
+    closingDay: dbCustomer.closing_day,
+    monthlyPlan: dbCustomer.monthly_plan,
+    payDay: dbCustomer.pay_day,
+    recoveryMethod: dbCustomer.recovery_method,
+    userId: dbCustomer.user_id,
+    name2: dbCustomer.name2,
+    websiteUrl: dbCustomer.website_url,
+    zipCode: dbCustomer.zip_code,
+    foundationDate: dbCustomer.foundation_date,
+    capital: dbCustomer.capital,
+    customerRank: dbCustomer.customer_rank,
+    customerDivision: dbCustomer.customer_division,
+    salesType: dbCustomer.sales_type,
+    creditLimit: dbCustomer.credit_limit,
+    payMoney: dbCustomer.pay_money,
+    bankName: dbCustomer.bank_name,
+    branchName: dbCustomer.branch_name,
+    accountNo: dbCustomer.account_no,
+    salesUserCode: dbCustomer.sales_user_code,
+    startDate: dbCustomer.start_date,
+    endDate: dbCustomer.end_date,
+    drawingDate: dbCustomer.drawing_date,
+    salesGoal: dbCustomer.sales_goal,
+    infoSalesIdeas: dbCustomer.info_sales_ideas,
+    customerContactInfo: dbCustomer.customer_contact_info,
+    aiAnalysis: dbCustomer.ai_analysis,
+});
 
-type SupabaseDepartmentRow = {
-  id: string;
-  name?: string | null;
-};
-
-type SupabasePaymentRecipientRow = {
-  id: string;
-  recipient_code?: string | null;
-  company_name?: string | null;
-  recipient_name?: string | null;
-  bank_name?: string | null;
-  branch_name?: string | null;
-  account_number?: string | null;
-  bank_branch?: string | null;
-  bank_account_number?: string | null;
-  is_active?: boolean | null;
-  allocation_targets?: { id?: string | null; name?: string | null; target_id?: string | null; target_name?: string | null }[] | null;
-};
-
-type SupabasePaymentRecipientAllocationTargetRow = {
-  id: string;
-  payment_recipient_id?: string | null;
-  target_id?: string | null;
-  name?: string | null;
-  target_name?: string | null;
-  sort_order?: number | null;
-  created_at?: string | null;
-};
-
-type SupabaseAllocationDivisionRow = {
-  id: string;
-  name?: string | null;
-  is_active?: boolean | null;
-  created_at?: string | null;
-};
-
-const normalizeErrorText = (value: unknown): string => {
-  if (typeof value !== 'string') {
-    return '';
-  }
-  return value.trim().toLowerCase();
-};
-
-const isRelationNotFoundError = (error?: PostgrestError | null): boolean => {
-  if (!error) {
-    return false;
-  }
-
-  if (['42P01', 'PGRST114', 'PGRST204'].includes(error.code ?? '')) {
-    return true;
-  }
-
-  const candidates = [error.message, error.details, error.hint];
-  return candidates.some(text => {
-    const normalized = normalizeErrorText(text);
-    if (!normalized) {
-      return false;
+const customerToDbCustomer = (customer: Partial<Customer>): any => {
+    const dbData: { [key: string]: any } = {};
+    for (const key in customer) {
+        const camelKey = key as keyof Customer;
+        const snakeKey = camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        dbData[snakeKey] = customer[camelKey];
     }
-    return (
-      normalized.includes('relation') || normalized.includes('view') || normalized.includes('schema')
-    ) && normalized.includes('does not exist');
-  });
+    return dbData;
 };
 
-const isColumnNotFoundError = (error?: PostgrestError | null): boolean => {
-  if (!error) {
-    return false;
-  }
+const dbLeadToLead = (dbLead: any): Lead => ({
+    id: dbLead.id,
+    status: dbLead.status,
+    createdAt: dbLead.created_at,
+    name: dbLead.name,
+    email: dbLead.email,
+    phone: dbLead.phone,
+    company: dbLead.company,
+    source: dbLead.source,
+    tags: dbLead.tags,
+    message: dbLead.message,
+    updatedAt: dbLead.updated_at,
+    referrer: dbLead.referrer,
+    referrerUrl: dbLead.referrer_url,
+    landingPageUrl: dbLead.landing_page_url,
+    searchKeywords: dbLead.search_keywords,
+    utmSource: dbLead.utm_source,
+    utmMedium: dbLead.utm_medium,
+    utmCampaign: dbLead.utm_campaign,
+    utmTerm: dbLead.utm_term,
+    utmContent: dbLead.utm_content,
+    userAgent: dbLead.user_agent,
+    ipAddress: dbLead.ip_address,
+    deviceType: dbLead.device_type,
+    browserName: dbLead.browser_name,
+    osName: dbLead.os_name,
+    country: dbLead.country,
+    city: dbLead.city,
+    region: dbLead.region,
+    employees: dbLead.employees,
+    budget: dbLead.budget,
+    timeline: dbLead.timeline,
+    inquiryType: dbLead.inquiry_type,
+    inquiryTypes: dbLead.inquiry_types,
+    infoSalesActivity: dbLead.info_sales_activity,
+    score: dbLead.score,
+    aiAnalysisReport: dbLead.ai_analysis_report,
+    aiDraftProposal: dbLead.ai_draft_proposal,
+    aiInvestigation: dbLead.ai_investigation ? { summary: dbLead.ai_investigation.summary, sources: dbLead.ai_investigation.sources } : undefined,
+});
 
-  if (['42703', 'PGRST301', 'PGRST302'].includes(error.code ?? '')) {
-    return true;
-  }
-
-  const candidates = [error.message, error.details, error.hint];
-  return candidates.some(text => {
-    const normalized = normalizeErrorText(text);
-    if (!normalized) {
-      return false;
+const leadToDbLead = (lead: Partial<Lead>): any => {
+    const dbData: { [key: string]: any } = {};
+    for (const key in lead) {
+        const camelKey = key as keyof Lead;
+        const snakeKey = camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        dbData[snakeKey] = lead[camelKey];
     }
-    return normalized.includes('column') && normalized.includes('does not exist');
-  });
+    return dbData;
 };
+
+const dbBugReportToBugReport = (dbReport: any): BugReport => ({
+    id: dbReport.id,
+    reporterName: dbReport.reporter_name,
+    reportType: dbReport.report_type,
+    summary: dbReport.summary,
+    description: dbReport.description,
+    status: dbReport.status,
+    createdAt: dbReport.created_at,
+});
+
+const bugReportToDbBugReport = (report: Partial<BugReport>): any => ({
+    reporter_name: report.reporterName,
+    report_type: report.reportType,
+    summary: report.summary,
+    description: report.description,
+    status: report.status,
+});
+
+const dbApplicationCodeToApplicationCode = (d: any): ApplicationCode => ({
+    id: d.id,
+    code: d.code,
+    name: d.name,
+    description: d.description,
+    createdAt: d.created_at,
+});
+
+const dbApprovalRouteToApprovalRoute = (d: any): ApprovalRoute => ({
+    id: d.id,
+    name: d.name,
+    routeData: {
+        steps: (d.route_data?.steps || []).map((s: any) => ({
+            approverId: s.approver_id,
+        })),
+    },
+    createdAt: d.created_at,
+});
+
 
 export const isSupabaseUnavailableError = (error: any): boolean => {
-  if (!error) return false;
-
-  const candidates = [error, error?.cause];
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') {
-      continue;
-    }
-
-    const code = (candidate as { code?: unknown }).code;
-    if (typeof code === 'string') {
-      if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT'].includes(code)) {
-        return true;
-      }
-    }
-
-    const status = (candidate as { status?: unknown }).status;
-    if (typeof status === 'number' && (status === 0 || status === 503 || status === 504)) {
-      return true;
-    }
-  }
-
-  const message = typeof error === 'string'
-    ? error
-    : error.message || error.details || error.error_description || error.hint;
-  if (!message) return false;
-
-  const normalized = message.toLowerCase();
-  if (
-    normalized.includes('fetch failed') ||
-    normalized.includes('failed to fetch') ||
-    normalized.includes('network') ||
-    normalized.includes('timeout') ||
-    normalized.includes('supabase client is not initialized') ||
-    normalized.includes('invalid api key')
-  ) {
-    return true;
-  }
-
-  if (message.includes('Supabaseの認証情報が設定されていません')) {
-    return true;
-  }
-
-  return false;
+    if (!error) return false;
+    const message = typeof error === 'string' ? error : error.message || error.details || error.error_description;
+    if (!message) return false;
+    return /fetch failed/i.test(message) || /failed to fetch/i.test(message) || /network/i.test(message);
 };
 
-const logSupabaseUnavailableWarning = (context: string, error: unknown): void => {
-  if (typeof console !== 'undefined' && console.warn) {
-    console.warn(`Supabase に接続できないため${context}をスキップし、デモデータにフォールバックします。`, error);
-  }
+// --- Data Service Functions ---
+
+export const getJobs = async (): Promise<Job[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('jobs').select('*').order('job_number', { ascending: false });
+    if (error) throw new Error(`Failed to fetch jobs: ${error.message}`);
+    return (data || []).map(dbJobToJob);
 };
 
-const toStringValue = (value: unknown, fallback = ''): string => {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return String(value);
-  }
-  return fallback;
-};
-
-const isBlankString = (value: string | null | undefined): boolean => {
-  if (typeof value !== 'string') {
-    return true;
-  }
-  return value.trim() === '';
-};
-
-const MQ_CODE_KEYS = ['p', 'v', 'm', 'q', 'f', 'g'] as const;
-type MqCodeKey = typeof MQ_CODE_KEYS[number];
-
-const resolveMqCodeSegment = (row: SupabaseAccountItemRow, key: MqCodeKey): string | undefined => {
-  const mqObject = typeof row.mq_code === 'object' && row.mq_code !== null ? row.mq_code : null;
-  const uppercaseKey = key.toUpperCase();
-  const candidates: unknown[] = [
-    mqObject?.[key],
-    mqObject?.[uppercaseKey],
-    (row as Record<string, unknown>)[`mq_code_${key}`],
-    (row as Record<string, unknown>)[`mq_code_${uppercaseKey}`],
-    (row as Record<string, unknown>)[key],
-    (row as Record<string, unknown>)[uppercaseKey],
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim() !== '') {
-      return candidate;
-    }
-  }
-  return undefined;
-};
-
-const mapSupabaseAccountItemRow = (row: SupabaseAccountItemRow): AccountItem => {
-  const nowIso = new Date().toISOString();
-  const mqCode = MQ_CODE_KEYS.reduce<Record<MqCodeKey, string>>((acc, key) => {
-    acc[key] = toStringValue(resolveMqCodeSegment(row, key), '');
-    return acc;
-  }, { p: '', v: '', m: '', q: '', f: '', g: '' });
-
-  return {
-    id: row.id,
-    code: toStringValue(row.code, ''),
-    name: toStringValue(row.name, ''),
-    categoryCode: toStringValue(row.category_code, ''),
-    isActive: row.is_active ?? true,
-    sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
-    createdAt: toStringValue(row.created_at, nowIso),
-    updatedAt: toStringValue(row.updated_at, row.created_at ?? nowIso),
-    mqCode,
-  };
-};
-
-const mapSupabaseDepartmentRow = (row: SupabaseDepartmentRow): Department | null => {
-  const name = toStringValue(row.name, '').trim();
-  if (!row.id || !name) {
-    return null;
-  }
-  return { id: row.id, name };
-};
-
-const mapSupabasePaymentRecipientRow = (row: SupabasePaymentRecipientRow): PaymentRecipient => {
-  const allocationTargetsRaw =
-    (row.allocation_targets as unknown) ?? (row as Record<string, unknown>)['allocationTargets'];
-  const allocationTargets: { id: string; name: string }[] = Array.isArray(allocationTargetsRaw)
-    ? (allocationTargetsRaw as Array<Record<string, unknown>>)
-        .map((target) => {
-          if (!target) return null;
-          const idCandidate = toStringValue(target.id ?? target.target_id ?? null, '').trim();
-          const nameCandidate = toStringValue(target.name ?? target.target_name ?? null, '').trim();
-          if (!idCandidate || !nameCandidate) {
-            return null;
-          }
-          return { id: idCandidate, name: nameCandidate };
-        })
-        .filter((target): target is { id: string; name: string } => Boolean(target))
-    : [];
-
-  return {
-    id: row.id,
-    recipientCode: toStringValue(row.recipient_code, row.id),
-    companyName: toStringValue(row.company_name, '') || null,
-    recipientName: toStringValue(row.recipient_name, '') || null,
-    bankName: toStringValue(row.bank_name, '') || null,
-    bankBranch:
-      toStringValue(row.bank_branch ?? row.branch_name ?? (row as Record<string, unknown>)['bankBranch'], '') || null,
-    bankAccountNumber:
-      toStringValue(
-        row.bank_account_number ?? row.account_number ?? (row as Record<string, unknown>)['bankAccountNumber'],
-        '',
-      ) || null,
-    isActive: row.is_active ?? true,
-    allocationTargets,
-  };
-};
-
-const mapSupabaseAllocationDivisionRow = (row: SupabaseAllocationDivisionRow): AllocationDivision => {
-  const nowIso = new Date().toISOString();
-  return {
-    id: row.id,
-    name: toStringValue(row.name, ''),
-    isActive: row.is_active ?? true,
-    createdAt: toStringValue(row.created_at, nowIso),
-  };
-};
-
-const fetchAccountItemsFromSupabase = async (): Promise<AccountItem[] | null> => {
-  try {
-    const supabaseClient = getSupabase();
-    const sources = ['account_items', 'v_account_items', 'v_account_items_with_mq_code'] as const;
-
-    for (const table of sources) {
-      const { data, error } = await supabaseClient
-        .from(table)
-        .select('*');
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('勘定科目マスタの取得', error);
-          return null;
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          continue;
-        }
-        throw error;
-      }
-
-      if (!data) {
-        continue;
-      }
-
-      const mapped = data.map(mapSupabaseAccountItemRow);
-      const demoAccountItemMap = new Map(demoState.accountItems.map(item => [item.code, item]));
-      mapped.forEach(item => {
-        const fallback = demoAccountItemMap.get(item.code);
-        if (!fallback) {
-          return;
-        }
-        if (isBlankString(item.categoryCode) && !isBlankString(fallback.categoryCode)) {
-          item.categoryCode = fallback.categoryCode;
-        }
-        if (isBlankString(item.createdAt) && !isBlankString(fallback.createdAt)) {
-          item.createdAt = fallback.createdAt;
-        }
-        if (isBlankString(item.updatedAt) && !isBlankString(fallback.updatedAt)) {
-          item.updatedAt = fallback.updatedAt;
-        }
-        if ((item.sortOrder === 0 || typeof item.sortOrder !== 'number') && typeof fallback.sortOrder === 'number' && fallback.sortOrder !== 0) {
-          item.sortOrder = fallback.sortOrder;
-        }
-        MQ_CODE_KEYS.forEach(key => {
-          if (isBlankString(item.mqCode[key]) && fallback.mqCode?.[key]) {
-            item.mqCode[key] = fallback.mqCode[key];
-          }
-        });
-      });
-      mapped.sort((a, b) => {
-        if (a.sortOrder !== b.sortOrder) {
-          return a.sortOrder - b.sortOrder;
-        }
-        return a.code.localeCompare(b.code, 'ja');
-      });
-      return mapped;
-    }
-
-    return null;
-  } catch (error) {
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('勘定科目マスタの取得', error);
-      return null;
-    }
-    throw error;
-  }
-};
-
-const fetchDepartmentsFromSupabase = async (): Promise<Department[] | null> => {
-  try {
-    const supabaseClient = getSupabase();
-    const sources = [
-      { table: 'v_departments', select: 'id, name' },
-      { table: 'departments', select: 'id, name' },
-    ] as const;
-
-    for (const source of sources) {
-      const { data, error } = await supabaseClient
-        .from(source.table)
-        .select(source.select);
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('部門マスタの取得', error);
-          return null;
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          continue;
-        }
-        throw error;
-      }
-
-      if (!data) {
-        continue;
-      }
-
-      const mapped = data
-        .map(mapSupabaseDepartmentRow)
-        .filter((dept): dept is Department => dept !== null);
-
-      mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-      return mapped;
-    }
-
-    return null;
-  } catch (error) {
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('部門マスタの取得', error);
-      return null;
-    }
-    throw error;
-  }
-};
-
-const fetchPaymentRecipientsFromSupabase = async (): Promise<PaymentRecipient[] | null> => {
-  try {
-    const supabaseClient = getSupabase();
-    const selects = [
-      'id, recipient_code, company_name, recipient_name, bank_name, bank_branch, bank_account_number, is_active',
-      'id, recipient_code, company_name, recipient_name, bank_name, branch_name:bank_branch, account_number:bank_account_number, is_active',
-      'id, recipient_code, company_name, recipient_name, bank_name, branch_name, account_number, is_active',
-      '*',
-    ] as const;
-
-    let recipients: SupabasePaymentRecipientRow[] | null = null;
-    let recipientsRelationMissing = false;
-
-    for (const select of selects) {
-      const { data, error } = await supabaseClient
-        .from('payment_recipients')
-        .select(select);
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('支払先マスタの取得', error);
-          return null;
-        }
-        if (isRelationNotFoundError(error)) {
-          recipientsRelationMissing = true;
-          break;
-        }
-        if (isColumnNotFoundError(error)) {
-          continue;
-        }
-        throw error;
-      }
-
-      if (!data) {
-        continue;
-      }
-
-      recipients = data;
-      break;
-    }
-
-    if (!recipients || recipientsRelationMissing) {
-      return null;
-    }
-
-    const allocationTargetsByRecipientId = new Map<
-      string,
-      { data: NonNullable<SupabasePaymentRecipientRow['allocation_targets']>[number]; sortOrder: number; createdAt: string; name: string }
-    >();
-
-    // 指示書に従い、存在する6カラムのみを取得
-    const { data, error } = await supabaseClient
-      .from('payment_recipient_allocation_targets')
-      .select('id, payment_recipient_id, name, sort_order, created_at, updated_at')
-      .order('sort_order', { ascending: true });
-
-    if (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('支払先振分先マスタの取得', error);
-      } else if (!isRelationNotFoundError(error)) {
-        throw error;
-      }
-    } else if (data && data.length > 0) {
-      (data as any[]).forEach((targetRow: any) => {
-        const recipientId = toStringValue(targetRow.payment_recipient_id, '').trim();
-        if (!recipientId) {
-          return;
-        }
-
-        // target_id, target_name は存在しないため、name のみを使用
-        const normalizedTarget: NonNullable<SupabasePaymentRecipientRow['allocation_targets']>[number] = {
-          id: targetRow.id,
-          name: targetRow.name ?? null,
-          target_id: null, // カラムが存在しないため null
-          target_name: null, // カラムが存在しないため null
-        };
-
-        const sortOrder = typeof targetRow.sort_order === 'number' ? targetRow.sort_order : Number.MAX_SAFE_INTEGER;
-        const createdAt = toStringValue(targetRow.created_at, '');
-        const sortName = toStringValue(targetRow.name, '');
-
-        const existing = allocationTargetsByRecipientId.get(recipientId) ?? [];
-        existing.push({ data: normalizedTarget, sortOrder, createdAt, name: sortName });
-        allocationTargetsByRecipientId.set(recipientId, existing);
-      });
-    }
-
-    allocationTargetsByRecipientId.forEach(targets => {
-      targets.sort((a, b) => {
-        if (a.sortOrder !== b.sortOrder) {
-          return a.sortOrder - b.sortOrder;
-        }
-        if (a.createdAt !== b.createdAt) {
-          return a.createdAt.localeCompare(b.createdAt);
-        }
-        return a.name.localeCompare(b.name, 'ja');
-      });
-    });
-
-    const mapped = recipients.map(row => {
-      const groupedTargets = allocationTargetsByRecipientId.get(row.id);
-      const allocationTargets =
-        groupedTargets && groupedTargets.length > 0
-          ? groupedTargets.map(target => target.data)
-          : row.allocation_targets;
-
-      const rowForMapping =
-        allocationTargets && allocationTargets.length > 0
-          ? ({ ...row, allocation_targets: allocationTargets } as SupabasePaymentRecipientRow)
-          : row;
-
-      return mapSupabasePaymentRecipientRow(rowForMapping);
-    });
-
-    mapped.sort((a, b) => {
-      const aLabel = `${a.companyName ?? ''}${a.recipientName ?? ''}`;
-      const bLabel = `${b.companyName ?? ''}${b.recipientName ?? ''}`;
-      return aLabel.localeCompare(bLabel, 'ja');
-    });
-    return mapped;
-  } catch (error) {
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('支払先マスタの取得', error);
-      return null;
-    }
-    throw error;
-  }
-};
-
-const fetchAllocationDivisionsFromSupabase = async (): Promise<AllocationDivision[] | null> => {
-  try {
-    const supabaseClient = getSupabase();
-    const sources = [
-      { table: 'allocation_divisions', select: 'id, name, is_active, created_at' },
-      { table: 'v_allocation_divisions', select: 'id, name, is_active, created_at' },
-    ] as const;
-
-    for (const source of sources) {
-      const { data, error } = await supabaseClient
-        .from(source.table)
-        .select(source.select);
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('配賦区分マスタの取得', error);
-          return null;
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          continue;
-        }
-        throw error;
-      }
-
-      if (!data) {
-        continue;
-      }
-
-      const mapped = data.map(mapSupabaseAllocationDivisionRow);
-      mapped.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-      return mapped;
-    }
-
-    return null;
-  } catch (error) {
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('配賦区分マスタの取得', error);
-      return null;
-    }
-    throw error;
-  }
-};
-
-const isUniqueViolation = (error?: PostgrestError | null): boolean => error?.code === '23505';
-
-const fetchSupabaseEmployeeUser = async (userId: string): Promise<EmployeeUser | null> => {
-  if (!hasSupabaseCredentials()) {
-    return null;
-  }
-
-  try {
-    const supabaseClient = getSupabase();
-
-    // Fetch from users table directly
-    const { data: userData, error: userError } = await supabaseClient
-      .from('users')
-      .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (userError) {
-      if (isSupabaseUnavailableError(userError)) {
-        logSupabaseUnavailableWarning('ユーザー情報の取得', userError);
-        return null;
-      }
-      if (isRelationNotFoundError(userError) || isColumnNotFoundError(userError)) {
-        console.warn('usersテーブルが見つからないため、セッションユーザー情報の取得をスキップします。', userError);
-        return null;
-      }
-      throw userError;
-    }
-
-    if (!userData) {
-      return null;
-    }
-
-    // Map to EmployeeUser format
-    return {
-      id: userData.id,
-      name: userData.name || '名前未設定',
-      department: null,
-      title: null,
-      email: userData.email || '',
-      role: (userData.role as 'admin' | 'user') || 'user',
-      createdAt: userData.created_at || new Date().toISOString(),
-      canUseAnythingAnalysis: userData.can_use_anything_analysis ?? true,
-    };
-  } catch (error) {
-    if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
-      console.warn('Supabase のユーザー情報が利用できないため、セッションユーザー情報を取得できません。', error);
-      return null;
-    }
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('ユーザー情報の取得', error);
-      return null;
-    }
-    throw error;
-  }
-};
-
-const ensureSupabaseEmployeeUser = async (
-  authUser: MinimalAuthUser,
-  fallbackEmail: string
-): Promise<EmployeeUser | null> => {
-  if (!hasSupabaseCredentials()) {
-    throw new Error('Supabaseの認証情報が設定されていません。');
-  }
-
-  const supabaseClient = getSupabase();
-
-  const displayName =
-    authUser.user_metadata?.full_name?.trim() ||
-    authUser.user_metadata?.name?.trim?.() ||
-    fallbackEmail ||
-    'ゲストユーザー';
-
-  const buildFallbackEmployeeUser = (): EmployeeUser => {
-    const fallbackFromDemo =
-      demoState.employeeUsers.find((user) => user.id === authUser.id) ??
-      (fallbackEmail ? demoState.employeeUsers.find((user) => user.email === fallbackEmail) : undefined);
-    if (fallbackFromDemo) {
-      return { ...fallbackFromDemo };
-    }
-    const nowIso = new Date().toISOString();
-    return {
-      id: authUser.id,
-      name: displayName,
-      department: null,
-      title: null,
-      email: fallbackEmail || '',
-      role: 'user',
-      createdAt: nowIso,
-      canUseAnythingAnalysis: true,
-    };
-  };
-
-  try {
-    const { data: userRow, error: userError } = await supabaseClient
-      .from('users')
-      .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
-      .eq('id', authUser.id)
-      .maybeSingle();
-
-    if (userError) {
-      if (isSupabaseUnavailableError(userError)) {
-        logSupabaseUnavailableWarning('ユーザー情報の取得', userError);
-        return buildFallbackEmployeeUser();
-      }
-      throw userError;
-    }
-
-    let ensuredUser = userRow ?? null;
-
-    if (!ensuredUser) {
-      const { data: insertedUser, error: insertError } = await supabaseClient
-        .from('users')
-        .insert({
-          id: authUser.id,
-          name: displayName,
-          email: fallbackEmail || null,
-          role: 'user',
-          can_use_anything_analysis: true,
-        })
-        .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
-        .maybeSingle();
-
-      if (insertError) {
-        if (isSupabaseUnavailableError(insertError)) {
-          logSupabaseUnavailableWarning('ユーザー情報の作成', insertError);
-          return buildFallbackEmployeeUser();
-        }
-
-        if (!isUniqueViolation(insertError)) {
-          throw insertError;
-        }
-
-        const { data: refetchedUser, error: refetchError } = await supabaseClient
-          .from('users')
-          .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
-          .eq('id', authUser.id)
-          .maybeSingle();
-
-        if (refetchError) {
-          if (isSupabaseUnavailableError(refetchError)) {
-            logSupabaseUnavailableWarning('ユーザー情報の再取得', refetchError);
-            return buildFallbackEmployeeUser();
-          }
-          throw refetchError;
-        }
-
-        ensuredUser = refetchedUser ?? null;
-      } else {
-        ensuredUser = insertedUser ?? null;
-      }
-    }
-
-    if (!ensuredUser) {
-      console.warn('Supabase上にユーザー情報が存在しません。フォールバックユーザーを使用します。');
-      const fallbackUser = buildFallbackEmployeeUser();
-      return { ...fallbackUser, isNewUser: true };
-    }
-
-    const { data: employeeRow, error: employeeError } = await supabaseClient
-      .from('employees')
-      .select('id, user_id, name, department, title, created_at')
-      .eq('user_id', authUser.id)
-      .maybeSingle();
-
-    if (employeeError && !isUniqueViolation(employeeError)) {
-      if (isSupabaseUnavailableError(employeeError)) {
-        logSupabaseUnavailableWarning('従業員レコードの取得', employeeError);
-        return buildFallbackEmployeeUser();
-      }
-      throw employeeError;
-    }
-
-    if (!employeeRow) {
-      const today = new Date().toISOString().slice(0, 10);
-      const { error: insertEmployeeError } = await supabaseClient
-        .from('employees')
-        .insert({
-          user_id: authUser.id,
-          name: displayName,
-          department: null,
-          title: null,
-          hire_date: today,
-          salary: 0,
-        });
-
-      if (insertEmployeeError && !isUniqueViolation(insertEmployeeError)) {
-        if (isSupabaseUnavailableError(insertEmployeeError)) {
-          logSupabaseUnavailableWarning('従業員レコードの作成', insertEmployeeError);
-          return buildFallbackEmployeeUser();
-        }
-        throw insertEmployeeError;
-      }
-    }
-
-    const viewUser = await fetchSupabaseEmployeeUser(authUser.id);
-    if (viewUser) {
-      return viewUser;
-    }
-
-    return {
-      id: ensuredUser.id,
-      name: ensuredUser.name ?? displayName,
-      department: employeeRow?.department ?? null,
-      title: employeeRow?.title ?? null,
-      email: ensuredUser.email ?? fallbackEmail ?? '',
-      role: ensuredUser.role === 'admin' ? 'admin' : 'user',
-      createdAt: employeeRow?.created_at ?? ensuredUser.created_at ?? new Date().toISOString(),
-      canUseAnythingAnalysis: ensuredUser.can_use_anything_analysis ?? false,
-    };
-  } catch (error) {
-    if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
-      if (!hasLoggedMissingSupabaseUserTableWarning && typeof console !== 'undefined') {
-        console.warn(
-          'Supabase の users / employees テーブルまたはビューが見つかりません。暫定的に認証ユーザーの情報をメタデータから生成します。セットアップスクリプトの実行をご確認ください。',
-          error
-        );
-        hasLoggedMissingSupabaseUserTableWarning = true;
-      }
-      return buildFallbackEmployeeUser();
-    }
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('ユーザー情報の確保', error);
-      return buildFallbackEmployeeUser();
-    }
-    throw error;
-  }
-
-  return null;
-};
-
-let projects: Project[] = [
-  {
-    id: uuidv4(),
-    projectName: '秋季キャンペーンプロジェクト',
-    customerName: '株式会社ネオプリント',
-    customerId: demoState.customers[0]?.id,
-    status: ProjectStatus.InProgress,
-    overview: '秋季キャンペーン向け販促物一式の制作と配送を行うプロジェクトです。',
-    extracted_details: '主要 deliverables: チラシ、ポスター、SNSバナー。スケジュールは10月末まで。',
-    createdAt: '2025-09-20T08:00:00Z',
-    updatedAt: '2025-10-01T09:00:00Z',
-    userId: demoState.employeeUsers[0]?.id || 'user-001',
-    attachments: [],
-    relatedEstimates: demoState.estimates.filter(
-      (est) => est.customerName === '株式会社ネオプリント'
-    ),
-    relatedJobs: demoState.jobs.filter((job) => job.clientName === '株式会社ネオプリント'),
-    isActive: true,
-  },
-  {
-    id: uuidv4(),
-    projectName: '新製品カタログ刷新',
-    customerName: '株式会社リンクス',
-    customerId: demoState.customers[2]?.id,
-    status: ProjectStatus.New,
-    overview: '2026年度版カタログの刷新に向けたコンテンツ整理とデザイン制作。',
-    extracted_details: '最新製品ラインナップの取材、撮影、デザイン制作。納品予定は11月下旬。',
-    createdAt: '2025-10-10T03:30:00Z',
-    updatedAt: '2025-10-10T03:30:00Z',
-    userId: demoState.employeeUsers[1]?.id || 'user-002',
-    attachments: [],
-    relatedEstimates: [],
-    relatedJobs: [],
-    isActive: true,
-  },
-];
-let allocationDivisions: AllocationDivision[] = [
-    { id: 'alloc-1', name: '営業部配賦', isActive: true, createdAt: '2024-01-05T00:00:00Z' },
-    { id: 'alloc-2', name: '製造部配賦', isActive: true, createdAt: '2024-01-05T00:00:00Z' },
-];
-let titles: Title[] = [
-    { id: 'title-1', name: '部長', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
-    { id: 'title-2', name: '課長', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
-    { id: 'title-3', name: '主任', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
-];
-let analysisHistory: AnalysisHistory[] = [];
-let nextEstimateNumber = Math.max(0, ...demoState.estimates.map(est => est.estimateNumber)) + 1;
-
-
-const deepClone = <T>(value: T): T => {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value));
-};
-
-const findById = <T extends { id: string }>(
-  collection: T[],
-  id: string,
-  entityName: string
-): T => {
-  const item = collection.find((it) => it.id === id);
-  if (!item) {
-    throw new Error(`${entityName} with ID ${id} not found`);
-  }
-  return item;
-};
-
-function calculateEstimateTotals(items: EstimateLineItem[], taxInclusive: boolean) {
-  let subtotal = 0;
-  let taxTotal = 0;
-  const normalized = items.map((it) => {
-    const rowSubtotal = it.qty * it.unitPrice;
-    const rate = it.taxRate ?? 0.1;
-    const rowTax = taxInclusive ? Math.round(rowSubtotal - rowSubtotal / (1 + rate)) : Math.round(rowSubtotal * rate);
-    const rowTotal = taxInclusive ? rowSubtotal : rowSubtotal + rowTax;
-    subtotal += rowSubtotal;
-    taxTotal += rowTax;
-    return {
-      ...it,
-      subtotal: Math.round(rowSubtotal),
-      taxAmount: rowTax,
-      total: rowTotal,
-    };
-  });
-  const grandTotal = taxInclusive ? Math.round(subtotal) : Math.round(subtotal + taxTotal);
-  return { items: normalized, subtotal: Math.round(subtotal), taxTotal, grandTotal };
-}
-
-const mapApplicationDetails = (app: Application): ApplicationWithDetails => ({
-    ...app,
-    applicant: demoState.employeeUsers.find(u => u.id === app.applicantId),
-    applicationCode: demoState.applicationCodes.find(code => code.id === app.applicationCodeId),
-    approvalRoute: demoState.approvalRoutes.find(route => route.id === app.approvalRouteId),
-});
-
-const APPLICATION_STATUS_LABELS: Record<Application['status'], string> = {
-  draft: '下書き',
-  pending_approval: '承認待ち',
-  approved: '承認済み',
-  rejected: '差戻し',
-};
-
-const resolveEmployeeUser = (id: string | null | undefined): EmployeeUser | undefined => {
-  if (!id) {
-    return undefined;
-  }
-  return demoState.employeeUsers.find(user => user.id === id);
-};
-
-const toNotificationRecipients = (
-  users: (EmployeeUser | undefined)[],
-): ApplicationNotificationRecipient[] => {
-  const map = new Map<string, ApplicationNotificationRecipient>();
-  users.forEach(user => {
-    if (!user) return;
-    map.set(user.id, {
-      id: user.id,
-      name: user.name,
-      email: user.email ?? '',
-    });
-  });
-  return Array.from(map.values());
-};
-
-const formatApprovalRouteSummary = (route?: ApprovalRoute): string => {
-  if (!route?.routeData?.steps?.length) {
-    return '';
-  }
-  return route.routeData.steps
-    .map((step, index) => {
-      const approver = resolveEmployeeUser(step.approverId);
-      const approverLabel = approver
-        ? `${approver.name}${approver.department ? `（${approver.department}）` : ''}`
-        : '未設定';
-      return `${index + 1}次承認: ${approverLabel}`;
-    })
-    .join('\n');
-};
-
-const filterDeliverableRecipients = (
-  recipients: ApplicationNotificationRecipient[],
-): ApplicationNotificationRecipient[] => {
-  return recipients.filter((recipient) => recipient.email && /.+@.+\..+/.test(recipient.email));
-};
-
-const recordApplicationEmail = async (
-  application: Application,
-  audience: ApplicationNotificationAudience,
-  recipients: ApplicationNotificationRecipient[],
-  subject: string,
-  body: string,
-): Promise<ApplicationNotificationEmail | null> => {
-  const deliverable = filterDeliverableRecipients(recipients);
-  if (deliverable.length === 0) {
-    return null;
-  }
-
-  const { id: messageId, sentAt } = await sendEmail({
-    to: deliverable.map((recipient) => recipient.email),
-    subject,
-    body,
-  });
-
-  const record: ApplicationNotificationEmail = {
-    id: messageId,
-    applicationId: application.id,
-    applicationCodeId: application.applicationCodeId,
-    audience,
-    subject,
-    body,
-    recipients: deliverable,
-    sentAt,
-    status: application.status,
-  };
-
-  demoState.applicationEmailNotifications.push(record);
-  return record;
-};
-
-const createApplicationNotificationEmails = async (application: Application) => {
-  const applicationCode = demoState.applicationCodes.find(code => code.id === application.applicationCodeId);
-  const approvalRoute = demoState.approvalRoutes.find(route => route.id === application.approvalRouteId);
-  const applicant = resolveEmployeeUser(application.applicantId);
-
-  const applicationName = applicationCode?.name ?? '申請';
-  const applicantName = applicant?.name ?? '申請者';
-  const statusLabel = APPLICATION_STATUS_LABELS[application.status] ?? application.status;
-  const routeSummary = formatApprovalRouteSummary(approvalRoute);
-
-  const summaryLines = [
-    `申請ID: ${application.id}`,
-    `申請種別: ${applicationName}`,
-    `申請者: ${applicantName}`,
-    `現在のステータス: ${statusLabel}`,
-  ];
-  if (routeSummary) {
-    summaryLines.push(`承認ルート:\n${routeSummary}`);
-  }
-  const summaryText = summaryLines.join('\n');
-
-  const approverRecipients = toNotificationRecipients(
-    approvalRoute?.routeData?.steps?.map(step => resolveEmployeeUser(step.approverId)) ?? [],
-  );
-  if (approverRecipients.length > 0) {
-    const subject = `【承認依頼】${applicationName} - ${applicantName}`;
-    const body = [
-      `${applicantName}さんから${applicationName}の承認依頼が届きました。`,
-      '',
-      summaryText,
-      '',
-      '承認対応をお願いします。',
-    ].join('\n');
-    await recordApplicationEmail(application, 'approval_route', approverRecipients, subject, body);
-  }
-
-  const applicantRecipients = applicant ? toNotificationRecipients([applicant]) : [];
-  if (applicantRecipients.length > 0) {
-    const subject = `【申請受付】${applicationName} のステータス: ${statusLabel}`;
-    const bodyLines = [
-      `${applicantName}さん`,
-      '',
-      `${applicationName}の申請を受け付けました。`,
-      `現在のステータス: ${statusLabel}`,
-      '',
-    ];
-    if (routeSummary) {
-      bodyLines.push('承認ルート:');
-      bodyLines.push(routeSummary);
-      bodyLines.push('');
-    }
-    bodyLines.push('承認状況はシステムの「承認一覧」で確認できます。');
-
-    const body = bodyLines.join('\n');
-    await recordApplicationEmail(application, 'applicant', applicantRecipients, subject, body);
-  }
-};
-
-const createApplicationStatusChangeEmails = async (application: Application) => {
-  const applicationCode = demoState.applicationCodes.find(code => code.id === application.applicationCodeId);
-  const approvalRoute = demoState.approvalRoutes.find(route => route.id === application.approvalRouteId);
-  const applicant = resolveEmployeeUser(application.applicantId);
-
-  const applicationName = applicationCode?.name ?? '申請';
-  const applicantName = applicant?.name ?? '申請者';
-  const statusLabel = APPLICATION_STATUS_LABELS[application.status] ?? application.status;
-  const routeSummary = formatApprovalRouteSummary(approvalRoute);
-
-  const baseSummaryLines = [
-    `申請ID: ${application.id}`,
-    `申請種別: ${applicationName}`,
-    `申請者: ${applicantName}`,
-    `最終ステータス: ${statusLabel}`,
-  ];
-
-  if (application.rejectionReason) {
-    baseSummaryLines.push(`差戻し理由: ${application.rejectionReason}`);
-  }
-
-  if (routeSummary) {
-    baseSummaryLines.push(`承認ルート:\n${routeSummary}`);
-  }
-
-  const summaryText = baseSummaryLines.join('\n');
-
-  const applicantRecipients = applicant ? toNotificationRecipients([applicant]) : [];
-  if (applicantRecipients.length > 0) {
-    const subjectPrefix = application.status === 'approved' ? '【承認完了】' : application.status === 'rejected' ? '【差戻し】' : '【ステータス更新】';
-    const subject = `${subjectPrefix}${applicationName}`;
-    const bodyLines = [
-      `${applicantName}さん`,
-      '',
-      `${applicationName}の申請ステータスが「${statusLabel}」になりました。`,
-      '',
-      summaryText,
-      '',
-      '詳細は承認ワークフロー画面から確認できます。',
-    ];
-
-    await recordApplicationEmail(application, 'applicant', applicantRecipients, subject, bodyLines.join('\n'));
-  }
-
-  const approverRecipients = toNotificationRecipients(
-    (approvalRoute?.routeData?.steps ?? [])
-      .map(step => resolveEmployeeUser(step.approverId))
-      .filter(user => (user?.id ?? '') !== (applicant?.id ?? '')),
-  );
-
-  if (approverRecipients.length > 0) {
-    const subjectPrefix = application.status === 'approved' ? '【対応完了】' : application.status === 'rejected' ? '【差戻し完了】' : '【ステータス更新】';
-    const subject = `${subjectPrefix}${applicationName} - ${applicantName}`;
-    const bodyLines = [
-      `${applicantName}さんの${applicationName}が「${statusLabel}」になりました。`,
-      '',
-      summaryText,
-      '',
-      '必要に応じて申請内容の確認をお願いします。',
-    ];
-
-    await recordApplicationEmail(application, 'approval_route', approverRecipients, subject, bodyLines.join('\n'));
-  }
-};
-
-
-export const resolveUserSession = async (authUser: MinimalAuthUser): Promise<EmployeeUser & { isNewUser?: boolean }> => {
-  const fallbackEmail = authUser.email ?? '';
-
-  if (!hasSupabaseCredentials()) {
-    throw new Error('Supabaseの認証情報が設定されていません。');
-  }
-
-  const buildFallbackUser = (): EmployeeUser => {
-    const fallbackFromDemo =
-      demoState.employeeUsers.find((user) => user.id === authUser.id) ??
-      (fallbackEmail ? demoState.employeeUsers.find((user) => user.email === fallbackEmail) : undefined) ??
-      demoState.employeeUsers[0];
-    if (fallbackFromDemo) {
-      return { ...fallbackFromDemo };
-    }
-    const displayName =
-      authUser.user_metadata?.full_name?.trim() ||
-      authUser.user_metadata?.name?.trim?.() ||
-      fallbackEmail ||
-      'ゲストユーザー';
-    return {
-      id: authUser.id,
-      name: displayName,
-      department: null,
-      title: null,
-      email: fallbackEmail,
-      role: 'user',
-      createdAt: new Date().toISOString(),
-      canUseAnythingAnalysis: true,
-    };
-  };
-
-  try {
-    const supabaseUser = await ensureSupabaseEmployeeUser(authUser, fallbackEmail);
-    if (supabaseUser) {
-      return supabaseUser;
-    }
-  } catch (error) {
-    if (isSupabaseUnavailableError(error)) {
-      logSupabaseUnavailableWarning('ユーザーセッションの解決', error);
-      return buildFallbackUser();
-    }
-    throw error;
-  }
-
-  return buildFallbackUser();
-};
-
-export const getUsers = async (): Promise<EmployeeUser[]> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-
-      // Fetch from users table (actual employee data)
-      const { data: usersData, error: usersError } = await supabaseClient
-        .from('users')
-        .select('id, name, email, employee_number, department_id, position_id, role, can_use_anything_analysis, created_at')
-        .order('name', { ascending: true });
-
-      if (usersError) {
-        if (isSupabaseUnavailableError(usersError)) {
-          logSupabaseUnavailableWarning('ユーザーテーブルの取得', usersError);
-          return deepClone(demoState.employeeUsers);
-        }
-        if (isRelationNotFoundError(usersError) || isColumnNotFoundError(usersError)) {
-          console.warn('usersテーブルが見つかりません。デモデータにフォールバックします。', usersError);
-          return deepClone(demoState.employeeUsers);
-        }
-        throw usersError;
-      }
-
-      if (usersData && usersData.length > 0) {
-        // Map users data to EmployeeUser format
-        const mappedUsers = usersData.map(user => ({
-          id: user.id,
-          name: user.name || '名前未設定',
-          department: null, // Not available in users table
-          title: null, // Not available in users table
-          email: user.email || '',
-          role: (user.role as 'admin' | 'user') || 'user',
-          createdAt: user.created_at || new Date().toISOString(),
-          canUseAnythingAnalysis: user.can_use_anything_analysis ?? true,
-        }));
-        
-        // Sync to demoState for resolveEmployeeUser to work
-        demoState.employeeUsers = mappedUsers;
-        
-        return deepClone(mappedUsers);
-      }
-
-    } catch (error) {
-      if (isRelationNotFoundError(error as PostgrestError) || isColumnNotFoundError(error as PostgrestError)) {
-        console.warn('Supabase のユーザーデータが存在しないため、ユーザー一覧をデモデータで代用します。', error);
-        return deepClone(demoState.employeeUsers);
-      }
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('ユーザーデータの取得', error);
-        return deepClone(demoState.employeeUsers);
-      }
-      throw error;
-    }
-  }
-
-  return deepClone(demoState.employeeUsers);
-};
-
-export const addUser = async (input: {
-  name: string;
-  email: string | null;
-  role: 'admin' | 'user';
-  canUseAnythingAnalysis?: boolean;
-  department?: string | null;
-  title?: string | null;
-}): Promise<EmployeeUser> => {
-  if (hasSupabaseCredentials()) {
-    throw new Error('Supabase環境ではアプリからのユーザー新規追加はサポートされていません。Supabase Authから招待を行ってください。');
-  }
-
-  const now = new Date().toISOString();
-  const newUser: EmployeeUser = {
-    id: uuidv4(),
-    name: input.name,
-    email: input.email ?? '',
-    role: input.role,
-    department: input.department ?? null,
-    title: input.title ?? null,
-    createdAt: now,
-    canUseAnythingAnalysis: input.canUseAnythingAnalysis ?? true,
-  };
-
-  demoState.employeeUsers.push(newUser);
-  demoState.employees.push({
-    id: uuidv4(),
-    name: newUser.name,
-    department: newUser.department ?? '',
-    title: newUser.title ?? '',
-    hireDate: now,
-    salary: 0,
-    createdAt: now,
-  });
-
-  return deepClone(newUser);
-};
-
-export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<EmployeeUser> => {
-  if (hasSupabaseCredentials()) {
-    const supabaseClient = getSupabase();
-    
-    // Update users table (role, email, can_use_anything_analysis)
-    const userUpdates: any = {};
-    if (Object.prototype.hasOwnProperty.call(updates, 'role')) {
-      userUpdates.role = updates.role;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'email')) {
-      userUpdates.email = updates.email;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'canUseAnythingAnalysis')) {
-      userUpdates.can_use_anything_analysis = updates.canUseAnythingAnalysis;
-    }
-
-    if (Object.keys(userUpdates).length > 0) {
-      const { error: userUpdateError } = await supabaseClient
-        .from('users')
-        .update(userUpdates)
-        .eq('id', id);
-
-      if (userUpdateError) {
-        throw userUpdateError;
-      }
-    }
-
-    // Update employees table (name, department, title)
-    const employeeUpdates: Partial<SupabaseEmployeeRow> = {};
-    if (Object.prototype.hasOwnProperty.call(updates, 'name')) {
-      employeeUpdates.name = updates.name ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'department')) {
-      employeeUpdates.department = updates.department ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'title')) {
-      employeeUpdates.title = updates.title ?? null;
-    }
-
-    if (Object.keys(employeeUpdates).length > 0) {
-      const { data: employeeRow, error: employeeSelectError } = await supabaseClient
-        .from('employees')
-        .select('id')
-        .eq('user_id', id)
-        .maybeSingle();
-
-      if (employeeSelectError && !isSupabaseUnavailableError(employeeSelectError)) {
-        throw employeeSelectError;
-      }
-
-      if (employeeRow) {
-        const { error: employeeUpdateError } = await supabaseClient
-          .from('employees')
-          .update(employeeUpdates)
-          .eq('id', employeeRow.id);
-
-        if (employeeUpdateError) {
-          throw employeeUpdateError;
-        }
-      } else {
-        const { error: employeeInsertError } = await supabaseClient
-          .from('employees')
-          .insert({ user_id: id, ...employeeUpdates });
-
-        if (employeeInsertError && !isUniqueViolation(employeeInsertError)) {
-          throw employeeInsertError;
-        }
-      }
-    }
-
-    const refreshed = await fetchSupabaseEmployeeUser(id);
-    if (!refreshed) {
-      throw new Error('ユーザー情報の再取得に失敗しました。');
-    }
-    return refreshed;
-  }
-
-  const target = findById(demoState.employeeUsers, id, 'ユーザー');
-  Object.assign(target, updates);
-
-  const employee = demoState.employees.find(emp => emp.name === target.name);
-  if (employee) {
-    employee.department = updates.department ?? employee.department;
-    employee.title = updates.title ?? employee.title;
-  }
-  return deepClone(target);
-};
-
-export const deleteUser = async (id: string): Promise<void> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      
-      // Step 1: Delete dependent rows from employees table (user_id FK) if exists
-      try {
-        const { error: empDelError } = await supabaseClient
-          .from('employees')
-          .delete()
-          .eq('user_id', id);
-        if (empDelError && !isRelationNotFoundError(empDelError)) {
-          // If table exists and deletion fails, surface the error
-          throw empDelError;
-        }
-      } catch (empErr) {
-        // Log and continue only if it's relation not found; otherwise rethrow
-        if (!isRelationNotFoundError(empErr as any)) {
-          console.error('従業員テーブルの関連削除に失敗:', empErr);
-          throw empErr;
-        }
-      }
-
-      // Step 2: Delete from users table
-      const { error: userDelError } = await supabaseClient
-        .from('users')
-        .delete()
-        .eq('id', id);
-
-      if (userDelError) {
-        console.error('ユーザー削除エラー:', userDelError);
-        throw userDelError;
-      }
-
-      // Also update demoState cache
-      demoState.employeeUsers = demoState.employeeUsers.filter(user => user.id !== id);
-      
-      return;
-    } catch (error) {
-      console.error('ユーザーの削除に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  const removed = demoState.employeeUsers.find(user => user.id === id);
-  demoState.employeeUsers = demoState.employeeUsers.filter(user => user.id !== id);
-  if (removed) {
-    demoState.employees = demoState.employees.filter(emp => emp.name !== removed.name);
-  }
-};
-
-export const getJobs = async (): Promise<Job[]> => deepClone(demoState.jobs);
-
-export const addJob = async (job: Partial<Job>): Promise<Job> => {
-  const now = new Date().toISOString();
-  const newJob: Job = {
-    id: uuidv4(),
-    jobNumber: job.jobNumber ?? Math.floor(Math.random() * 100000),
-    clientName: job.clientName ?? '新規顧客',
-    title: job.title ?? '新規案件',
-    status: job.status ?? demoState.jobs[0]?.status ?? JobStatus.Pending,
-    dueDate: job.dueDate ?? now.substring(0, 10),
-    quantity: job.quantity ?? 1,
-    paperType: job.paperType ?? '',
-    finishing: job.finishing ?? '',
-    details: job.details ?? '',
-    createdAt: now,
-    price: job.price ?? 0,
-    variableCost: job.variableCost ?? 0,
-    invoiceStatus: job.invoiceStatus ?? InvoiceStatus.Uninvoiced,
-    invoicedAt: job.invoicedAt ?? null,
-    paidAt: job.paidAt ?? null,
-    readyToInvoice: job.readyToInvoice ?? false,
-    invoiceId: job.invoiceId ?? null,
-    manufacturingStatus: job.manufacturingStatus,
-    projectId: job.projectId,
-    projectName: job.projectName,
-    userId: job.userId,
-  };
-  demoState.jobs.push(newJob);
-  return deepClone(newJob);
+export const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>): Promise<Job> => {
+    const supabase = getSupabase();
+    const dbJob = jobToDbJob(jobData);
+    const { data, error } = await supabase.from('jobs').insert(dbJob).select().single();
+    if (error) throw new Error(`Failed to add job: ${error.message}`);
+    return dbJobToJob(data);
 };
 
 export const updateJob = async (id: string, updates: Partial<Job>): Promise<Job> => {
-  const job = findById(demoState.jobs, id, '案件');
-  Object.assign(job, updates);
-  return deepClone(job);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('jobs').update(jobToDbJob(updates)).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update job: ${error.message}`);
+    return dbJobToJob(data);
 };
 
 export const deleteJob = async (id: string): Promise<void> => {
-  demoState.jobs = demoState.jobs.filter(job => job.id !== id);
-};
-
-export const updateJobReadyToInvoice = async (id: string, ready: boolean): Promise<Job> => {
-    const job = findById(demoState.jobs, id, '案件');
-    job.readyToInvoice = ready;
-    return deepClone(job);
-};
-
-export const createInvoiceFromJobs = async (jobIds: string[]): Promise<Invoice> => {
-    if (jobIds.length === 0) {
-      throw new Error('請求対象の案件が選択されていません。');
-    }
-    const jobs = jobIds.map(id => findById(demoState.jobs, id, '案件'));
-    const customerName = jobs[0].clientName;
-    if (!jobs.every(job => job.clientName === customerName)) {
-      throw new Error('同じ顧客の案件のみまとめて請求できます。');
-    }
-    
-    const subtotal = jobs.reduce((sum, job) => sum + (job.price ?? 0), 0);
-    const taxAmount = Math.round(subtotal * 0.1);
-    const totalAmount = subtotal + taxAmount;
-    const now = new Date();
-    const invoiceId = uuidv4();
-
-    const items: InvoiceItem[] = jobs.map((job, index) => ({
-        id: uuidv4(),
-        invoiceId,
-        jobId: job.id,
-        description: job.title,
-        quantity: 1,
-        unit: '式',
-        unitPrice: job.price ?? 0,
-        lineTotal: job.price ?? 0,
-        sortIndex: index,
-    }));
-    
-    const invoice: Invoice = {
-        id: invoiceId,
-        invoiceNo: `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${now.getTime()}`,
-        invoiceDate: now.toISOString().slice(0, 10),
-        customerName,
-        subtotalAmount: subtotal,
-        taxAmount: taxAmount,
-        totalAmount: totalAmount,
-        status: 'issued',
-        createdAt: now.toISOString(),
-        items,
-    };
-    
-    demoState.invoices.push(invoice);
-    
-    jobs.forEach(job => {
-        job.invoiceStatus = InvoiceStatus.Invoiced;
-        job.invoiceId = invoiceId;
-        job.invoicedAt = now.toISOString();
-        job.readyToInvoice = false;
-    });
-
-    return deepClone(invoice);
-};
-
-const fetchCustomersFromSupabase = async (): Promise<Customer[] | null> => {
-  try {
-    const supabaseClient = getSupabase();
-    const { data, error } = await supabaseClient
-      .from('customers')
-      .select('*')
-      .order('customer_name', { ascending: true });
-
-    if (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('顧客マスタの取得', error);
-        return null;
-      }
-      throw error;
-    }
-
-    if (!data) return [];
-
-    return data.map((row: any) => ({
-      id: row.id,
-      customerCode: row.customer_code ?? undefined,
-      customerName: row.customer_name,
-      customerNameKana: row.customer_name_kana ?? undefined,
-      representative: row.representative ?? undefined,
-      phoneNumber: row.phone_number ?? undefined,
-      address1: row.address1 ?? undefined,
-      companyContent: row.company_content ?? undefined,
-      annualSales: row.annual_sales ?? undefined,
-      employeesCount: row.employees_count ?? undefined,
-      note: row.note ?? undefined,
-      infoSalesActivity: row.info_sales_activity ?? undefined,
-      infoRequirements: row.info_requirements ?? undefined,
-      infoHistory: row.info_history ?? undefined,
-      createdAt: row.created_at,
-      postNo: row.post_no ?? undefined,
-      address2: row.address2 ?? row.address_2 ?? undefined, // 両方のカラム名に対応
-      fax: row.fax ?? undefined,
-      closingDay: row.closing_day ?? undefined,
-      monthlyPlan: row.monthly_plan ?? undefined,
-      payDay: row.pay_day ?? undefined,
-      recoveryMethod: row.recovery_method ?? undefined,
-      userId: row.user_id ?? undefined,
-      name2: row.name2 ?? undefined,
-      websiteUrl: row.website_url ?? undefined,
-      zipCode: row.zip_code ?? undefined,
-      foundationDate: row.foundation_date ?? undefined,
-      capital: row.capital ?? undefined,
-      customerRank: row.customer_rank ?? undefined,
-      customerDivision: row.customer_division ?? undefined,
-      salesType: row.sales_type ?? undefined,
-      creditLimit: row.credit_limit ?? undefined,
-      payMoney: row.pay_money ?? undefined,
-      bankName: row.bank_name ?? undefined,
-      branchName: row.branch_name ?? undefined,
-      accountNo: row.account_no ?? undefined,
-      salesUserCode: row.sales_user_code ?? undefined,
-      startDate: row.start_date ?? undefined,
-      endDate: row.end_date ?? undefined,
-      drawingDate: row.drawing_date ?? undefined,
-      salesGoal: row.sales_goal ?? undefined,
-      infoSalesIdeas: row.info_sales_ideas ?? undefined,
-      customerContactInfo: row.customer_contact_info ?? undefined,
-      aiAnalysis: row.ai_analysis ?? null,
-    }));
-  } catch (err) {
-    console.error('顧客マスタの取得に失敗しました:', err);
-    return null;
-  }
+    const supabase = getSupabase();
+    const { error } = await supabase.from('jobs').delete().eq('id', id);
+    if (error) throw new Error(`Failed to delete job: ${error.message}`);
 };
 
 export const getCustomers = async (): Promise<Customer[]> => {
-  if (hasSupabaseCredentials()) {
-    const supabaseCustomers = await fetchCustomersFromSupabase();
-    if (supabaseCustomers) {
-      return supabaseCustomers;
-    }
-  }
-  return deepClone(demoState.customers);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+    if (error) throw new Error(`Failed to fetch customers: ${error.message}`);
+    return (data || []).map(dbCustomerToCustomer);
 };
 
-export const addCustomer = async (customer: Partial<Customer>): Promise<Customer> => {
-    const newCustomer: Customer = {
-      id: uuidv4(),
-      customerName: customer.customerName ?? '名称未設定',
-      createdAt: customer.createdAt ?? new Date().toISOString(),
-      representative: customer.representative,
-      phoneNumber: customer.phoneNumber,
-      address1: customer.address1,
-      companyContent: customer.companyContent,
-      annualSales: customer.annualSales,
-      employeesCount: customer.employeesCount,
-      note: customer.note,
-      infoSalesActivity: customer.infoSalesActivity,
-      infoRequirements: customer.infoRequirements,
-      infoHistory: customer.infoHistory,
-      postNo: customer.postNo,
-      address2: customer.address2,
-      fax: customer.fax,
-      closingDay: customer.closingDay,
-      monthlyPlan: customer.monthlyPlan,
-      payDay: customer.payDay,
-      recoveryMethod: customer.recoveryMethod,
-      userId: customer.userId,
-      name2: customer.name2,
-      websiteUrl: customer.websiteUrl,
-      zipCode: customer.zipCode,
-      foundationDate: customer.foundationDate,
-      capital: customer.capital,
-      customerRank: customer.customerRank,
-      customerDivision: customer.customerDivision,
-      salesType: customer.salesType,
-      creditLimit: customer.creditLimit,
-      payMoney: customer.payMoney,
-      bankName: customer.bankName,
-      branchName: customer.branchName,
-      accountNo: customer.accountNo,
-      salesUserCode: customer.salesUserCode,
-      startDate: customer.startDate,
-      endDate: customer.endDate,
-      drawingDate: customer.drawingDate,
-      salesGoal: customer.salesGoal,
-      infoSalesIdeas: customer.infoSalesIdeas,
-      customerContactInfo: customer.customerContactInfo,
-      aiAnalysis: customer.aiAnalysis ?? null,
-    };
-    demoState.customers.push(newCustomer);
-    return deepClone(newCustomer);
+export const addCustomer = async (customerData: Partial<Customer>): Promise<Customer> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('customers').insert(customerToDbCustomer(customerData)).select().single();
+    if (error) throw new Error(`Failed to add customer: ${error.message}`);
+    return dbCustomerToCustomer(data);
 };
 
 export const updateCustomer = async (id: string, updates: Partial<Customer>): Promise<Customer> => {
-    const customer = findById(demoState.customers, id, '顧客');
-    Object.assign(customer, updates);
-    return deepClone(customer);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('customers').update(customerToDbCustomer(updates)).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update customer: ${error.message}`);
+    return dbCustomerToCustomer(data);
 };
 
-export const getJournalEntries = async (): Promise<JournalEntry[]> => deepClone(demoState.journalEntries);
 
-export const addJournalEntry = async (entry: Omit<JournalEntry, 'id'>): Promise<JournalEntry> => {
-    const lastEntry = demoState.journalEntries[demoState.journalEntries.length - 1];
-    const newEntry: JournalEntry = {
-        ...entry,
-        id: (lastEntry?.id ?? 0) + 1,
-    };
-    demoState.journalEntries.push(newEntry);
-    return deepClone(newEntry);
+export const getJournalEntries = async (): Promise<JournalEntry[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('journal_entries').select('*').order('date', { ascending: false });
+    if (error) throw new Error(`Failed to fetch journal entries: ${error.message}`);
+    return data || [];
 };
 
-export const getAccountItems = async (): Promise<AccountItem[]> => {
-  if (hasSupabaseCredentials()) {
-    const supabaseItems = await fetchAccountItemsFromSupabase();
-    if (supabaseItems) {
-      return supabaseItems;
+export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>): Promise<JournalEntry> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('journal_entries').insert(entryData).select().single();
+    if (error) throw new Error(`Failed to add journal entry: ${error.message}`);
+    return data;
+};
+
+export async function getUsers(): Promise<EmployeeUser[]> {
+    const supabase = getSupabase();
+    let data: any[] | null = null;
+    let error: any = null;
+
+    const { data: viewData, error: viewError } = await supabase
+      .from('v_employees_active')
+      .select('user_id, name, department, title, email, role, created_at')
+      .order('name', { ascending: true });
+
+    if (viewError) {
+        console.warn("Could not fetch from 'v_employees_active' view, falling back to 'users' table. Error:", viewError.message);
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, name, email, role, created_at')
+            .order('name', { ascending: true });
+        
+        data = userData?.map(u => ({
+            user_id: u.id, name: u.name, department: null, title: u.role === 'admin' ? '管理者' : 'スタッフ',
+            email: u.email, role: u.role, created_at: u.created_at
+        })) || [];
+        error = userError;
+    } else {
+        data = viewData;
     }
-  }
-  return deepClone(demoState.accountItems);
+  
+    if (error) throw new Error(`Failed to fetch users: ${error.message}`);
+    return (data || []).map(u => ({
+        id: u.user_id, name: u.name, department: u.department, title: u.title,
+        email: u.email, role: u.role, createdAt: u.created_at
+    }));
+}
+
+export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user' }): Promise<void> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('users').insert({ email: userData.email, name: userData.name, role: userData.role }).select().single();
+    if (error) throw new Error(`Failed to add user: ${error.message}. This might fail if the user doesn't exist in auth.users. An invite flow might be required.`);
+    return;
 };
 
-export const getActiveAccountItems = async (): Promise<AccountItem[]> => {
-  const items = await getAccountItems();
-  return items.filter(item => item.isActive);
+export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<void> => {
+    const supabase = getSupabase();
+    const { error: userError } = await supabase.from('users').update({ name: updates.name, email: updates.email, role: updates.role }).eq('id', id);
+    if (userError) throw new Error(`Failed to update user: ${userError.message}`);
+
+    const { error: employeeError } = await supabase.from('employees').update({ department: updates.department, title: updates.title }).eq('user_id', id);
+    if (employeeError) throw new Error(`Failed to update employee details: ${employeeError.message}`);
 };
 
-export const saveAccountItem = async (item: Partial<AccountItem>): Promise<AccountItem> => {
-    if (item.id) {
-      const existing = findById(demoState.accountItems, item.id, '勘定科目');
-      if (item.mqCode) {
-        existing.mqCode = { ...existing.mqCode, ...item.mqCode };
-      }
-      Object.assign(existing, { ...item, mqCode: existing.mqCode, updatedAt: new Date().toISOString() });
-      return deepClone(existing);
-    }
-    const now = new Date().toISOString();
-    const newItem: AccountItem = {
-      id: uuidv4(),
-      code: item.code ?? `ACCT-${demoState.accountItems.length + 1}`,
-      name: item.name ?? '新規勘定科目',
-      categoryCode: item.categoryCode ?? '',
-      isActive: item.isActive ?? true,
-      sortOrder: item.sortOrder ?? demoState.accountItems.length,
-      createdAt: now,
-      updatedAt: now,
-      mqCode: {
-        p: item.mqCode?.p ?? '',
-        v: item.mqCode?.v ?? '',
-        m: item.mqCode?.m ?? '',
-        q: item.mqCode?.q ?? '',
-        f: item.mqCode?.f ?? '',
-        g: item.mqCode?.g ?? '',
-      },
-    };
-    demoState.accountItems.push(newItem);
-    return deepClone(newItem);
-};
-
-export const deactivateAccountItem = async (id: string): Promise<AccountItem> => {
-    const item = findById(demoState.accountItems, id, '勘定科目');
-    item.isActive = false;
-    item.updatedAt = new Date().toISOString();
-    return deepClone(item);
+export const deleteUser = async (userId: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('employees').update({ active: false }).eq('user_id', userId);
+    if (error) throw new Error(`Failed to delete user (deactivate employee): ${error.message}`);
 };
 
 export const getLeads = async (): Promise<Lead[]> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        return data.map((row: any) => ({
-          id: row.id,
-          status: row.status as LeadStatus,
-          createdAt: row.created_at,
-          name: row.name || '',
-          email: row.email || '',
-          phone: row.phone || '',
-          company: row.company || '',
-          source: row.source || '',
-          tags: Array.isArray(row.tags) ? row.tags : [],
-          message: row.message || '',
-          updatedAt: row.updated_at || row.created_at,
-          referrer: row.referrer,
-          referrerUrl: row.referrer_url,
-          landingPageUrl: row.landing_page_url,
-          searchKeywords: row.search_keywords,
-          utmSource: row.utm_source,
-          utmMedium: row.utm_medium,
-          utmCampaign: row.utm_campaign,
-          utmTerm: row.utm_term,
-          utmContent: row.utm_content,
-          userAgent: row.user_agent,
-          ipAddress: row.ip_address,
-          deviceType: row.device_type,
-          browserName: row.browser_name,
-          osName: row.os_name,
-          country: row.country,
-          city: row.city,
-          region: row.region,
-          employees: row.employees,
-          budget: row.budget,
-          timeline: row.timeline,
-          inquiryType: row.inquiry_type,
-          inquiryTypes: Array.isArray(row.inquiry_types) ? row.inquiry_types : [],
-          infoSalesActivity: row.info_sales_activity,
-          score: row.score,
-          aiAnalysisReport: row.ai_analysis_report,
-          aiDraftProposal: row.ai_draft_proposal,
-          aiInvestigation: row.ai_investigation,
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to fetch leads from Supabase:', error);
-    }
-  }
-  
-  return deepClone(demoState.leads);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+    if (error) throw new Error(`Failed to fetch leads: ${error.message}`);
+    return (data || []).map(dbLeadToLead);
 };
 
-export const addLead = async (lead: Partial<Lead>): Promise<Lead> => {
-    const now = new Date().toISOString();
-    const newLead: Lead = {
-      id: uuidv4(),
-      status: lead.status ?? LeadStatus.New,
-      createdAt: now,
-      name: lead.name ?? '無名',
-      email: lead.email ?? '',
-      phone: lead.phone ?? '',
-      company: lead.company ?? '',
-      source: lead.source ?? '',
-      tags: lead.tags ?? [],
-      message: lead.message ?? '',
-      updatedAt: now,
-      referrer: lead.referrer,
-      referrerUrl: lead.referrerUrl,
-      landingPageUrl: lead.landingPageUrl,
-      searchKeywords: lead.searchKeywords,
-      utmSource: lead.utmSource,
-      utmMedium: lead.utmMedium,
-      utmCampaign: lead.utmCampaign,
-      utmTerm: lead.utmTerm,
-      utmContent: lead.utmContent,
-      userAgent: lead.userAgent,
-      ipAddress: lead.ipAddress,
-      deviceType: lead.deviceType,
-      browserName: lead.browserName,
-      osName: lead.osName,
-      country: lead.country,
-      city: lead.city,
-      region: lead.region,
-      employees: lead.employees,
-      budget: lead.budget,
-      timeline: lead.timeline,
-      inquiryType: lead.inquiryType,
-      inquiryTypes: lead.inquiryTypes,
-      infoSalesActivity: lead.infoSalesActivity,
-      score: lead.score,
-      aiAnalysisReport: lead.aiAnalysisReport,
-      aiDraftProposal: lead.aiDraftProposal,
-      aiInvestigation: lead.aiInvestigation,
-    };
-    
-    if (hasSupabaseCredentials()) {
-      try {
-        const supabaseClient = getSupabase();
-        const { data, error } = await supabaseClient
-          .from('leads')
-          .insert({
-            id: newLead.id,
-            status: newLead.status,
-            created_at: newLead.createdAt,
-            name: newLead.name,
-            email: newLead.email,
-            phone: newLead.phone,
-            company: newLead.company,
-            source: newLead.source,
-            tags: newLead.tags,
-            message: newLead.message,
-            updated_at: newLead.updatedAt,
-            referrer: newLead.referrer,
-            referrer_url: newLead.referrerUrl,
-            landing_page_url: newLead.landingPageUrl,
-            search_keywords: newLead.searchKeywords,
-            utm_source: newLead.utmSource,
-            utm_medium: newLead.utmMedium,
-            utm_campaign: newLead.utmCampaign,
-            utm_term: newLead.utmTerm,
-            utm_content: newLead.utmContent,
-            user_agent: newLead.userAgent,
-            ip_address: newLead.ipAddress,
-            device_type: newLead.deviceType,
-            browser_name: newLead.browserName,
-            os_name: newLead.osName,
-            country: newLead.country,
-            city: newLead.city,
-            region: newLead.region,
-            employees: newLead.employees,
-            budget: newLead.budget,
-            timeline: newLead.timeline,
-            inquiry_type: newLead.inquiryType,
-            inquiry_types: newLead.inquiryTypes,
-            info_sales_activity: newLead.infoSalesActivity,
-            score: newLead.score,
-            ai_analysis_report: newLead.aiAnalysisReport,
-            ai_draft_proposal: newLead.aiDraftProposal,
-            ai_investigation: newLead.aiInvestigation,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        if (data) return deepClone(newLead);
-      } catch (error) {
-        console.error('Failed to add lead to Supabase:', error);
-        throw error;
-      }
-    }
-    
-    demoState.leads.push(newLead);
-    return deepClone(newLead);
+export const addLead = async (leadData: Partial<Lead>): Promise<Lead> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('leads').insert(leadToDbLead(leadData)).select().single();
+    if (error) throw new Error(`Failed to add lead: ${error.message}`);
+    return dbLeadToLead(data);
 };
 
 export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Lead> => {
-    const now = new Date().toISOString();
-    
-    if (hasSupabaseCredentials()) {
-      try {
-        const supabaseClient = getSupabase();
-        const updateData: any = {
-          updated_at: now,
-        };
-        
-        if (updates.status !== undefined) updateData.status = updates.status;
-        if (updates.name !== undefined) updateData.name = updates.name;
-        if (updates.email !== undefined) updateData.email = updates.email;
-        if (updates.phone !== undefined) updateData.phone = updates.phone;
-        if (updates.company !== undefined) updateData.company = updates.company;
-        if (updates.source !== undefined) updateData.source = updates.source;
-        if (updates.tags !== undefined) updateData.tags = updates.tags;
-        if (updates.message !== undefined) updateData.message = updates.message;
-        if (updates.infoSalesActivity !== undefined) updateData.info_sales_activity = updates.infoSalesActivity;
-        if (updates.score !== undefined) updateData.score = updates.score;
-        if (updates.aiAnalysisReport !== undefined) updateData.ai_analysis_report = updates.aiAnalysisReport;
-        if (updates.aiDraftProposal !== undefined) updateData.ai_draft_proposal = updates.aiDraftProposal;
-        if (updates.aiInvestigation !== undefined) updateData.ai_investigation = updates.aiInvestigation;
-        
-        const { data, error } = await supabaseClient
-          .from('leads')
-          .update(updateData)
-          .eq('id', id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        
-        if (data) {
-          return {
-            id: data.id,
-            status: data.status as LeadStatus,
-            createdAt: data.created_at,
-            name: data.name || '',
-            email: data.email || '',
-            phone: data.phone || '',
-            company: data.company || '',
-            source: data.source || '',
-            tags: Array.isArray(data.tags) ? data.tags : [],
-            message: data.message || '',
-            updatedAt: data.updated_at || data.created_at,
-            referrer: data.referrer,
-            referrerUrl: data.referrer_url,
-            landingPageUrl: data.landing_page_url,
-            searchKeywords: data.search_keywords,
-            utmSource: data.utm_source,
-            utmMedium: data.utm_medium,
-            utmCampaign: data.utm_campaign,
-            utmTerm: data.utm_term,
-            utmContent: data.utm_content,
-            userAgent: data.user_agent,
-            ipAddress: data.ip_address,
-            deviceType: data.device_type,
-            browserName: data.browser_name,
-            osName: data.os_name,
-            country: data.country,
-            city: data.city,
-            region: data.region,
-            employees: data.employees,
-            budget: data.budget,
-            timeline: data.timeline,
-            inquiryType: data.inquiry_type,
-            inquiryTypes: Array.isArray(data.inquiry_types) ? data.inquiry_types : [],
-            infoSalesActivity: data.info_sales_activity,
-            score: data.score,
-            aiAnalysisReport: data.ai_analysis_report,
-            aiDraftProposal: data.ai_draft_proposal,
-            aiInvestigation: data.ai_investigation,
-          };
-        }
-      } catch (error) {
-        console.error('Failed to update lead in Supabase:', error);
-        throw error;
-      }
-    }
-    
-    const lead = findById(demoState.leads, id, 'リード');
-    Object.assign(lead, updates, { updatedAt: now });
-    return deepClone(lead);
+    const supabase = getSupabase();
+    const { updatedAt, ...restOfUpdates } = updates;
+    const { data, error } = await supabase.from('leads').update(leadToDbLead(restOfUpdates)).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update lead: ${error.message}`);
+    return dbLeadToLead(data);
 };
 
 export const deleteLead = async (id: string): Promise<void> => {
-    if (hasSupabaseCredentials()) {
-      try {
-        const supabaseClient = getSupabase();
-        const { error } = await supabaseClient
-          .from('leads')
-          .delete()
-          .eq('id', id);
-
-        if (error) throw error;
-        return;
-      } catch (error) {
-        console.error('Failed to delete lead from Supabase:', error);
-        throw error;
-      }
-    }
-    
-    demoState.leads = demoState.leads.filter(lead => lead.id !== id);
+    const supabase = getSupabase();
+    const { error } = await supabase.from('leads').delete().eq('id', id);
+    if (error) throw new Error(`Failed to delete lead: ${error.message}`);
 };
 
 export const getApprovalRoutes = async (): Promise<ApprovalRoute[]> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('approval_routes')
-        .select('id, name, route_data, created_at')
-        .order('name', { ascending: true });
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('承認ルートの取得', error);
-          return deepClone(demoState.approvalRoutes);
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          console.warn('approval_routesテーブルが見つかりません。デモデータにフォールバックします。', error);
-          return deepClone(demoState.approvalRoutes);
-        }
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        const routes = data.map(row => ({
-          id: row.id,
-          name: row.name || '名称未設定',
-          routeData: row.route_data || { steps: [] },
-          createdAt: row.created_at || new Date().toISOString(),
-        }));
-        // demoStateを更新してmapApplicationDetailsで使えるようにする
-        demoState.approvalRoutes = routes;
-        return routes;
-      }
-    } catch (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('承認ルートの取得', error);
-        return deepClone(demoState.approvalRoutes);
-      }
-      throw error;
-    }
-  }
-  return deepClone(demoState.approvalRoutes);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('approval_routes').select('*');
+    if (error) throw new Error(`Failed to fetch approval routes: ${error.message}`);
+    return (data || []).map(dbApprovalRouteToApprovalRoute);
 };
-
-export const addApprovalRoute = async (route: Omit<ApprovalRoute, 'id' | 'createdAt'>): Promise<ApprovalRoute> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('approval_routes')
-        .insert({
-          name: route.name,
-          route_data: route.routeData,
-        })
-        .select('id, name, route_data, created_at')
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      if (data) {
-        return {
-          id: data.id,
-          name: data.name,
-          routeData: data.route_data,
-          createdAt: data.created_at,
-        };
-      }
-    } catch (error) {
-      console.error('承認ルートの作成に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to demo data
-  const newRoute: ApprovalRoute = {
-    id: uuidv4(),
-    name: route.name,
-    routeData: deepClone(route.routeData),
-    createdAt: new Date().toISOString(),
-  };
-  demoState.approvalRoutes.push(newRoute);
-  return deepClone(newRoute);
+export const addApprovalRoute = async (routeData: any): Promise<ApprovalRoute> => {
+    const supabase = getSupabase();
+    const dbRouteData = { name: routeData.name, route_data: { steps: routeData.routeData.steps.map((s:any) => ({ approver_id: s.approverId })) } };
+    const { data, error } = await supabase.from('approval_routes').insert(dbRouteData).select().single();
+    if (error) throw new Error(`Failed to add approval route: ${error.message}`);
+    return dbApprovalRouteToApprovalRoute(data);
 };
-
 export const updateApprovalRoute = async (id: string, updates: Partial<ApprovalRoute>): Promise<ApprovalRoute> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const updateData: any = {};
-      if (updates.name) updateData.name = updates.name;
-      if (updates.routeData) updateData.route_data = updates.routeData;
-
-      const { data, error } = await supabaseClient
-        .from('approval_routes')
-        .update(updateData)
-        .eq('id', id)
-        .select('id, name, route_data, created_at')
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      if (data) {
-        return {
-          id: data.id,
-          name: data.name,
-          routeData: data.route_data,
-          createdAt: data.created_at,
-        };
-      }
-    } catch (error) {
-      console.error('承認ルートの更新に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to demo data
-  const route = findById(demoState.approvalRoutes, id, '承認ルート');
-  if (updates.routeData) {
-    route.routeData = deepClone(updates.routeData);
-  }
-  if (updates.name) {
-    route.name = updates.name;
-  }
-  return deepClone(route);
+    const supabase = getSupabase();
+    const dbUpdates = { name: updates.name, route_data: { steps: updates.routeData!.steps.map(s => ({ approver_id: s.approverId }))}};
+    const { data, error } = await supabase.from('approval_routes').update(dbUpdates).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update approval route: ${error.message}`);
+    return dbApprovalRouteToApprovalRoute(data);
 };
-
 export const deleteApprovalRoute = async (id: string): Promise<void> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { error } = await supabaseClient
-        .from('approval_routes')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        throw error;
-      }
-      return;
-    } catch (error) {
-      console.error('承認ルートの削除に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to demo data
-  demoState.approvalRoutes = demoState.approvalRoutes.filter(route => route.id !== id);
+    const supabase = getSupabase();
+    const { error } = await supabase.from('approval_routes').delete().eq('id', id);
+    if (error) throw new Error(`Failed to delete approval route: ${error.message}`);
 };
 
-export const getPurchaseOrders = async (): Promise<PurchaseOrder[]> => deepClone(demoState.purchaseOrders);
-
-export const addPurchaseOrder = async (order: Partial<PurchaseOrder>): Promise<PurchaseOrder> => {
-    const newOrder: PurchaseOrder = {
-      id: uuidv4(),
-      supplierName: order.supplierName ?? '仕入先未設定',
-      itemName: order.itemName ?? '品目未設定',
-      orderDate: order.orderDate ?? new Date().toISOString().slice(0, 10),
-      quantity: order.quantity ?? 0,
-      unitPrice: order.unitPrice ?? 0,
-      status: order.status ?? PurchaseOrderStatus.Ordered,
-    };
-    demoState.purchaseOrders.push(newOrder);
-    return deepClone(newOrder);
-};
-
-export const getInventoryItems = async (): Promise<InventoryItem[]> => deepClone(demoState.inventoryItems);
-
-export const addInventoryItem = async (item: Partial<InventoryItem>): Promise<InventoryItem> => {
-    const newItem: InventoryItem = {
-      id: uuidv4(),
-      name: item.name ?? '新規資材',
-      category: item.category ?? 'その他',
-      quantity: item.quantity ?? 0,
-      unit: item.unit ?? '個',
-      unitPrice: item.unitPrice ?? 0,
-    };
-    demoState.inventoryItems.push(newItem);
-    return deepClone(newItem);
-};
-
-export const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>): Promise<InventoryItem> => {
-    const item = findById(demoState.inventoryItems, id, '在庫品目');
-    Object.assign(item, updates);
-    return deepClone(item);
-};
-
-export const getEmployees = async (): Promise<Employee[]> => deepClone(demoState.employees);
-
-export const getBugReports = async (): Promise<BugReport[]> => deepClone(demoState.bugReports);
-
-export const addBugReport = async (report: Omit<BugReport, 'id' | 'createdAt' | 'status'> & { status?: BugReportStatus }): Promise<BugReport> => {
-    const newReport: BugReport = {
-      id: uuidv4(),
-      reporterName: report.reporterName,
-      reportType: report.reportType,
-      summary: report.summary,
-      description: report.description,
-      status: report.status ?? BugReportStatus.Open,
-      createdAt: new Date().toISOString(),
-    };
-    demoState.bugReports.push(newReport);
-    return deepClone(newReport);
-};
-
-export const updateBugReport = async (id: string, updates: Partial<BugReport>): Promise<BugReport> => {
-    const report = findById(demoState.bugReports, id, 'バグ報告');
-    Object.assign(report, updates);
-    return deepClone(report);
-};
-
-export const getEstimates = async (): Promise<Estimate[]> => deepClone(demoState.estimates);
-
-export const addEstimate = async (estimate: Partial<Estimate>): Promise<Estimate> => {
-    const now = new Date().toISOString();
-    const totals = calculateEstimateTotals(estimate.items ?? [], estimate.taxInclusive ?? false);
-    const newEstimate: Estimate = {
-      id: uuidv4() as UUID,
-      estimateNumber: estimate.estimateNumber ?? nextEstimateNumber++,
-      customerName: estimate.customerName ?? '顧客未設定',
-      title: estimate.title ?? '新規見積',
-      items: totals.items,
-      subtotal: totals.subtotal,
-      taxTotal: totals.taxTotal,
-      grandTotal: totals.grandTotal,
-      deliveryDate: estimate.deliveryDate ?? now.slice(0, 10),
-      paymentTerms: estimate.paymentTerms ?? '末締め翌月末払い',
-      deliveryTerms: estimate.deliveryTerms,
-      deliveryMethod: estimate.deliveryMethod ?? 'メール送付',
-      notes: estimate.notes ?? '',
-      status: estimate.status ?? EstimateStatus.Draft,
-      version: estimate.version ?? 1,
-      userId: estimate.userId ?? (demoState.employeeUsers[0]?.id || 'user-001'),
-      user: estimate.user ?? demoState.employeeUsers.find(u => u.id === estimate.userId) ?? demoState.employeeUsers[0],
-      createdAt: now,
-      updatedAt: now,
-      projectId: estimate.projectId,
-      projectName: estimate.projectName,
-      taxInclusive: estimate.taxInclusive ?? false,
-      pdfUrl: estimate.pdfUrl,
-      tracking: estimate.tracking,
-      postal: estimate.postal,
-    };
-    demoState.estimates.push(newEstimate);
-    return deepClone(newEstimate);
-};
-
-export const updateEstimate = async (id: UUID, updates: Partial<Estimate>): Promise<Estimate> => {
-    const estimate = findById(demoState.estimates, id, '見積');
-
-    if (updates.items || typeof updates.taxInclusive !== 'undefined') {
-      const totals = calculateEstimateTotals(updates.items ?? estimate.items, updates.taxInclusive ?? estimate.taxInclusive ?? false);
-      estimate.items = totals.items;
-      estimate.subtotal = totals.subtotal;
-      estimate.taxTotal = totals.taxTotal;
-      estimate.grandTotal = totals.grandTotal;
-    }
-    if (updates.postal) {
-      estimate.postal = { ...(estimate.postal ?? { method: 'inhouse_print', status: 'preparing', toName: estimate.customerName }), ...updates.postal };
-    }
-    if (updates.tracking) {
-      estimate.tracking = { ...(estimate.tracking ?? { trackId: uuidv4(), mailStatus: 'unopened', totalOpens: 0, totalClicks: 0 }), ...updates.tracking };
-    }
-
-    Object.assign(estimate, updates, { updatedAt: new Date().toISOString() });
-    return deepClone(estimate);
-};
-
-export const savePostal = async (estimateId: UUID, updates: Partial<PostalInfo>): Promise<Estimate> => {
-    const estimate = findById(demoState.estimates, estimateId, '見積');
-    const nextPostal: PostalInfo = {
-      method: estimate.postal?.method ?? 'inhouse_print',
-      status: estimate.postal?.status ?? 'preparing',
-      toName: estimate.postal?.toName ?? estimate.customerName,
-      ...estimate.postal,
-      ...updates,
-    };
-    if (nextPostal.toName && !nextPostal.labelPreviewSvg) {
-      nextPostal.labelPreviewSvg = renderPostalLabelSvg(nextPostal.toName, nextPostal.toCompany);
-    }
-    estimate.postal = nextPostal;
-    estimate.updatedAt = new Date().toISOString();
-    return deepClone(estimate);
-};
-
-export const saveTracking = async (estimateId: UUID, updates: Partial<TrackingInfo>): Promise<Estimate> => {
-    const estimate = findById(demoState.estimates, estimateId, '見積');
-    const tracking: TrackingInfo = {
-      trackId: estimate.tracking?.trackId ?? uuidv4(),
-      mailStatus: updates.mailStatus ?? estimate.tracking?.mailStatus ?? 'unopened',
-      totalOpens: updates.totalOpens ?? estimate.tracking?.totalOpens ?? 0,
-      totalClicks: updates.totalClicks ?? estimate.tracking?.totalClicks ?? 0,
-      lastEventAt: updates.lastEventAt ?? estimate.tracking?.lastEventAt,
-      firstOpenedAt: updates.firstOpenedAt ?? estimate.tracking?.firstOpenedAt,
-    };
-    estimate.tracking = tracking;
-    estimate.updatedAt = new Date().toISOString();
-    return deepClone(estimate);
-};
-
-export const renderPostalLabelSvg = (toName: string, toCompany?: string): string => {
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250">
-<rect width="400" height="250" fill="#ffffff" stroke="#1f2937" stroke-width="2" rx="12" ry="12" />
-<text x="200" y="90" font-size="28" text-anchor="middle" font-family="'Noto Sans JP', sans-serif">${toCompany ?? ''}</text>
-<text x="200" y="140" font-size="36" text-anchor="middle" font-family="'Noto Sans JP', sans-serif" font-weight="bold">${toName} 様</text>
-<text x="200" y="190" font-size="16" text-anchor="middle" fill="#4b5563">印刷DXソリューションズ株式会社</text>
-</svg>`;
-};
-
-export const getApplications = async (_currentUser: EmployeeUser | null): Promise<ApplicationWithDetails[]> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
+export const getApplications = async (currentUser: User | null): Promise<ApplicationWithDetails[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
         .from('applications')
-        .select('*')
+        .select(`*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`)
+        .or(`applicant_id.eq.${currentUser?.id},approver_id.eq.${currentUser?.id}`)
         .order('created_at', { ascending: false });
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('申請一覧の取得', error);
-          return deepClone(demoState.applications.map(mapApplicationDetails));
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          console.warn('applicationsテーブルが見つかりません。デモデータにフォールバックします。', error);
-          return deepClone(demoState.applications.map(mapApplicationDetails));
-        }
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        const applications: Application[] = data.map(row => ({
-          id: row.id,
-          applicantId: row.applicant_id,
-          applicationCodeId: row.application_code_id,
-          formData: row.form_data,
-          status: row.status,
-          submittedAt: row.submitted_at,
-          approvedAt: row.approved_at,
-          rejectedAt: row.rejected_at,
-          currentLevel: row.current_level,
-          approverId: row.approver_id,
-          rejectionReason: row.rejection_reason,
-          approvalRouteId: row.approval_route_id,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }));
         
-        return deepClone(applications.map(mapApplicationDetails));
-      }
-    } catch (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('申請一覧の取得', error);
-        return deepClone(demoState.applications.map(mapApplicationDetails));
-      }
-      throw error;
-    }
-  }
-  return deepClone(demoState.applications.map(mapApplicationDetails));
-};
-
-export const getApplicationEmailNotifications = async (): Promise<ApplicationNotificationEmail[]> => {
-    return deepClone(demoState.applicationEmailNotifications);
-};
-
-interface SubmissionPayload {
-  applicationCodeId: string;
-  formData: any;
-  approvalRouteId: string;
-  status?: Application['status'];
-  submittedAt?: string | null;
-  approverId?: string | null;
-  currentLevel?: number;
-  rejectionReason?: string | null;
-}
-
-export const submitApplication = async (payload: SubmissionPayload, applicantId: string): Promise<ApplicationWithDetails> => {
-  const now = new Date().toISOString();
-  const status = payload.status ?? 'pending_approval';
-  const currentLevel = payload.currentLevel ?? (status === 'pending_approval' ? 1 : 0);
-
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      
-      // Resolve application_code_id: if it's not a UUID, look it up by code
-      let resolvedApplicationCodeId = payload.applicationCodeId;
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      
-      if (!uuidRegex.test(payload.applicationCodeId)) {
-        // It's a code, not a UUID - look up the actual ID
-        // Extract the actual code (e.g., "code-lev" -> "LEV", "code-exp" -> "EXP")
-        let searchCode = payload.applicationCodeId;
-        if (searchCode.startsWith('code-')) {
-          searchCode = searchCode.substring(5).toUpperCase(); // Remove "code-" prefix and uppercase
-        }
-        
-        const { data: codeData, error: codeError } = await supabaseClient
-          .from('application_codes')
-          .select('id')
-          .eq('code', searchCode)
-          .single();
-        
-        if (codeError || !codeData) {
-          throw new Error(`申請コード「${payload.applicationCodeId}」(検索: ${searchCode})が見つかりません`);
-        }
-        
-        resolvedApplicationCodeId = codeData.id;
-      }
-      
-      // Get approval route to determine first approver
-      const { data: routeData, error: routeError } = await supabaseClient
-        .from('approval_routes')
-        .select('route_data')
-        .eq('id', payload.approvalRouteId)
-        .single();
-
-      if (routeError) {
-        throw new Error(`承認ルートの取得に失敗しました: ${routeError.message}`);
-      }
-
-      const approverId = payload.approverId ?? routeData?.route_data?.steps?.[currentLevel - 1]?.approverId ?? null;
-
-      // Insert application
-      const { data, error } = await supabaseClient
-        .from('applications')
-        .insert({
-          applicant_id: applicantId,
-          application_code_id: resolvedApplicationCodeId,
-          form_data: payload.formData,
-          status,
-          submitted_at: status === 'draft' ? null : (payload.submittedAt ?? now),
-          approved_at: null,
-          rejected_at: null,
-          current_level: currentLevel,
-          approver_id: approverId,
-          rejection_reason: payload.rejectionReason ?? null,
-          approval_route_id: payload.approvalRouteId,
-        })
-        .select('*')
-        .single();
-
-      if (error) {
-        console.error('Supabase INSERT error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw error;
-      }
-
-      if (data) {
-        const application: Application = {
-          id: data.id,
-          applicantId: data.applicant_id,
-          applicationCodeId: data.application_code_id,
-          formData: data.form_data,
-          status: data.status,
-          submittedAt: data.submitted_at,
-          approvedAt: data.approved_at,
-          rejectedAt: data.rejected_at,
-          currentLevel: data.current_level,
-          approverId: data.approver_id,
-          rejectionReason: data.rejection_reason,
-          approvalRouteId: data.approval_route_id,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-        
-        // Note: Email notifications would need to be implemented separately
-        // await createApplicationNotificationEmails(application);
-        
-        return deepClone(mapApplicationDetails(application));
-      }
-    } catch (error) {
-      console.error('申請の提出に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to demo data
-  const route = findById(demoState.approvalRoutes, payload.approvalRouteId, '承認ルート');
-  const application: Application = {
-    id: uuidv4(),
-    applicantId,
-    applicationCodeId: payload.applicationCodeId,
-    formData: payload.formData,
-    status,
-    submittedAt: status === 'draft' ? null : (payload.submittedAt ?? now),
-    approvedAt: null,
-    rejectedAt: null,
-    currentLevel,
-    approverId: payload.approverId ?? route.routeData.steps[currentLevel - 1]?.approverId ?? null,
-    rejectionReason: payload.rejectionReason ?? null,
-    approvalRouteId: payload.approvalRouteId,
-    createdAt: now,
-    updatedAt: now,
-  };
-  demoState.applications.push(application);
-  await createApplicationNotificationEmails(application);
-  return deepClone(mapApplicationDetails(application));
-};
-
-// 経費申請承認後の会計処理
-const processExpenseApproval = async (application: ApplicationWithDetails) => {
-  const formData = application.formData as any;
-  const details = formData.details || [];
-  
-  // 各明細行から仕訳を生成
-  for (const detail of details) {
-    if (!detail.accountItemId || !detail.amount) continue;
-    
-    const paymentDate = detail.paymentDate || new Date().toISOString().split('T')[0];
-    
-    // 仕訳エントリーを生成
-    const journalEntry: Omit<JournalEntry, 'id'> = {
-      date: paymentDate,
-      account: detail.accountItemId,
-      debit: detail.amount,
-      credit: 0,
-      description: detail.description || '経費精算',
-    };
-    
-    await addJournalEntry(journalEntry);
-    
-    // 貸方（未払金）の仕訳も追加
-    const creditEntry: Omit<JournalEntry, 'id'> = {
-      date: paymentDate,
-      account: '2110', // 未払金
-      debit: 0,
-      credit: detail.amount,
-      description: detail.description || '経費精算',
-    };
-    
-    await addJournalEntry(creditEntry);
-    
-    // MQ計算用のジョブを追加（mqCodeが完全な場合）
-    if (detail.mqCode && detail.mqCode.p && detail.mqCode.v && detail.mqCode.m && detail.mqCode.q) {
-      const mqJob = {
-        id: `mq_${application.id}_${detail.id}`,
-        applicationId: application.id,
-        detailId: detail.id,
-        mqCode: detail.mqCode,
-        amount: detail.amount,
-        paymentDate: paymentDate,
-        status: 'pending' as const,
-        createdAt: new Date().toISOString(),
-      };
-      
-      // MQジョブキューに追加（実装されている場合）
-      console.log('[MQ計算] ジョブ追加:', mqJob);
-    }
-  }
-  
-  console.log(`[経費承認] ${details.length}件の明細を処理しました`);
-};
-
-export const approveApplication = async (application: ApplicationWithDetails, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
-  const now = new Date().toISOString();
-  
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('applications')
-        .update({
-          status: 'approved',
-          approved_at: now,
-          rejected_at: null,
-          rejection_reason: null,
-          current_level: (application.currentLevel ?? 0) + 1,
-          approver_id: approver.id,
-          updated_at: now,
-        })
-        .eq('id', application.id)
-        .select('*')
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      if (data) {
-        const updatedApp: Application = {
-          id: data.id,
-          applicantId: data.applicant_id,
-          applicationCodeId: data.application_code_id,
-          formData: data.form_data,
-          status: data.status,
-          submittedAt: data.submitted_at,
-          approvedAt: data.approved_at,
-          rejectedAt: data.rejected_at,
-          currentLevel: data.current_level,
-          approverId: data.approver_id,
-          rejectionReason: data.rejection_reason,
-          approvalRouteId: data.approval_route_id,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-        
-        // 経費申請の場合は会計処理を実行
-        const appDetails = mapApplicationDetails(updatedApp);
-        if (appDetails.applicationCode?.code === 'EXP' || appDetails.applicationCode?.code === 'TRP') {
-          await processExpenseApproval(appDetails);
-        }
-        
-        return deepClone(appDetails);
-      }
-      
-      throw new Error('承認処理後のデータ取得に失敗しました');
-    } catch (error) {
-      console.error('申請の承認に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to demo data
-  const stored = findById(demoState.applications, application.id, '申請');
-  stored.status = 'approved';
-  stored.approvedAt = now;
-  stored.rejectedAt = null;
-  stored.rejectionReason = null;
-  stored.currentLevel = (stored.currentLevel ?? 0) + 1;
-  stored.approverId = approver.id;
-  stored.updatedAt = now;
-  await createApplicationStatusChangeEmails(stored);
-  
-  // 経費申請の場合は会計処理を実行
-  const appDetails = mapApplicationDetails(stored);
-  if (appDetails.applicationCode?.code === 'EXP' || appDetails.applicationCode?.code === 'TRP') {
-    await processExpenseApproval(appDetails);
-  }
-  
-  return deepClone(appDetails);
-};
-
-export const rejectApplication = async (application: ApplicationWithDetails, reason: string, approver: EmployeeUser): Promise<ApplicationWithDetails> => {
-  const now = new Date().toISOString();
-  
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('applications')
-        .update({
-          status: 'rejected',
-          rejected_at: now,
-          approved_at: null,
-          rejection_reason: reason,
-          approver_id: approver.id,
-          updated_at: now,
-        })
-        .eq('id', application.id)
-        .select('*')
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      if (data) {
-        const updatedApp: Application = {
-          id: data.id,
-          applicantId: data.applicant_id,
-          applicationCodeId: data.application_code_id,
-          formData: data.form_data,
-          status: data.status,
-          submittedAt: data.submitted_at,
-          approvedAt: data.approved_at,
-          rejectedAt: data.rejected_at,
-          currentLevel: data.current_level,
-          approverId: data.approver_id,
-          rejectionReason: data.rejection_reason,
-          approvalRouteId: data.approval_route_id,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-        return deepClone(mapApplicationDetails(updatedApp));
-      }
-      
-      throw new Error('否認処理後のデータ取得に失敗しました');
-    } catch (error) {
-      console.error('申請の否認に失敗しました:', error);
-      throw error;
-    }
-  }
-
-  // Fallback to demo data
-  const stored = findById(demoState.applications, application.id, '申請');
-  stored.status = 'rejected';
-  stored.rejectedAt = now;
-  stored.approvedAt = null;
-  stored.rejectionReason = reason;
-  stored.approverId = approver.id;
-  stored.updatedAt = now;
-  await createApplicationStatusChangeEmails(stored);
-  return deepClone(mapApplicationDetails(stored));
-};
-
-export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('application_codes')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('申請種別の取得', error);
-          return deepClone(demoState.applicationCodes);
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          console.warn('application_codesテーブルが見つかりません。デモデータにフォールバックします。', error);
-          return deepClone(demoState.applicationCodes);
-        }
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        const codes: ApplicationCode[] = data.map(row => ({
-          id: row.id,
-          code: row.code,
-          name: row.name,
-          description: row.description || '',
-          createdAt: row.created_at,
-        }));
-        
-        // Update demoState cache
-        demoState.applicationCodes = codes;
-        
-        return deepClone(codes);
-      }
-    } catch (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('申請種別の取得', error);
-        return deepClone(demoState.applicationCodes);
-      }
-      throw error;
-    }
-  }
-  return deepClone(demoState.applicationCodes);
-};
-
-export const getInvoices = async (): Promise<Invoice[]> => deepClone(demoState.invoices);
-
-export const getProjects = async (): Promise<Project[]> => deepClone(projects);
-
-type AttachmentInput = { file: File | { name: string; type?: string }; category?: string };
-
-export const addProject = async (data: Partial<Project>, attachments: AttachmentInput[] = []): Promise<Project> => {
-    const now = new Date().toISOString();
-    const projectId = uuidv4();
-    const projectAttachments: ProjectAttachment[] = attachments.map((item, index) => ({
-      id: uuidv4(),
-      projectId,
-      fileName: (item.file as File).name ?? (item.file as { name: string }).name ?? `attachment-${index + 1}`,
-      filePath: `project_files/${projectId}/${index + 1}`,
-      fileUrl: `https://example.com/project_files/${projectId}/${index + 1}`,
-      mimeType: (item.file as File).type ?? (item.file as { type?: string }).type ?? 'application/octet-stream',
-      category: item.category ?? 'その他',
-      createdAt: now,
+    if (error) throw new Error(`Failed to fetch applications: ${error.message}`);
+    return (data || []).map(app => ({
+        id: app.id, applicantId: app.applicant_id, applicationCodeId: app.application_code_id, formData: app.form_data, status: app.status,
+        submittedAt: app.submitted_at, approvedAt: app.approved_at, rejectedAt: app.rejected_at, currentLevel: app.current_level,
+        approverId: app.approver_id, rejectionReason: app.rejection_reason, approvalRouteId: app.approval_route_id,
+        createdAt: app.created_at, updatedAt: app.updated_at,
+        applicant: app.applicant,
+        applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
+        approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
     }));
+};
+export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('application_codes').select('*');
+    if (error) throw new Error(`Failed to fetch application codes: ${error.message}`);
+    return (data || []).map(dbApplicationCodeToApplicationCode);
+};
+export const submitApplication = async (appData: any, applicantId: string): Promise<Application> => {
+    const supabase = getSupabase();
 
-    const newProject: Project = {
-      id: projectId,
-      projectName: data.projectName ?? '新規案件',
-      customerName: data.customerName ?? '顧客未設定',
-      customerId: data.customerId,
-      status: data.status ?? ProjectStatus.New,
-      overview: data.overview ?? '',
-      extracted_details: data.extracted_details ?? '',
-      createdAt: now,
-      updatedAt: now,
-      userId: data.userId ?? demoState.employeeUsers[0]?.id ?? 'user-001',
-      attachments: projectAttachments,
-      relatedEstimates: [],
-      relatedJobs: [],
-    };
-    projects.push(newProject);
-    return deepClone(newProject);
+    const { data: routeData, error: routeError } = await supabase.from('approval_routes').select('route_data').eq('id', appData.approvalRouteId).single();
+    if (routeError) throw new Error(`承認ルートの取得に失敗しました: ${routeError.message}`);
+    if (!routeData?.route_data?.steps || routeData.route_data.steps.length === 0) throw new Error('選択された承認ルートに承認者が設定されていません。');
+
+    const firstApproverId = routeData.route_data.steps[0].approver_id;
+
+    const { data, error } = await supabase.from('applications').insert({
+        application_code_id: appData.applicationCodeId, form_data: appData.formData, approval_route_id: appData.approvalRouteId,
+        applicant_id: applicantId, status: 'pending_approval', submitted_at: new Date().toISOString(), current_level: 1, approver_id: firstApproverId,
+    }).select().single();
+
+    if (error) throw new Error(`Failed to submit application: ${error.message}`);
+
+    return data;
+};
+export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
+    return Promise.resolve();
+};
+export const rejectApplication = async (app: ApplicationWithDetails, reason: string, currentUser: User): Promise<void> => {
+    return Promise.resolve();
 };
 
-export const getDepartments = async (): Promise<Department[]> => {
-  if (hasSupabaseCredentials()) {
-    const supabaseDepartments = await fetchDepartmentsFromSupabase();
-    if (supabaseDepartments) {
-      return supabaseDepartments;
+export const getAccountItems = async (): Promise<AccountItem[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('account_items').select('*');
+    if (error) throw new Error(`Failed to fetch account items: ${error.message}`);
+    return (data || []).map(d => ({ ...d, sortOrder: d.sort_order, categoryCode: d.category_code, createdAt: d.created_at, updatedAt: d.updated_at, isActive: d.is_active }));
+};
+
+export const getActiveAccountItems = async (): Promise<MasterAccountItem[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('account_items').select('id, code, name, category_code').eq('is_active', true).order('sort_order', { nullsFirst: false }).order('code');
+    if (error) throw new Error(`Failed to fetch active account items: ${error.message || JSON.stringify(error)}`);
+    return (data || []).map(d => ({ ...d, id: d.id, code: d.code, name: d.name, categoryCode: d.category_code }));
+};
+
+export const saveAccountItem = async (item: Partial<AccountItem>): Promise<void> => {
+    const supabase = getSupabase();
+    const dbItem = { code: item.code, name: item.name, category_code: item.categoryCode, is_active: item.isActive, sort_order: item.sortOrder };
+    const { error } = await supabase.from('account_items').upsert({ id: item.id, ...dbItem });
+    if (error) throw new Error(`勘定科目の保存に失敗しました: ${error.message}`);
+};
+
+export const deactivateAccountItem = async (id: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('account_items').update({ is_active: false }).eq('id', id);
+    if (error) throw new Error(`勘定科目の無効化に失敗しました: ${error.message}`);
+};
+
+export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
+    const supabase = getSupabase();
+    let query = supabase.from('payment_recipients').select('id, recipient_code, company_name, recipient_name').order('company_name', { nullsFirst: false }).order('recipient_name', { nullsFirst: false });
+
+    if (q && q.trim()) {
+        query = query.ilike('company_name', `%${q}%`);
     }
-  }
-  return deepClone(demoState.departments);
+    const { data, error } = await query.limit(1000);
+    if (error) throw new Error(`Failed to fetch payment recipients: ${error.message || JSON.stringify(error)}`);
+    return (data || []).map(d => ({ id: d.id, recipientCode: d.recipient_code, companyName: d.company_name, recipientName: d.recipient_name }));
 };
 
-export const saveDepartment = async (department: Partial<Department>): Promise<Department> => {
-    if (department.id) {
-      const existing = findById(demoState.departments, department.id, '部署');
-      Object.assign(existing, department);
-      return deepClone(existing);
-    }
-    const newDepartment: Department = {
-      id: uuidv4(),
-      name: department.name ?? '新規部署',
-    };
-    demoState.departments.push(newDepartment);
-    return deepClone(newDepartment);
-};
-
-export const deleteDepartment = async (id: string): Promise<void> => {
-    demoState.departments = demoState.departments.filter(dep => dep.id !== id);
-};
-
-export const getPaymentRecipients = async (): Promise<PaymentRecipient[]> => {
-  if (hasSupabaseCredentials()) {
-    const supabaseRecipients = await fetchPaymentRecipientsFromSupabase();
-    if (supabaseRecipients) {
-      return supabaseRecipients;
-    }
-  }
-  return deepClone(demoState.paymentRecipients);
-};
-
-export const savePaymentRecipient = async (recipient: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
-    if (recipient.id) {
-        const existing = findById(demoState.paymentRecipients, recipient.id, '支払先');
-        if (recipient.allocationTargets) {
-          existing.allocationTargets = recipient.allocationTargets.map(target => ({ ...target, id: target.id ?? uuidv4() }));
-        }
-        Object.assign(existing, recipient, { isActive: recipient.isActive ?? existing.isActive ?? true });
-        return deepClone(existing);
-    }
-    const newRecipient: PaymentRecipient = {
-        id: uuidv4(),
-        recipientCode: recipient.recipientCode ?? `V${String(demoState.paymentRecipients.length + 1).padStart(3, '0')}`,
-        companyName: recipient.companyName ?? '',
-        recipientName: recipient.recipientName ?? '',
-        bankName: recipient.bankName ?? '',
-        bankBranch: recipient.bankBranch ?? '',
-        bankAccountNumber: recipient.bankAccountNumber ?? '',
-        isActive: recipient.isActive ?? true,
-        allocationTargets: (recipient.allocationTargets ?? []).map(target => ({ ...target, id: target.id ?? uuidv4() })),
-    };
-    demoState.paymentRecipients.push(newRecipient);
-    return deepClone(newRecipient);
+export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<void> => {
+    const supabase = getSupabase();
+    const dbItem = { recipient_code: item.recipientCode, company_name: item.companyName, recipient_name: item.recipientName };
+    const { error } = await supabase.from('payment_recipients').upsert({ id: item.id, ...dbItem });
+    if (error) throw new Error(`支払先の保存に失敗しました: ${error.message}`);
 };
 
 export const deletePaymentRecipient = async (id: string): Promise<void> => {
-    demoState.paymentRecipients = demoState.paymentRecipients.filter(rec => rec.id !== id);
+    const supabase = getSupabase();
+    const { error } = await supabase.from('payment_recipients').delete().eq('id', id);
+    if (error) throw new Error(`支払先の削除に失敗しました: ${error.message}`);
 };
 
 export const getAllocationDivisions = async (): Promise<AllocationDivision[]> => {
-  if (hasSupabaseCredentials()) {
-    const supabaseDivisions = await fetchAllocationDivisionsFromSupabase();
-    if (supabaseDivisions) {
-      return supabaseDivisions;
-    }
-  }
-  return deepClone(allocationDivisions);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('allocation_divisions').select('*').order('name');
+    if (error) throw new Error(`振分区分の取得に失敗しました: ${error.message}`);
+    return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
 };
 
-export const saveAllocationDivision = async (division: Partial<AllocationDivision>): Promise<AllocationDivision> => {
-    if (division.id) {
-        const existing = findById(allocationDivisions, division.id, '振分区分');
-        Object.assign(existing, division);
-        return deepClone(existing);
-    }
-    const newDivision: AllocationDivision = {
-        id: uuidv4(),
-        name: division.name ?? '新規振分区分',
-        isActive: division.isActive ?? true,
-        createdAt: new Date().toISOString(),
-    };
-    allocationDivisions.push(newDivision);
-    return deepClone(newDivision);
+export const saveAllocationDivision = async (item: Partial<AllocationDivision>): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('allocation_divisions').upsert({ id: item.id, name: item.name, is_active: item.isActive });
+    if (error) throw new Error(`振分区分の保存に失敗しました: ${error.message}`);
 };
 
 export const deleteAllocationDivision = async (id: string): Promise<void> => {
-    allocationDivisions = allocationDivisions.filter(div => div.id !== id);
+    const supabase = getSupabase();
+    const { error } = await supabase.from('allocation_divisions').delete().eq('id', id);
+    if (error) throw new Error(`振分区分の削除に失敗しました: ${error.message}`);
+};
+
+export const getDepartments = async (): Promise<Department[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('departments').select('id, name').order('name');
+    if (error) throw new Error(`Failed to fetch departments: ${error.message}`);
+    return data as Department[];
+};
+
+export const saveDepartment = async (item: Partial<Department>): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('departments').upsert({ id: item.id, name: item.name });
+    if (error) throw new Error(`部署の保存に失敗しました: ${error.message}`);
+};
+
+export const deleteDepartment = async (id: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('departments').delete().eq('id', id);
+    if (error) throw new Error(`部署の削除に失敗しました: ${error.message}`);
 };
 
 export const getTitles = async (): Promise<Title[]> => {
-  if (hasSupabaseCredentials()) {
-    try {
-      const supabaseClient = getSupabase();
-      const { data, error } = await supabaseClient
-        .from('employee_titles')
-        .select('id, name, is_active, created_at')
-        .order('name', { ascending: true });
-
-      if (error) {
-        if (isSupabaseUnavailableError(error)) {
-          logSupabaseUnavailableWarning('役職マスタの取得', error);
-          return deepClone(titles);
-        }
-        if (isRelationNotFoundError(error) || isColumnNotFoundError(error)) {
-          console.warn('employee_titlesテーブルが見つかりません。デモデータにフォールバックします。', error);
-          return deepClone(titles);
-        }
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        return data.map(row => ({
-          id: row.id,
-          name: row.name || '名称未設定',
-          isActive: row.is_active ?? true,
-          createdAt: row.created_at || new Date().toISOString(),
-        }));
-      }
-    } catch (error) {
-      if (isSupabaseUnavailableError(error)) {
-        logSupabaseUnavailableWarning('役職マスタの取得', error);
-        return deepClone(titles);
-      }
-      throw error;
-    }
-  }
-  return deepClone(titles);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('employee_titles').select('*').order('name');
+    if (error) throw new Error(`役職の取得に失敗しました: ${error.message}`);
+    return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
 };
 
-export const saveTitle = async (title: Partial<Title>): Promise<Title> => {
-    if (title.id) {
-        const existing = findById(titles, title.id, '役職');
-        Object.assign(existing, title);
-        return deepClone(existing);
-    }
-    const newTitle: Title = {
-        id: uuidv4(),
-        name: title.name ?? '新規役職',
-        isActive: title.isActive ?? true,
-        createdAt: new Date().toISOString(),
-    };
-    titles.push(newTitle);
-    return deepClone(newTitle);
+export const saveTitle = async (item: Partial<Title>): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('employee_titles').upsert({ id: item.id, name: item.name, is_active: item.isActive });
+    if (error) throw new Error(`役職の保存に失敗しました: ${error.message}`);
 };
 
 export const deleteTitle = async (id: string): Promise<void> => {
-    titles = titles.filter(title => title.id !== id);
+    const supabase = getSupabase();
+    const { error } = await supabase.from('employee_titles').delete().eq('id', id);
+    if (error) throw new Error(`役職の削除に失敗しました: ${error.message}`);
 };
+
+
+export const getPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('purchase_orders').select('*').order('order_date', { ascending: false });;
+    if (error) throw new Error(`Failed to fetch purchase orders: ${error.message}`);
+    return (data || []).map(d => ({ ...d, supplierName: d.supplier_name, itemName: d.item_name, orderDate: d.order_date, unitPrice: d.unit_price }));
+};
+
+export const addPurchaseOrder = async (order: Omit<PurchaseOrder, 'id'>): Promise<PurchaseOrder> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('purchase_orders').insert({
+        supplier_name: order.supplierName, item_name: order.itemName, order_date: order.orderDate,
+        quantity: order.quantity, unit_price: order.unitPrice, status: order.status,
+    }).select().single();
+    if (error) throw new Error(`Failed to add purchase order: ${error.message}`);
+    return data as PurchaseOrder;
+}
+
+
+export const getInventoryItems = async (): Promise<InventoryItem[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('inventory_items').select('*').order('name');
+    if (error) throw new Error(`Failed to fetch inventory items: ${error.message}`);
+    return (data || []).map(d => ({ ...d, unitPrice: d.unit_price }));
+};
+
+export const addInventoryItem = async (item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('inventory_items').insert({
+        name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, unit_price: item.unitPrice
+    }).select().single();
+    if (error) throw new Error(`Failed to add inventory item: ${error.message}`);
+    return data as InventoryItem;
+}
+
+export const updateInventoryItem = async (id: string, item: Partial<InventoryItem>): Promise<InventoryItem> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('inventory_items').update({
+        name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, unit_price: item.unitPrice
+    }).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update inventory item: ${error.message}`);
+    return data as InventoryItem;
+}
+
+
+export const getEmployees = async (): Promise<Employee[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('employees').select('*');
+    if (error) throw new Error(`Failed to fetch employees: ${error.message}`);
+    return (data || []).map(d => ({...d, hireDate: d.hire_date, createdAt: d.created_at}));
+};
+export const getBugReports = async (): Promise<BugReport[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', {ascending: false});
+    if (error) throw new Error(`Failed to fetch bug reports: ${error.message}`);
+    return (data || []).map(dbBugReportToBugReport);
+};
+export const addBugReport = async (report: any): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('bug_reports').insert({ ...bugReportToDbBugReport(report), status: '未対応' });
+    if (error) throw new Error(`Failed to add bug report: ${error.message}`);
+};
+export const updateBugReport = async (id: string, updates: Partial<BugReport>): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('bug_reports').update(bugReportToDbBugReport(updates)).eq('id', id);
+    if (error) throw new Error(`Failed to update bug report: ${error.message}`);
+};
+
+export const getEstimates = async (): Promise<Estimate[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('estimates').select('*');
+    if (error) throw new Error(`Failed to fetch estimates: ${error.message}`);
+    return data || [];
+};
+export const addEstimate = async (estimateData: any): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('estimates').insert(estimateData);
+    if (error) throw new Error(`Failed to add estimate: ${error.message}`);
+};
+
+export const updateEstimate = async (id: string, updates: Partial<Estimate>): Promise<Estimate> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('estimates').update(updates).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update estimate: ${error.message}`);
+    return data;
+};
+
+export const updateInvoice = async (id: string, updates: Partial<Invoice>): Promise<Invoice> => {
+    const supabase = getSupabase();
+    const dbUpdates: any = {};
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.paidAt) dbUpdates.paid_at = updates.paidAt;
+    
+    const { data, error } = await supabase.from('invoices').update(dbUpdates).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update invoice: ${error.message}`);
+    return data;
+};
+
+
+// --- Implemented Functions ---
+
+export const getInvoices = async (): Promise<Invoice[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('invoices').select('*, items:invoice_items(*)').order('invoice_date', { ascending: false });
+    if (error) throw new Error(`Failed to fetch invoices: ${error.message}`);
+    return (data || []).map(inv => ({
+        id: inv.id, invoiceNo: inv.invoice_no, invoiceDate: inv.invoice_date, dueDate: inv.due_date, customerName: inv.customer_name,
+        subtotalAmount: inv.subtotal_amount, taxAmount: inv.tax_amount, totalAmount: inv.total_amount, status: inv.status,
+        createdAt: inv.created_at, paidAt: inv.paid_at,
+        items: inv.items.map((item: any) => ({
+            id: item.id, invoiceId: item.invoice_id, jobId: item.job_id, description: item.description,
+            quantity: item.quantity, unit: item.unit, unitPrice: item.unit_price, lineTotal: item.line_total, sortIndex: item.sort_index
+        }))
+    }));
+};
+
+export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoiceNo: string }> => {
+    const supabase = getSupabase();
+    const { data: jobsToInvoice, error: jobsError } = await supabase.from('jobs').select('*').in('id', jobIds);
+    if (jobsError) throw new Error(`Failed to fetch jobs for invoicing: ${jobsError.message}`);
+    if (!jobsToInvoice || jobsToInvoice.length === 0) throw new Error("No jobs found for invoicing.");
+
+    const customerName = jobsToInvoice[0].client_name;
+    const subtotal = jobsToInvoice.reduce((sum, job) => sum + job.price, 0);
+    const tax = subtotal * 0.1;
+    const total = subtotal + tax;
+    const invoiceNo = `INV-${Date.now()}`;
+
+    const { data: newInvoice, error: invoiceError } = await supabase.from('invoices').insert({
+        invoice_no: invoiceNo, invoice_date: new Date().toISOString().split('T')[0], customer_name: customerName,
+        subtotal_amount: subtotal, tax_amount: tax, total_amount: total, status: 'issued',
+    }).select().single();
+    if (invoiceError) throw new Error(`Failed to create invoice record: ${invoiceError.message}`);
+
+    const invoiceItems: Omit<InvoiceItem, 'id'>[] = jobsToInvoice.map((job, index) => ({
+        invoiceId: newInvoice.id, jobId: job.id, description: `${job.title} (案件番号: ${job.job_number})`,
+        quantity: 1, unit: '式', unitPrice: job.price, lineTotal: job.price, sortIndex: index,
+    }));
+    const { error: itemsError } = await supabase.from('invoice_items').insert(invoiceItems.map(item => ({...item, invoice_id: item.invoiceId, job_id: item.jobId, unit_price: item.unitPrice, line_total: item.lineTotal, sort_index: item.sortIndex})));
+    if (itemsError) throw new Error(`Failed to create invoice items: ${itemsError.message}`);
+
+    const { error: updateJobsError } = await supabase.from('jobs').update({
+        invoice_id: newInvoice.id, invoice_status: InvoiceStatus.Invoiced, invoiced_at: new Date().toISOString(),
+    }).in('id', jobIds);
+    if (updateJobsError) throw new Error(`Failed to update jobs after invoicing: ${updateJobsError.message}`);
+
+    return { invoiceNo };
+};
+
+export const uploadFile = async (file: File, bucket: string): Promise<{ path: string }> => {
+    const supabase = getSupabase();
+    const filePath = `public/${Date.now()}-${file.name}`;
+    const { data, error } = await supabase.storage.from(bucket).upload(filePath, file);
+    if (error) throw new Error(`Failed to upload to ${bucket}: ${error.message}`);
+    return { path: data.path };
+};
+
 
 export const getInboxItems = async (): Promise<InboxItem[]> => {
-    if (hasSupabaseCredentials()) {
-        const supabaseClient = getSupabase();
-        const { data, error } = await supabaseClient
-            .from('inbox_items')
-            .select('*')
-            .order('created_at', { ascending: false });
-        
-        if (error) throw new Error(`インボックスアイテムの取得に失敗しました: ${error.message}`);
-        
-        return (data || []).map(item => ({
-            id: item.id,
-            fileName: item.file_name,
-            filePath: item.file_path,
-            fileUrl: supabaseClient.storage.from('inbox').getPublicUrl(item.file_path).data.publicUrl,
-            mimeType: item.mime_type,
-            status: item.status as InboxItemStatus,
-            extractedData: item.extracted_data,
-            errorMessage: item.error_message,
-            createdAt: item.created_at,
-        }));
-    }
-    return deepClone(demoState.inboxItems);
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('inbox_items').select('*').order('created_at', { ascending: false });
+    if (error) throw new Error(`Failed to fetch inbox items: ${error.message}`);
+
+    return (data || []).map(item => {
+        const { data: urlData } = supabase.storage.from('inbox').getPublicUrl(item.file_path);
+        return {
+            id: item.id, fileUrl: urlData.publicUrl, extractedData: item.extracted_data, errorMessage: item.error_message,
+            createdAt: item.created_at, fileName: item.file_name, filePath: item.file_path, mimeType: item.mime_type, status: item.status,
+        }
+    });
 };
 
-export const addInboxItem = async (item: Omit<InboxItem, 'id' | 'createdAt' | 'fileUrl'> & { fileUrl?: string }): Promise<InboxItem> => {
-    if (hasSupabaseCredentials()) {
-        const supabaseClient = getSupabase();
-        const { data, error } = await supabaseClient
-            .from('inbox_items')
-            .insert({
-                file_name: item.fileName,
-                file_path: item.filePath,
-                mime_type: item.mimeType,
-                status: item.status,
-                extracted_data: item.extractedData,
-                error_message: item.errorMessage,
-            })
-            .select()
-            .single();
-        
-        if (error) throw new Error(`インボックスアイテムの追加に失敗しました: ${error.message}`);
-        
-        return {
-            id: data.id,
-            fileName: data.file_name,
-            filePath: data.file_path,
-            fileUrl: supabaseClient.storage.from('inbox').getPublicUrl(data.file_path).data.publicUrl,
-            mimeType: data.mime_type,
-            status: data.status as InboxItemStatus,
-            extractedData: data.extracted_data,
-            errorMessage: data.error_message,
-            createdAt: data.created_at,
-        };
-    }
-    
-    const newItem: InboxItem = {
-      id: uuidv4(),
-      fileName: item.fileName,
-      filePath: item.filePath,
-      fileUrl: item.fileUrl ?? `https://example.com/storage/${item.filePath}`,
-      mimeType: item.mimeType,
-      status: item.status,
-      extractedData: item.extractedData ?? null,
-      errorMessage: item.errorMessage ?? null,
-      createdAt: new Date().toISOString(),
-    };
-    demoState.inboxItems.unshift(newItem);
-    return deepClone(newItem);
+export const addInboxItem = async (item: Omit<InboxItem, 'id' | 'createdAt' | 'fileUrl'>): Promise<InboxItem> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('inbox_items').insert({
+        file_name: item.fileName, file_path: item.filePath, mime_type: item.mimeType, status: item.status,
+        extracted_data: item.extractedData, error_message: item.errorMessage,
+    }).select().single();
+    if (error) throw new Error(`Failed to add inbox item: ${error.message}`);
+    return data as InboxItem;
 };
 
 export const updateInboxItem = async (id: string, updates: Partial<InboxItem>): Promise<InboxItem> => {
-    if (hasSupabaseCredentials()) {
-        const supabaseClient = getSupabase();
-        const dbUpdates: any = {};
-        if (updates.status) dbUpdates.status = updates.status;
-        if (updates.extractedData !== undefined) dbUpdates.extracted_data = updates.extractedData;
-        if (updates.errorMessage !== undefined) dbUpdates.error_message = updates.errorMessage;
-        
-        const { data, error } = await supabaseClient
-            .from('inbox_items')
-            .update(dbUpdates)
-            .eq('id', id)
-            .select()
-            .single();
-        
-        if (error) throw new Error(`インボックスアイテムの更新に失敗しました: ${error.message}`);
-        
-        return {
-            id: data.id,
-            fileName: data.file_name,
-            filePath: data.file_path,
-            fileUrl: supabaseClient.storage.from('inbox').getPublicUrl(data.file_path).data.publicUrl,
-            mimeType: data.mime_type,
-            status: data.status as InboxItemStatus,
-            extractedData: data.extracted_data,
-            errorMessage: data.error_message,
-            createdAt: data.created_at,
-        };
-    }
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('inbox_items').update({
+        status: updates.status, extracted_data: updates.extractedData,
+    }).eq('id', id).select().single();
+    if (error) throw new Error(`Failed to update inbox item: ${error.message}`);
     
-    const item = findById(demoState.inboxItems, id, 'インボックス項目');
-    Object.assign(item, updates);
-    return deepClone(item);
+    const { data: urlData } = supabase.storage.from('inbox').getPublicUrl(data.file_path);
+    return { ...data, fileUrl: urlData.publicUrl, extractedData: data.extracted_data } as InboxItem;
 };
 
-export const deleteInboxItem = async (item: InboxItem): Promise<void> => {
-    if (hasSupabaseCredentials()) {
-        const supabaseClient = getSupabase();
-        
-        // Delete file from storage
-        const { error: storageError } = await supabaseClient.storage
-            .from('inbox')
-            .remove([item.filePath]);
-        
-        if (storageError) console.warn('ストレージからのファイル削除に失敗しました:', storageError);
-        
-        // Delete record from database
-        const { error } = await supabaseClient
-            .from('inbox_items')
-            .delete()
-            .eq('id', item.id);
-        
-        if (error) throw new Error(`インボックスアイテムの削除に失敗しました: ${error.message}`);
-        return;
-    }
-    
-    demoState.inboxItems = demoState.inboxItems.filter(i => i.id !== item.id);
+export const deleteInboxItem = async (itemToDelete: InboxItem): Promise<void> => {
+    const supabase = getSupabase();
+    const { error: storageError } = await supabase.storage.from('inbox').remove([itemToDelete.filePath]);
+    if (storageError) console.error("Storage deletion failed, proceeding with DB deletion:", storageError);
+
+    const { error: dbError } = await supabase.from('inbox_items').delete().eq('id', itemToDelete.id);
+    if (dbError) throw new Error(`Failed to delete inbox item from DB: ${dbError.message}`);
 };
 
-export const uploadFile = async (file: File, bucket: string): Promise<{ path: string; url: string }> => {
-    if (hasSupabaseCredentials()) {
-        const supabaseClient = getSupabase();
-        const identifier = uuidv4();
-        const rawName = file.name ?? `${identifier}.bin`;
-        const sanitizeKey = (name: string): string => {
-            try {
-                // Normalize and keep letters/numbers from all locales + common filename symbols
-                const normalized = name.normalize('NFKC');
-                // Replace disallowed characters with underscore
-                const cleaned = normalized.replace(/[^\p{L}\p{N}._-]+/gu, '_');
-                // Collapse repeats and trim
-                return cleaned.replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(-180) || 'file';
-            } catch {
-                // Fallback without Unicode property escapes
-                const fallback = name.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(-180) || 'file';
-                return fallback;
-            }
-        };
-        const safeName = sanitizeKey(rawName);
-        const path = `${identifier}-${safeName}`;
-        
-        const { data, error } = await supabaseClient.storage
-            .from(bucket)
-            .upload(path, file, {
-                cacheControl: '3600',
-                upsert: false,
-            });
-        
-        if (error) throw new Error(`ファイルのアップロードに失敗しました: ${error.message}`);
-        
-        const { data: urlData } = supabaseClient.storage.from(bucket).getPublicUrl(path);
-        
-        return {
-            path,
-            url: urlData.publicUrl,
-        };
-    }
-    
-    const identifier = uuidv4();
-    const fileName = file.name ?? `${identifier}.bin`;
-    const path = `${bucket}/${identifier}-${fileName}`;
-    return {
-      path,
-      url: `https://example.com/storage/${path}`,
-    };
-};
-
-export const getAnalysisHistory = async (): Promise<AnalysisHistory[]> => {
-    const sorted = [...analysisHistory].sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
-    return deepClone(sorted);
-};
-
-export const addAnalysisHistory = async (entry: Omit<AnalysisHistory, 'id' | 'createdAt'> & { createdAt?: string; id?: UUID }): Promise<AnalysisHistory> => {
-    const newEntry: AnalysisHistory = {
-      id: entry.id ?? uuidv4(),
-      userId: entry.userId,
-      viewpoint: entry.viewpoint,
-      dataSources: entry.dataSources,
-      result: entry.result,
-      createdAt: entry.createdAt ?? new Date().toISOString(),
-    };
-    analysisHistory.unshift(newEntry);
-    return deepClone(newEntry);
-};
-
-export const updateUserRole = async (email: string, role: 'admin' | 'user'): Promise<void> => {
-  if (!hasSupabaseCredentials()) {
-    throw new Error('Supabase環境でのみ利用可能です。');
-  }
-
-  const supabaseClient = getSupabase();
-  
-  const { error } = await supabaseClient
-    .from('users')
-    .update({ role })
-    .eq('email', email);
-
-  if (error) {
-    throw new Error(`ユーザーロールの更新に失敗しました: ${error.message}`);
-  }
-};
-
-export const findDuplicateAccounts = async (email: string): Promise<EmployeeUser[]> => {
-  if (!hasSupabaseCredentials()) {
-    return [];
-  }
-
-  const supabaseClient = getSupabase();
-  
-  const { data, error } = await supabaseClient
-    .from('users')
-    .select('id, name, email, role, can_use_anything_analysis, created_at')
-    .eq('email', email)
-    .order('created_at', { ascending: false });
-
-  if (error || !data) {
-    return [];
-  }
-
-  return data.map(user => ({
-    id: user.id,
-    name: user.name || '名前未設定',
-    department: null,
-    title: null,
-    email: user.email || '',
-    role: (user.role as 'admin' | 'user') || 'user',
-    createdAt: user.created_at || new Date().toISOString(),
-    canUseAnythingAnalysis: user.can_use_anything_analysis ?? true,
-  }));
-};
-
-export const selectUserAccount = async (userId: string): Promise<EmployeeUser | null> => {
-  if (!hasSupabaseCredentials()) {
-    return null;
-  }
-
-  return await fetchSupabaseEmployeeUser(userId);
-};
-
-export const registerEmployeeNumber = async (userId: string, employeeNumber: string): Promise<void> => {
-  if (!hasSupabaseCredentials()) {
-    throw new Error('Supabase環境でのみ利用可能です。');
-  }
-
-  const supabaseClient = getSupabase();
-  
-  const { error } = await supabaseClient
-    .from('users')
-    .update({ employee_number: employeeNumber })
-    .eq('id', userId);
-
-  if (error) {
-    throw new Error(`社員番号の登録に失敗しました: ${error.message}`);
-  }
+export const updateJobReadyToInvoice = async (jobId: string, value: boolean): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('jobs').update({ ready_to_invoice: value }).eq('id', jobId);
+    if (error) throw new Error(`Failed to update job ready status: ${error.message}`);
 };

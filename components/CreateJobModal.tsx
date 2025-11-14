@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Job, JobStatus, AISuggestions, InvoiceStatus, ManufacturingStatus } from '../types.ts';
-import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants.ts';
-import { suggestJobParameters } from '../services/geminiService.ts';
-import { Sparkles, Loader, X } from './Icons.tsx';
-import { formatJPY } from '../utils.ts';
+import { Job, JobStatus, AISuggestions, InvoiceStatus, ManufacturingStatus } from '../types';
+import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants';
+import { suggestJobParameters } from '../services/geminiService';
+import { Sparkles, Loader, X } from './Icons';
+import { formatJPY } from '../utils';
 
 interface CreateJobModalProps {
   isOpen: boolean;

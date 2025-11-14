@@ -25,27 +25,20 @@ interface MasterManagementPageProps {
   onDeleteTitle: (id: string) => Promise<void>;
   addToast: (message: string, type: Toast['type']) => void;
   requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
-  initialTab?: Tab;
-  visibleTabs?: Tab[];
 }
 
 type Tab = 'accounts' | 'recipients' | 'allocations' | 'departments' | 'titles';
 
 const MasterManagementPage: React.FC<MasterManagementPageProps> = (props) => {
-  const { initialTab = 'accounts', visibleTabs } = props;
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [activeTab, setActiveTab] = useState<Tab>('accounts');
 
-  const allTabs: {id: Tab, label: string}[] = [
+  const tabs: {id: Tab, label: string}[] = [
       { id: 'accounts', label: '勘定科目管理' },
       { id: 'recipients', label: '支払先管理' },
       { id: 'allocations', label: '振分区分管理' },
       { id: 'departments', label: '部署管理' },
       { id: 'titles', label: '役職管理' },
   ];
-  
-  const tabs = visibleTabs 
-    ? allTabs.filter(tab => visibleTabs.includes(tab.id))
-    : allTabs;
 
   return (
     <div className="space-y-6">
@@ -100,7 +93,7 @@ const AccountItemsManager: React.FC<MasterManagementPageProps> = ({ accountItems
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
                  <h3 className="text-lg font-semibold">勘定科目マスタ</h3>
-                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg" aria-label="新規勘定科目を追加"><PlusCircle className="w-5 h-5"/>新規追加</button>
+                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
                  <thead className="text-sm bg-slate-50 dark:bg-slate-700"><tr>{['コード', '名称', 'カテゴリ', '有効', '操作'].map(h => <th key={h} className="px-6 py-3 text-left font-medium">{h}</th>)}</tr></thead>
@@ -111,10 +104,7 @@ const AccountItemsManager: React.FC<MasterManagementPageProps> = ({ accountItems
                             <td className="px-6 py-4 font-medium">{item.name}</td>
                             <td className="px-6 py-4">{item.categoryCode}</td>
                             <td className="px-6 py-4">{item.isActive ? 'はい' : 'いいえ'}</td>
-                            <td className="px-6 py-4 flex items-center gap-2">
-                                <button onClick={() => handleOpenModal(item)} className="p-1" aria-label={`勘定科目「${item.name}」を編集`}><Pencil className="w-5 h-5"/></button>
-                                <button onClick={() => handleDelete(item)} className="p-1" aria-label={`勘定科目「${item.name}」を無効化`}><Trash2 className="w-5 h-5 text-red-500"/></button>
-                            </td>
+                            <td className="px-6 py-4 flex items-center gap-2"><button onClick={() => handleOpenModal(item)} className="p-1"><Pencil className="w-5 h-5"/></button><button onClick={() => handleDelete(item)} className="p-1"><Trash2 className="w-5 h-5 text-red-500"/></button></td>
                         </tr>
                     ))}
                  </tbody>
@@ -150,48 +140,21 @@ const PaymentRecipientsManager: React.FC<MasterManagementPageProps> = ({ payment
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
                  <h3 className="text-lg font-semibold">支払先マスタ</h3>
-                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg" aria-label="新規支払先を追加"><PlusCircle className="w-5 h-5"/>新規追加</button>
+                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
-             <div className="overflow-x-auto">
-                 <table className="w-full text-base">
-                     <thead className="text-sm bg-slate-50 dark:bg-slate-700">
-                         <tr>
-                             {['コード', '会社名', '受取人名', '金融機関', '支店', '種別', '口座番号', 'マイナンバー', '有効', '操作'].map(h => 
-                                 <th key={h} className="px-4 py-3 text-left font-medium whitespace-nowrap">{h}</th>
-                             )}
-                         </tr>
-                     </thead>
-                     <tbody>
-                        {paymentRecipients.map(item => (
-                            <tr key={item.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                <td className="px-4 py-4 text-sm">{item.recipientCode}</td>
-                                <td className="px-4 py-4 font-medium">{item.companyName || '---'}</td>
-                                <td className="px-4 py-4">{item.recipientName || '---'}</td>
-                                <td className="px-4 py-4 text-sm">{item.bankName || '---'}</td>
-                                <td className="px-4 py-4 text-sm">{item.bankBranch || '---'}</td>
-                                <td className="px-4 py-4 text-sm">{item.bankAccountType || '---'}</td>
-                                <td className="px-4 py-4 text-sm font-mono">{item.bankAccountNumber || '---'}</td>
-                                <td className="px-4 py-4 text-sm font-mono">{item.myNumber ? `****${item.myNumber.slice(-4)}` : '---'}</td>
-                                <td className="px-4 py-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${item.isActive === false ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                                        {item.isActive === false ? '無効' : '有効'}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-4">
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => handleOpenModal(item)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded" aria-label={`支払先「${item.companyName || item.recipientName}」を編集`}>
-                                            <Pencil className="w-5 h-5 text-blue-600"/>
-                                        </button>
-                                        <button onClick={() => handleDelete(item)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded" aria-label={`支払先「${item.companyName || item.recipientName}」を削除`}>
-                                            <Trash2 className="w-5 h-5 text-red-500"/>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                     </tbody>
-                 </table>
-             </div>
+             <table className="w-full text-base">
+                 <thead className="text-sm bg-slate-50 dark:bg-slate-700"><tr>{['コード', '会社名', '受取人名', '操作'].map(h => <th key={h} className="px-6 py-3 text-left font-medium">{h}</th>)}</tr></thead>
+                 <tbody>
+                    {paymentRecipients.map(item => (
+                        <tr key={item.id} className="border-b dark:border-slate-700">
+                            <td className="px-6 py-4">{item.recipientCode}</td>
+                            <td className="px-6 py-4 font-medium">{item.companyName}</td>
+                            <td className="px-6 py-4">{item.recipientName}</td>
+                            <td className="px-6 py-4 flex items-center gap-2"><button onClick={() => handleOpenModal(item)} className="p-1"><Pencil className="w-5 h-5"/></button><button onClick={() => handleDelete(item)} className="p-1"><Trash2 className="w-5 h-5 text-red-500"/></button></td>
+                        </tr>
+                    ))}
+                 </tbody>
+             </table>
              {isModalOpen && <PaymentRecipientModal item={selectedItem} onClose={() => setIsModalOpen(false)} onSave={handleSave} />}
         </div>
     );
@@ -223,7 +186,7 @@ const AllocationDivisionsManager: React.FC<MasterManagementPageProps> = ({ alloc
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
                  <h3 className="text-lg font-semibold">振分区分マスタ</h3>
-                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg" aria-label="新規振分区分を追加"><PlusCircle className="w-5 h-5"/>新規追加</button>
+                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
                  <thead className="text-sm bg-slate-50 dark:bg-slate-700"><tr>{['名称', '有効', '操作'].map(h => <th key={h} className="px-6 py-3 text-left font-medium">{h}</th>)}</tr></thead>
@@ -232,10 +195,7 @@ const AllocationDivisionsManager: React.FC<MasterManagementPageProps> = ({ alloc
                         <tr key={item.id} className="border-b dark:border-slate-700">
                             <td className="px-6 py-4 font-medium">{item.name}</td>
                             <td className="px-6 py-4">{item.isActive ? 'はい' : 'いいえ'}</td>
-                            <td className="px-6 py-4 flex items-center gap-2">
-                                <button onClick={() => handleOpenModal(item)} className="p-1" aria-label={`振分区分「${item.name}」を編集`}><Pencil className="w-5 h-5"/></button>
-                                <button onClick={() => handleDelete(item)} className="p-1" aria-label={`振分区分「${item.name}」を削除`}><Trash2 className="w-5 h-5 text-red-500"/></button>
-                            </td>
+                            <td className="px-6 py-4 flex items-center gap-2"><button onClick={() => handleOpenModal(item)} className="p-1"><Pencil className="w-5 h-5"/></button><button onClick={() => handleDelete(item)} className="p-1"><Trash2 className="w-5 h-5 text-red-500"/></button></td>
                         </tr>
                     ))}
                  </tbody>
@@ -271,7 +231,7 @@ const DepartmentsManager: React.FC<MasterManagementPageProps> = ({ departments, 
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
                  <h3 className="text-lg font-semibold">部署マスタ</h3>
-                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg" aria-label="新規部署を追加"><PlusCircle className="w-5 h-5"/>新規追加</button>
+                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
                  <thead className="text-sm bg-slate-50 dark:bg-slate-700"><tr>{['名称', '操作'].map(h => <th key={h} className="px-6 py-3 text-left font-medium">{h}</th>)}</tr></thead>
@@ -279,10 +239,7 @@ const DepartmentsManager: React.FC<MasterManagementPageProps> = ({ departments, 
                     {departments.map(item => (
                         <tr key={item.id} className="border-b dark:border-slate-700">
                             <td className="px-6 py-4 font-medium">{item.name}</td>
-                            <td className="px-6 py-4 flex items-center gap-2">
-                                <button onClick={() => handleOpenModal(item)} className="p-1" aria-label={`部署「${item.name}」を編集`}><Pencil className="w-5 h-5"/></button>
-                                <button onClick={() => handleDelete(item)} className="p-1" aria-label={`部署「${item.name}」を削除`}><Trash2 className="w-5 h-5 text-red-500"/></button>
-                            </td>
+                            <td className="px-6 py-4 flex items-center gap-2"><button onClick={() => handleOpenModal(item)} className="p-1"><Pencil className="w-5 h-5"/></button><button onClick={() => handleDelete(item)} className="p-1"><Trash2 className="w-5 h-5 text-red-500"/></button></td>
                         </tr>
                     ))}
                  </tbody>
@@ -318,7 +275,7 @@ const TitlesManager: React.FC<MasterManagementPageProps> = ({ titles, onSaveTitl
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
                  <h3 className="text-lg font-semibold">役職マスタ</h3>
-                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg" aria-label="新規役職を追加"><PlusCircle className="w-5 h-5"/>新規追加</button>
+                 <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
                  <thead className="text-sm bg-slate-50 dark:bg-slate-700"><tr>{['名称', '有効', '操作'].map(h => <th key={h} className="px-6 py-3 text-left font-medium">{h}</th>)}</tr></thead>
@@ -327,10 +284,7 @@ const TitlesManager: React.FC<MasterManagementPageProps> = ({ titles, onSaveTitl
                         <tr key={item.id} className="border-b dark:border-slate-700">
                             <td className="px-6 py-4 font-medium">{item.name}</td>
                              <td className="px-6 py-4">{item.isActive ? 'はい' : 'いいえ'}</td>
-                            <td className="px-6 py-4 flex items-center gap-2">
-                                <button onClick={() => handleOpenModal(item)} className="p-1" aria-label={`役職「${item.name}」を編集`}><Pencil className="w-5 h-5"/></button>
-                                <button onClick={() => handleDelete(item)} className="p-1" aria-label={`役職「${item.name}」を削除`}><Trash2 className="w-5 h-5 text-red-500"/></button>
-                            </td>
+                            <td className="px-6 py-4 flex items-center gap-2"><button onClick={() => handleOpenModal(item)} className="p-1"><Pencil className="w-5 h-5"/></button><button onClick={() => handleDelete(item)} className="p-1"><Trash2 className="w-5 h-5 text-red-500"/></button></td>
                         </tr>
                     ))}
                  </tbody>

@@ -1,27 +1,21 @@
 
 
-
-
-
-
 import React from 'react';
-// FIX: Corrected import path for JournalLedger.
-import JournalLedger from './JournalLedger.tsx';
-import GeneralLedger from './accounting/GeneralLedger.tsx';
-import TrialBalancePage from './accounting/TrialBalancePage.tsx';
-// FIX: Changed to default import for InvoiceOCR, which is now the correct export type.
-import InvoiceOCR from './InvoiceOCR.tsx';
-import PaymentManagement from './accounting/PaymentManagement.tsx';
-import LaborCostManagement from './accounting/LaborCostManagement.tsx';
-import PeriodClosingPage from './accounting/PeriodClosingPage.tsx';
-import PlaceholderPage from './PlaceholderPage.tsx';
-import BillingManagement from './accounting/BillingManagement.tsx';
+import JournalLedger from './accounting/JournalLedger';
+import GeneralLedger from './accounting/GeneralLedger';
+import TrialBalancePage from './accounting/TrialBalancePage';
+import InvoiceOCR from './InvoiceOCR';
+import PaymentManagement from './accounting/PaymentManagement';
+import LaborCostManagement from './accounting/LaborCostManagement';
+import PeriodClosingPage from './accounting/PeriodClosingPage';
+import PlaceholderPage from './PlaceholderPage';
+import BillingManagement from './accounting/BillingManagement';
 
 
-import { JournalEntry, InvoiceData, Page } from '../types.ts';
+import { JournalEntry, InvoiceData, Page } from '../types';
 
 const AccountingPage: React.FC<any> = (props) => {
-    const { page, journalEntries, accountItems, onAddEntry, addToast, requestConfirmation, jobs, applications, onNavigate, customers, employees, onRefreshData, allocationDivisions } = props;
+    const { page, journalEntries, accountItems, onAddEntry, addToast, requestConfirmation, jobs, applications, onNavigate, customers, employees, onRefreshData } = props;
 
     switch(page as Page) {
         case 'accounting_journal':
@@ -49,8 +43,7 @@ const AccountingPage: React.FC<any> = (props) => {
                 onAddEntry(debitEntry);
                 addToast('買掛金と経費が計上されました。', 'success');
             };
-            // FIX: Pass accountItems and allocationDivisions to InvoiceOCR
-            return <InvoiceOCR onSaveExpenses={handleSaveExpenses} addToast={addToast} requestConfirmation={requestConfirmation} isAIOff={props.isAIOff} accountItems={accountItems} allocationDivisions={allocationDivisions} />;
+            return <InvoiceOCR onSaveExpenses={handleSaveExpenses} addToast={addToast} requestConfirmation={requestConfirmation} isAIOff={props.isAIOff} />;
 
         case 'purchasing_payments':
              const handleExecutePayment = async (supplier: string, amount: number) => {

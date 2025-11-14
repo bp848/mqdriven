@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ApprovalRoute } from '../../types.ts';
-import { getApprovalRoutes } from '../../services/dataService.ts';
+import { ApprovalRoute } from '../../types';
+import { getApprovalRoutes } from '../../services/dataService';
 
 interface ApprovalRouteSelectorProps {
     onChange: (routeId: string) => void;

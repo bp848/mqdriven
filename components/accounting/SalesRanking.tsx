@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { Job, JobStatus } from '../../types.ts';
-import { Trophy, DollarSign, TrendingUp, Briefcase } from '../Icons.tsx';
-import StatCard from '../StatCard.tsx';
-import { formatJPY } from '../../utils.ts';
+import { Job, JobStatus } from '../../types';
+import { Trophy, DollarSign, TrendingUp, Briefcase } from '../Icons';
+import StatCard from '../StatCard';
+import { formatJPY } from '../../utils';
 
 interface SalesRankingProps {
     jobs: Job[];

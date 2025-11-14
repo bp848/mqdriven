@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { submitApplication } from '../../services/dataService.ts';
-import { extractInvoiceDetails } from '../../services/geminiService.ts';
-import ApprovalRouteSelector from './ApprovalRouteSelector.tsx';
-import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons.tsx';
-import { User, InvoiceData, AccountItem, AllocationDivision } from '../../types.ts';
+import React, { useState, useMemo } from 'react';
+import { submitApplication } from '../../services/dataService';
+import { extractInvoiceDetails } from '../../services/geminiService';
+import ApprovalRouteSelector from './ApprovalRouteSelector';
+import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
+import { User, InvoiceData } from '../../types';
 
 interface TransportExpenseFormProps {
     onSuccess: () => void;
@@ -12,8 +12,6 @@ interface TransportExpenseFormProps {
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
-    accountItems: AccountItem[];
-    allocationDivisions: AllocationDivision[];
 }
 
 interface TransportDetail {
@@ -25,7 +23,7 @@ interface TransportDetail {
     amount: number;
 }
 
-const TRP_MODES = ['電車', 'バス', 'タクシー', '飛行機', 'その他'];
+const TRANSPORT_MODES = ['電車', 'バス', 'タクシー', '飛行機', 'その他'];
 
 const readFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -36,13 +34,13 @@ const readFileAsBase64 = (file: File): Promise<string> => {
     });
 };
 
-const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError, accountItems, allocationDivisions }) => {
+const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError }) => {
     const [details, setDetails] = useState<TransportDetail[]>(() => [{
         id: `row_${Date.now()}`,
         travelDate: new Date().toISOString().split('T')[0],
         departure: '',
         arrival: '',
-        transportMode: TRP_MODES[0],
+        transportMode: TRANSPORT_MODES[0],
         amount: 0,
     }]);
     const [notes, setNotes] = useState('');
@@ -50,7 +48,6 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
-    const firstInvalidRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>(null);
 
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
     const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
@@ -61,7 +58,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
             travelDate: new Date().toISOString().split('T')[0],
             departure: '',
             arrival: '',
-            transportMode: TRP_MODES[0],
+            transportMode: TRANSPORT_MODES[0],
             amount: 0,
         }]);
     };
@@ -85,55 +82,24 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         setError('');
         try {
             const base64String = await readFileAsBase64(file);
-            const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type, accountItems, allocationDivisions);
+            const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type);
             
-            console.log('交通費OCR結果:', ocrData);
-            
-            // Parse departure/arrival from description
-            let departure = '';
-            let arrival = '';
-            const amount = ocrData.totalAmount || 0;
-            
+            // Heuristic to parse departure/arrival from description
             const description = ocrData.description || '';
-            if (description) {
-                // Match patterns like "東京駅→大阪駅", "新宿から渋谷", "品川～横浜", "東京-大阪"
-                const routeMatch = description.match(/(.+?)(から|→|～|ー|-)(.+)/);
-                if (routeMatch) {
-                    departure = routeMatch[1].trim().replace(/駅$/, '').replace(/\s+/g, '');
-                    arrival = routeMatch[3].trim().replace(/駅$/, '').replace(/\s+/g, '');
-                } else {
-                    // If no separator found, try to split by spaces
-                    const parts = description.split(/\s+/);
-                    if (parts.length >= 2) {
-                        departure = parts[0].replace(/駅$/, '');
-                        arrival = parts[1].replace(/駅$/, '');
-                    }
-                }
-            }
+            const parts = description.split(/から|→|～/);
+            const departure = parts[0]?.trim() || '';
+            const arrival = parts[1]?.trim() || '';
 
-            // 既存の空行を探す（出発地、到着地、金額が空の行）
-            const emptyRowIndex = details.findIndex(d => !d.departure.trim() && !d.arrival.trim() && !d.amount);
-            
-            const ocrDetail = {
-                id: emptyRowIndex >= 0 ? details[emptyRowIndex].id : `row_ocr_${Date.now()}`,
+            setDetails(prev => [...prev.filter(d => d.departure || d.arrival), {
+                id: `row_ocr_${Date.now()}`,
                 travelDate: ocrData.invoiceDate || new Date().toISOString().split('T')[0],
                 departure,
                 arrival,
-                transportMode: TRP_MODES[0],
-                amount,
-            };
-            
-            if (emptyRowIndex >= 0) {
-                // 既存の空行に入力
-                setDetails(prev => prev.map((d, i) => i === emptyRowIndex ? ocrDetail : d));
-                console.log('[交通費OCR] 既存の空行に入力しました');
-            } else {
-                // 空行がない場合は新しい行を追加
-                setDetails(prev => [...prev, ocrDetail]);
-                console.log('[交通費OCR] 新しい明細行を追加しました');
-            }
+                transportMode: TRANSPORT_MODES[0],
+                amount: ocrData.totalAmount || 0,
+            }]);
         } catch (err: any) {
-            if (err.name === 'AbortError') return;
+            if (err.name === 'AbortError') return; // Request was aborted, do nothing
             setError(err.message || 'AI-OCR処理中にエラーが発生しました。');
         } finally {
             setIsOcrLoading(false);
@@ -141,124 +107,21 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         }
     };
 
-    // Form validation for submit button activation
-    const isFormValid = useMemo(() => {
-        if (!approvalRouteId || details.length === 0) return false;
-        return !details.some(detail =>
-            !detail.travelDate ||
-            !detail.departure.trim() ||
-            !detail.arrival.trim() ||
-            !detail.transportMode ||
-            detail.amount <= 0
-        );
-    }, [approvalRouteId, details]);
-
-    const mapDetailToPayload = (detail: TransportDetail) => ({
-        travel_date: detail.travelDate,
-        departure: detail.departure,
-        arrival: detail.arrival,
-        transport_mode: detail.transportMode,
-        amount: detail.amount,
-    });
-
-    const handleSaveDraft = async () => {
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            return;
-        }
-        if (!approvalRouteId) {
-            setError('承認ルートを選択してください。');
-            return;
-        }
-
-        setIsSubmitting(true);
-        setError('');
-        try {
-            const submissionData = {
-                details: details.map(mapDetailToPayload),
-                notes,
-                total_amount: totalAmount,
-            };
-            await submitApplication({
-                applicationCodeId,
-                formData: submissionData,
-                approvalRouteId,
-                status: 'draft'
-            }, currentUser.id);
-            onSuccess();
-        } catch (err: any) {
-            setError('下書きの保存に失敗しました。');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        firstInvalidRef.current = null;
-        setError('');
-
-        if (!approvalRouteId) {
-            setError('承認ルートを選択してください。');
-            firstInvalidRef.current = document.getElementById('approval-route-selector') as HTMLSelectElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            return;
-        }
-        if (details.length === 0 || details.every(d => !d.departure.trim() && !d.arrival.trim() && !d.amount)) {
-            setError('少なくとも1つの明細を入力してください。');
-            firstInvalidRef.current = document.querySelector('input[placeholder="例: 東京駅"]') as HTMLInputElement;
-            firstInvalidRef.current?.focus();
-            return;
-        }
-        
-        // Validate each detail row
-        for (let i = 0; i < details.length; i++) {
-            const detail = details[i];
-            if (!detail.travelDate) {
-                setError('全ての明細で利用日を入力してください。');
-                firstInvalidRef.current = document.querySelector(`input[id="travelDate-${detail.id}"]`) as HTMLInputElement;
-                firstInvalidRef.current?.focus();
-                return;
-            }
-            if (!detail.departure.trim()) {
-                setError('全ての明細で出発地を入力してください。');
-                firstInvalidRef.current = document.querySelector(`input[id="departure-${detail.id}"]`) as HTMLInputElement;
-                firstInvalidRef.current?.focus();
-                return;
-            }
-            if (!detail.arrival.trim()) {
-                setError('全ての明細で目的地を入力してください。');
-                firstInvalidRef.current = document.querySelector(`input[id="arrival-${detail.id}"]`) as HTMLInputElement;
-                firstInvalidRef.current?.focus();
-                return;
-            }
-            if (!detail.transportMode) {
-                setError('全ての明細で交通手段を選択してください。');
-                firstInvalidRef.current = document.querySelector(`select[id="transportMode-${detail.id}"]`) as HTMLSelectElement;
-                firstInvalidRef.current?.focus();
-                return;
-            }
-            if (detail.amount <= 0) {
-                setError('全ての明細で金額を正しく入力してください。');
-                firstInvalidRef.current = document.querySelector(`input[id="amount-${detail.id}"]`) as HTMLInputElement;
-                firstInvalidRef.current?.focus();
-                return;
-            }
+        if (!approvalRouteId) return setError('承認ルートを選択してください。');
+        if (!currentUser) return setError('ユーザー情報が見つかりません。');
+        if (details.length === 0 || details.every(d => !d.departure && !d.arrival)) {
+            return setError('少なくとも1つの明細を入力してください。');
         }
 
         setIsSubmitting(true);
         setError('');
         try {
             const submissionData = {
-                details: details
-                    .filter(d => d.departure.trim() || d.arrival.trim() || d.amount)
-                    .map(mapDetailToPayload),
-                notes,
-                total_amount: totalAmount,
+                details: details.filter(d => d.departure || d.arrival),
+                notes: notes,
+                totalAmount: totalAmount,
             };
             await submitApplication({ applicationCodeId, formData: submissionData, approvalRouteId }, currentUser.id);
             onSuccess();
@@ -281,12 +144,12 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     return (
         <div className="relative">
              {(isLoading || formLoadError) && (
-                <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8" aria-live="polite" aria-busy={isLoading}>
-                    {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" aria-hidden="true" />}
+                <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8">
+                    {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                 </div>
             )}
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up" aria-labelledby="form-title">
-                <h2 id="form-title" className="text-2xl font-bold text-slate-800 dark:text-white text-center">交通費申請フォーム</h2>
+            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up">
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-white text-center">交通費申請フォーム</h2>
 
                 {formLoadError && (
                     <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
@@ -296,12 +159,12 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 )}
                 
                 <details className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700" open>
-                    <summary className="text-base font-semibold cursor-pointer text-slate-700 dark:text-slate-200" aria-expanded="true" aria-controls="ocr-section">明細書 (AI-OCR)</summary>
-                    <div id="ocr-section" className="mt-4 flex items-center gap-4">
+                    <summary className="text-base font-semibold cursor-pointer text-slate-700 dark:text-slate-200">明細書 (AI-OCR)</summary>
+                    <div className="mt-4 flex items-center gap-4">
                         <label htmlFor="ocr-file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer ${isOcrLoading || isAIOff || isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            {isOcrLoading ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : <Upload className="w-5 h-5" aria-hidden="true" />}
+                            {isOcrLoading ? <Loader className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
                             <span>{isOcrLoading ? '解析中...' : 'ファイルから読み取り'}</span>
-                            <input id="ocr-file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,application/pdf" disabled={isOcrLoading || isAIOff || isDisabled} aria-label="領収書ファイルアップロード" />
+                            <input id="ocr-file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,application/pdf" disabled={isOcrLoading || isAIOff || isDisabled} />
                         </label>
                         {isAIOff && <p className="text-sm text-red-500 dark:text-red-400">AI機能無効のため、OCR機能は利用できません。</p>}
                         {!isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400">交通費の領収書を選択すると、下の表に自動で追加されます。</p>}
@@ -311,28 +174,27 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 <div>
                     <label className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">交通費明細 *</label>
                     <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                        <table className="w-full text-sm" role="grid" aria-describedby="transport-details-description">
-                            <caption id="transport-details-description" className="sr-only">交通費明細一覧</caption>
+                        <table className="w-full text-sm">
                             <thead className="bg-slate-50 dark:bg-slate-700/50">
                                 <tr>
-                                    {['利用日', '出発地', '目的地', '交通手段', '金額(円)'].map(h => <th key={h} scope="col" className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">{h}</th>)}
-                                    <th scope="col" className="p-2 w-12"><span className="sr-only">削除</span></th>
+                                    {['利用日', '出発地', '目的地', '交通手段', '金額(円)'].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">{h}</th>)}
+                                    <th className="p-2 w-12"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                                 {details.map((item) => (
                                     <tr key={item.id}>
-                                        <td className="p-1"><input type="date" id={`travelDate-${item.id}`} value={item.travelDate} onChange={e => handleDetailChange(item.id, 'travelDate', e.target.value)} className={inputClass} disabled={isDisabled} aria-label="利用日" aria-required="true" required /></td>
-                                        <td className="p-1 min-w-[150px]"><input type="text" id={`departure-${item.id}`} placeholder="例: 東京駅" value={item.departure} onChange={e => handleDetailChange(item.id, 'departure', e.target.value)} className={inputClass} disabled={isDisabled} aria-label="出発地" aria-required="true" required /></td>
-                                        <td className="p-1 min-w-[150px]"><input type="text" id={`arrival-${item.id}`} placeholder="例: 幕張メッセ" value={item.arrival} onChange={e => handleDetailChange(item.id, 'arrival', e.target.value)} className={inputClass} disabled={isDisabled} aria-label="目的地" aria-required="true" required /></td>
+                                        <td className="p-1"><input type="date" value={item.travelDate} onChange={e => handleDetailChange(item.id, 'travelDate', e.target.value)} className={inputClass} disabled={isDisabled} /></td>
+                                        <td className="p-1 min-w-[150px]"><input type="text" placeholder="例: 東京駅" value={item.departure} onChange={e => handleDetailChange(item.id, 'departure', e.target.value)} className={inputClass} disabled={isDisabled} /></td>
+                                        <td className="p-1 min-w-[150px]"><input type="text" placeholder="例: 幕張メッセ" value={item.arrival} onChange={e => handleDetailChange(item.id, 'arrival', e.target.value)} className={inputClass} disabled={isDisabled} /></td>
                                         <td className="p-1 min-w-[120px]">
-                                            <select id={`transportMode-${item.id}`} value={item.transportMode} onChange={e => handleDetailChange(item.id, 'transportMode', e.target.value)} className={inputClass} disabled={isDisabled} aria-label="交通手段" aria-required="true" required>
-                                                {TRP_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}
+                                            <select value={item.transportMode} onChange={e => handleDetailChange(item.id, 'transportMode', e.target.value)} className={inputClass} disabled={isDisabled}>
+                                                {TRANSPORT_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}
                                             </select>
                                         </td>
-                                        <td className="p-1 min-w-[120px]"><input type="number" id={`amount-${item.id}`} value={item.amount} onChange={e => handleDetailChange(item.id, 'amount', Number(e.target.value))} className={`${inputClass} text-right`} disabled={isDisabled} aria-label="金額" aria-required="true" required min="1" /></td>
+                                        <td className="p-1 min-w-[120px]"><input type="number" value={item.amount} onChange={e => handleDetailChange(item.id, 'amount', Number(e.target.value))} className={`${inputClass} text-right`} disabled={isDisabled} /></td>
                                         <td className="text-center p-1">
-                                            <button type="button" onClick={() => handleRemoveRow(item.id)} className="p-1 text-slate-400 hover:text-red-500" disabled={isDisabled} aria-label="明細行を削除"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                                            <button type="button" onClick={() => handleRemoveRow(item.id)} className="p-1 text-slate-400 hover:text-red-500" disabled={isDisabled}><Trash2 className="w-4 h-4" /></button>
                                         </td>
                                     </tr>
                                 ))}
@@ -340,8 +202,8 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                         </table>
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                        <button type="button" onClick={addNewRow} className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700" disabled={isDisabled} aria-label="明細行を追加">
-                            <PlusCircle className="w-4 h-4" aria-hidden="true" /> 行を追加
+                        <button type="button" onClick={addNewRow} className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700" disabled={isDisabled}>
+                            <PlusCircle className="w-4 h-4" /> 行を追加
                         </button>
                         <div className="text-right">
                             <span className="text-sm text-slate-500 dark:text-slate-400">合計金額: </span>
@@ -352,20 +214,18 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
                 <div>
                     <label htmlFor="notes" className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">備考</label>
-                    <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={inputClass} placeholder="補足事項があれば入力してください。" disabled={isDisabled} aria-label="備考" />
+                    <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={inputClass} placeholder="補足事項があれば入力してください。" disabled={isDisabled} />
                 </div>
 
-                <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
+                <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} />
 
-                {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg" role="alert">{error}</p>}
+                {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
 
                 <div className="flex justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting} aria-label="フォーム内容をクリア">内容をクリア</button>
-                    <button type="button" onClick={handleSaveDraft} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting} aria-label="下書き保存">
-                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '下書き保存'}
-                    </button>
-                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid || isSubmitting} aria-label="申請を送信する">
-                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : '申請を送信する'}
+                    <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>内容をクリア</button>
+                    <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>下書き保存</button>
+                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
+                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '申請を送信する'}
                     </button>
                 </div>
             </form>

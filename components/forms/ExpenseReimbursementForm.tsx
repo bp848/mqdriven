@@ -1,14 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { submitApplication } from '../../services/dataService.ts';
-import { extractInvoiceDetails } from '../../services/geminiService.ts';
-import ApprovalRouteSelector from './ApprovalRouteSelector.tsx';
-import AccountItemSelect from './AccountItemSelect.tsx';
-import PaymentRecipientSelect from './PaymentRecipientSelect.tsx';
-import DepartmentSelect from './DepartmentSelect.tsx';
-import CustomerSearchSelect from './CustomerSearchSelect.tsx';
-import ProjectSelect from './ProjectSelect.tsx';
-import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons.tsx';
-import { User, InvoiceData, Customer, AccountItem, Department, AllocationDivision, Project, PaymentRecipient, MQCode } from '../../types.ts';
+import React, { useState, useMemo } from 'react';
+import { submitApplication } from '../../services/dataService';
+import { extractInvoiceDetails } from '../../services/geminiService';
+import ApprovalRouteSelector from './ApprovalRouteSelector';
+import AccountItemSelect from './AccountItemSelect';
+import PaymentRecipientSelect from './PaymentRecipientSelect';
+import DepartmentSelect from './DepartmentSelect';
+import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
+// FIX: Import AllocationDivision type.
+import { User, InvoiceData, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision } from '../../types';
 
 interface ExpenseReimbursementFormProps {
     onSuccess: () => void;
@@ -16,13 +15,14 @@ interface ExpenseReimbursementFormProps {
     currentUser: User | null;
     customers: Customer[];
     accountItems: AccountItem[];
-    projects: Project[];
+    jobs: Job[];
+    purchaseOrders: PurchaseOrder[];
     departments: Department[];
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
+    // FIX: Add missing 'allocationDivisions' property.
     allocationDivisions: AllocationDivision[];
-    paymentRecipients: PaymentRecipient[];
 }
 
 interface ExpenseDetail {
@@ -30,14 +30,12 @@ interface ExpenseDetail {
     paymentDate: string;
     paymentRecipientId: string;
     description: string;
-    allocationTargetId: string;
+    allocationTarget: string;
     costType: 'V' | 'F';
     accountItemId: string;
+    // FIX: Rename 'departmentId' to 'allocationDivisionId' to match schema.
     allocationDivisionId: string;
     amount: number;
-    customerId: string;
-    projectId: string;
-    mqCode: MQCode | null;
 }
 
 const readFileAsBase64 = (file: File): Promise<string> => {
@@ -49,88 +47,18 @@ const readFileAsBase64 = (file: File): Promise<string> => {
     });
 };
 
-const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onSuccess, applicationCodeId, currentUser, customers, accountItems, projects, departments, isAIOff, isLoading, error: formLoadError, allocationDivisions, paymentRecipients }) => {
+const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onSuccess, applicationCodeId, currentUser, customers, jobs, departments, isAIOff, isLoading, error: formLoadError, allocationDivisions }) => {
     const [departmentId, setDepartmentId] = useState<string>('');
-    // FIX: Initialize with one empty row to prevent validation issues and improve UX.
-    const [details, setDetails] = useState<ExpenseDetail[]>(() => [{
-        id: `row_${Date.now()}`,
-        paymentDate: new Date().toISOString().split('T')[0],
-        paymentRecipientId: '',
-        description: '',
-        allocationTargetId: '',
-        costType: 'F',
-        accountItemId: '',
-        allocationDivisionId: '',
-        amount: 0,
-        customerId: '',
-        projectId: '',
-        mqCode: null,
-    }]);
+    const [details, setDetails] = useState<ExpenseDetail[]>([]);
     const [notes, setNotes] = useState('');
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
-    const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
-    const [duplicateWarnings, setDuplicateWarnings] = useState<Set<string>>(new Set());
-    const [duplicateWarningMessage, setDuplicateWarningMessage] = useState('');
-
+    
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
 
     const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
-
-    const recipientMap = useMemo(() => new Map(paymentRecipients.map(recipient => [recipient.id, recipient])), [paymentRecipients]);
-    const activeAllocationDivisions = useMemo(() => allocationDivisions.filter(div => div.isActive), [allocationDivisions]);
-
-    const isMqCodeComplete = (mqCode: MQCode | null | undefined): boolean => {
-        if (!mqCode) return false;
-        return Boolean(mqCode.p && mqCode.v && mqCode.m && mqCode.q && mqCode.f && mqCode.g);
-    };
-
-    const evaluateDuplicateWarnings = (rows: ExpenseDetail[]) => {
-        const duplicates = new Set<string>();
-        for (let index = 1; index < rows.length; index += 1) {
-            const current = rows[index];
-            const previous = rows[index - 1];
-            if (
-                current.paymentRecipientId &&
-                previous.paymentRecipientId &&
-                current.paymentRecipientId === previous.paymentRecipientId &&
-                current.description.trim() === previous.description.trim() &&
-                current.amount === previous.amount &&
-                current.paymentDate === previous.paymentDate
-            ) {
-                duplicates.add(previous.id);
-                duplicates.add(current.id);
-            }
-        }
-        return {
-            duplicates,
-            message: duplicates.size > 0 ? '同一内容の明細が連続しています。必要に応じて統合してください。' : '',
-        };
-    };
-
-    useEffect(() => {
-        const { duplicates, message } = evaluateDuplicateWarnings(details);
-        setDuplicateWarnings(duplicates);
-        setDuplicateWarningMessage(message);
-    }, [details]);
-
-    // FIX: The user reported an error on line 73. While no specific error was found, the form was incomplete.
-    // I am completing the form with logic from similar components to ensure functionality.
-    const isFormValid = useMemo(() => {
-        if (!departmentId || !approvalRouteId || details.length === 0) return false;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return !details.some(detail => {
-            const paymentDate = detail.paymentDate ? new Date(detail.paymentDate) : null;
-            // 必須項目：名前と金額のみ
-            return (
-                !detail.description.trim() ||
-                !detail.amount || detail.amount <= 0
-            );
-        });
-    }, [departmentId, approvalRouteId, details]);
 
     const addNewRow = () => {
         setDetails(prev => [...prev, {
@@ -138,46 +66,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
             paymentDate: new Date().toISOString().split('T')[0],
             paymentRecipientId: '',
             description: '',
-            allocationTargetId: '',
+            allocationTarget: '',
             costType: 'F',
             accountItemId: '',
+            // FIX: Use 'allocationDivisionId'.
             allocationDivisionId: '',
             amount: 0,
-            customerId: '',
-            projectId: '',
-            mqCode: null,
         }]);
     };
     
-    const updateDetail = (id: string, updates: Partial<ExpenseDetail>) => {
-        setDetails(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+    const handleDetailChange = (id: string, field: keyof ExpenseDetail, value: string | number) => {
+        setDetails(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
     const handleRemoveRow = (id: string) => setDetails(prev => prev.filter(item => item.id !== id));
-
-    const clearForm = () => {
-        setDepartmentId('');
-        // FIX: Re-initialize with one empty row instead of just clearing
-        setDetails([{
-            id: `row_${Date.now()}`,
-            paymentDate: new Date().toISOString().split('T')[0],
-            paymentRecipientId: '',
-            description: '',
-            allocationTargetId: '',
-            costType: 'F',
-            accountItemId: '',
-            allocationDivisionId: '',
-            amount: 0,
-            customerId: '',
-            projectId: '',
-            mqCode: null,
-        }]);
-        setNotes('');
-        setError('');
-        setValidationErrors(new Set());
-        setDuplicateWarnings(new Set());
-        setDuplicateWarningMessage('');
-    };
     
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -191,216 +93,71 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
         setIsOcrLoading(true);
         setError('');
         try {
-            console.log('[経費申請OCR] ファイル読み取り開始:', file.name, 'タイプ:', file.type);
             const base64String = await readFileAsBase64(file);
-            console.log('[経費申請OCR] Base64変換完了。AI解析開始...');
+            const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type);
             
-            const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type, accountItems, allocationDivisions);
-            console.log('[経費申請OCR] AI解析完了:', ocrData);
-            
-            const matchedAccountItem = accountItems.find(item => item.name === ocrData.account);
-            const matchedAllocDivision = allocationDivisions.find(div => div.name === ocrData.allocationDivision);
-            const matchedCustomer = customers.find(customer => customer.customerName === ocrData.relatedCustomer);
-            const matchedProject = projects.find(project => project.projectName === ocrData.project);
-            const resolvedProject = matchedCustomer && matchedProject && matchedProject.customerId === matchedCustomer.id ? matchedProject : null;
-
-            console.log('[経費申請OCR] マッチング結果 - 勘定科目:', matchedAccountItem?.name, '振分区分:', matchedAllocDivision?.name);
-
-            // 既存の空行を探す（名前と金額が空の行）
-            const emptyRowIndex = details.findIndex(d => !d.description.trim() && (!d.amount || d.amount <= 0));
-            
-            const ocrDetail: ExpenseDetail = {
-                id: emptyRowIndex >= 0 ? details[emptyRowIndex].id : `row_ocr_${Date.now()}`,
+            const newDetail: ExpenseDetail = {
+                id: `row_ocr_${Date.now()}`,
                 paymentDate: ocrData.invoiceDate || new Date().toISOString().split('T')[0],
-                paymentRecipientId: '', // User needs to select this
+                paymentRecipientId: '', // OCRデータに支払先IDはないため空
                 description: `【OCR読取: ${ocrData.vendorName}】${ocrData.description}`,
-                allocationTargetId: '',
+                allocationTarget: ocrData.project ? `job:${jobs.find(j => j.title === ocrData.project)?.id || ''}` : `customer:${customers.find(c => c.customerName === ocrData.relatedCustomer)?.id || ''}`,
                 costType: ocrData.costType || 'F',
-                accountItemId: matchedAccountItem?.id || '',
-                allocationDivisionId: matchedAllocDivision?.id || '',
+                accountItemId: '', // OCRデータに勘定科目IDはないため空
+                // FIX: Use 'allocationDivisionId'.
+                allocationDivisionId: '',
                 amount: ocrData.totalAmount || 0,
-                customerId: matchedCustomer?.id || '',
-                projectId: resolvedProject?.id || '',
-                mqCode: matchedAccountItem?.mqCode ?? null,
             };
-            
-            if (emptyRowIndex >= 0) {
-                // 既存の空行に入力
-                setDetails(prev => prev.map((d, i) => i === emptyRowIndex ? ocrDetail : d));
-                console.log('[経費申請OCR] 既存の空行に入力しました');
-            } else {
-                // 空行がない場合は新しい行を追加
-                setDetails(prev => [...prev, ocrDetail]);
-                console.log('[経費申請OCR] 新しい明細行を追加しました');
-            }
+            setDetails(prev => [...prev, newDetail]);
 
         } catch (err: any) {
-            if (err.name === 'AbortError') return;
-            console.error('[経費申請OCR] エラー:', err);
+            if (err.name === 'AbortError') return; // Request was aborted, do nothing
             setError(err.message || 'AI-OCR処理中にエラーが発生しました。');
         } finally {
             setIsOcrLoading(false);
-            e.target.value = '';
+            e.target.value = ''; // ファイル選択をリセット
         }
     };
 
-    const validateForm = () => {
-        const errors = new Set<string>();
-        const warnings = new Set<string>();
-        
-        // 必須チェック（送信を止める）
-        if (!approvalRouteId) errors.add('approvalRouteId');
-        if (details.length === 0) errors.add('details');
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        details.forEach(detail => {
-            // 必須：名前と金額のみ
-            if (!detail.description.trim()) errors.add(`${detail.id}-description`);
-            if (!detail.amount || detail.amount <= 0) errors.add(`${detail.id}-amount`);
-            
-            // 警告のみ（送信は止めない）
-            if (!detail.paymentDate) {
-                warnings.add(`${detail.id}-paymentDate`);
-            } else {
-                const paymentDate = new Date(detail.paymentDate);
-                if (Number.isNaN(paymentDate.getTime()) || paymentDate.getTime() > today.getTime()) {
-                    warnings.add(`${detail.id}-paymentDate`);
-                }
-            }
-            if (!detail.paymentRecipientId) warnings.add(`${detail.id}-paymentRecipientId`);
-            if (!detail.accountItemId) warnings.add(`${detail.id}-accountItemId`);
-            if (!detail.allocationDivisionId) warnings.add(`${detail.id}-allocationDivisionId`);
-            if (!detail.customerId) warnings.add(`${detail.id}-customerId`);
-            // 案件は任意（警告も出さない）
-            if (!isMqCodeComplete(detail.mqCode)) warnings.add(`${detail.id}-mqCode`);
-        });
-
-        const { duplicates, message } = evaluateDuplicateWarnings(details);
-        setDuplicateWarnings(duplicates);
-        setDuplicateWarningMessage(message);
-
-        return errors;
-    };
-
-    const mapDetailToPayload = (detail: ExpenseDetail) => ({
-        payment_date: detail.paymentDate,
-        payment_recipient_id: detail.paymentRecipientId || null,
-        description: detail.description,
-        account_item_id: detail.accountItemId || null,
-        allocation_division_id: detail.allocationDivisionId || null,
-        allocation_target_id: detail.allocationTargetId || null,
-        cost_type: detail.costType,
-        amount: detail.amount,
-        customer_id: detail.customerId || null,
-        project_id: detail.projectId || null,
-        mq_code: detail.mqCode ?? null,
-    });
-
-    const handleSaveDraft = async () => {
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            return;
-        }
-        if (!approvalRouteId) {
-            setError('承認ルートを選択してください。');
-            return;
-        }
-
-        setIsSubmitting(true);
-        setError('');
-        try {
-            const submissionData = {
-                department_id: departmentId,
-                details: details.map(mapDetailToPayload),
-                notes,
-                total_amount: totalAmount
-            };
-            await submitApplication({
-                applicationCodeId,
-                formData: submissionData,
-                approvalRouteId,
-                status: 'draft'
-            }, currentUser.id);
-            onSuccess();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : '下書きの保存に失敗しました。');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const errors = validateForm();
-        setValidationErrors(errors);
-        
-        if (errors.size > 0) {
-            setError("必須項目（承認ルート、明細の名前・金額）を入力してください。");
-            return;
-        }
-
-        if (!currentUser) {
-            setError("ユーザー情報が見つかりません。");
-            return;
+        if (!approvalRouteId) return setError('承認ルートを選択してください。');
+        if (!currentUser) return setError('ユーザー情報が見つかりません。');
+        if (!departmentId) return setError('部門を選択してください。');
+        if (details.length === 0 || details.every(d => !d.description && !d.paymentRecipientId)) {
+            return setError('少なくとも1つの明細を入力してください。');
         }
 
         setIsSubmitting(true);
         setError('');
         try {
             const submissionData = {
-                department_id: departmentId,
-                details: details
-                    .filter(d => d.description && d.amount > 0)
-                    .map(mapDetailToPayload),
-                notes,
-                total_amount: totalAmount
+                departmentId,
+                details: details.filter(d => d.description || d.paymentRecipientId),
+                notes: notes,
+                totalAmount: totalAmount,
             };
-            await submitApplication({
-                applicationCodeId,
-                formData: submissionData,
-                approvalRouteId
-            }, currentUser.id);
+            await submitApplication({ applicationCodeId, formData: submissionData, approvalRouteId }, currentUser.id);
             onSuccess();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : '申請の提出に失敗しました。');
+        } catch (err: any) {
+            setError('申請の提出に失敗しました。');
         } finally {
             setIsSubmitting(false);
         }
     };
-    
-    const inputClass = "w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
-    
-    // 必須項目が空の場合も赤く表示
-    const hasError = (fieldId: string) => {
-        if (validationErrors.has(fieldId)) return true;
-        
-        // 必須項目のチェック（デフォルトで赤く表示）
-        const match = fieldId.match(/^(.+)-(description|amount)$/);
-        if (match) {
-            const [, rowId, field] = match;
-            const detail = details.find(d => d.id === rowId);
-            if (detail) {
-                if (field === 'description' && !detail.description.trim()) return true;
-                if (field === 'amount' && (!detail.amount || detail.amount <= 0)) return true;
-            }
-        }
-        return false;
-    };
 
-    // FIX: Add return statement to make this a valid React component
+    const inputClass = "w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+
     return (
         <div className="relative">
-             {(isLoading || formLoadError) && (
-                <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8" aria-live="polite" aria-busy={isLoading}>
-                    {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" aria-hidden="true" />}
-                    {formLoadError && <div className="text-center"><AlertTriangle className="w-12 h-12 text-red-500 mx-auto" /><p className="mt-2 text-red-600">{formLoadError}</p></div>}
+            {(isLoading || formLoadError) && (
+                <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8">
+                    {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                 </div>
             )}
-             <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up" aria-labelledby="form-title">
-                <h2 id="form-title" className="text-2xl font-bold text-slate-800 dark:text-white text-center">経費精算フォーム</h2>
-                 
+            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up">
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-white text-center">経費精算フォーム</h2>
+                
                 {formLoadError && (
                     <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
                         <p className="font-bold">フォーム読み込みエラー</p>
@@ -408,262 +165,54 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                     </div>
                 )}
                 
-                <details className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700" open>
-                    <summary className="text-base font-semibold cursor-pointer text-slate-700 dark:text-slate-200">明細書 (AI-OCR)</summary>
-                    <div id="ocr-section" className="mt-4 flex items-center gap-4">
-                        <label htmlFor="ocr-file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer ${isOcrLoading || isAIOff || isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            {isOcrLoading ? <Loader className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                            <span>{isOcrLoading ? '解析中...' : 'ファイルから読み取り'}</span>
-                            <input id="ocr-file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,application/pdf" disabled={isOcrLoading || isAIOff || isDisabled} />
-                        </label>
-                        {isAIOff && <p className="text-sm text-red-500 dark:text-red-400">AI機能無効のため、OCR機能は利用できません。</p>}
-                        {!isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400">領収書ファイルを選択すると、下の表に自動で追加されます。</p>}
-                    </div>
-                </details>
-                
-                <div>
-                    <label htmlFor="departmentId" className={`block text-base font-semibold mb-2 ${!departmentId ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                        部門 * {!departmentId && '⚠️'}
+                <div className="mt-4 flex items-center gap-4">
+                    <label htmlFor="ocr-file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer ${isOcrLoading || isAIOff || isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        {isOcrLoading ? <Loader className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                        <span>{isOcrLoading ? '解析中...' : '領収書から読み取り'}</span>
+                        <input id="ocr-file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,application/pdf" disabled={isOcrLoading || isAIOff || isDisabled} />
                     </label>
-                    <div className={!departmentId ? 'border-2 border-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg shadow-lg shadow-red-500/50 animate-pulse' : ''}>
-                        <DepartmentSelect
-                            id="departmentId"
-                            value={departmentId}
-                            onChange={setDepartmentId}
-                            required
-                            disabled={isDisabled}
-                            departments={departments}
-                        />
-                    </div>
-                    {!departmentId && (
-                        <p className="mt-1 text-sm text-red-600 font-semibold">部門を選択してください</p>
-                    )}
+                    {isAIOff && <p className="text-sm text-red-500 dark:text-red-400">AI機能無効のため、OCR機能は利用できません。</p>}
+                    {!isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400">領収書ファイルを選択すると、下の表に自動で追加されます。</p>}
                 </div>
                 
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">部門 *</label>
+                  <DepartmentSelect
+                    value={departmentId}
+                    onChange={setDepartmentId}
+                    required
+                  />
+                </div>
+
+                <div>
                     <label className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">経費明細 *</label>
-                    {duplicateWarningMessage && (
-                        <div className="mb-3 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-600 dark:bg-amber-900/30">
-                            <AlertTriangle className="w-4 h-4" />
-                            <span>{duplicateWarningMessage}</span>
+                    {details.map(item => (
+                        <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-start mb-2">
+                            <input type="date" value={item.paymentDate} onChange={e => handleDetailChange(item.id, 'paymentDate', e.target.value)} className={`${inputClass} md:col-span-2`} disabled={isDisabled} />
+                            <div className="md:col-span-2"><PaymentRecipientSelect value={item.paymentRecipientId} onChange={(id) => handleDetailChange(item.id, 'paymentRecipientId', id)} required /></div>
+                            <input type="text" placeholder="内容" value={item.description} onChange={e => handleDetailChange(item.id, 'description', e.target.value)} className={`${inputClass} md:col-span-2`} disabled={isDisabled} />
+                            <div className="md:col-span-2"><AccountItemSelect value={item.accountItemId} onChange={(id) => handleDetailChange(item.id, 'accountItemId', id)} required /></div>
+                            {/* FIX: Replace DepartmentSelect with AllocationDivision select. */}
+                            <div className="md:col-span-1">
+                                <select value={item.allocationDivisionId} onChange={e => handleDetailChange(item.id, 'allocationDivisionId', e.target.value)} className={inputClass} disabled={isDisabled}>
+                                    <option value="">振分区分</option>
+                                    {allocationDivisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                </select>
+                            </div>
+                            <select value={item.allocationTarget} onChange={e => handleDetailChange(item.id, 'allocationTarget', e.target.value)} className={`${inputClass} md:col-span-1`} disabled={isDisabled}>
+                                <option value="">振分先</option>
+                                <optgroup label="顧客">
+                                    {customers.map(c => <option key={`customer:${c.id}`} value={`customer:${c.id}`}>{c.customerName}</option>)}
+                                </optgroup>
+                                <optgroup label="案件">
+                                    {jobs.map(j => <option key={`job:${j.id}`} value={`job:${j.id}`}>{j.title}</option>)}
+                                </optgroup>
+                            </select>
+                            <input type="number" placeholder="金額" value={item.amount} onChange={e => handleDetailChange(item.id, 'amount', Number(e.target.value))} className={`${inputClass} md:col-span-1 text-right`} disabled={isDisabled} />
+                            <button type="button" onClick={() => handleRemoveRow(item.id)} className="p-2 text-slate-400 hover:text-red-500 h-10" disabled={isDisabled}><Trash2 className="w-5 h-5" /></button>
                         </div>
-                    )}
-                    <div className="space-y-4">
-                        {details.map((item, index) => {
-                            const selectedRecipient = recipientMap.get(item.paymentRecipientId);
-                            const allocationOptions = selectedRecipient?.allocationTargets ?? [];
-                            const rowHasError = [
-                                `${item.id}-paymentDate`,
-                                `${item.id}-paymentRecipientId`,
-                                `${item.id}-description`,
-                                `${item.id}-amount`,
-                                `${item.id}-accountItemId`,
-                                `${item.id}-allocationDivisionId`,
-                                `${item.id}-customerId`,
-                                `${item.id}-projectId`,
-                                `${item.id}-mqCode`,
-                            ].some(hasError);
-                            const rowHasWarning = duplicateWarnings.has(item.id);
-                            const containerClass = rowHasError
-                                ? 'border-red-600 bg-red-100 dark:bg-red-900/30 shadow-lg shadow-red-500/50 animate-pulse'
-                                : rowHasWarning
-                                    ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20'
-                                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30';
-
-                            const paymentDateId = `paymentDate-${item.id}`;
-                            const paymentRecipientId = `paymentRecipient-${item.id}`;
-                            const allocationTargetId = `allocationTarget-${item.id}`;
-                            const descriptionId = `description-${item.id}`;
-                            const amountId = `amount-${item.id}`;
-                            const customerId = `customer-${item.id}`;
-                            const projectId = `project-${item.id}`;
-                            const accountItemId = `accountItem-${item.id}`;
-                            const allocationDivisionId = `allocationDivision-${item.id}`;
-                            const costTypeId = `costType-${item.id}`;
-
-                            return (
-                                <div key={item.id} className={`grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-3 p-4 rounded-lg border ${containerClass}`}>
-                                    <div className="md:col-span-2">
-                                        <label htmlFor={paymentDateId} className="text-xs font-semibold text-slate-500">支払日 *</label>
-                                        <input
-                                            type="date"
-                                            id={paymentDateId}
-                                            value={item.paymentDate}
-                                            onChange={e => updateDetail(item.id, { paymentDate: e.target.value })}
-                                            className={`${inputClass} ${hasError(`${item.id}-paymentDate`) ? 'border-red-600 focus:border-red-600 focus:ring-red-600 bg-red-50 dark:bg-red-900/20 shadow-red-500/50 shadow-md' : ''}`}
-                                            disabled={isDisabled}
-                                        />
-                                        {hasError(`${item.id}-paymentDate`) && (
-                                            <p className="mt-1 text-[11px] text-red-600">未来日または未入力です。</p>
-                                        )}
-                                    </div>
-                                    <div className="md:col-span-3 space-y-1">
-                                        <label htmlFor={paymentRecipientId} className="text-xs font-semibold text-slate-500">支払先 *</label>
-                                        <PaymentRecipientSelect
-                                            value={item.paymentRecipientId}
-                                            onChange={val => updateDetail(item.id, { paymentRecipientId: val, allocationTargetId: '' })}
-                                            recipients={paymentRecipients}
-                                            disabled={isDisabled}
-                                            id={paymentRecipientId}
-                                        />
-                                        {selectedRecipient && (
-                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                                {[selectedRecipient.bankName, selectedRecipient.bankBranch, selectedRecipient.bankAccountNumber]
-                                                    .filter(Boolean)
-                                                    .join(' / ') || '銀行情報未登録'}
-                                            </p>
-                                        )}
-                                        {hasError(`${item.id}-paymentRecipientId`) && (
-                                            <p className="text-[11px] text-red-600">支払先を選択してください。</p>
-                                        )}
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label htmlFor={allocationTargetId} className="text-xs font-semibold text-slate-500">振分先</label>
-                                        <select
-                                            id={allocationTargetId}
-                                            value={item.allocationTargetId}
-                                            onChange={e => updateDetail(item.id, { allocationTargetId: e.target.value })}
-                                            className={inputClass}
-                                            disabled={isDisabled || allocationOptions.length === 0}
-                                        >
-                                            <option value="">振分先なし</option>
-                                            {allocationOptions.map(option => (
-                                                <option key={option.id} value={option.id}>{option.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="md:col-span-5">
-                                        <label htmlFor={descriptionId} className="text-xs font-semibold text-slate-500">内容 *</label>
-                                        <input
-                                            type="text"
-                                            id={descriptionId}
-                                            placeholder="例: 会議費用"
-                                            value={item.description}
-                                            onChange={e => updateDetail(item.id, { description: e.target.value })}
-                                            className={`${inputClass} ${hasError(`${item.id}-description`) ? 'border-red-600 focus:border-red-600 focus:ring-red-600 bg-red-50 dark:bg-red-900/20 shadow-red-500/50 shadow-md' : ''}`}
-                                            disabled={isDisabled}
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label htmlFor={amountId} className="text-xs font-semibold text-slate-500">金額 *</label>
-                                        <input
-                                            type="number"
-                                            id={amountId}
-                                            value={item.amount}
-                                            onChange={e => updateDetail(item.id, { amount: Number(e.target.value) || 0 })}
-                                            className={`${inputClass} text-right ${hasError(`${item.id}-amount`) ? 'border-red-600 focus:border-red-600 focus:ring-red-600 bg-red-50 dark:bg-red-900/20 shadow-red-500/50 shadow-md' : ''}`}
-                                            disabled={isDisabled}
-                                            min="1"
-                                        />
-                                    </div>
-                                    <div className="md:col-span-3">
-                                        <label htmlFor={customerId} className="text-xs font-semibold text-slate-500">顧客 *</label>
-                                        <CustomerSearchSelect
-                                            customers={customers}
-                                            value={item.customerId}
-                                            onChange={customerId => updateDetail(item.id, { customerId, projectId: '' })}
-                                            disabled={isDisabled}
-                                            required
-                                            id={customerId}
-                                        />
-                                        {hasError(`${item.id}-customerId`) && (
-                                            <p className="text-[11px] text-red-600">顧客を選択してください。</p>
-                                        )}
-                                    </div>
-                                    <div className="md:col-span-3">
-                                        <label htmlFor={projectId} className="text-xs font-semibold text-slate-500">案件</label>
-                                        <ProjectSelect
-                                            projects={projects}
-                                            customerId={item.customerId}
-                                            value={item.projectId}
-                                            onChange={projectId => updateDetail(item.id, { projectId })}
-                                            disabled={isDisabled}
-                                            required={false}
-                                            id={projectId}
-                                        />
-                                    </div>
-                                    <div className="md:col-span-3">
-                                        <label htmlFor={accountItemId} className="text-xs font-semibold text-slate-500">勘定科目 *</label>
-                                        <AccountItemSelect
-                                            value={item.accountItemId}
-                                            onChange={val => updateDetail(item.id, { accountItemId: val })}
-                                            onSelect={selected => updateDetail(item.id, { accountItemId: selected?.id ?? '', mqCode: selected?.mqCode ?? null })}
-                                            items={accountItems}
-                                            disabled={isDisabled}
-                                            required
-                                            id={accountItemId}
-                                        />
-                                        {hasError(`${item.id}-accountItemId`) && (
-                                            <p className="text-[11px] text-red-600">勘定科目を選択してください。</p>
-                                        )}
-                                    </div>
-                                    <div className="md:col-span-3">
-                                        <label className="text-xs font-semibold text-slate-500">MQコード *</label>
-                                        <div className={`rounded-md border p-2 ${hasError(`${item.id}-mqCode`) ? 'border-red-600 bg-red-100 dark:bg-red-900/30 shadow-red-500/50 shadow-md animate-pulse' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800'}`}>
-                                            {item.mqCode ? (
-                                                <dl className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs">
-                                                    {(['P', 'V', 'M', 'Q', 'F', 'G'] as const).map(label => {
-                                                        const key = label.toLowerCase() as keyof MQCode;
-                                                        return (
-                                                            <div key={label}>
-                                                                <dt className="font-semibold text-slate-500">{label}</dt>
-                                                                <dd className="font-mono text-slate-800 dark:text-slate-200">{item.mqCode?.[key] || '-'}</dd>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </dl>
-                                            ) : (
-                                                <p className="text-[11px] text-slate-500">勘定科目を選択すると自動表示されます。</p>
-                                            )}
-                                        </div>
-                                        {hasError(`${item.id}-mqCode`) && (
-                                            <p className="text-[11px] text-red-600">MQコードの定義が不足しています。</p>
-                                        )}
-                                    </div>
-                                    <div className="md:col-span-3">
-                                        <label htmlFor={allocationDivisionId} className="text-xs font-semibold text-slate-500">区分 *</label>
-                                        <select
-                                            id={allocationDivisionId}
-                                            value={item.allocationDivisionId}
-                                            onChange={e => updateDetail(item.id, { allocationDivisionId: e.target.value })}
-                                            className={`${inputClass} ${hasError(`${item.id}-allocationDivisionId`) ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
-                                            disabled={isDisabled}
-                                        >
-                                            <option value="">区分選択</option>
-                                            {activeAllocationDivisions.map(d => (
-                                                <option key={d.id} value={d.id}>{d.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label htmlFor={costTypeId} className="text-xs font-semibold text-slate-500">費用種別</label>
-                                        <select
-                                            id={costTypeId}
-                                            value={item.costType}
-                                            onChange={e => updateDetail(item.id, { costType: e.target.value as 'V' | 'F' })}
-                                            className={inputClass}
-                                            disabled={isDisabled}
-                                        >
-                                            <option value="F">固定費(F)</option>
-                                            <option value="V">変動費(V)</option>
-                                        </select>
-                                    </div>
-                                    <div className="md:col-span-1 flex items-end justify-center">
-                                        <button type="button" onClick={() => handleRemoveRow(item.id)} className="p-1 text-slate-400 hover:text-red-500" disabled={isDisabled}>
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    {rowHasWarning && (
-                                        <div className="md:col-span-12 flex items-center gap-1 text-[11px] text-amber-700">
-                                            <AlertTriangle className="w-3.5 h-3.5" />
-                                            <span>直前の明細と内容が重複しています。</span>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
+                    ))}
+                     <div className="flex items-center justify-between mt-2">
                         <button type="button" onClick={addNewRow} className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700" disabled={isDisabled}>
                             <PlusCircle className="w-4 h-4" /> 行を追加
                         </button>
@@ -678,28 +227,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onS
                     <label htmlFor="notes" className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">備考</label>
                     <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={inputClass} placeholder="補足事項があれば入力してください。" disabled={isDisabled} />
                 </div>
-                
-                <div className={
-                    !approvalRouteId 
-                        ? 'p-4 border-2 border-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg shadow-lg shadow-red-500/50 animate-pulse' 
-                        : 'p-4 border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg shadow-md shadow-blue-500/30'
-                }>
-                    <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
-                    {!approvalRouteId ? (
-                        <p className="mt-2 text-sm text-red-600 font-semibold">⚠️ 承認ルートを選択してください（必須）</p>
-                    ) : (
-                        <p className="mt-2 text-sm text-blue-600 dark:text-blue-400 font-semibold">✓ 承認ルートが設定されています</p>
-                    )}
-                </div>
+
+                <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} />
 
                 {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
-                
+
                 <div className="flex justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting}>内容をクリア</button>
-                    <button type="button" onClick={handleSaveDraft} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled || isSubmitting}>
-                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '下書き保存'}
-                    </button>
-                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled || !isFormValid || isSubmitting}>
+                    <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>下書き保存</button>
+                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
                         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '申請を送信する'}
                     </button>
                 </div>

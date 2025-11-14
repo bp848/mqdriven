@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Lead, LeadStatus } from '../../types.ts';
-import LeadStatusBadge from './LeadStatusBadge.tsx';
+import { Lead, LeadStatus } from '../../types';
+import LeadStatusBadge from './LeadStatusBadge';
 
 interface LeadKanbanViewProps {
   leads: Lead[];
@@ -98,7 +98,7 @@ const LeadKanbanView: React.FC<LeadKanbanViewProps> = ({ leads, onUpdateLead, on
         const droppedLead = leads.find(l => l.id === leadId);
 
         if (droppedLead && droppedLead.status !== newStatus) {
-            onUpdateLead(leadId, { status: newStatus, updatedAt: new Date().toISOString() });
+            onUpdateLead(leadId, { status: newStatus });
         }
     };
     
@@ -118,11 +118,13 @@ const LeadKanbanView: React.FC<LeadKanbanViewProps> = ({ leads, onUpdateLead, on
                     leads={leadsByStatus[status]}
                     onCardClick={onCardClick}
                     onDrop={(newStatus) => {
-                        const leadId = (window as any).draggedLeadId;
+                        // This seems complex, let's simplify. The onDrop should be on the column itself.
+                        // Refactoring the onDrop handler.
+                        const leadId = (window as any).draggedLeadId; // A bit of a hack for simplicity without complex context/state mgmt
                         if(leadId) {
                             const droppedLead = leads.find(l => l.id === leadId);
                             if (droppedLead && droppedLead.status !== newStatus) {
-                                onUpdateLead(leadId, { status: newStatus, updatedAt: new Date().toISOString() });
+                                onUpdateLead(leadId, { status: newStatus });
                             }
                         }
                     }}
@@ -133,7 +135,6 @@ const LeadKanbanView: React.FC<LeadKanbanViewProps> = ({ leads, onUpdateLead, on
 };
 
 // Simplified KanbanView without complex drag-n-drop state management
-
 const SimpleLeadKanbanView: React.FC<LeadKanbanViewProps> = ({ leads, onUpdateLead, onCardClick }) => {
     
     const handleDropOnColumn = (e: React.DragEvent<HTMLDivElement>, newStatus: LeadStatus) => {
@@ -142,7 +143,7 @@ const SimpleLeadKanbanView: React.FC<LeadKanbanViewProps> = ({ leads, onUpdateLe
         const droppedLead = leads.find(l => l.id === leadId);
         
         if (droppedLead && droppedLead.status !== newStatus) {
-            onUpdateLead(leadId, { status: newStatus, updatedAt: new Date().toISOString() });
+            onUpdateLead(leadId, { status: newStatus });
         }
         e.currentTarget.classList.remove('bg-blue-100', 'dark:bg-blue-900/50');
     };
@@ -164,7 +165,7 @@ const SimpleLeadKanbanView: React.FC<LeadKanbanViewProps> = ({ leads, onUpdateLe
     }, [leads]);
 
     return (
-        <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:-mx-8 sm:px-8">
+        <div className="flex gap-4 overflow-x-auto pb-4 -mx-8 px-8">
             {COLUMNS_ORDER.map(status => (
                 <div
                     key={status}

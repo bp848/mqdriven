@@ -1,4 +1,4 @@
-import { Job, JobStatus, InvoiceStatus, Employee, JournalEntry, Customer, PurchaseOrder, PurchaseOrderStatus } from './types.ts';
+import { Job, JobStatus, InvoiceStatus, Employee, JournalEntry, Customer, PurchaseOrder, PurchaseOrderStatus } from './types';
 
 export const PAPER_TYPES = [
   'コート紙 90kg',
@@ -27,7 +27,7 @@ export const FIXED_COSTS = {
 };
 
 // ダッシュボード用の日次目標
-export const DLY_GOALS = {
+export const DAILY_GOALS = {
   grossMargin: 50000, // 限界利益
   operatingProfit: 25000, // 経常利益
   ordersValue: 150000, // 受注額

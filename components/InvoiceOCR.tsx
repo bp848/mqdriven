@@ -1,16 +1,17 @@
+
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { extractInvoiceDetails } from '../services/geminiService.ts';
-import { getInboxItems, addInboxItem, updateInboxItem, deleteInboxItem, uploadFile } from '../services/dataService.ts';
-import { InboxItem, InvoiceData, InboxItemStatus, Toast, ConfirmationDialogProps, AccountItem, AllocationDivision } from '../types.ts';
-import { Upload, Loader, X, CheckCircle, Save, Trash2, AlertTriangle, RefreshCw } from './Icons.tsx';
+import { extractInvoiceDetails } from '../services/geminiService';
+// FIX: The member 'uploadToInbox' is not exported from '../services/dataService'. Use 'uploadFile' instead.
+import { getInboxItems, addInboxItem, updateInboxItem, deleteInboxItem, uploadFile } from '../services/dataService';
+import { InboxItem, InvoiceData, InboxItemStatus, Toast, ConfirmationDialogProps } from '../types';
+import { Upload, Loader, X, CheckCircle, Save, Trash2, AlertTriangle, RefreshCw } from './Icons';
 
 interface InvoiceOCRProps {
     onSaveExpenses: (data: InvoiceData) => void;
     addToast: (message: string, type: Toast['type']) => void;
     requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
     isAIOff: boolean;
-    accountItems: AccountItem[];
-    allocationDivisions: AllocationDivision[];
 }
 
 const readFileAsBase64 = (file: File): Promise<string> => {
@@ -45,9 +46,7 @@ const InboxItemCard: React.FC<{
     onDelete: (item: InboxItem) => Promise<void>;
     onApprove: (item: InboxItem) => Promise<void>;
     requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
-    accountItems: AccountItem[];
-    allocationDivisions: AllocationDivision[];
-}> = ({ item, onUpdate, onDelete, onApprove, requestConfirmation, accountItems, allocationDivisions }) => {
+}> = ({ item, onUpdate, onDelete, onApprove, requestConfirmation }) => {
     const [localData, setLocalData] = useState<InvoiceData | null>(item.extractedData);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -57,22 +56,26 @@ const InboxItemCard: React.FC<{
         setLocalData(item.extractedData);
     }, [item.extractedData]);
 
-    // FIX: Add HTMLTextAreaElement to the event type to allow usage with textareas.
-    const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        if (!localData) return;
         const { name, value } = e.target;
-        setLocalData(prev => prev ? { ...prev, [name]: value } : null);
+        setLocalData({
+            ...localData,
+            [name]: name === 'totalAmount' ? parseFloat(value) || 0 : value
+        });
     };
 
     const handleSave = async () => {
+        if (!localData) return;
         setIsSaving(true);
         await onUpdate(item.id, { extractedData: localData });
         setIsSaving(false);
     };
-
-    const handleDeleteClick = () => {
+    
+    const handleDelete = async () => {
         requestConfirmation({
-            title: 'アイテムを削除',
-            message: `本当にファイル「${item.fileName}」をインボックスから削除しますか？`,
+            title: 'ファイルを削除',
+            message: `本当に「${item.fileName}」を削除しますか？この操作は元に戻せません。`,
             onConfirm: async () => {
                 setIsDeleting(true);
                 await onDelete(item);
@@ -83,198 +86,258 @@ const InboxItemCard: React.FC<{
     const handleApprove = async () => {
         if (!localData) return;
         setIsApproving(true);
-        await onApprove(item);
+        const itemToApprove: InboxItem = {
+            ...item,
+            extractedData: localData,
+        };
+        await onApprove(itemToApprove);
+        setIsApproving(false);
     };
 
-    if (item.status === InboxItemStatus.Processing) {
-        return (
-             <div className="p-4 border rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center gap-4">
-                <Loader className="w-5 h-5 animate-spin" />
-                <div>
-                    <p className="font-medium">{item.fileName}</p>
-                    <StatusBadge status={item.status} />
-                </div>
-            </div>
-        );
-    }
-    
-    if (item.status === InboxItemStatus.Error) {
-         return (
-             <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <AlertTriangle className="w-5 h-5 text-red-500"/>
-                    <div>
-                        <p className="font-medium">{item.fileName}</p>
-                        <p className="text-sm text-red-600 dark:text-red-300">{item.errorMessage}</p>
-                    </div>
-                </div>
-                <button onClick={handleDeleteClick} disabled={isDeleting} className="p-2 text-red-500 hover:bg-red-100 rounded-full"><Trash2 className="w-5 h-5"/></button>
-            </div>
-        );
-    }
-    
+    const inputClass = "w-full text-base bg-slate-50 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500";
+    const selectClass = "w-full text-base bg-slate-50 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500";
+
+
     return (
-        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <div className="p-4 bg-slate-50 dark:bg-slate-900/30 flex justify-between items-start">
+        <div className={`bg-white dark:bg-slate-800 p-4 rounded-xl shadow-md border ${item.status === 'approved' ? 'border-green-300 dark:border-green-700' : 'border-slate-200 dark:border-slate-700'}`}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <p className="font-semibold">{item.fileName}</p>
-                    <StatusBadge status={item.status} />
+                    <a href={item.fileUrl} target="_blank" rel="noopener noreferrer">
+                        <img src={item.fileUrl} alt={item.fileName} className="w-full h-auto max-h-80 object-contain rounded-md border border-slate-200 dark:border-slate-700" />
+                    </a>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 truncate" title={item.fileName}>{item.fileName}</p>
                 </div>
-                <img src={item.fileUrl} alt={item.fileName} className="w-24 h-auto rounded-md object-contain border dark:border-slate-600"/>
-            </div>
-            {localData && (
-                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input name="vendorName" value={localData.vendorName || ''} onChange={handleLocalChange} placeholder="発行元" className="md:col-span-2 w-full bg-slate-50 dark:bg-slate-700 p-2 rounded-md border"/>
-                    <input name="invoiceDate" type="date" value={localData.invoiceDate || ''} onChange={handleLocalChange} className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded-md border"/>
-                    <input name="totalAmount" type="number" value={localData.totalAmount || ''} onChange={handleLocalChange} placeholder="合計金額" className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded-md border"/>
-                    <textarea name="description" value={localData.description || ''} onChange={handleLocalChange} placeholder="内容" className="md:col-span-2 w-full bg-slate-50 dark:bg-slate-700 p-2 rounded-md border"/>
-                    <select name="account" value={localData.account || ''} onChange={handleLocalChange} className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded-md border">
-                        <option value="">勘定科目を選択</option>
-                        {accountItems.map(ai => <option key={ai.id} value={ai.name}>{ai.name}</option>)}
-                    </select>
-                     <select name="allocationDivision" value={localData.allocationDivision || ''} onChange={handleLocalChange} className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded-md border">
-                        <option value="">振分区分を選択</option>
-                        {allocationDivisions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                    </select>
+                <div className="flex flex-col">
+                    <div className="flex justify-between items-center mb-3">
+                        <StatusBadge status={item.status} />
+                        <div className="flex items-center gap-2">
+                            {item.status === 'pending_review' && (
+                                <button onClick={handleSave} disabled={isSaving} className="p-2 text-slate-500 hover:text-blue-600 disabled:opacity-50" aria-label="保存">
+                                    {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                </button>
+                            )}
+                            <button onClick={handleDelete} disabled={isDeleting} className="p-2 text-slate-500 hover:text-red-600 disabled:opacity-50" aria-label="削除">
+                                {isDeleting ? <Loader className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+                    {item.status === 'processing' && <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-700/50 rounded-lg"><Loader className="w-8 h-8 animate-spin text-blue-500" /><p className="mt-2 text-slate-500">AIが解析中...</p></div>}
+                    {item.status === 'error' && <div className="flex-1 flex flex-col items-center justify-center bg-red-50 dark:bg-red-900/30 rounded-lg p-4"><AlertTriangle className="w-8 h-8 text-red-500" /><p className="mt-2 text-red-700 dark:text-red-300 font-semibold">解析エラー</p><p className="text-sm text-red-600 dark:text-red-400 mt-1 text-center">{item.errorMessage}</p></div>}
+                    {localData && (
+                        <div className="space-y-3">
+                             <div>
+                                <label htmlFor={`vendorName-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">発行元</label>
+                                <input id={`vendorName-${item.id}`} name="vendorName" type="text" value={localData.vendorName} onChange={handleChange} placeholder="発行元" className={inputClass} readOnly={item.status === 'approved'} />
+                            </div>
+                            <div>
+                                <label htmlFor={`invoiceDate-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">発行日</label>
+                                <input id={`invoiceDate-${item.id}`} name="invoiceDate" type="date" value={localData.invoiceDate} onChange={handleChange} placeholder="発行日" className={inputClass} readOnly={item.status === 'approved'} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor={`totalAmount-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">合計金額</label>
+                                    <input id={`totalAmount-${item.id}`} name="totalAmount" type="number" value={localData.totalAmount} onChange={handleChange} placeholder="合計金額" className={inputClass} readOnly={item.status === 'approved'} />
+                                </div>
+                                 <div>
+                                    <label htmlFor={`costType-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">費用の種類 (AI提案)</label>
+                                    <select id={`costType-${item.id}`} name="costType" value={localData.costType} onChange={handleChange} className={selectClass} disabled={item.status === 'approved'}>
+                                        <option value="V">変動費 (V)</option>
+                                        <option value="F">固定費 (F)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label htmlFor={`description-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">内容</label>
+                                <textarea id={`description-${item.id}`} name="description" value={localData.description} onChange={handleChange} placeholder="内容" rows={2} className={inputClass} readOnly={item.status === 'approved'} />
+                            </div>
+                        </div>
+                    )}
+                    {item.status === 'pending_review' && (
+                        <button onClick={handleApprove} disabled={isApproving} className="mt-auto w-full flex items-center justify-center gap-2 bg-green-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
+                            {isApproving ? <Loader className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                            承認して計上
+                        </button>
+                    )}
                 </div>
-            )}
-             <div className="p-3 bg-slate-50 dark:bg-slate-900/30 flex justify-end items-center gap-2">
-                 <button onClick={handleDeleteClick} disabled={isDeleting} className="p-2 text-slate-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
-                 <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1.5 text-sm font-semibold py-1.5 px-3 rounded-md border"><Save className="w-4 h-4"/>保存</button>
-                 <button onClick={handleApprove} disabled={isApproving || !localData} className="flex items-center gap-1.5 text-sm font-semibold py-1.5 px-3 rounded-md bg-green-600 text-white"><CheckCircle className="w-4 h-4"/>承認して計上</button>
             </div>
         </div>
-    )
+    );
 };
 
-const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, requestConfirmation, isAIOff, accountItems, allocationDivisions }) => {
+const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, requestConfirmation, isAIOff }) => {
     const [items, setItems] = useState<InboxItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const mounted = useRef(true);
 
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
+    
     const loadItems = useCallback(async () => {
-        setIsLoading(true);
-        setError('');
         try {
-            const fetchedItems = await getInboxItems();
-            setItems(fetchedItems);
+            if (mounted.current) setIsLoading(true);
+            const data = await getInboxItems();
+            if (mounted.current) setItems(data);
         } catch (err: any) {
-            setError('インボックスアイテムの読み込みに失敗しました。');
-            addToast('インボックスアイテムの読み込みに失敗しました。', 'error');
+            if (mounted.current) setError(err.message || 'データの読み込みに失敗しました。');
         } finally {
-            setIsLoading(false);
+            if (mounted.current) setIsLoading(false);
         }
-    }, [addToast]);
+    }, []);
 
     useEffect(() => {
         loadItems();
     }, [loadItems]);
 
-    const handleFileUpload = async (file: File) => {
+    // Added a separate function to handle file processing (upload, OCR, add to inbox)
+    const processFile = async (file: File) => {
+        let tempItem: Omit<InboxItem, 'id' | 'createdAt' | 'fileUrl'> = {
+            fileName: file.name,
+            filePath: '',
+            mimeType: file.type,
+            status: InboxItemStatus.Processing,
+            extractedData: null,
+            errorMessage: null,
+        };
+        
+        const tempId = `temp_${Date.now()}`;
+        if (mounted.current) {
+            setItems(prev => [{ ...tempItem, id: tempId, createdAt: new Date().toISOString(), fileUrl: URL.createObjectURL(file) }, ...prev]);
+        }
+
+        try {
+            // FIX: 'uploadToInbox' is not defined. Use 'uploadFile' with the correct bucket name 'inbox'.
+            const { path } = await uploadFile(file, 'inbox');
+            tempItem.filePath = path;
+
+            const base64String = await readFileAsBase64(file);
+            const data = await extractInvoiceDetails(base64String, file.type);
+            
+            if (mounted.current) {
+                tempItem.extractedData = data;
+                tempItem.status = InboxItemStatus.PendingReview;
+            }
+
+        } catch (err: any) {
+            if (mounted.current) {
+                tempItem.status = InboxItemStatus.Error;
+                tempItem.errorMessage = err.message || '不明なエラーが発生しました。';
+            }
+        } finally {
+             if (mounted.current) {
+                setItems(prev => prev.filter(i => i.id !== tempId)); // Remove temp item
+             }
+            if (tempItem.filePath) {
+                await addInboxItem(tempItem); // Add final item if path exists
+            }
+        }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
         if (!file) return;
 
-        let tempId = `temp-${Date.now()}`;
+        if (isAIOff) {
+            addToast('AI機能は現在無効です。ファイルからの読み取りはできません。', 'error');
+            return;
+        }
+
+        setIsUploading(true);
+        setError('');
         try {
-            console.log('[OCR] ファイルアップロード開始:', file.name, 'タイプ:', file.type, 'サイズ:', file.size);
-            
-            const tempItem: InboxItem = {
-                id: tempId, fileName: file.name, filePath: '', fileUrl: URL.createObjectURL(file), mimeType: file.type,
-                status: InboxItemStatus.Processing, extractedData: null, errorMessage: null, createdAt: new Date().toISOString(),
-            };
-            setItems(prev => [tempItem, ...prev]);
-
-            console.log('[OCR] ファイルをストレージにアップロード中...');
-            const { path } = await uploadFile(file, 'inbox');
-            console.log('[OCR] ストレージアップロード完了:', path);
-            
-            // FIX: Add missing properties errorMessage and extractedData when calling addInboxItem
-            const newDbItem = await addInboxItem({ fileName: file.name, filePath: path, mimeType: file.type, status: InboxItemStatus.Processing, extractedData: null, errorMessage: null });
-            console.log('[OCR] DBアイテム作成完了:', newDbItem.id);
-            tempId = newDbItem.id; 
-            setItems(prev => prev.map(i => i.id.startsWith('temp-') ? { ...newDbItem, fileUrl: URL.createObjectURL(file) } : i));
-
-            if (isAIOff) {
-                console.log('[OCR] AI機能が無効です。自動解析をスキップします。');
-                await updateInboxItem(newDbItem.id, { status: InboxItemStatus.PendingReview, errorMessage: 'AI機能無効のため自動解析スキップ' });
-                await loadItems();
-                addToast('AI機能が無効のため、自動解析をスキップしました', 'info');
-                return;
-            }
-
-            console.log('[OCR] ファイルをBase64に変換中...');
-            const base64String = await readFileAsBase64(file);
-            console.log('[OCR] Base64変換完了。文字列長:', base64String.length);
-            
-            console.log('[OCR] AI-OCR解析開始...');
-            const ocrData = await extractInvoiceDetails(base64String, file.type, accountItems, allocationDivisions);
-            console.log('[OCR] AI-OCR解析完了:', ocrData);
-            
-            await updateInboxItem(newDbItem.id, { status: InboxItemStatus.PendingReview, extractedData: ocrData });
-            await loadItems();
-            addToast('OCR解析が完了しました', 'success');
+            // Call the existing processFile function that handles upload and OCR for inbox items
+            await processFile(file);
         } catch (err: any) {
-            console.error('[OCR] エラー発生:', err);
-            const errorMessage = err.message || 'ファイルのアップロードまたは解析中にエラーが発生しました。';
-            setError(errorMessage);
-            addToast(`ファイル処理エラー: ${errorMessage}`, 'error');
-            if (tempId && !tempId.startsWith('temp-')) {
-                await updateInboxItem(tempId, { status: InboxItemStatus.Error, errorMessage: err.message });
+            if (mounted.current) {
+                setError(err.message || 'ファイル処理中にエラーが発生しました。');
             }
-            await loadItems();
+        } finally {
+            if (mounted.current) {
+                setIsUploading(false); // Reset uploading status
+            }
+            e.target.value = ''; // Clear file input
+        }
+    };
+
+    const handleUpdateItem = async (id: string, data: Partial<InboxItem>) => {
+        try {
+            const updatedItem = await updateInboxItem(id, data);
+            if (mounted.current) {
+                setItems(prev => prev.map(item => item.id === id ? updatedItem : item));
+                addToast('更新しました。', 'success');
+            }
+        } catch (err: any) {
+            if (mounted.current) addToast(`更新に失敗しました: ${err.message}`, 'error');
         }
     };
     
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) handleFileUpload(file);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+    const handleDeleteItem = async (itemToDelete: InboxItem) => {
+        try {
+            await deleteInboxItem(itemToDelete);
+            if (mounted.current) {
+                setItems(prev => prev.filter(item => item.id !== itemToDelete.id));
+                addToast('削除しました。', 'success');
+            }
+        } catch (err: any) {
+            if (mounted.current) addToast(`削除に失敗しました: ${err.message}`, 'error');
+        }
     };
     
-    const handleUpdate = async (id: string, data: Partial<InboxItem>) => {
-        await updateInboxItem(id, data);
-        await loadItems();
-    };
-    
-    const handleDelete = async (item: InboxItem) => {
-        await deleteInboxItem(item);
-        await loadItems();
+    const handleApproveItem = async (itemToApprove: InboxItem) => {
+        if (!itemToApprove.extractedData) return;
+        try {
+            onSaveExpenses(itemToApprove.extractedData);
+            await handleUpdateItem(itemToApprove.id, { status: InboxItemStatus.Approved });
+        } catch (err: any) {
+            if (mounted.current) addToast(`承認処理に失敗しました: ${err.message}`, 'error');
+        }
     };
 
-    const handleApprove = async (item: InboxItem) => {
-        if (!item.extractedData) return;
-        onSaveExpenses(item.extractedData);
-        await updateInboxItem(item.id, { status: InboxItemStatus.Approved });
-        await loadItems();
-    };
 
     return (
         <div className="space-y-6">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm">
+            <div>
                 <div className="flex justify-between items-center">
-                    <div>
-                        <h2 className="text-xl font-semibold text-slate-800 dark:text-white">インボックス (AI-OCR)</h2>
-                        <p className="mt-1 text-base text-slate-500 dark:text-slate-400">請求書や領収書をアップロードして、AIで自動的に仕訳データを作成します。</p>
-                    </div>
-                     <button onClick={loadItems} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"><RefreshCw className="w-5 h-5"/></button>
-                </div>
-                 <div className="mt-4">
-                    <label htmlFor="ocr-file-upload" className="relative block w-full border-2 border-dashed rounded-lg p-8 text-center hover:border-blue-400 cursor-pointer">
-                        <Upload className="mx-auto h-12 w-12 text-slate-400" />
-                        <span className="mt-2 block text-sm font-medium text-slate-900 dark:text-slate-200">クリックしてファイルを選択またはドラッグ＆ドロップ</span>
-                        <input ref={fileInputRef} id="ocr-file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,application/pdf" />
+                    <label htmlFor="file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-md hover:bg-blue-700 transition-colors ${isUploading || isAIOff ? 'bg-slate-400 cursor-not-allowed' : ''}`}>
+                        <Upload className="w-5 h-5" />
+                        <span>請求書・領収書を追加</span>
+                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" multiple disabled={isUploading || isAIOff} />
                     </label>
+                    {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 ml-4">AI機能無効のため、OCR機能は利用できません。</p>}
                 </div>
+                 {isUploading && !isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">アップロードと解析を実行中です...</p>}
             </div>
 
-            <div className="space-y-4">
-                {isLoading && <div className="text-center p-8"><Loader className="w-8 h-8 animate-spin mx-auto"/></div>}
-                {error && <div className="text-center p-8 text-red-500">{error}</div>}
-                {!isLoading && items.length === 0 && <div className="text-center p-8 text-slate-500">アップロードされた請求書はありません。</div>}
-                {items.map(item => (
-                    <InboxItemCard key={item.id} item={item} onUpdate={handleUpdate} onDelete={handleDelete} onApprove={handleApprove} requestConfirmation={requestConfirmation} accountItems={accountItems} allocationDivisions={allocationDivisions} />
-                ))}
-            </div>
+            {error && (
+                <div className="bg-red-100 dark:bg-red-900/50 p-4 rounded-lg text-red-700 dark:text-red-300">
+                    <strong>エラー:</strong> {error}
+                </div>
+            )}
+            
+            {isLoading ? (
+                <div className="text-center py-10">
+                    <Loader className="w-8 h-8 mx-auto animate-spin text-blue-500" />
+                    <p className="mt-2 text-slate-500 dark:text-slate-400">受信トレイを読み込んでいます...</p>
+                </div>
+            ) : (
+                items.length > 0 ? (
+                    <div className="space-y-6">
+                        {items.map(item => (
+                            <InboxItemCard key={item.id} item={item} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} onApprove={handleApproveItem} requestConfirmation={requestConfirmation} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center py-20 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl">
+                        <p className="font-semibold text-slate-700 dark:text-slate-300">仕入計上する請求書はありません</p>
+                        <p className="mt-1 text-slate-500 dark:text-slate-400">請求書や領収書をアップロードして仕入計上を開始します。</p>
+                    </div>
+                )
+            )}
         </div>
     );
 };

@@ -1,11 +1,10 @@
 
-
 import React, { useState, useMemo } from 'react';
-import { JournalEntry, SortConfig } from '../types.ts';
-import { PlusCircle, Sparkles, Loader, BookOpen } from './Icons.tsx';
-import { suggestJournalEntry } from '../services/geminiService.ts';
-import EmptyState from './ui/EmptyState.tsx';
-import SortableHeader from './ui/SortableHeader.tsx';
+import { JournalEntry, SortConfig } from '../types';
+import { PlusCircle, Sparkles, Loader, BookOpen } from './Icons';
+import { suggestJournalEntry } from '../services/geminiService';
+import EmptyState from './ui/EmptyState';
+import SortableHeader from './ui/SortableHeader';
 
 interface JournalLedgerProps {
   entries: JournalEntry[];

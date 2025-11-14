@@ -1,5 +1,5 @@
 import React from 'react';
-import { JobStatus } from '../types.ts';
+import { JobStatus } from '../types';
 
 interface JobStatusBadgeProps {
   status: JobStatus;

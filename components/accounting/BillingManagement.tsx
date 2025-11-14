@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Job, Invoice, JobStatus, InvoiceStatus } from '../../types.ts';
-import { FileText, Loader, X } from '../Icons.tsx';
-import { updateJobReadyToInvoice, createInvoiceFromJobs, getInvoices } from '../../services/dataService.ts';
+import { Job, Invoice, JobStatus, InvoiceStatus } from '../../types';
+import { FileText, Loader, X } from '../Icons';
+import { updateJobReadyToInvoice, createInvoiceFromJobs, getInvoices } from '../../services/dataService';
 
 interface BillingManagementProps {
     jobs: Job[];

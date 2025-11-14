@@ -1,7 +1,5 @@
 import React, { useMemo } from 'react';
-import { Job, JobStatus } from '../../types.ts';
-import JobStatusBadge from '../JobStatusBadge.tsx';
-import { formatJPY, formatDate } from '../../utils.ts';
+import { Job, JobStatus } from '../../types';
 
 interface SalesPipelinePageProps {
   jobs: Job[];
@@ -39,8 +37,8 @@ const JobCard: React.FC<{ job: Job; onClick: () => void; }> = ({ job, onClick })
             <h4 className="font-bold text-slate-800 dark:text-white truncate">{job.title}</h4>
             <p className="text-sm text-slate-600 dark:text-slate-300">{job.clientName}</p>
             <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">{formatJPY(margin)}</p>
-                <p className="text-xs text-slate-400">納期: {formatDate(job.dueDate)}</p>
+                <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">¥{margin.toLocaleString()}</p>
+                <p className="text-xs text-slate-400">納期: {job.dueDate}</p>
             </div>
         </div>
     );
@@ -105,10 +103,10 @@ const SalesPipelinePage: React.FC<SalesPipelinePageProps> = ({ jobs, onUpdateJob
                                 <div className="text-right font-bold text-slate-700 dark:text-slate-200">{totalQ.toLocaleString()}</div>
                                 
                                 <div className="font-semibold text-slate-500">売上 (P):</div>
-                                <div className="text-right font-bold text-slate-700 dark:text-slate-200">{formatJPY(totalP)}</div>
+                                <div className="text-right font-bold text-slate-700 dark:text-slate-200">¥{totalP.toLocaleString()}</div>
                                 
                                 <div className="font-semibold text-slate-500">利益 (M):</div>
-                                <div className="text-right font-bold text-blue-600 dark:text-blue-400">{formatJPY(totalM)}</div>
+                                <div className="text-right font-bold text-blue-600 dark:text-blue-400">¥{totalM.toLocaleString()}</div>
                             </div>
                         </div>
 

@@ -1,42 +1,21 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# AI Studio Gemini App Proxy Server
 
-# Run and deploy your AI Studio app
+This nodejs proxy server lets you run your AI Studio Gemini application unmodified, without exposing your API key in the frontend code.
 
-This contains everything you need to run your app locally.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1u_0P84eOgCk9nBEQJE9sCC1ROToKixdo
+## Instructions
 
-## Run Locally
+**Prerequisites**:
+- [Google Cloud SDK / gcloud CLI](https://cloud.google.com/sdk/docs/install)
+- (Optional) Gemini API Key
 
-**Prerequisites:**  Node.js
+1. Download or copy the files of your AI Studio app into this directory at the root level.
+2. If your app calls the Gemini API, create a Secret for your API key:
+     ```
+     echo -n "${GEMINI_API_KEY}" | gcloud secrets create gemini_api_key --data-file=-
+     ```
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and set your `VITE_GEMINI_API_KEY` to your Gemini API key
-   - Get your API key from: https://aistudio.google.com/app/apikey
-
-3. Configure outbound email for workflow notifications (optional):
-   - `APPLICATION_EMAIL_ENDPOINT` pointing to your production mail relay (e.g. Supabase Edge Function URL)
-   - optional `APPLICATION_EMAIL_API_KEY` if the relay requires authentication
-   These values can be defined in `.env` or environment variables at deploy time.
-
-4. Run the app:
-   ```bash
-   npm run dev
-   ```
-
-## Deployment
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions and security best practices.
-
-**⚠️ IMPORTANT**: Never commit API keys to Git. Always use environment variables.
-# mqdriven
+3.  Deploy to Cloud Run (optionally including API key):
+    ```
+    gcloud run deploy my-app --source=. --update-secrets=GEMINI_API_KEY=gemini_api_key:latest
+    ```

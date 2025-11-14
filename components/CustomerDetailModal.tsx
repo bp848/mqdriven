@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Customer } from '../types.ts';
-import { X, Pencil, Loader, Lightbulb, AlertTriangle, Save } from './Icons.tsx';
+import { Customer } from '../types';
+import { X, Pencil, Loader, Lightbulb, AlertTriangle, Save } from './Icons';
 
 interface CustomerDetailModalProps {
     customer: Customer | null;
@@ -182,15 +182,16 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                             {isEditing ? (
                                 <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-md border border-slate-200 dark:border-slate-700">
                                     <input type="text" name="zipCode" id="zipCode" placeholder="郵便番号" value={formData.zipCode || ''} onChange={handleChange} disabled={isSubmitting} className="block w-1/2 rounded-md border-0 py-1.5 px-2.5 text-slate-900 dark:text-white bg-white dark:bg-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-base disabled:opacity-50" autoComplete="postal-code" />
-                                    <input type="text" name="address1" id="address1" placeholder="住所1（番地・号など）" value={formData.address1 || ''} onChange={handleChange} disabled={isSubmitting} className="block w-full rounded-md border-0 py-1.5 px-2.5 text-slate-900 dark:text-white bg-white dark:bg-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-base disabled:opacity-50" autoComplete="address-line1" />
-                                    <input type="text" name="address2" id="address2" placeholder="住所2（建物名・部屋番号など）" value={formData.address2 || ''} onChange={handleChange} disabled={isSubmitting} className="block w-full rounded-md border-0 py-1.5 px-2.5 text-slate-900 dark:text-white bg-white dark:bg-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-base disabled:opacity-50" autoComplete="address-line2" />
+                                    <input type="text" name="address1" id="address1" placeholder="住所1" value={formData.address1 || ''} onChange={handleChange} disabled={isSubmitting} className="block w-full rounded-md border-0 py-1.5 px-2.5 text-slate-900 dark:text-white bg-white dark:bg-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-base disabled:opacity-50" autoComplete="address-line1" />
+                                    <input type="text" name="address2" id="address2" placeholder="住所2" value={formData.address2 || ''} onChange={handleChange} disabled={isSubmitting} className="block w-full rounded-md border-0 py-1.5 px-2.5 text-slate-900 dark:text-white bg-white dark:bg-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-base disabled:opacity-50" autoComplete="address-line2" />
                                 </div>
                             ) : (
                                 <div className="text-base leading-6 text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words min-h-[40px] flex items-center py-1.5">
                                     {customer?.zipCode || customer?.address1 || customer?.address2 ? (
                                         <>
-                                            {customer?.zipCode && <span className="block">〒{customer.zipCode}</span>}
-                                            <span className="block">{customer?.address1 || ''}{customer?.address2 || ''}</span>
+                                            {customer?.zipCode && `〒${customer.zipCode}`}
+                                            <br />
+                                            {`${customer?.address1 || ''}${customer?.address2 || ''}`}
                                         </>
                                     ) : '-'}
                                 </div>
@@ -250,7 +251,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
             <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{title}</h2>
-                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="閉じる">
+                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
@@ -258,7 +259,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                 <div className="p-6 overflow-y-auto">
                     {error && (
                         <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-200">
-                            <AlertTriangle className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
                             {error}
                         </div>
                     )}
@@ -292,9 +293,8 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                                     type="button"
                                     onClick={() => onSetMode('edit')}
                                     className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600"
-                                    aria-label="顧客情報を編集"
                                 >
-                                    <Pencil className="w-4 h-4" aria-hidden="true" />
+                                    <Pencil className="w-4 h-4" />
                                     編集
                                 </button>
                                 <button 
@@ -302,9 +302,8 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                                     onClick={handleAnalyzeClick}
                                     disabled={isAIOff}
                                     className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold py-2 px-4 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800/50 disabled:opacity-50"
-                                    aria-label="AIで企業分析"
                                 >
-                                    <Lightbulb className="w-4 h-4" aria-hidden="true" />
+                                    <Lightbulb className="w-4 h-4" />
                                     AI企業分析
                                 </button>
                             </>
@@ -313,18 +312,17 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                     <div className="flex gap-4">
                         {isEditing ? (
                             <>
-                                <button type="button" onClick={onClose} disabled={isSubmitting} className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50" aria-label="キャンセル">キャンセル</button>
+                                <button type="button" onClick={onClose} disabled={isSubmitting} className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">キャンセル</button>
                                 <button 
                                     type="submit"
                                     disabled={isSubmitting}
                                     className="w-32 flex items-center justify-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400"
-                                    aria-label="保存"
                                 >
-                                    {isSubmitting ? <Loader className="w-5 h-5 animate-spin" aria-hidden="true" /> : <><Save className="w-5 h-5 mr-2" aria-hidden="true" />保存</>}
+                                    {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5 mr-2"/>保存</>}
                                 </button>
                             </>
                         ) : (
-                             <button type="button" onClick={onClose} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700" aria-label="閉じる">閉じる</button>
+                             <button type="button" onClick={onClose} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700">閉じる</button>
                         )}
                     </div>
                 </div>

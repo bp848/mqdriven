@@ -1,9 +1,6 @@
-
-
 import {
   AccountItem,
   ApplicationCode,
-  ApplicationNotificationEmail,
   ApplicationWithDetails,
   ApprovalRoute,
   BugReport,
@@ -31,8 +28,7 @@ import {
   PaymentRecipient,
   PurchaseOrder,
   PurchaseOrderStatus,
-  EstimateLineItem,
-} from '../types.ts';
+} from '../types';
 
 export interface DemoDataState {
   jobs: Job[];
@@ -53,7 +49,6 @@ export interface DemoDataState {
   inboxItems: InboxItem[];
   departments: Department[];
   paymentRecipients: PaymentRecipient[];
-  applicationEmailNotifications: ApplicationNotificationEmail[];
 }
 
 const clone = <T>(value: T): T => {
@@ -63,13 +58,14 @@ const clone = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value));
 };
 
+const createEstimateItems = (items: EstimateItem[]): EstimateItem[] => items.map(item => ({ ...item }));
+
 export const createDemoDataState = (): DemoDataState => {
   const jobs: Job[] = [
     {
       id: 'job-001',
       jobNumber: 20241001,
       clientName: '株式会社ネオプリント',
-      customerId: 'cus-001',
       title: '秋季キャンペーンチラシ',
       status: JobStatus.InProgress,
       dueDate: '2025-11-05',
@@ -91,7 +87,6 @@ export const createDemoDataState = (): DemoDataState => {
       id: 'job-002',
       jobNumber: 20240921,
       clientName: '有限会社ブルースタジオ',
-      customerId: 'cus-002',
       title: '会社案内パンフレット改訂',
       status: JobStatus.Pending,
       dueDate: '2025-10-30',
@@ -113,7 +108,6 @@ export const createDemoDataState = (): DemoDataState => {
       id: 'job-003',
       jobNumber: 20240818,
       clientName: '株式会社リンクス',
-      customerId: 'cus-003',
       title: '商品カタログ2025',
       status: JobStatus.Completed,
       dueDate: '2025-09-10',
@@ -136,7 +130,6 @@ export const createDemoDataState = (): DemoDataState => {
   const customers: Customer[] = [
     {
       id: 'cus-001',
-      customerCode: 'C001',
       customerName: '株式会社ネオプリント',
       representative: '山田 太郎',
       phoneNumber: '03-1234-5678',
@@ -149,11 +142,9 @@ export const createDemoDataState = (): DemoDataState => {
       salesType: '直取引',
       creditLimit: '500万円',
       customerContactInfo: 'sales@neoprint.jp',
-      isActive: true,
     },
     {
       id: 'cus-002',
-      customerCode: 'C002',
       customerName: '有限会社ブルースタジオ',
       representative: '佐藤 花子',
       phoneNumber: '06-2345-6789',
@@ -166,11 +157,9 @@ export const createDemoDataState = (): DemoDataState => {
       salesType: '紹介',
       creditLimit: '200万円',
       customerContactInfo: 'info@bluestudio.jp',
-      isActive: true,
     },
     {
       id: 'cus-003',
-      customerCode: 'C003',
       customerName: '株式会社リンクス',
       representative: '田中 実',
       phoneNumber: '052-345-6789',
@@ -183,7 +172,6 @@ export const createDemoDataState = (): DemoDataState => {
       salesType: '直取引',
       creditLimit: '800万円',
       customerContactInfo: 'procurement@lynx.co.jp',
-      isActive: true,
     },
   ];
 
@@ -224,7 +212,6 @@ export const createDemoDataState = (): DemoDataState => {
       sortOrder: 1,
       createdAt: '2022-04-01T00:00:00Z',
       updatedAt: '2025-04-01T00:00:00Z',
-      mqCode: { p: 'P-5001', v: 'V-0000', m: 'M-0000', q: 'Q-5001', f: 'F-0000', g: 'G-1000' },
     },
     {
       id: 'acct-002',
@@ -235,7 +222,6 @@ export const createDemoDataState = (): DemoDataState => {
       sortOrder: 2,
       createdAt: '2022-04-01T00:00:00Z',
       updatedAt: '2025-04-01T00:00:00Z',
-      mqCode: { p: 'P-5201', v: 'V-5201', m: 'M-0520', q: 'Q-5201', f: 'F-0000', g: 'G-2000' },
     },
     {
       id: 'acct-003',
@@ -246,11 +232,10 @@ export const createDemoDataState = (): DemoDataState => {
       sortOrder: 3,
       createdAt: '2022-04-01T00:00:00Z',
       updatedAt: '2025-04-01T00:00:00Z',
-      mqCode: { p: 'P-6101', v: 'V-0000', m: 'M-0610', q: 'Q-6101', f: 'F-6101', g: 'G-3000' },
     },
-    { id: 'acct-6001', code: '6001', name: '旅費交通費', categoryCode: 'EXP_TRP', isActive: true, sortOrder: 10, createdAt: '2024-01-01', updatedAt: '2024-01-01', mqCode: { p: 'P-6001', v: 'V-6001', m: 'M-6001', q: 'Q-TRP', f: 'F-0500', g: 'G-4100' } },
-    { id: 'acct-6002', code: '6002', name: '通信費', categoryCode: 'EXP_COMM', isActive: true, sortOrder: 20, createdAt: '2024-01-01', updatedAt: '2024-01-01', mqCode: { p: 'P-6002', v: 'V-6002', m: 'M-6002', q: 'Q-COMM', f: 'F-0500', g: 'G-4200' } },
-    { id: 'acct-6003', code: '6003', name: '消耗品費', categoryCode: 'EXP_SUPPLIES', isActive: true, sortOrder: 30, createdAt: '2024-01-01', updatedAt: '2024-01-01', mqCode: { p: 'P-6003', v: 'V-6003', m: 'M-6003', q: 'Q-SUP', f: 'F-0600', g: 'G-4300' } }
+    { id: 'acct-6001', code: '6001', name: '旅費交通費', categoryCode: 'EXP_TRAVEL', isActive: true, sortOrder: 10, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+    { id: 'acct-6002', code: '6002', name: '通信費', categoryCode: 'EXP_COMM', isActive: true, sortOrder: 20, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+    { id: 'acct-6003', code: '6003', name: '消耗品費', categoryCode: 'EXP_SUPPLIES', isActive: true, sortOrder: 30, createdAt: '2024-01-01', updatedAt: '2024-01-01' }
   ];
 
   const leads: Lead[] = [
@@ -544,64 +529,171 @@ export const createDemoDataState = (): DemoDataState => {
       reporterName: '田中 翔',
       reportType: 'bug',
       summary: '案件詳細で見積履歴が表示されない',
-      description: '案件詳細モーダルを開いた際、関連する見積もりの履歴が表示されるべき箇所が空欄になっています。',
+      description: '案件詳細モーダルの「見積履歴」タブにデータが表示されなくなっています。',
       status: BugReportStatus.InProgress,
-      createdAt: '2025-10-03T11:00:00Z',
+      createdAt: '2025-09-25T01:15:00Z',
     },
   ];
 
-  const estimates: Estimate[] = [];
-  const invoices: Invoice[] = [];
-  const inboxItems: InboxItem[] = [];
-  const applicationEmailNotifications: ApplicationNotificationEmail[] = [];
-  const departments: Department[] = [
-    { id: 'dep-sales', name: '営業部' },
-    { id: 'dep-production', name: '製造部' },
-    { id: 'dep-admin', name: '管理部' },
+  const estimates: Estimate[] = [
+    {
+      id: 'est-001',
+      estimateNumber: 23045,
+      customerName: '株式会社ネオプリント',
+      title: '秋季キャンペーンチラシ制作',
+      items: createEstimateItems([
+        {
+          division: 'デザイン・DTP代',
+          content: 'デザインディレクション費',
+          quantity: 1,
+          unit: '式',
+          unitPrice: 80000,
+          price: 80000,
+          cost: 30000,
+          costRate: 37.5,
+          subtotal: 80000,
+        },
+        {
+          division: '印刷代',
+          content: 'チラシ印刷（A4 両面）',
+          quantity: 15000,
+          unit: '枚',
+          unitPrice: 20,
+          price: 300000,
+          cost: 180000,
+          costRate: 60,
+          subtotal: 300000,
+        },
+        {
+          division: '加工代',
+          content: 'PP加工（グロス）',
+          quantity: 15000,
+          unit: '枚',
+          unitPrice: 12,
+          price: 180000,
+          cost: 90000,
+          costRate: 50,
+          subtotal: 180000,
+        },
+      ]),
+      total: 560000,
+      deliveryDate: '2025-11-05',
+      paymentTerms: '月末締め翌月末払い',
+      deliveryMethod: '指定倉庫へ納品',
+      notes: '校正2回まで含む',
+      status: EstimateStatus.Ordered,
+      version: 3,
+      userId: 'user-001',
+      user: employeeUsers[0],
+      createdAt: '2025-10-04T03:30:00Z',
+      updatedAt: '2025-10-04T03:30:00Z',
+    },
+    {
+      id: 'est-002',
+      estimateNumber: 23046,
+      customerName: '有限会社ブルースタジオ',
+      title: '会社案内パンフレット',
+      items: createEstimateItems([
+        {
+          division: 'デザイン・DTP代',
+          content: 'アートディレクション',
+          quantity: 1,
+          unit: '式',
+          unitPrice: 120000,
+          price: 120000,
+          cost: 50000,
+          costRate: 41.6,
+          subtotal: 120000,
+        },
+        {
+          division: '印刷代',
+          content: 'パンフレット印刷（12P 中綴じ）',
+          quantity: 3000,
+          unit: '冊',
+          unitPrice: 120,
+          price: 360000,
+          cost: 210000,
+          costRate: 58.3,
+          subtotal: 360000,
+        },
+      ]),
+      total: 560000,
+      deliveryDate: '2025-10-30',
+      paymentTerms: '納品月末締め翌月末払い',
+      deliveryMethod: '本社受け渡し',
+      notes: '撮影費別途見積',
+      status: EstimateStatus.Draft,
+      version: 1,
+      userId: 'user-002',
+      user: employeeUsers[1],
+      createdAt: '2025-09-25T05:20:00Z',
+      updatedAt: '2025-09-25T05:20:00Z',
+    },
   ];
+
+  const invoiceItems: InvoiceItem[] = [
+    {
+      id: 'inv-item-001',
+      invoiceId: 'inv-001',
+      jobId: 'job-003',
+      description: '商品カタログ2025 制作費',
+      quantity: 1,
+      unit: '式',
+      unitPrice: 1250000,
+      lineTotal: 1250000,
+      sortIndex: 0,
+    },
+  ];
+
+  const invoices: Invoice[] = [
+    {
+      id: 'inv-001',
+      invoiceNo: 'INV-20240912',
+      invoiceDate: '2025-09-12',
+      customerName: '株式会社リンクス',
+      subtotalAmount: 1250000,
+      taxAmount: 125000,
+      totalAmount: 1375000,
+      status: 'issued',
+      createdAt: '2025-09-12T00:00:00Z',
+      paidAt: null,
+      items: clone(invoiceItems),
+    },
+  ];
+
+  const inboxItems: InboxItem[] = [
+    {
+      id: 'inbox-001',
+      fileName: 'invoice-20241005.pdf',
+      filePath: 'demo/invoice-20241005.pdf',
+      fileUrl: 'https://example.com/demo/invoice-20241005.pdf',
+      mimeType: 'application/pdf',
+      status: InboxItemStatus.PendingReview,
+      extractedData: {
+        vendorName: '東都紙業株式会社',
+        invoiceDate: '2025-10-05',
+        totalAmount: 76000,
+        description: '用紙仕入',
+        costType: 'V',
+        account: '仕入高',
+        relatedCustomer: '株式会社ネオプリント',
+        project: '秋季キャンペーンチラシ',
+      },
+      errorMessage: null,
+      createdAt: '2025-10-05T06:30:00Z',
+    },
+  ];
+  
+  const departments: Department[] = [
+    { id: 'dep-1', name: '総務部' },
+    { id: 'dep-2', name: '経理部' },
+    { id: 'dep-3', name: '営業部' },
+    { id: 'dep-4', name: '制作部' },
+  ];
+  
   const paymentRecipients: PaymentRecipient[] = [
-    {
-      id: 'pay-001',
-      recipientCode: 'V001',
-      companyName: '株式会社アーク商事',
-      recipientName: '経理部',
-      bankName: '三菱UFJ銀行',
-      bankBranch: '新橋支店',
-      bankAccountNumber: '普通 1234567',
-      isActive: true,
-      allocationTargets: [
-        { id: 'pay-001-hq', name: '本社 経理課' },
-        { id: 'pay-001-sales', name: '営業サポートチーム' },
-      ],
-    },
-    {
-      id: 'pay-002',
-      recipientCode: 'V002',
-      companyName: 'ネクストロジ株式会社',
-      recipientName: '請求担当 佐藤',
-      bankName: '三井住友銀行',
-      bankBranch: '銀座支店',
-      bankAccountNumber: '当座 7654321',
-      isActive: true,
-      allocationTargets: [
-        { id: 'pay-002-logi', name: '物流センター' },
-        { id: 'pay-002-west', name: '西日本支店' },
-      ],
-    },
-    {
-      id: 'pay-003',
-      recipientCode: 'V003',
-      companyName: '株式会社フロンティアデザイン',
-      recipientName: '代表取締役 渡辺',
-      bankName: 'みずほ銀行',
-      bankBranch: '丸の内支店',
-      bankAccountNumber: '普通 9876543',
-      isActive: true,
-      allocationTargets: [
-        { id: 'pay-003-cre', name: 'クリエイティブ事業部' },
-        { id: 'pay-003-lab', name: 'R&Dラボ' },
-      ],
-    },
+    { id: 'rec-1', recipientCode: 'V001', companyName: '東日本旅客鉄道株式会社', recipientName: 'JR東日本' },
+    { id: 'rec-2', recipientCode: 'V002', companyName: 'KDDI株式会社', recipientName: 'KDDI' },
   ];
 
   return {
@@ -623,6 +715,7 @@ export const createDemoDataState = (): DemoDataState => {
     inboxItems,
     departments,
     paymentRecipients,
-    applicationEmailNotifications,
   };
 };
+
+export const cloneDemoState = (state: DemoDataState): DemoDataState => clone(state);

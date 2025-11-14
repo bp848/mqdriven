@@ -24,16 +24,6 @@ ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
 
 -- 1. 必要なテーブルを作成（存在しない場合のみ）
 
--- アプリケーションのユーザープロファイルテーブル
-CREATE TABLE IF NOT EXISTS public.users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    name TEXT,
-    email TEXT UNIQUE,
-    role TEXT NOT NULL DEFAULT 'user',
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-);
-
-
 CREATE TABLE IF NOT EXISTS public.forms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(10) UNIQUE NOT NULL,
@@ -88,7 +78,6 @@ CREATE TABLE IF NOT EXISTS public.employees (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- v_employees_active ビューを修正
 CREATE OR REPLACE VIEW public.v_employees_active AS
 SELECT
     e.user_id,
@@ -96,17 +85,17 @@ SELECT
     e.department,
     e.title,
     u.email, -- auth.users から email を取得
-    COALESCE(pu.role, 'user') AS role, -- public.users テーブルからロールを取得
+    CASE
+        WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin' AND pg_has_role(u.id::regrole, 'admin', 'member')) THEN 'admin'
+        ELSE 'user'
+    END AS role,
     e.created_at
 FROM
     public.employees e
 JOIN
     auth.users u ON e.user_id = u.id
-LEFT JOIN
-    public.users pu ON e.user_id = pu.id
 WHERE
     e.active = true;
-
 
 -- accounts_item テーブル
 CREATE TABLE IF NOT EXISTS public.account_items (
@@ -130,9 +119,11 @@ CREATE TABLE IF NOT EXISTS public.payment_recipients (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- leads テーブル (完全なスキーマ)
+-- leads テーブル
 CREATE TABLE IF NOT EXISTS public.leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     name TEXT,
     email TEXT,
     phone TEXT,
@@ -140,53 +131,12 @@ CREATE TABLE IF NOT EXISTS public.leads (
     source TEXT,
     tags TEXT[],
     message TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    status TEXT NOT NULL,
-    inquiry_types TEXT[],
-    info_sales_activity TEXT,
-    ip_address TEXT,
-    device_type TEXT,
-    assignee_id UUID,
-    is_first_visit TEXT,
-    landing_page_url TEXT,
-    previous_visit_date DATE,
     referrer TEXT,
     referrer_url TEXT,
+    landing_page_url TEXT,
     search_keywords TEXT,
-    utm_campaign TEXT,
-    utm_content TEXT,
-    utm_medium TEXT,
-    utm_source TEXT,
-    utm_term TEXT,
-    visit_count TEXT,
-    browser_name TEXT,
-    browser_version TEXT,
-    os_name TEXT,
-    os_version TEXT,
-    screen_resolution TEXT,
-    viewport_size TEXT,
-    language TEXT,
-    timezone TEXT,
-    session_id TEXT,
-    page_load_time INTEGER,
-    time_on_page INTEGER,
-    cta_source TEXT,
-    scroll_depth TEXT,
-    sections_viewed TEXT,
-    print_types TEXT,
-    user_agent TEXT,
-    country TEXT,
-    city TEXT,
-    region TEXT,
-    employees TEXT,
-    budget TEXT,
-    timeline TEXT,
-    inquiry_type TEXT,
-    score INTEGER,
-    ai_analysis_report TEXT,
-    ai_draft_proposal TEXT,
-    ai_investigation JSONB
+    utm_source TEXT
 );
 
 -- customers テーブル
@@ -233,8 +183,7 @@ CREATE TABLE IF NOT EXISTS public.customers (
     drawing_date DATE,
     sales_goal TEXT,
     info_sales_ideas TEXT,
-    customer_contact_info TEXT,
-    ai_analysis JSONB
+    customer_contact_info TEXT
 );
 
 -- invoices テーブル
@@ -277,22 +226,6 @@ CREATE TABLE IF NOT EXISTS public.inbox_items (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- allocation_divisions (振分区分) テーブル
-CREATE TABLE IF NOT EXISTS public.allocation_divisions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-);
-
--- employee_titles (役職) テーブル
-CREATE TABLE IF NOT EXISTS public.employee_titles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-);
-
 
 -- 2. 'applications'テーブルに'updated_at'カラムを追加し、自動更新トリガーを設定
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
@@ -318,11 +251,20 @@ CREATE TABLE IF NOT EXISTS public.departments (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- サンプル部門データを挿入 (重複しないように)
+INSERT INTO public.departments (name) VALUES
+('総務部'), ('経理部'), ('営業部'), ('製造部')
+ON CONFLICT (name) DO NOTHING;
+
+CREATE OR REPLACE VIEW public.v_departments AS
+SELECT id, name
+FROM public.departments;
+
 -- 4. 必須データを挿入
 -- 社長決裁ルート（重要：ステップが空でないこと）
 -- 注： '00000000-...' の部分は、実際の管理者ユーザーのUUIDに置き換える必要があります。
---      [手順] 1. Supabaseの 'SQL Editor' -> 'User Management' スクリプトを実行して、自分のユーザーのIDを確認します。
---            2. そのIDをコピーし、以下の '00000000-...' の部分に貼り付けてください。
+--      もし管理者ユーザーがいない場合、Supabase Auth でユーザーを作成し、
+--      public.employees テーブルに user_id を auth.users.id と同じにして登録してください。
 INSERT INTO public.approval_routes (name, route_data)
 VALUES ('社長決裁ルート', '{"steps": [{"approver_id": "00000000-0000-0000-0000-000000000000"}]}') -- !!! 管理者ユーザーのUUIDに置き換えてください !!!
 ON CONFLICT (name) DO UPDATE SET route_data = EXCLUDED.route_data;
@@ -338,22 +280,16 @@ VALUES
 ('WKR', '週報', '週報')
 ON CONFLICT (code) DO NOTHING;
 
--- フォーム定義（経費精算のスキーマを修正）
+-- フォーム定義（重要：schema.fieldsが空でないこと）
 INSERT INTO public.forms (code, name, description, schema, is_active)
 VALUES
-('EXP', '経費精算フォーム', '経費精算申請用のフォーム', '{"fields":[{"name":"department_id","type":"select","label":"部門","required":true,"options":[]},{"name":"details","type":"array","label":"経費明細","items":{"type":"object","properties":{"paymentDate":{"type":"date","label":"支払日"},"payment_recipient_id":{"type":"select","label":"支払先","options":[]},"description":{"type":"text","label":"内容"},"account_item_id":{"type":"select","label":"勘定科目","options":[]},"allocation_division_id":{"type":"select","label":"振分区分","options":[]},"allocationTarget":{"type":"select","label":"振分先","options":[]},"costType":{"type":"select","label":"費用種別","options":["V","F"]},"amount":{"type":"number","label":"金額"}}}},{"name":"notes","type":"textarea","label":"備考"}]}', true),
+('EXP', '経費精算フォーム', '経費精算申請用のフォーム', '{"fields":[{"name":"department_id","type":"select","label":"部門","required":true,"options":[]},{"name":"details","type":"array","label":"経費明細","items":{"type":"object","properties":{"paymentDate":{"type":"date","label":"支払日"},"payment_recipient_id":{"type":"select","label":"支払先","options":[]},"description":{"type":"text","label":"内容"},"account_item_id":{"type":"select","label":"勘定科目","options":[]},"department_id":{"type":"select","label":"振分部門","options":[]},"allocationTarget":{"type":"select","label":"振分先","options":[]},"costType":{"type":"select","label":"費用種別","options":["V","F"]},"amount":{"type":"number","label":"金額"}}}},{"name":"notes","type":"textarea","label":"備考"}]}', true),
 ('TRP', '交通費申請フォーム', '交通費申請用のフォーム', '{"fields":[{"name":"details","type":"array","label":"交通費明細","items":{"type":"object","properties":{"travelDate":{"type":"date","label":"利用日"},"departure":{"type":"text","label":"出発地"},"arrival":{"type":"text","label":"目的地"},"transportMode":{"type":"select","label":"交通手段","options":["電車","バス","タクシー","飛行機","その他"]},"amount":{"type":"number","label":"金額"}}}},{"name":"notes","type":"textarea","label":"備考"}]}', true),
 ('LEV', '休暇申請フォーム', '休暇申請用のフォーム', '{"fields":[{"name":"leaveType","type":"select","label":"休暇の種類","required":true,"options":["有給休暇","午前半休","午後半休","欠勤","その他"]},{"name":"startDate","type":"date","label":"開始日","required":true},{"name":"endDate","type":"date","label":"終了日","required":true},{"name":"reason","type":"textarea","label":"理由","required":true}]}', true),
 ('APL', '稟議申請フォーム', '稟議申請用のフォーム', '{"fields":[{"name":"title","type":"text","label":"件名","required":true},{"name":"details","type":"textarea","label":"目的・概要","required":true}]}', true),
 ('DLY', '日報フォーム', '日報提出用のフォーム', '{"fields":[{"name":"reportDate","type":"date","label":"報告日","required":true},{"name":"startTime","type":"time","label":"業務開始"},{"name":"endTime","type":"time","label":"業務終了"},{"name":"customerName","type":"text","label":"訪問先・顧客名"},{"name":"activityContent","type":"textarea","label":"活動内容","required":true},{"name":"nextDayPlan","type":"textarea","label":"翌日予定"}]}', true),
 ('WKR', '週報フォーム', '週報提出用のフォーム', '{"fields":[{"name":"title","type":"text","label":"件名","required":true},{"name":"details","type":"textarea","label":"報告内容","required":true}]}', true)
 ON CONFLICT (code) DO UPDATE SET schema = EXCLUDED.schema, is_active = EXCLUDED.is_active;
-
--- サンプルマスターデータ
-INSERT INTO public.departments (name) VALUES ('総務部'), ('経理部'), ('営業部'), ('製造部') ON CONFLICT (name) DO NOTHING;
-INSERT INTO public.employee_titles (name) VALUES ('代表取締役'), ('取締役'), ('部長'), ('課長'), ('社員') ON CONFLICT (name) DO NOTHING;
-INSERT INTO public.allocation_divisions (name) VALUES ('本社経費'), ('営業部経費'), ('製造部経費'), ('共通経費') ON CONFLICT (name) DO NOTHING;
-
 
 -- 5. RLSポリシーと権限を設定
 -- 各テーブルでRLSを有効化
@@ -370,26 +306,21 @@ ALTER TABLE public.invoice_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inbox_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.allocation_divisions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.employee_titles ENABLE ROW LEVEL SECURITY;
-
 
 -- 既存のポリシーを削除してクリーンな状態から開始
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.forms;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.application_codes;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.approval_routes;
 DROP POLICY IF EXISTS "Allow all access to authenticated users" ON public.applications;
-DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.account_items;
-DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.payment_recipients;
+DROP POLICY IF EXISTS "Allow authenticated read access" ON public.account_items;
+DROP POLICY IF EXISTS "Allow authenticated read access" ON public.payment_recipients;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.leads;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.customers;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.invoices;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.invoice_items;
 DROP POLICY IF EXISTS "Allow all authenticated users" ON public.inbox_items;
-DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.departments;
-DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.employees;
-DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.allocation_divisions;
-DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.employee_titles;
+DROP POLICY IF EXISTS "Allow authenticated read access" ON public.departments;
+DROP POLICY IF EXISTS "Allow all employees access" ON public.employees;
 
 -- 権限付与
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
@@ -399,20 +330,18 @@ GRANT SELECT ON public.v_departments TO anon, authenticated;
 CREATE POLICY "Allow authenticated read access" ON public.forms FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow authenticated read access" ON public.application_codes FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow authenticated read access" ON public.approval_routes FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated read access" ON public.account_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated read access" ON public.payment_recipients FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow authenticated read access" ON public.invoices FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow authenticated read access" ON public.invoice_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated read access" ON public.departments FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Allow all employees access" ON public.employees FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- データ操作用テーブルにALL権限を付与
 CREATE POLICY "Allow all authenticated users" ON public.inbox_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to authenticated users" ON public.applications FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.leads FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.customers FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access for authenticated users" ON public.employees FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access for authenticated users" ON public.account_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access for authenticated users" ON public.payment_recipients FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access for authenticated users" ON public.departments FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access for authenticated users" ON public.allocation_divisions FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access for authenticated users" ON public.employee_titles FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
 -- =================================================================

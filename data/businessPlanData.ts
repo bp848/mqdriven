@@ -1,4 +1,4 @@
-import { BusinessPlan } from '../types.ts';
+import { BusinessPlan } from '../types';
 
 // Data extracted from the provided "営業部" performance sheet image
 // All values are in 百万円 (millions of yen)

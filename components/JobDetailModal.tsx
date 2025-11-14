@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Job, JobStatus, InvoiceStatus, ConfirmationDialogProps, Page, Toast, ManufacturingStatus } from '../types.ts';
-import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants.ts';
-import { X, Pencil, Save, Loader, Trash2, HardHat, FileText } from './Icons.tsx';
-import JobStatusBadge from './JobStatusBadge.tsx';
-import { generateMultipagePdf } from '../utils.ts';
-import ManufacturingOrderPdfContent from './manufacturing/ManufacturingOrderPdfContent.tsx';
+import { Job, JobStatus, InvoiceStatus, ConfirmationDialogProps, Page, Toast, ManufacturingStatus } from '../types';
+import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants';
+import { X, Pencil, Save, Loader, Trash2, HardHat, FileText } from './Icons';
+import JobStatusBadge from './JobStatusBadge';
+import { generateMultipagePdf } from '../utils';
+import ManufacturingOrderPdfContent from './manufacturing/ManufacturingOrderPdfContent';
 
 interface JobDetailModalProps {
   job: Job | null;

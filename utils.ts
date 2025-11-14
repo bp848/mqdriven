@@ -1,40 +1,7 @@
-import { User } from './types.ts';
+import { User } from './types';
 
 declare const jspdf: any;
 declare const html2canvas: any;
-
-const getImportMetaEnv = (): Record<string, string | undefined> | undefined => {
-  try {
-    // `import.meta` may be undefined in some runtimes (e.g. Node during testing)
-    return (typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined) as
-      | Record<string, string | undefined>
-      | undefined;
-  } catch (error) {
-    console.warn('Failed to access import.meta.env:', error);
-    return undefined;
-  }
-};
-
-export const getEnvValue = (key: string): string | undefined => {
-  if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
-    return process.env[key];
-  }
-
-  const metaEnv = getImportMetaEnv();
-  if (metaEnv) {
-    if (metaEnv[key] !== undefined) {
-      return metaEnv[key];
-    }
-
-    const viteKey = `VITE_${key}`;
-    if (metaEnv[viteKey] !== undefined) {
-      return metaEnv[viteKey];
-    }
-  }
-
-  return undefined;
-};
-
 
 export const formatJPY = (amount: number | null | undefined): string => {
   if (amount === null || amount === undefined) return '-';
@@ -115,37 +82,16 @@ E-mail：sales.system@mqprint.co.jp
     }
 };
 
-const KATAKANA_START = 0x30a1;
-const KATAKANA_END = 0x30f6;
-
-export const normalizeSearchText = (value: string): string => {
-  if (!value) return '';
-  const normalized = value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/\s+/g, '');
-  let hiragana = '';
-  for (const ch of normalized) {
-    const code = ch.charCodeAt(0);
-    if (code >= KATAKANA_START && code <= KATAKANA_END) {
-      hiragana += String.fromCharCode(code - 0x60);
-    } else {
-      hiragana += ch;
-    }
-  }
-  return hiragana;
-};
-
-export const generateMultipagePdf = async (elementId: string, fileName: string): Promise<void> => {
+export const generateMultipagePdf = async (elementId: string, fileName: string) => {
     const input = document.getElementById(elementId);
     if (!input) {
-      throw new Error(`Element with id '${elementId}' not found.`);
+        throw new Error(`PDF生成用の要素(ID: "${elementId}")が見つかりませんでした。`);
     }
 
     const canvas = await html2canvas(input, {
         scale: 2,
         useCORS: true,
-        logging: true,
+        logging: false,
         width: input.scrollWidth,
         height: input.scrollHeight,
         windowWidth: input.scrollWidth,
@@ -154,7 +100,7 @@ export const generateMultipagePdf = async (elementId: string, fileName: string):
 
     const pdf = new jspdf.jsPDF({
         orientation: 'p',
-        unit: 'px',
+        unit: 'mm',
         format: 'a4',
     });
 
@@ -164,6 +110,7 @@ export const generateMultipagePdf = async (elementId: string, fileName: string):
     const canvasWidth = canvas.width;
     const canvasHeight = canvas.height;
     
+    // Calculate the height of the canvas content when fitted to the PDF width
     const ratio = canvasWidth / pdfWidth;
     const canvasRenderedHeight = canvasHeight / ratio;
 
@@ -178,13 +125,25 @@ export const generateMultipagePdf = async (elementId: string, fileName: string):
         
         pdf.addImage(canvas, 'PNG', 0, -position, pdfWidth, canvasRenderedHeight);
 
+        // Add header and footer to each page
         pdf.setFontSize(8);
         pdf.setTextColor(150);
+        
+        // Header
+        pdf.text('文唱堂印刷株式会社 | Confidential', 15, 10);
+        
+        // Footer
         pdf.text(
             `Page ${pageCount} of ${totalPages}`,
             pdfWidth / 2,
             pdfHeight - 10,
             { align: 'center' }
+        );
+        pdf.text(
+            new Date().toLocaleDateString('ja-JP'),
+            pdfWidth - 15,
+            pdfHeight - 10,
+            { align: 'right' }
         );
 
         position += pdfHeight;
