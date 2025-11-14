@@ -2,6 +2,7 @@ import { getSupabase } from './supabaseClient';
 import {
     EmployeeUser,
     Job,
+    JobStatus,
     Customer,
     JournalEntry,
     User,
@@ -31,52 +32,83 @@ import {
     Department,
     InvoiceStatus,
     LeadStatus,
+    PurchaseOrderStatus,
     AllocationDivision,
     Title,
 } from '../types';
 
+const jobStatusValues = new Set<string>(Object.values(JobStatus));
+const poStatusValues = new Set<string>(Object.values(PurchaseOrderStatus));
+
+const mapProjectStatus = (status?: string | null): JobStatus => {
+    if (status && jobStatusValues.has(status)) {
+        return status as JobStatus;
+    }
+    return JobStatus.InProgress;
+};
+
+const mapOrderStatus = (status?: string | null): PurchaseOrderStatus => {
+    if (status && poStatusValues.has(status)) {
+        return status as PurchaseOrderStatus;
+    }
+    // Fallback to the standard “発注済” state so UI badges remain consistent.
+    return PurchaseOrderStatus.Ordered;
+};
+
 // Mappers from snake_case (DB) to camelCase (JS)
-const dbJobToJob = (dbJob: any): Job => ({
-    id: dbJob.id,
-    jobNumber: dbJob.job_number,
-    clientName: dbJob.client_name,
-    title: dbJob.title,
-    status: dbJob.status,
-    dueDate: dbJob.due_date,
-    quantity: dbJob.quantity,
-    paperType: dbJob.paper_type,
-    finishing: dbJob.finishing,
-    details: dbJob.details,
-    createdAt: dbJob.created_at,
-    price: dbJob.price,
-    variableCost: dbJob.variable_cost,
-    invoiceStatus: dbJob.invoice_status,
-    invoicedAt: dbJob.invoiced_at,
-    paidAt: dbJob.paid_at,
-    readyToInvoice: dbJob.ready_to_invoice,
-    invoiceId: dbJob.invoice_id,
-    manufacturingStatus: dbJob.manufacturing_status,
+const dbJobToJob = (project: any): Job => ({
+    id: project.id,
+    jobNumber: typeof project.project_code === 'number'
+        ? project.project_code
+        : parseInt(project.project_code, 10) || 0,
+    clientName: project.customer_code || project.client_name || '',
+    title: project.project_name || project.title || '',
+    status: mapProjectStatus(project.project_status || project.status),
+    dueDate: project.delivery_date || project.due_date || '',
+    quantity: Number(project.quantity ?? 0),
+    paperType: project.paper_type || '',
+    finishing: project.finishing || '',
+    details: project.details || project.project_summary || '',
+    createdAt: project.create_date || project.created_at || new Date().toISOString(),
+    price: Number(project.amount ?? project.price ?? 0),
+    variableCost: Number(project.variable_cost ?? project.subamount ?? 0),
+    invoiceStatus: project.invoice_status || InvoiceStatus.Uninvoiced,
+    invoicedAt: project.invoiced_at ?? null,
+    paidAt: project.paid_at ?? null,
+    readyToInvoice: Boolean(project.ready_to_invoice),
+    invoiceId: project.invoice_id ?? null,
+    manufacturingStatus: project.manufacturing_status || ManufacturingStatus.OrderReceived,
 });
 
-const jobToDbJob = (job: Partial<Job>): any => ({
-    job_number: job.jobNumber,
-    client_name: job.clientName,
-    title: job.title,
-    status: job.status,
-    due_date: job.dueDate,
-    quantity: job.quantity,
-    paper_type: job.paperType,
-    finishing: job.finishing,
-    details: job.details,
-    price: job.price,
-    variable_cost: job.variableCost,
-    invoice_status: job.invoiceStatus,
-    invoiced_at: job.invoicedAt,
-    paid_at: job.paidAt,
-    ready_to_invoice: job.readyToInvoice,
-    invoice_id: job.invoiceId,
-    manufacturing_status: job.manufacturingStatus,
-});
+const jobToDbJob = (job: Partial<Job>): any => {
+    const row: Record<string, any> = {};
+    if (job.jobNumber !== undefined) row.project_code = job.jobNumber;
+    if (job.clientName !== undefined) row.customer_code = job.clientName;
+    if (job.title !== undefined) row.project_name = job.title;
+    if (job.status !== undefined) row.project_status = job.status;
+    if (job.createdAt) row.create_date = job.createdAt;
+    if (job.dueDate) row.delivery_date = job.dueDate;
+    if (job.quantity !== undefined) row.quantity = job.quantity;
+    if (job.price !== undefined) row.amount = job.price;
+    if (job.variableCost !== undefined) row.subamount = job.variableCost;
+    return row;
+};
+
+const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
+    const quantity = Number(order.quantity ?? 0);
+    const totalAmount = Number(order.amount ?? order.subamount ?? order.total_amount ?? 0);
+    const unitPrice = quantity > 0 ? totalAmount / quantity : totalAmount;
+
+    return {
+        id: order.id,
+        supplierName: order.client_custmer || order.customer_name || '',
+        itemName: order.project_code || order.order_code || '',
+        orderDate: order.order_date || order.create_date || '',
+        quantity,
+        unitPrice: Number(unitPrice ?? 0),
+        status: mapOrderStatus(order.approval_status1 || order.status),
+    };
+};
 
 const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
     id: dbCustomer.id,
@@ -235,29 +267,32 @@ export const isSupabaseUnavailableError = (error: any): boolean => {
 
 export const getJobs = async (): Promise<Job[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('jobs').select('*').order('job_number', { ascending: false });
+    const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('project_code', { ascending: false });
     if (error) throw new Error(`Failed to fetch jobs: ${error.message}`);
     return (data || []).map(dbJobToJob);
 };
 
 export const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>): Promise<Job> => {
     const supabase = getSupabase();
-    const dbJob = jobToDbJob(jobData);
-    const { data, error } = await supabase.from('jobs').insert(dbJob).select().single();
+    const dbJob = jobToDbJob({ ...jobData, createdAt: new Date().toISOString() });
+    const { data, error } = await supabase.from('projects').insert(dbJob).select().single();
     if (error) throw new Error(`Failed to add job: ${error.message}`);
     return dbJobToJob(data);
 };
 
 export const updateJob = async (id: string, updates: Partial<Job>): Promise<Job> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('jobs').update(jobToDbJob(updates)).eq('id', id).select().single();
+    const { data, error } = await supabase.from('projects').update(jobToDbJob(updates)).eq('id', id).select().single();
     if (error) throw new Error(`Failed to update job: ${error.message}`);
     return dbJobToJob(data);
 };
 
 export const deleteJob = async (id: string): Promise<void> => {
     const supabase = getSupabase();
-    const { error } = await supabase.from('jobs').delete().eq('id', id);
+    const { error } = await supabase.from('projects').delete().eq('id', id);
     if (error) throw new Error(`Failed to delete job: ${error.message}`);
 };
 
@@ -555,20 +590,28 @@ export const deleteTitle = async (id: string): Promise<void> => {
 
 export const getPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('purchase_orders').select('*').order('order_date', { ascending: false });;
+    const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('order_date', { ascending: false });
     if (error) throw new Error(`Failed to fetch purchase orders: ${error.message}`);
-    return (data || []).map(d => ({ ...d, supplierName: d.supplier_name, itemName: d.item_name, orderDate: d.order_date, unitPrice: d.unit_price }));
+    return (data || []).map(dbOrderToPurchaseOrder);
 };
 
 export const addPurchaseOrder = async (order: Omit<PurchaseOrder, 'id'>): Promise<PurchaseOrder> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('purchase_orders').insert({
-        supplier_name: order.supplierName, item_name: order.itemName, order_date: order.orderDate,
-        quantity: order.quantity, unit_price: order.unitPrice, status: order.status,
-    }).select().single();
+    const insertPayload = {
+        client_custmer: order.supplierName,
+        project_code: order.itemName,
+        order_date: order.orderDate,
+        quantity: order.quantity,
+        amount: order.unitPrice * order.quantity,
+        approval_status1: order.status,
+    };
+    const { data, error } = await supabase.from('orders').insert(insertPayload).select().single();
     if (error) throw new Error(`Failed to add purchase order: ${error.message}`);
-    return data as PurchaseOrder;
-}
+    return dbOrderToPurchaseOrder(data);
+};
 
 
 export const getInventoryItems = async (): Promise<InventoryItem[]> => {
