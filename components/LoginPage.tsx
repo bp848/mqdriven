@@ -2,7 +2,11 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient';
 import { Package, GoogleIcon } from './Icons';
 
-const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  onSwitchToRegister?: () => void;
+}
+
+const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
   const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -236,6 +240,18 @@ const LoginPage: React.FC = () => {
           {!isSupabaseConfigured && (
             <p className="mt-3 text-sm text-red-600 text-center">
               Supabaseの接続情報が未設定のため、デモモードでご利用ください。
+            </p>
+          )}
+          {onSwitchToRegister && (
+            <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+              アカウントが必要な方は{' '}
+              <button
+                type="button"
+                onClick={onSwitchToRegister}
+                className="text-blue-600 hover:underline font-semibold"
+              >
+                登録申請はこちら
+              </button>
             </p>
           )}
         </div>

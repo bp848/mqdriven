@@ -8,6 +8,8 @@ interface SidebarProps {
   currentUser: EmployeeUser | null;
   allUsers: EmployeeUser[];
   onUserChange: (user: EmployeeUser | null) => void;
+  supabaseUserEmail?: string | null;
+  onSignOut?: () => void;
 }
 
 type NavItemType = {
@@ -184,7 +186,7 @@ const CollapsibleNavItem: React.FC<{
 };
 
 
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser, allUsers, onUserChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser, allUsers, onUserChange, supabaseUserEmail, onSignOut }) => {
   const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>({});
 
   const visibleCategories = ALL_NAV_CATEGORIES;
@@ -235,6 +237,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
         </ul>
       </nav>
       <div className="mt-auto pt-4 border-t border-slate-700 space-y-4">
+        {supabaseUserEmail && (
+          <div className="px-3 py-2 rounded-lg bg-slate-700/60">
+            <p className="text-xs text-slate-400">ログイン中のユーザー</p>
+            <p className="text-sm font-semibold text-white break-all">{supabaseUserEmail}</p>
+          </div>
+        )}
         <div className="px-3 py-2">
            <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替</label>
            <select 
@@ -251,6 +259,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                 ))}
            </select>
         </div>
+        {onSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="w-full px-3 py-2 text-sm font-semibold text-center text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors"
+          >
+            ログアウト
+          </button>
+        )}
       </div>
     </aside>
   );
