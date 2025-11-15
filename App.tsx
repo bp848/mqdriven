@@ -13,7 +13,6 @@ import CreateLeadModal from './components/sales/CreateLeadModal';
 import PlaceholderPage from './components/PlaceholderPage';
 import UserManagementPage from './components/admin/UserManagementPage';
 import ApprovalRouteManagementPage from './components/admin/ApprovalRouteManagementPage';
-import BugReportList from './components/admin/BugReportList';
 import BugReportChatModal from './components/BugReportChatModal';
 import SettingsPage from './components/SettingsPage';
 import AccountingPage from './components/Accounting';
@@ -89,7 +88,6 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_user_management: 'ユーザー管理',
     admin_route_management: '承認ルート管理',
     admin_master_management: 'マスタ管理',
-    admin_bug_reports: '改善要望一覧',
     settings: '設定',
 };
 
@@ -134,7 +132,6 @@ const App: React.FC = () => {
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [bugReports, setBugReports] = useState<BugReport[]>([]);
     const [estimates, setEstimates] = useState<Estimate[]>([]);
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -210,16 +207,26 @@ const App: React.FC = () => {
                 setCurrentUser(effectiveUser as EmployeeUser);
             }
             
+            const employeesFromUsers: Employee[] = usersData.map(user => ({
+                id: user.id,
+                name: user.name,
+                department: user.department || '未設定',
+                title: user.title || (user.role === 'admin' ? '管理者' : 'スタッフ'),
+                hireDate: user.createdAt,
+                salary: 0,
+                createdAt: user.createdAt,
+            }));
+            
             const [
                 jobsData, customersData, journalData, accountItemsData,
-                leadsData, routesData, poData, inventoryData, employeesData,
-                bugReportsData, estimatesData, departmentsData, paymentRecipientsData,
+                leadsData, routesData, poData, inventoryData,
+                estimatesData, departmentsData, paymentRecipientsData,
                 allocationDivisionsData, titlesData
             ] = await Promise.all([
                 dataService.getJobs(), dataService.getCustomers(), dataService.getJournalEntries(),
                 dataService.getAccountItems(), dataService.getLeads(), dataService.getApprovalRoutes(),
-                dataService.getPurchaseOrders(), dataService.getInventoryItems(), dataService.getEmployees(),
-                dataService.getBugReports(), dataService.getEstimates(), dataService.getDepartments(),
+                dataService.getPurchaseOrders(), dataService.getInventoryItems(),
+                dataService.getEstimates(), dataService.getDepartments(),
                 dataService.getPaymentRecipients(), dataService.getAllocationDivisions(), dataService.getTitles()
             ]);
             
@@ -233,8 +240,7 @@ const App: React.FC = () => {
             setApprovalRoutes(routesData);
             setPurchaseOrders(poData);
             setInventoryItems(inventoryData);
-            setEmployees(employeesData);
-            setBugReports(bugReportsData);
+            setEmployees(employeesFromUsers);
             setEstimates(estimatesData);
             setDepartments(departmentsData);
             setPaymentRecipients(paymentRecipientsData);
@@ -391,6 +397,7 @@ const App: React.FC = () => {
             return;
         }
         await dataService.addBugReport({ ...report, reporterName: currentUser.name });
+        addToast('ご報告ありがとうございます。内容を受け付けました。', 'success');
     };
 
     const handleAddEstimate = async (estimateData: any) => {
@@ -476,10 +483,8 @@ const App: React.FC = () => {
                     addToast={addToast}
                     requestConfirmation={requestConfirmation}
                 />;
-            case 'admin_bug_reports':
-                return <BugReportList reports={bugReports} onUpdateReport={dataService.updateBugReport} searchTerm={searchTerm}/>
             case 'settings':
-                return <SettingsPage addToast={addToast} />;
+                return <SettingsPage addToast={addToast} currentUser={currentUser} />;
             case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_general_ledger': case 'accounting_trial_balance': case 'accounting_period_closing':
                 return <AccountingPage page={currentPage} journalEntries={journalEntries} accountItems={accountItems} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs} applications={applications} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers} employees={employees} onRefreshData={loadAllData} />;
             case 'inventory_management':
@@ -526,7 +531,7 @@ const App: React.FC = () => {
       primaryAction: ['sales_orders', 'sales_leads', 'sales_customers', 'purchasing_orders', 'inventory_management'].includes(currentPage)
         ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
         : undefined,
-      search: ['sales_orders', 'sales_customers', 'sales_leads', 'admin_bug_reports', 'purchasing_orders'].includes(currentPage)
+      search: ['sales_orders', 'sales_customers', 'sales_leads', 'purchasing_orders'].includes(currentPage)
         ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...` }
         : undefined,
     };
