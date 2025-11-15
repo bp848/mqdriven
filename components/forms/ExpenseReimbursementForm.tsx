@@ -1,13 +1,69 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { submitApplication } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
-import PaymentRecipientSelect from './PaymentRecipientSelect';
 import DepartmentSelect from './DepartmentSelect';
-import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
-// FIX: Import AllocationDivision type.
-import { User, InvoiceData, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision } from '../../types';
+import { Loader, Upload, PlusCircle, Trash2, AlertTriangle, CheckCircle, FileText, RefreshCw } from '../Icons';
+import {
+    User,
+    InvoiceData,
+    Customer,
+    AccountItem,
+    Job,
+    PurchaseOrder,
+    Department,
+    AllocationDivision,
+    JobStatus,
+    Toast,
+    InvoiceStatus,
+} from '../../types';
+
+type MQAlertLevel = 'INFO' | 'WARNING' | 'ERROR';
+
+interface MQAlert {
+    id: string;
+    level: MQAlertLevel;
+    message: string;
+    lineId?: string;
+}
+
+interface BankAccountInfo {
+    bankName: string;
+    branchName: string;
+    accountType: string;
+    accountNumber: string;
+}
+
+interface ExpenseLine {
+    id: string;
+    lineDate: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    unitPrice: number;
+    amountExclTax: number;
+    taxRate: number;
+    accountItemId: string;
+    allocationDivisionId: string;
+    customerId: string;
+    projectId: string;
+    linkedRevenueId: string;
+}
+
+interface ExpenseInvoiceDraft {
+    id: string;
+    supplierName: string;
+    registrationNumber: string;
+    invoiceDate: string;
+    dueDate: string;
+    totalGross: number;
+    totalNet: number;
+    taxAmount: number;
+    status: 'Draft' | 'Pending' | 'Approved' | 'Rejected' | '要修正' | '検証済';
+    bankAccount: BankAccountInfo;
+    lines: ExpenseLine[];
+}
 
 interface ExpenseReimbursementFormProps {
     onSuccess: () => void;
@@ -18,225 +74,1279 @@ interface ExpenseReimbursementFormProps {
     jobs: Job[];
     purchaseOrders: PurchaseOrder[];
     departments: Department[];
+    allocationDivisions: AllocationDivision[];
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
-    // FIX: Add missing 'allocationDivisions' property.
-    allocationDivisions: AllocationDivision[];
+    addToast?: (message: string, type: Toast['type']) => void;
 }
 
-interface ExpenseDetail {
-    id: string;
-    paymentDate: string;
-    paymentRecipientId: string;
-    description: string;
-    allocationTarget: string;
-    costType: 'V' | 'F';
-    accountItemId: string;
-    // FIX: Rename 'departmentId' to 'allocationDivisionId' to match schema.
-    allocationDivisionId: string;
-    amount: number;
+interface ComputedTotals {
+    net: number;
+    tax: number;
+    gross: number;
 }
+
+const numberFromInput = (value: string) => {
+    if (value === '') return 0;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+const createEmptyLine = (): ExpenseLine => ({
+    id: generateId('line'),
+    lineDate: new Date().toISOString().split('T')[0],
+    description: '',
+    quantity: 1,
+    unit: '式',
+    unitPrice: 0,
+    amountExclTax: 0,
+    taxRate: 10,
+    accountItemId: '',
+    allocationDivisionId: '',
+    customerId: '',
+    projectId: '',
+    linkedRevenueId: '',
+});
+
+const createEmptyInvoiceDraft = (): ExpenseInvoiceDraft => ({
+    id: generateId('invoice'),
+    supplierName: '',
+    registrationNumber: '',
+    invoiceDate: new Date().toISOString().split('T')[0],
+    dueDate: '',
+    totalGross: 0,
+    totalNet: 0,
+    taxAmount: 0,
+    status: 'Draft',
+    bankAccount: {
+        bankName: '',
+        branchName: '',
+        accountType: '',
+        accountNumber: '',
+    },
+    lines: [createEmptyLine()],
+});
+
+const computeLineTotals = (invoice: ExpenseInvoiceDraft): ComputedTotals => {
+    const net = invoice.lines.reduce((sum, line) => sum + (Number(line.amountExclTax) || 0), 0);
+    const tax = invoice.lines.reduce(
+        (sum, line) => sum + (Number(line.amountExclTax) || 0) * ((Number(line.taxRate) || 0) / 100),
+        0
+    );
+    return { net, tax, gross: net + tax };
+};
+
+const severityFromAlerts = (alerts: MQAlert[]) => {
+    if (alerts.some(alert => alert.level === 'ERROR')) return 'error';
+    if (alerts.some(alert => alert.level === 'WARNING')) return 'warn';
+    return 'ok';
+};
+
+const buildMqAlerts = (
+    invoice: ExpenseInvoiceDraft,
+    totals: ComputedTotals,
+    jobs: Job[],
+    purchaseOrders: PurchaseOrder[]
+): MQAlert[] => {
+    const alerts: MQAlert[] = [];
+    const projectTotals: Record<string, number> = {};
+
+    invoice.lines.forEach(line => {
+        if (!line.description.trim()) {
+            alerts.push({ id: `${line.id}-desc`, level: 'ERROR', message: '品名を入力してください。', lineId: line.id });
+        }
+        if (!line.customerId) {
+            alerts.push({ id: `${line.id}-customer`, level: 'ERROR', message: '顧客は必須です。', lineId: line.id });
+        }
+        if (!line.projectId && line.customerId) {
+            alerts.push({
+                id: `${line.id}-project`,
+                level: 'WARNING',
+                message: '顧客に紐づくプロジェクトを選択してください。',
+                lineId: line.id,
+            });
+        }
+        if (!line.accountItemId) {
+            alerts.push({
+                id: `${line.id}-account`,
+                level: 'WARNING',
+                message: '勘定科目の割当が未設定です。',
+                lineId: line.id,
+            });
+        }
+        if (!line.amountExclTax || line.amountExclTax <= 0) {
+            alerts.push({
+                id: `${line.id}-amount`,
+                level: 'ERROR',
+                message: '金額（税抜）には正の数を入力してください。',
+                lineId: line.id,
+            });
+        }
+
+        if (line.projectId) {
+            projectTotals[line.projectId] = (projectTotals[line.projectId] || 0) + (line.amountExclTax || 0);
+        }
+
+        const linkedOrder = purchaseOrders.find(po => `order:${po.id}` === line.linkedRevenueId);
+        if (linkedOrder && line.amountExclTax > linkedOrder.quantity * linkedOrder.unitPrice) {
+            alerts.push({
+                id: `${line.id}-po`,
+                level: 'WARNING',
+                message: 'この経費が対応する発注金額を上回っています。',
+                lineId: line.id,
+            });
+        }
+    });
+
+    invoice.lines.forEach(line => {
+        if (!line.projectId) return;
+        const job = jobs.find(j => j.id === line.projectId);
+        if (!job) return;
+
+        if (job.status === JobStatus.Completed) {
+            alerts.push({
+                id: `${line.id}-job-status`,
+                level: 'WARNING',
+                message: `プロジェクト「${job.title}」は完了済みです。部門長承認が必要です。`,
+                lineId: line.id,
+            });
+        }
+        if (projectTotals[line.projectId] > job.price) {
+            alerts.push({
+                id: `${line.id}-margin`,
+                level: 'ERROR',
+                message: `経費累計が案件「${job.title}」の売上を超えています。`,
+                lineId: line.id,
+            });
+        }
+        if (!job.invoiceId) {
+            alerts.push({
+                id: `${line.id}-missing-sales`,
+                level: 'INFO',
+                message: `案件「${job.title}」に売上請求書が登録されていません（漏れの可能性）。`,
+                lineId: line.id,
+            });
+        }
+    });
+
+    if (Math.abs((invoice.totalNet || 0) - totals.net) >= 1 || Math.abs((invoice.totalGross || 0) - totals.gross) >= 1) {
+        alerts.push({
+            id: `${invoice.id}-total-mismatch`,
+            level: 'WARNING',
+            message: 'ヘッダー金額と明細合計が一致しません。MQチェックを見直してください。',
+        });
+    }
+
+    return alerts;
+};
 
 const readFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result.split(',')[1]) : reject("Read failed");
+        reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result.split(',')[1]) : reject('Read failed'));
         reader.onerror = error => reject(error);
         reader.readAsDataURL(file);
     });
 };
 
-const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({ onSuccess, applicationCodeId, currentUser, customers, jobs, departments, isAIOff, isLoading, error: formLoadError, allocationDivisions }) => {
+const statusBadges: Record<string, string> = {
+    Draft: 'bg-slate-100 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200',
+    '要修正': 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
+    検証済: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
+    Pending: 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
+    Approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
+    Rejected: 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300',
+};
+
+const mqLevelStyles: Record<MQAlertLevel, string> = {
+    INFO: 'bg-blue-50 text-blue-700 border border-blue-200',
+    WARNING: 'bg-amber-50 text-amber-800 border border-amber-200',
+    ERROR: 'bg-rose-50 text-rose-800 border border-rose-200',
+};
+
+const severityIcon = (severity: 'ok' | 'warn' | 'error') => {
+    if (severity === 'ok') {
+        return <CheckCircle className="w-5 h-5 text-emerald-500" aria-hidden />;
+    }
+    if (severity === 'warn') {
+        return <AlertTriangle className="w-5 h-5 text-amber-500" aria-hidden />;
+    }
+    return <AlertTriangle className="w-5 h-5 text-rose-500" aria-hidden />;
+};
+
+const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
+    onSuccess,
+    applicationCodeId,
+    currentUser,
+    customers,
+    accountItems,
+    jobs,
+    purchaseOrders,
+    departments,
+    allocationDivisions,
+    isAIOff,
+    isLoading,
+    error: formLoadError,
+    addToast,
+}) => {
+    const [invoiceDrafts, setInvoiceDrafts] = useState<ExpenseInvoiceDraft[]>([createEmptyInvoiceDraft()]);
+    const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
     const [departmentId, setDepartmentId] = useState<string>('');
-    const [details, setDetails] = useState<ExpenseDetail[]>([]);
-    const [notes, setNotes] = useState('');
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
+    const [notes, setNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
-    
+    const [customerSearchTerms, setCustomerSearchTerms] = useState<Record<string, string>>({});
+    const [highlightedLineId, setHighlightedLineId] = useState<string>('');
+    const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
 
-    const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
+    useEffect(() => {
+        if (!selectedInvoiceId && invoiceDrafts.length > 0) {
+            setSelectedInvoiceId(invoiceDrafts[0].id);
+        }
+    }, [invoiceDrafts, selectedInvoiceId]);
 
-    const addNewRow = () => {
-        setDetails(prev => [...prev, {
-            id: `row_${Date.now()}`,
-            paymentDate: new Date().toISOString().split('T')[0],
-            paymentRecipientId: '',
-            description: '',
-            allocationTarget: '',
-            costType: 'F',
-            accountItemId: '',
-            // FIX: Use 'allocationDivisionId'.
-            allocationDivisionId: '',
-            amount: 0,
-        }]);
+    const selectedInvoice = useMemo(
+        () => invoiceDrafts.find(inv => inv.id === selectedInvoiceId) || invoiceDrafts[0],
+        [invoiceDrafts, selectedInvoiceId]
+    );
+
+    const effectiveCustomers = useMemo(() => {
+        if (customers.length) return customers;
+        const fallbackName = selectedInvoice?.supplierName || '仮顧客';
+        return [
+            {
+                id: 'fallback-customer',
+                customerName: fallbackName,
+                createdAt: new Date().toISOString(),
+            } as Customer,
+        ];
+    }, [customers, selectedInvoice?.supplierName]);
+
+    const effectiveJobs = useMemo(() => {
+        if (jobs.length) return jobs;
+        const fallbackCustomerName = effectiveCustomers[0]?.customerName || '仮顧客';
+        return [
+            {
+                id: 'fallback-job',
+                jobNumber: 1,
+                clientName: fallbackCustomerName,
+                title: `${fallbackCustomerName} 向け仮案件`,
+                status: JobStatus.InProgress,
+                dueDate: new Date().toISOString().split('T')[0],
+                quantity: 1,
+                paperType: '',
+                finishing: '',
+                details: 'Fallback project for expense allocation',
+                createdAt: new Date().toISOString(),
+                price: 100000,
+                variableCost: 50000,
+                invoiceStatus: InvoiceStatus.Uninvoiced,
+            } as Job,
+        ];
+    }, [jobs, effectiveCustomers]);
+
+    const invoiceDiagnostics = useMemo(() => {
+        return invoiceDrafts.map(invoice => {
+            const totals = computeLineTotals(invoice);
+            const alerts = buildMqAlerts(invoice, totals, effectiveJobs, purchaseOrders);
+            return {
+                invoiceId: invoice.id,
+                totals,
+                alerts,
+                severity: severityFromAlerts(alerts),
+            };
+        });
+    }, [invoiceDrafts, effectiveJobs, purchaseOrders]);
+
+    const diagnosticsForSelected = useMemo(() => {
+        if (!selectedInvoice) return undefined;
+        return invoiceDiagnostics.find(d => d.invoiceId === selectedInvoice.id);
+    }, [invoiceDiagnostics, selectedInvoice]);
+
+    useEffect(() => {
+        if (!highlightedLineId) return;
+        const row = document.getElementById(`expense-line-${highlightedLineId}`);
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [highlightedLineId]);
+
+    const updateSelectedInvoice = useCallback(
+        (updater: (invoice: ExpenseInvoiceDraft) => ExpenseInvoiceDraft) => {
+            setInvoiceDrafts(prev =>
+                prev.map(invoice => {
+                    if (!selectedInvoice || invoice.id !== selectedInvoice.id) return invoice;
+                    return updater(invoice);
+                })
+            );
+        },
+        [selectedInvoice]
+    );
+
+    const handleInvoiceFieldChange = (field: keyof ExpenseInvoiceDraft, value: string | number) => {
+        updateSelectedInvoice(invoice => ({ ...invoice, [field]: value }));
     };
-    
-    const handleDetailChange = (id: string, field: keyof ExpenseDetail, value: string | number) => {
-        setDetails(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+
+    const handleBankAccountChange = (field: keyof BankAccountInfo, value: string) => {
+        updateSelectedInvoice(invoice => ({
+            ...invoice,
+            bankAccount: { ...invoice.bankAccount, [field]: value },
+        }));
     };
 
-    const handleRemoveRow = (id: string) => setDetails(prev => prev.filter(item => item.id !== id));
-    
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const handleLineChange = (lineId: string, field: keyof ExpenseLine, value: string | number) => {
+        updateSelectedInvoice(invoice => {
+            const nextLines = invoice.lines.map(line => {
+                if (line.id !== lineId) return line;
+                const updatedLine: ExpenseLine = { ...line, [field]: value };
 
+                if (field === 'quantity' || field === 'unitPrice') {
+                    const quantity = Number(field === 'quantity' ? value : updatedLine.quantity) || 0;
+                    const unitPrice = Number(field === 'unitPrice' ? value : updatedLine.unitPrice) || 0;
+                    updatedLine.amountExclTax = Number((quantity * unitPrice).toFixed(2));
+                }
+
+                if (field === 'amountExclTax') {
+                    updatedLine.amountExclTax = Number(value) || 0;
+                }
+
+                if (field === 'customerId' && value === '') {
+                    updatedLine.projectId = '';
+                    updatedLine.linkedRevenueId = '';
+                }
+
+                return updatedLine;
+            });
+
+            return { ...invoice, lines: nextLines };
+        });
+    };
+
+    const addLine = () => {
+        updateSelectedInvoice(invoice => ({ ...invoice, lines: [...invoice.lines, createEmptyLine()] }));
+    };
+
+    const removeLine = (lineId: string) => {
+        updateSelectedInvoice(invoice => {
+            const remaining = invoice.lines.filter(line => line.id !== lineId);
+            return { ...invoice, lines: remaining.length > 0 ? remaining : [createEmptyLine()] };
+        });
+    };
+
+    const handleCustomerFilterChange = (lineId: string, value: string) => {
+        setCustomerSearchTerms(prev => ({ ...prev, [lineId]: value }));
+    };
+
+    const suggestedCustomers = useMemo(() => {
+        if (!selectedInvoice?.supplierName) return effectiveCustomers.slice(0, 3);
+        const keyword = selectedInvoice.supplierName.toLowerCase();
+        const matches = effectiveCustomers.filter(customer => customer.customerName.toLowerCase().includes(keyword));
+        if (matches.length >= 3) return matches.slice(0, 3);
+
+        const merged = [...matches];
+        for (const customer of effectiveCustomers) {
+            if (merged.length >= 3) break;
+            if (!merged.find(item => item.id === customer.id)) {
+                merged.push(customer);
+            }
+        }
+        return merged.slice(0, 3);
+    }, [effectiveCustomers, selectedInvoice?.supplierName]);
+
+    const getAccountItemSuggestions = (description: string) => {
+        if (!description.trim()) return [];
+        const keyword = description.toLowerCase();
+        return accountItems
+            .filter(item => item.name.toLowerCase().includes(keyword) || item.code.toLowerCase().includes(keyword))
+            .slice(0, 3);
+    };
+
+    const handleJumpToLine = (lineId?: string) => {
+        if (!lineId) return;
+        setHighlightedLineId(lineId);
+        setTimeout(() => {
+            const firstInput = document.querySelector<HTMLInputElement>(`#description-${lineId}`);
+            firstInput?.focus();
+        }, 120);
+    };
+
+    const ingestFiles = async (fileList: FileList | File[]) => {
+        if (!fileList || fileList.length === 0) return;
         if (isAIOff) {
-            setError('AI機能は現在無効です。ファイルからの読み取りはできません。');
+            setError('AI機能が停止しているため、OCR取り込みは利用できません。');
             return;
         }
 
         setIsOcrLoading(true);
         setError('');
-        try {
-            const base64String = await readFileAsBase64(file);
-            const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type);
-            
-            const newDetail: ExpenseDetail = {
-                id: `row_ocr_${Date.now()}`,
-                paymentDate: ocrData.invoiceDate || new Date().toISOString().split('T')[0],
-                paymentRecipientId: '', // OCRデータに支払先IDはないため空
-                description: `【OCR読取: ${ocrData.vendorName}】${ocrData.description}`,
-                allocationTarget: ocrData.project ? `job:${jobs.find(j => j.title === ocrData.project)?.id || ''}` : `customer:${customers.find(c => c.customerName === ocrData.relatedCustomer)?.id || ''}`,
-                costType: ocrData.costType || 'F',
-                accountItemId: '', // OCRデータに勘定科目IDはないため空
-                // FIX: Use 'allocationDivisionId'.
-                allocationDivisionId: '',
-                amount: ocrData.totalAmount || 0,
-            };
-            setDetails(prev => [...prev, newDetail]);
+        const created: ExpenseInvoiceDraft[] = [];
 
+        try {
+            for (const file of Array.from(fileList)) {
+                const base64 = await readFileAsBase64(file);
+                const ocrData: InvoiceData = await extractInvoiceDetails(base64, file.type);
+                const invoice = createEmptyInvoiceDraft();
+                invoice.supplierName = ocrData.vendorName || invoice.supplierName;
+                invoice.invoiceDate = ocrData.invoiceDate || invoice.invoiceDate;
+                invoice.totalGross = Number(ocrData.totalAmount || 0);
+                if (invoice.totalGross > 0) {
+                    const estimatedNet = Number((invoice.totalGross / 1.1).toFixed(2));
+                    invoice.totalNet = estimatedNet;
+                    invoice.taxAmount = Number((invoice.totalGross - estimatedNet).toFixed(2));
+                }
+                invoice.lines = [
+                    {
+                        ...createEmptyLine(),
+                        description: ocrData.description ? `【OCR】${ocrData.description}` : '',
+                        amountExclTax: Number(ocrData.totalAmount || 0),
+                    },
+                ];
+                created.push(invoice);
+            }
         } catch (err: any) {
-            if (err.name === 'AbortError') return; // Request was aborted, do nothing
-            setError(err.message || 'AI-OCR処理中にエラーが発生しました。');
+            setError(err.message || 'OCR処理でエラーが発生しました。');
         } finally {
             setIsOcrLoading(false);
-            e.target.value = ''; // ファイル選択をリセット
         }
+
+        if (created.length > 0) {
+            setInvoiceDrafts(prev => [...created, ...prev]);
+            setSelectedInvoiceId(created[0].id);
+            addToast?.(`${created.length}件の請求書をDraftに取り込みました。`, 'info');
+        }
+    };
+
+    const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        await ingestFiles(files ?? []);
+        event.target.value = '';
+    };
+
+    const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDraggingFiles(false);
+        await ingestFiles(event.dataTransfer.files);
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!approvalRouteId) return setError('承認ルートを選択してください。');
+        setError('');
+
         if (!currentUser) return setError('ユーザー情報が見つかりません。');
+        if (!selectedInvoice) return setError('請求書を追加してください。');
         if (!departmentId) return setError('部門を選択してください。');
-        if (details.length === 0 || details.every(d => !d.description && !d.paymentRecipientId)) {
-            return setError('少なくとも1つの明細を入力してください。');
+        if (!approvalRouteId) return setError('承認ルートを選択してください。');
+        if (!selectedInvoice.supplierName.trim()) return setError('サプライヤー名を入力してください。');
+        if (selectedInvoice.lines.length === 0) return setError('少なくとも1件の明細を入力してください。');
+        if (selectedInvoice.lines.some(line => !line.description || !line.customerId || !line.projectId || !line.amountExclTax)) {
+            return setError('すべての明細で「品名」「顧客」「プロジェクト」「金額（税抜）」を入力してください。');
         }
 
         setIsSubmitting(true);
-        setError('');
         try {
-            const submissionData = {
-                departmentId,
-                details: details.filter(d => d.description || d.paymentRecipientId),
-                notes: notes,
-                totalAmount: totalAmount,
-            };
-            await submitApplication({ applicationCodeId, formData: submissionData, approvalRouteId }, currentUser.id);
+            await submitApplication(
+                {
+                    applicationCodeId,
+                    formData: {
+                        departmentId,
+                        invoice: selectedInvoice,
+                        mqAlerts: diagnosticsForSelected?.alerts ?? [],
+                        computedTotals: diagnosticsForSelected?.totals,
+                        notes,
+                    },
+                    approvalRouteId,
+                },
+                currentUser.id
+            );
+            addToast?.('経費精算を送信しました。', 'success');
             onSuccess();
         } catch (err: any) {
-            setError('申請の提出に失敗しました。');
+            setError(err.message || '申請の提出に失敗しました。');
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const inputClass = "w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+    const handleNextInvoice = () => {
+        if (!selectedInvoice) return;
+        const index = invoiceDrafts.findIndex(inv => inv.id === selectedInvoice.id);
+        if (index === -1) return;
+        const nextIndex = (index + 1) % invoiceDrafts.length;
+        setSelectedInvoiceId(invoiceDrafts[nextIndex].id);
+    };
+
+    const addNewInvoice = () => {
+        const draft = createEmptyInvoiceDraft();
+        setInvoiceDrafts(prev => [...prev, draft]);
+        setSelectedInvoiceId(draft.id);
+    };
+
+    const totalsLabel = diagnosticsForSelected?.totals || { net: 0, tax: 0, gross: 0 };
+
+    if (!selectedInvoice) {
+        return (
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm">
+                <p className="text-center text-slate-500">請求書を追加して開始してください。</p>
+                <button
+                    type="button"
+                    onClick={addNewInvoice}
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg"
+                >
+                    <PlusCircle className="w-4 h-4" />
+                    新しい請求書を作成
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="relative">
             {(isLoading || formLoadError) && (
-                <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8">
+                <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/70 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
                     {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                 </div>
             )}
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white text-center">経費精算フォーム</h2>
-                
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white text-center">経費精算フォーム</h2>
+
                 {formLoadError && (
-                    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
+                    <div className="bg-rose-50 border-l-4 border-rose-400 text-rose-700 p-4 rounded-md" role="alert">
                         <p className="font-bold">フォーム読み込みエラー</p>
                         <p>{formLoadError}</p>
                     </div>
                 )}
-                
-                <div className="mt-4 flex items-center gap-4">
-                    <label htmlFor="ocr-file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer ${isOcrLoading || isAIOff || isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        {isOcrLoading ? <Loader className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                        <span>{isOcrLoading ? '解析中...' : '領収書から読み取り'}</span>
-                        <input id="ocr-file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,application/pdf" disabled={isOcrLoading || isAIOff || isDisabled} />
-                    </label>
-                    {isAIOff && <p className="text-sm text-red-500 dark:text-red-400">AI機能無効のため、OCR機能は利用できません。</p>}
-                    {!isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400">領収書ファイルを選択すると、下の表に自動で追加されます。</p>}
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">部門 *</label>
-                  <DepartmentSelect
-                    value={departmentId}
-                    onChange={setDepartmentId}
-                    required
-                  />
-                </div>
 
-                <div>
-                    <label className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">経費明細 *</label>
-                    {details.map(item => (
-                        <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-start mb-2">
-                            <input type="date" value={item.paymentDate} onChange={e => handleDetailChange(item.id, 'paymentDate', e.target.value)} className={`${inputClass} md:col-span-2`} disabled={isDisabled} />
-                            <div className="md:col-span-2"><PaymentRecipientSelect value={item.paymentRecipientId} onChange={(id) => handleDetailChange(item.id, 'paymentRecipientId', id)} required /></div>
-                            <input type="text" placeholder="内容" value={item.description} onChange={e => handleDetailChange(item.id, 'description', e.target.value)} className={`${inputClass} md:col-span-2`} disabled={isDisabled} />
-                            <div className="md:col-span-2"><AccountItemSelect value={item.accountItemId} onChange={(id) => handleDetailChange(item.id, 'accountItemId', id)} required /></div>
-                            {/* FIX: Replace DepartmentSelect with AllocationDivision select. */}
-                            <div className="md:col-span-1">
-                                <select value={item.allocationDivisionId} onChange={e => handleDetailChange(item.id, 'allocationDivisionId', e.target.value)} className={inputClass} disabled={isDisabled}>
-                                    <option value="">振分区分</option>
-                                    {allocationDivisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                </select>
+                <div className="grid lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-5 space-y-6">
+                        <section
+                            onDragOver={e => {
+                                e.preventDefault();
+                                if (!isDisabled && !isAIOff) setIsDraggingFiles(true);
+                            }}
+                            onDragLeave={() => setIsDraggingFiles(false)}
+                            onDrop={handleDrop}
+                            className={`border-2 border-dashed rounded-xl p-4 flex flex-col gap-3 bg-white dark:bg-slate-800 ${
+                                isDraggingFiles ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-500/10' : 'border-slate-200'
+                            } ${isDisabled || isAIOff ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <FileText className="w-6 h-6 text-blue-500" aria-hidden />
+                                <div>
+                                    <p className="font-semibold text-slate-800 dark:text-slate-100">一括アップロード</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        PDF / 画像をまとめてドラッグ＆ドロップ。OCR結果はDraftに追加されます。
+                                    </p>
+                                </div>
                             </div>
-                            <select value={item.allocationTarget} onChange={e => handleDetailChange(item.id, 'allocationTarget', e.target.value)} className={`${inputClass} md:col-span-1`} disabled={isDisabled}>
-                                <option value="">振分先</option>
-                                <optgroup label="顧客">
-                                    {customers.map(c => <option key={`customer:${c.id}`} value={`customer:${c.id}`}>{c.customerName}</option>)}
-                                </optgroup>
-                                <optgroup label="案件">
-                                    {jobs.map(j => <option key={`job:${j.id}`} value={`job:${j.id}`}>{j.title}</option>)}
-                                </optgroup>
-                            </select>
-                            <input type="number" placeholder="金額" value={item.amount} onChange={e => handleDetailChange(item.id, 'amount', Number(e.target.value))} className={`${inputClass} md:col-span-1 text-right`} disabled={isDisabled} />
-                            <button type="button" onClick={() => handleRemoveRow(item.id)} className="p-2 text-slate-400 hover:text-red-500 h-10" disabled={isDisabled}><Trash2 className="w-5 h-5" /></button>
-                        </div>
-                    ))}
-                     <div className="flex items-center justify-between mt-2">
-                        <button type="button" onClick={addNewRow} className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700" disabled={isDisabled}>
-                            <PlusCircle className="w-4 h-4" /> 行を追加
-                        </button>
-                        <div className="text-right">
-                            <span className="text-sm text-slate-500 dark:text-slate-400">合計金額: </span>
-                            <span className="text-xl font-bold text-slate-800 dark:text-white">¥{totalAmount.toLocaleString()}</span>
-                        </div>
+                            <label
+                                htmlFor="bulk-upload"
+                                className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition ${
+                                    isDisabled || isAIOff ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
+                            >
+                                {isOcrLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                <span>{isOcrLoading ? '解析中...' : 'ファイルをアップロード'}</span>
+                                <input
+                                    id="bulk-upload"
+                                    type="file"
+                                    className="sr-only"
+                                    accept="image/*,application/pdf"
+                                    multiple
+                                    disabled={isDisabled || isAIOff}
+                                    onChange={handleFileInputChange}
+                                />
+                            </label>
+                            {isAIOff && (
+                                <p className="text-xs text-rose-500">
+                                    SupabaseのAIフラグがOFFのため、OCRキューは利用できません。
+                                </p>
+                            )}
+                        </section>
+
+                        <section className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                                <p className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-slate-400" />
+                                    請求書マスターリスト
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={addNewInvoice}
+                                    className="text-sm text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 disabled:opacity-50"
+                                    disabled={isDisabled}
+                                >
+                                    <PlusCircle className="w-4 h-4" /> 新規Draft
+                                </button>
+                            </div>
+
+                            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                                {invoiceDrafts.map(invoice => {
+                                    const diagnostics = invoiceDiagnostics.find(d => d.invoiceId === invoice.id);
+                                    const severity = diagnostics?.severity ?? 'ok';
+                                    return (
+                                        <button
+                                            key={invoice.id}
+                                            type="button"
+                                            onClick={() => setSelectedInvoiceId(invoice.id)}
+                                            disabled={isDisabled}
+                                            className={`w-full text-left rounded-lg border p-3 flex items-center justify-between gap-3 transition ${
+                                                selectedInvoice?.id === invoice.id
+                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10'
+                                                    : 'border-slate-200 hover:border-blue-400'
+                                            }`}
+                                        >
+                                            <div>
+                                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                                    {invoice.supplierName || '未入力のサプライヤー'}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    {invoice.invoiceDate} / 合計 ¥{(diagnostics?.totals.gross ?? 0).toLocaleString()}
+                                                </p>
+                                                <span
+                                                    className={`inline-flex items-center text-[11px] px-2 py-0.5 rounded-full mt-1 ${
+                                                        statusBadges[invoice.status] || 'bg-slate-100 text-slate-600'
+                                                    }`}
+                                                >
+                                                    {invoice.status}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {severityIcon(severity as 'ok' | 'warn' | 'error')}
+                                                <span className="text-xs text-slate-500">
+                                                    {diagnostics?.alerts.length ?? 0} 件
+                                                </span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        <section className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm space-y-3">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-amber-500" aria-hidden />
+                                <p className="font-semibold text-slate-800 dark:text-slate-100">MQルール警告</p>
+                            </div>
+                            {diagnosticsForSelected?.alerts.length ? (
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                    {diagnosticsForSelected.alerts.map(alert => (
+                                        <div
+                                            key={alert.id}
+                                            className={`p-3 rounded-lg text-sm flex justify-between items-start gap-2 ${mqLevelStyles[alert.level]}`}
+                                        >
+                                            <p>{alert.message}</p>
+                                            {alert.lineId && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleJumpToLine(alert.lineId)}
+                                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+                                                >
+                                                    該当明細へ
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-500">検証済。問題は見つかりません。</p>
+                            )}
+                        </section>
+                    </div>
+
+                    <div className="lg:col-span-7 space-y-6">
+                        <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                        サプライヤー名 *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={selectedInvoice.supplierName}
+                                        onChange={e => handleInvoiceFieldChange('supplierName', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="例: 町田印刷株式会社"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                        登録番号（インボイス）
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={selectedInvoice.registrationNumber}
+                                        onChange={e => handleInvoiceFieldChange('registrationNumber', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="T1234567890123"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                        請求書発行日 *
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={selectedInvoice.invoiceDate}
+                                        onChange={e => handleInvoiceFieldChange('invoiceDate', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                        支払期限
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={selectedInvoice.dueDate}
+                                        onChange={e => handleInvoiceFieldChange('dueDate', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                        合計金額（税込）
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={selectedInvoice.totalGross}
+                                        onChange={e =>
+                                            handleInvoiceFieldChange('totalGross', numberFromInput(e.target.value))
+                                        }
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-right text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div className="flex items-end justify-between gap-2">
+                                    <div className="w-full">
+                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                            ステータス
+                                        </label>
+                                        <select
+                                            value={selectedInvoice.status}
+                                            onChange={e =>
+                                                handleInvoiceFieldChange('status', e.target.value as ExpenseInvoiceDraft['status'])
+                                            }
+                                            className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={isDisabled}
+                                        >
+                                            {['Draft', '要修正', '検証済', 'Pending', 'Approved', 'Rejected'].map(status => (
+                                                <option key={status} value={status}>
+                                                    {status}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            handleInvoiceFieldChange('status', diagnosticsForSelected?.alerts.length ? '要修正' : '検証済')
+                                        }
+                                        className="inline-flex items-center gap-1 px-3 py-2 text-xs bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
+                                        disabled={isDisabled}
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                        MQ結果を反映
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid md:grid-cols-3 gap-4">
+                                {(['totalNet', 'taxAmount'] as const).map(field => (
+                                    <div key={field}>
+                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                            {field === 'totalNet' ? '税抜金額' : '消費税額'}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={selectedInvoice[field]}
+                                            onChange={e =>
+                                                handleInvoiceFieldChange(field, numberFromInput(e.target.value))
+                                            }
+                                            className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-right text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={isDisabled}
+                                        />
+                                    </div>
+                                ))}
+                                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-sm">
+                                    <p className="text-xs text-slate-500 mb-1">明細からの自動集計</p>
+                                    <p className="flex justify-between text-slate-700 dark:text-slate-100">
+                                        <span>税抜</span>
+                                        <span>¥{totalsLabel.net.toLocaleString()}</span>
+                                    </p>
+                                    <p className="flex justify-between text-slate-600">
+                                        <span>消費税</span>
+                                        <span>¥{totalsLabel.tax.toLocaleString()}</span>
+                                    </p>
+                                    <p className="flex justify-between font-semibold text-slate-900 dark:text-white">
+                                        <span>税込</span>
+                                        <span>¥{totalsLabel.gross.toLocaleString()}</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">部門 *</label>
+                                <DepartmentSelect value={departmentId} onChange={setDepartmentId} required />
+                            </div>
+
+                            <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} />
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">振込先・銀行名</label>
+                                    <input
+                                        type="text"
+                                        value={selectedInvoice.bankAccount.bankName}
+                                        onChange={e => handleBankAccountChange('bankName', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="○○銀行"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">支店名</label>
+                                    <input
+                                        type="text"
+                                        value={selectedInvoice.bankAccount.branchName}
+                                        onChange={e => handleBankAccountChange('branchName', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="本店営業部"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">口座種別</label>
+                                    <input
+                                        type="text"
+                                        value={selectedInvoice.bankAccount.accountType}
+                                        onChange={e => handleBankAccountChange('accountType', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="普通 / 当座"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">口座番号</label>
+                                    <input
+                                        type="text"
+                                        value={selectedInvoice.bankAccount.accountNumber}
+                                        onChange={e => handleBankAccountChange('accountNumber', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="1234567"
+                                        disabled={isDisabled}
+                                    />
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <p className="text-base font-semibold text-slate-800 dark:text-slate-100">経費明細 *</p>
+                                <button
+                                    type="button"
+                                    onClick={addLine}
+                                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-semibold disabled:opacity-50"
+                                    disabled={isDisabled}
+                                >
+                                    <PlusCircle className="w-4 h-4" />
+                                    明細行を追加
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-xs text-slate-500 uppercase tracking-wider">
+                                            <th className="py-2">#</th>
+                                            <th className="py-2">日付</th>
+                                            <th className="py-2">品名</th>
+                                            <th className="py-2">数量</th>
+                                            <th className="py-2">単位</th>
+                                            <th className="py-2">単価</th>
+                                            <th className="py-2">金額（税抜）</th>
+                                            <th className="py-2">勘定科目</th>
+                                            <th className="py-2">振分区分</th>
+                                            <th className="py-2">税率</th>
+                                            <th className="py-2">顧客</th>
+                                            <th className="py-2">プロジェクト</th>
+                                            <th className="py-2">売上/見積</th>
+                                            <th />
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                        {selectedInvoice.lines.map((line, index) => {
+                                            const customerFilter = (customerSearchTerms[line.id] || '').toLowerCase();
+                                            const filteredCustomers = effectiveCustomers.filter(customer =>
+                                                customer.customerName.toLowerCase().includes(customerFilter)
+                                            );
+                                            const selectedCustomer = effectiveCustomers.find(customer => customer.id === line.customerId);
+                                            const availableProjects = effectiveJobs.filter(
+                                                job => selectedCustomer && job.clientName === selectedCustomer.customerName
+                                            );
+                                            const revenueOptions = [
+                                                ...availableProjects
+                                                    .filter(job => job.invoiceId)
+                                                    .map(job => ({
+                                                        id: `invoice:${job.invoiceId}`,
+                                                        label: `売上 ${job.jobNumber} / ¥${job.price.toLocaleString()}`,
+                                                    })),
+                                                ...purchaseOrders
+                                                    .filter(order => order.supplierName === selectedInvoice.supplierName)
+                                                    .map(order => ({
+                                                        id: `order:${order.id}`,
+                                                        label: `発注 ${order.itemName} / ¥${(
+                                                            order.quantity * order.unitPrice
+                                                        ).toLocaleString()}`,
+                                                    })),
+                                            ];
+                                            const accountItemHints = getAccountItemSuggestions(line.description);
+
+                                            return (
+                                                <tr
+                                                    key={line.id}
+                                                    id={`expense-line-${line.id}`}
+                                                    className={`align-top ${
+                                                        highlightedLineId === line.id ? 'bg-blue-50 dark:bg-blue-500/10' : ''
+                                                    }`}
+                                                >
+                                                    <td className="py-3 text-xs text-slate-500">{index + 1}</td>
+                                                    <td className="py-3 w-32">
+                                                        <label htmlFor={`lineDate-${line.id}`} className="sr-only">
+                                                            日付
+                                                        </label>
+                                                        <input
+                                                            id={`lineDate-${line.id}`}
+                                                            aria-label="日付"
+                                                            type="date"
+                                                            value={line.lineDate}
+                                                            onChange={e => handleLineChange(line.id, 'lineDate', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            disabled={isDisabled}
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-64">
+                                                        <label htmlFor={`description-${line.id}`} className="sr-only">
+                                                            品名
+                                                        </label>
+                                                        <input
+                                                            id={`description-${line.id}`}
+                                                            aria-label="品名"
+                                                            type="text"
+                                                            value={line.description}
+                                                            onChange={e => handleLineChange(line.id, 'description', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            placeholder="例: 町田印刷 9月号チラシ"
+                                                            disabled={isDisabled}
+                                                        />
+                                                        {accountItemHints.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {accountItemHints.map(hint => (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={hint.id}
+                                                                        onClick={() => handleLineChange(line.id, 'accountItemId', hint.id)}
+                                                                        className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-600 hover:bg-blue-100"
+                                                                        disabled={isDisabled}
+                                                                    >
+                                                                        候補: {hint.name}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 w-24">
+                                                        <label htmlFor={`quantity-${line.id}`} className="sr-only">
+                                                            数量
+                                                        </label>
+                                                        <input
+                                                            id={`quantity-${line.id}`}
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={line.quantity}
+                                                            onChange={e =>
+                                                                handleLineChange(line.id, 'quantity', numberFromInput(e.target.value))
+                                                            }
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm text-right"
+                                                            disabled={isDisabled}
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-24">
+                                                        <label htmlFor={`unit-${line.id}`} className="sr-only">
+                                                            単位
+                                                        </label>
+                                                        <input
+                                                            id={`unit-${line.id}`}
+                                                            type="text"
+                                                            value={line.unit}
+                                                            onChange={e => handleLineChange(line.id, 'unit', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            disabled={isDisabled}
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-28">
+                                                        <label htmlFor={`unitPrice-${line.id}`} className="sr-only">
+                                                            単価
+                                                        </label>
+                                                        <input
+                                                            id={`unitPrice-${line.id}`}
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={line.unitPrice}
+                                                            onChange={e =>
+                                                                handleLineChange(line.id, 'unitPrice', numberFromInput(e.target.value))
+                                                            }
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm text-right"
+                                                            disabled={isDisabled}
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-32">
+                                                        <label htmlFor={`amount-${line.id}`} className="sr-only">
+                                                            金額（税抜）
+                                                        </label>
+                                                        <input
+                                                            id={`amount-${line.id}`}
+                                                            aria-label="金額（税抜）"
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={line.amountExclTax}
+                                                            onChange={e =>
+                                                                handleLineChange(line.id, 'amountExclTax', numberFromInput(e.target.value))
+                                                            }
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm text-right"
+                                                            disabled={isDisabled}
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-48">
+                                                        <label htmlFor={`accountItem-${line.id}`} className="sr-only">
+                                                            勘定科目
+                                                        </label>
+                                                        <AccountItemSelect
+                                                            id={`accountItem-${line.id}`}
+                                                            name={`accountItem-${line.id}`}
+                                                            value={line.accountItemId}
+                                                            onChange={value => handleLineChange(line.id, 'accountItemId', value)}
+                                                            required
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-40">
+                                                        <label className="sr-only" htmlFor={`allocation-${line.id}`}>
+                                                            振分区分
+                                                        </label>
+                                                        <select
+                                                            id={`allocation-${line.id}`}
+                                                            value={line.allocationDivisionId}
+                                                            onChange={e =>
+                                                                handleLineChange(line.id, 'allocationDivisionId', e.target.value)
+                                                            }
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            disabled={isDisabled}
+                                                        >
+                                                            <option value="">振分区分</option>
+                                                            {allocationDivisions.map(division => (
+                                                                <option key={division.id} value={division.id}>
+                                                                    {division.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="py-3 w-24">
+                                                        <label htmlFor={`taxRate-${line.id}`} className="sr-only">
+                                                            税率
+                                                        </label>
+                                                        <input
+                                                            id={`taxRate-${line.id}`}
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={line.taxRate}
+                                                            onChange={e =>
+                                                                handleLineChange(line.id, 'taxRate', numberFromInput(e.target.value))
+                                                            }
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm text-right"
+                                                            disabled={isDisabled}
+                                                        />
+                                                    </td>
+                                                    <td className="py-3 w-56">
+                                                        <label className="sr-only" htmlFor={`customer-${line.id}`}>
+                                                            顧客
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="顧客検索"
+                                                            value={customerSearchTerms[line.id] || ''}
+                                                            onChange={e => handleCustomerFilterChange(line.id, e.target.value)}
+                                                            className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-2 py-1 text-xs mb-1"
+                                                            disabled={isDisabled}
+                                                        />
+                                                        <div className="flex flex-wrap gap-1 mb-1">
+                                                            {suggestedCustomers.map(customer => (
+                                                                <button
+                                                                    type="button"
+                                                                    key={customer.id}
+                                                                    onClick={() => handleLineChange(line.id, 'customerId', customer.id)}
+                                                                    className={`px-2 py-0.5 text-[11px] rounded-full border ${
+                                                                        line.customerId === customer.id
+                                                                            ? 'bg-blue-100 border-blue-400 text-blue-700'
+                                                                            : 'bg-white border-slate-200 text-slate-600'
+                                                                    }`}
+                                                                    disabled={isDisabled}
+                                                                >
+                                                                    {customer.customerName}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <select
+                                                            id={`customer-${line.id}`}
+                                                            aria-label="顧客"
+                                                            value={line.customerId}
+                                                            onChange={e => handleLineChange(line.id, 'customerId', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            required
+                                                            disabled={isDisabled}
+                                                        >
+                                                            <option value="">顧客を選択</option>
+                                                            {filteredCustomers.map(customer => (
+                                                                <option key={customer.id} value={customer.id}>
+                                                                    {customer.customerName}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="py-3 w-56">
+                                                        <label className="sr-only" htmlFor={`project-${line.id}`}>
+                                                            プロジェクト
+                                                        </label>
+                                                        <select
+                                                            id={`project-${line.id}`}
+                                                            aria-label='プロジェクト'
+                                                            value={line.projectId}
+                                                            onChange={e => handleLineChange(line.id, 'projectId', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            disabled={isDisabled || !line.customerId}
+                                                        >
+                                                            <option value="">
+                                                                {line.customerId ? 'プロジェクトを選択' : '顧客を先に選択'}
+                                                            </option>
+                                                            {availableProjects.map(project => (
+                                                                <option
+                                                                    key={project.id}
+                                                                    value={project.id}
+                                                                    disabled={project.status === JobStatus.Completed}
+                                                                >
+                                                                    {project.title}（{project.status}）
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="py-3 w-56">
+                                                        <label className="sr-only" htmlFor={`revenue-${line.id}`}>
+                                                            売上/見積
+                                                        </label>
+                                                        <select
+                                                            id={`revenue-${line.id}`}
+                                                            aria-label="売上/見積"
+                                                            value={line.linkedRevenueId}
+                                                            onChange={e => handleLineChange(line.id, 'linkedRevenueId', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                            disabled={isDisabled || revenueOptions.length === 0}
+                                                        >
+                                                            <option value="">
+                                                                {revenueOptions.length ? '売上/見積を紐付け' : '候補なし'}
+                                                            </option>
+                                                            {revenueOptions.map(option => (
+                                                                <option key={option.id} value={option.id}>
+                                                                    {option.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="py-3 align-middle text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeLine(line.id)}
+                                                            className="text-slate-400 hover:text-rose-500 disabled:opacity-50"
+                                                            disabled={isDisabled}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-200 dark:border-slate-700">
+                                <div className="text-sm text-slate-500 dark:text-slate-400">
+                                    合計金額（税抜ベース）:
+                                    <span className="text-lg font-bold text-slate-900 dark:text-white ml-2">
+                                        ¥{totalsLabel.net.toLocaleString()}
+                                    </span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-3">
+                            <label htmlFor="allocationNotes" className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                備考
+                            </label>
+                            <textarea
+                                id="allocationNotes"
+                                value={notes}
+                                onChange={e => setNotes(e.target.value)}
+                                rows={3}
+                                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="補足事項や承認者宛コメントを入力してください。"
+                                disabled={isDisabled}
+                            />
+                        </section>
                     </div>
                 </div>
 
-                <div>
-                    <label htmlFor="notes" className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">備考</label>
-                    <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={inputClass} placeholder="補足事項があれば入力してください。" disabled={isDisabled} />
-                </div>
+                {error && (
+                    <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-3" role="alert">
+                        {error}
+                    </p>
+                )}
 
-                <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} />
-
-                {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
-
-                <div className="flex justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                    <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>下書き保存</button>
-                    <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
-                        {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '申請を送信する'}
+                <div className="flex flex-wrap justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                        type="button"
+                        onClick={handleNextInvoice}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-100 font-semibold disabled:opacity-50"
+                        disabled={isDisabled}
+                    >
+                        次の請求書へ
                     </button>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-50"
+                            disabled={isDisabled}
+                        >
+                            下書き保存
+                        </button>
+                        <button
+                            type="submit"
+                            className="px-6 py-2 rounded-lg bg-blue-600 text-white font-semibold flex items-center justify-center gap-2 disabled:bg-slate-400"
+                            disabled={isDisabled}
+                        >
+                            {isSubmitting ? <Loader className="w-4 h-4 animate-spin" /> : '申請を送信する'}
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>

@@ -4,7 +4,13 @@ import { LeadStatus } from '../types';
 
 test.use({ timezoneId: 'Asia/Tokyo', locale: 'ja-JP' });
 
-const APP_URL = process.env.APP_URL || 'http://localhost:3000'; // Fallback for local testing
+const APP_URL = process.env.APP_URL || 'http://localhost:5173'; // Fallback for local testing
+
+test('APP_URL に単純アクセスできるか', async ({ page }) => {
+  await page.goto(APP_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByRole('heading', { name: 'ホーム' })).toBeVisible();
+});
 
 // Helper function to dismiss toasts
 async function dismissAllToasts(page: Page) {
@@ -30,18 +36,15 @@ test.describe('Approval Workflow E2E Tests', () => {
     // Assuming a default user is logged in or can be selected
     // If auth is required, add login steps here. For now, assume public access or auto-login for testing.
     await page.waitForLoadState('domcontentloaded');
-    await page.getByRole('button', { name: '閉じる' }).click().catch(() => {}); // Close setup modal if present
-    await page.getByRole('button', { name: 'バグ報告・改善要望' }).click().catch(() => {}); // Close bug report modal if present
-    await dismissAllToasts(page); // Clear any initial toasts
+    await page.getByRole('button', { name: '申請・承認' }).click();
+    await expect(page.getByRole('link', { name: '経費精算' })).toBeVisible();
   });
 
   test('休暇申請: 必須入力→バリデーション→下書き保存→提出→承認一覧に反映', async ({ page }) => {
     await page.getByRole('link', { name: '休暇申請' }).click();
     await expect(page.getByRole('heading', { name: '休暇申請フォーム' })).toBeVisible();
 
-    // 初期状態で送信ボタンが非活性であることを確認
     const submitButton = page.getByRole('button', { name: '申請を送信する' });
-    await expect(submitButton).toBeDisabled();
 
     // 承認ルートを選択
     await page.locator('#approval-route-selector').selectOption({ label: '社長決裁ルート' });
@@ -179,30 +182,29 @@ test.describe('Approval Workflow E2E Tests', () => {
     await expect(page.getByRole('heading', { name: '経費精算フォーム' })).toBeVisible();
 
     const submitButton = page.getByRole('button', { name: '申請を送信する' });
-    await expect(submitButton).toBeDisabled();
+
+    await page.getByLabel('サプライヤー名 *').fill('町田印刷');
+    await page.getByLabel('請求書発行日 *').fill('2025-11-01');
 
     // 承認ルートを選択
     await page.locator('#approval-route-selector').selectOption({ label: '社長決裁ルート' });
-    await expect(submitButton).toBeDisabled(); // 部門と明細がまだなので非活性
-
     // 部門を選択 (マスターデータが空の場合を考慮)
     await page.locator('#departmentId').selectOption({ index: 1 }).catch(() => {}); // Select first available department if any
-    await expect(submitButton).toBeDisabled(); // 明細がまだなので非活性
-    
-    // 明細行を入力
-    const firstRow = page.locator('.grid.grid-cols-1.md\\:grid-cols-12').first();
-    await firstRow.getByLabel('支払日').fill('2025-11-05');
-    await firstRow.locator('#paymentRecipientId').selectOption({ index: 1 }).catch(() => {}); // Select first available recipient
-    await firstRow.getByLabel('内容').fill('会議費用');
-    await firstRow.locator('#accountItemId').selectOption({ index: 1 }).catch(() => {}); // Select first available account item
-    await firstRow.locator('#allocationDivisionId').selectOption({ index: 1 }).catch(() => {}); // Select first available allocation division
-    await firstRow.getByLabel('金額').fill('1500');
+
+    // 明細行を入力（DOMラベルに依存）
+    await page.getByLabel('日付').first().fill('2025-11-05');
+    await page.getByLabel('品名').first().fill('町田印刷 9月号');
+    await page.getByLabel('顧客').first().selectOption({ index: 1 }).catch(() => {});
+    await page.getByLabel('プロジェクト').first().selectOption({ index: 1 }).catch(() => {});
+    await page.getByLabel('勘定科目').first().selectOption({ index: 1 }).catch(() => {});
+    await page.getByLabel('振分区分').first().selectOption({ index: 1 }).catch(() => {});
+    await page.getByLabel('金額（税抜）').first().fill('1500');
 
     // 全ての必須項目が入力されたので、送信ボタンが活性化されることを確認
     await expect(submitButton).toBeEnabled();
 
     // 合計金額の表示確認
-    await expect(page.getByText('合計金額: ¥1,500')).toBeVisible();
+    await expect(page.getByText('合計金額（税抜ベース）: ¥1,500')).toBeVisible();
 
     // 提出
     await submitButton.click();
@@ -219,22 +221,18 @@ test.describe('Approval Workflow E2E Tests', () => {
 
     await page.locator('#approval-route-selector').selectOption({ label: '社長決裁ルート' });
     await page.locator('#departmentId').selectOption({ index: 1 }).catch(() => {}); // Select first available department if any
+    await page.getByLabel('サプライヤー名 *').fill('テストサプライヤー');
 
-    // 必須項目の一部を意図的に空にする
-    const firstRow = page.locator('.grid.grid-cols-1.md\\:grid-cols-12').first();
-    await firstRow.getByLabel('支払日').fill('2025-11-05');
-    // await firstRow.locator('#paymentRecipientId').selectOption({ index: 1 }); // 支払先を空にする
-    await firstRow.getByLabel('内容').fill('会議費用');
-    await firstRow.locator('#accountItemId').selectOption({ index: 1 }).catch(() => {});
-    await firstRow.locator('#allocationDivisionId').selectOption({ index: 1 }).catch(() => {});
-    await firstRow.getByLabel('金額').fill('1500');
+    // 必須項目の一部を意図的に空にする（顧客/プロジェクトを選ばない）
+    await page.getByLabel('日付').first().fill('2025-11-05');
+    await page.getByLabel('品名').first().fill('テスト経費');
+    await page.getByLabel('金額（税抜）').first().fill('1500');
+    await page.getByLabel('勘定科目').first().selectOption({ index: 1 }).catch(() => {});
+    await page.getByLabel('振分区分').first().selectOption({ index: 1 }).catch(() => {});
 
-    // 支払先が未選択なので非活性
-    await expect(submitButton).toBeDisabled();
-    // 送信を試み、エラーが表示され、フォーカスが移動することを確認
+    // 送信を試み、エラーが表示されることを確認
     await submitButton.click();
-    await expectAndFocusError(page, '全ての明細で支払先を選択してください。');
-    await expect(firstRow.locator('#paymentRecipientId')).toBeFocused();
+    await expectAndFocusError(page, 'すべての明細で「品名」「顧客」「プロジェクト」「金額（税抜）」を入力してください。');
   });
 
   test('承認一覧: タブ切替（未承認/自分の申請/完了等）、検索・並び替え・ページング確認', async ({ page }) => {

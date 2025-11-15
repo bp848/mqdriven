@@ -11,7 +11,6 @@ import {
     ApprovalRoute,
     PurchaseOrder,
     InventoryItem,
-    Employee,
     Toast,
     ConfirmationDialogProps,
     BugReport,
@@ -334,20 +333,47 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
 
 export async function getUsers(): Promise<EmployeeUser[]> {
     const supabase = getSupabase();
-    const { data, error } = await supabase
-        .from('users')
-        .select('id, name, email, role, created_at')
-        .order('name', { ascending: true });
+    const [
+        { data: userRows, error: userError },
+        { data: departmentRows, error: departmentError },
+        { data: titleRows, error: titleError },
+    ] = await Promise.all([
+        supabase
+            .from('users')
+            .select('id, name, email, role, created_at, department_id, position_id')
+            .order('name', { ascending: true }),
+        supabase.from('departments').select('id, name'),
+        supabase.from('employee_titles').select('id, name'),
+    ]);
 
-    if (error) throw new Error(`Failed to fetch users: ${error.message}`);
+    if (userError) throw new Error(`Failed to fetch users: ${userError.message}`);
+    if (departmentError) console.warn('Failed to fetch departments for user mapping:', departmentError.message);
+    if (titleError) console.warn('Failed to fetch titles for user mapping:', titleError.message);
 
-    return (data || []).map((user: any) => {
+    const departmentMap = new Map<string, string>();
+    (departmentRows || []).forEach((dept: any) => {
+        if (dept?.id) {
+            departmentMap.set(dept.id, dept.name || '');
+        }
+    });
+
+    const titleMap = new Map<string, string>();
+    (titleRows || []).forEach((title: any) => {
+        if (title?.id) {
+            titleMap.set(title.id, title.name || '');
+        }
+    });
+
+    return (userRows || []).map((user: any) => {
         const role: 'admin' | 'user' = user.role === 'admin' ? 'admin' : 'user';
+        const departmentName = user.department_id ? departmentMap.get(user.department_id) || null : null;
+        const titleName = user.position_id ? titleMap.get(user.position_id) || null : null;
+
         return {
             id: user.id,
             name: user.name || '（未設定）',
-            department: null,
-            title: role === 'admin' ? '管理者' : 'スタッフ',
+            department: departmentName,
+            title: titleName,
             email: user.email || '',
             role,
             createdAt: user.created_at,
@@ -640,28 +666,6 @@ export const updateInventoryItem = async (id: string, item: Partial<InventoryIte
 }
 
 
-export const getEmployees = async (): Promise<Employee[]> => {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
-        .from('users')
-        .select('id, name, email, role, created_at')
-        .order('name', { ascending: true });
-
-    if (error) throw new Error(`Failed to fetch employees: ${error.message}`);
-
-    return (data || []).map((user: any) => {
-        const role: 'admin' | 'user' = user.role === 'admin' ? 'admin' : 'user';
-        return {
-            id: user.id,
-            name: user.name || '（未設定）',
-            department: role === 'admin' ? '経営' : 'スタッフ',
-            title: role === 'admin' ? '管理者' : 'スタッフ',
-            hireDate: user.created_at,
-            salary: 0,
-            createdAt: user.created_at,
-        };
-    });
-};
 export const getBugReports = async (): Promise<BugReport[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', {ascending: false});

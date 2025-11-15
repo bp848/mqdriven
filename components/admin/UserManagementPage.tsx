@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { User, Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
 import { getUsers, addUser, updateUser, deleteUser } from '../../services/dataService';
 import { Loader, PlusCircle, X, Save, Trash2, Pencil } from '../Icons';
 
@@ -68,6 +68,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
     const [error, setError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<EmployeeUser | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const loadUsers = useCallback(async () => {
         try {
@@ -127,17 +128,42 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
         });
     };
 
+    const filteredUsers = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) return users;
+        return users.filter(user => {
+            const fields = [
+                user.name,
+                user.email,
+                user.department || '',
+                user.title || '',
+                user.role === 'admin' ? '管理者' : '一般ユーザー',
+            ];
+            return fields.some(field => field.toLowerCase().includes(term));
+        });
+    }, [users, searchTerm]);
+
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-xl font-semibold">ユーザー管理</h2>
                     <p className="mt-1 text-base text-slate-500">ユーザーの追加、編集、役割の変更を行います。</p>
                 </div>
-                <button onClick={() => handleOpenModal()} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">
-                    <PlusCircle className="w-5 h-5" />
-                    新規ユーザー追加
-                </button>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="氏名・メール・部門で検索..."
+                        className="w-full md:w-72 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        aria-label="ユーザー検索"
+                    />
+                    <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">
+                        <PlusCircle className="w-5 h-5" />
+                        新規ユーザー追加
+                    </button>
+                </div>
             </div>
             {isLoading ? (
                 <div className="p-16 text-center"><Loader className="w-8 h-8 mx-auto animate-spin" /></div>
@@ -148,6 +174,8 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                     <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-700">
                         <tr>
                             <th className="px-6 py-3">氏名</th>
+                            <th className="px-6 py-3">部門</th>
+                            <th className="px-6 py-3">役職</th>
                             <th className="px-6 py-3">メールアドレス</th>
                             <th className="px-6 py-3">役割</th>
                             <th className="px-6 py-3">登録日</th>
@@ -155,9 +183,18 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                         </tr>
                     </thead>
                     <tbody>
-                        {users.map(user => (
-                            <tr key={user.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        {filteredUsers.length === 0 ? (
+                            <tr>
+                                <td className="px-6 py-8 text-center text-slate-500" colSpan={7}>
+                                    条件に一致するユーザーが見つかりませんでした。
+                                </td>
+                            </tr>
+                        ) : (
+                            filteredUsers.map(user => (
+                                <tr key={user.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-6 py-4 font-medium">{user.name}</td>
+                                <td className="px-6 py-4 text-slate-500">{user.department || '未設定'}</td>
+                                <td className="px-6 py-4 text-slate-500">{user.title || '未設定'}</td>
                                 <td className="px-6 py-4 text-slate-500">{user.email}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'}`}>
@@ -172,7 +209,8 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                            ))
+                        )}
                     </tbody>
                 </table>
             )}

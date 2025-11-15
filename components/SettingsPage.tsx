@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader, Save, Mail, CheckCircle } from './Icons';
-import { Toast } from '../types';
+import { Toast, EmployeeUser } from '../types';
 
 interface SettingsPageProps {
     addToast: (message: string, type: Toast['type']) => void;
+    currentUser: EmployeeUser | null;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ addToast }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) => {
     const [smtpSettings, setSmtpSettings] = useState({
         host: 'smtp.example.com',
         port: 587,
@@ -88,8 +89,30 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast }) => {
     const inputClass = "w-full text-base bg-slate-50 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500";
     const labelClass = "block text-base font-medium text-slate-700 dark:text-slate-300 mb-1.5";
 
+    const profileFields = [
+        { label: '氏名', value: currentUser?.name || '未設定' },
+        { label: '部門', value: currentUser?.department || '未所属' },
+        { label: '役職', value: currentUser?.title || '未設定' },
+        { label: 'メールアドレス', value: currentUser?.email || '未設定' },
+        { label: '権限', value: currentUser ? (currentUser.role === 'admin' ? '管理者' : '一般ユーザー') : '未設定' },
+    ];
+
     return (
         <form onSubmit={handleSave} className="space-y-8">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white">マイプロフィール</h2>
+                    <p className="mt-1 text-base text-slate-500 dark:text-slate-400">現在ログインしているユーザーの情報です。</p>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {profileFields.map(({ label, value }) => (
+                        <div key={label}>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+                            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{value}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700">
                     <h2 className="text-xl font-semibold text-slate-800 dark:text-white">通知メール設定 (SMTP)</h2>
