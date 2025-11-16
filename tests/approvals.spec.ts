@@ -185,6 +185,7 @@ test.describe('Approval Workflow E2E Tests', () => {
 
     await page.getByLabel('サプライヤー名 *').fill('町田印刷');
     await page.getByLabel('請求書発行日 *').fill('2025-11-01');
+    await page.getByLabel('支払先 *').selectOption({ index: 1 }).catch(() => {});
 
     // 承認ルートを選択
     await page.locator('#approval-route-selector').selectOption({ label: '社長決裁ルート' });
@@ -222,6 +223,7 @@ test.describe('Approval Workflow E2E Tests', () => {
     await page.locator('#approval-route-selector').selectOption({ label: '社長決裁ルート' });
     await page.locator('#departmentId').selectOption({ index: 1 }).catch(() => {}); // Select first available department if any
     await page.getByLabel('サプライヤー名 *').fill('テストサプライヤー');
+    await page.getByLabel('支払先 *').selectOption({ index: 1 }).catch(() => {});
 
     // 必須項目の一部を意図的に空にする（顧客/プロジェクトを選ばない）
     await page.getByLabel('日付').first().fill('2025-11-05');
