@@ -17,6 +17,7 @@ import {
     JobStatus,
     Toast,
     InvoiceStatus,
+    PaymentRecipient,
 } from '../../types';
 
 type MQAlertLevel = 'INFO' | 'WARNING' | 'ERROR';
@@ -54,6 +55,7 @@ interface ExpenseLine {
 interface ExpenseInvoiceDraft {
     id: string;
     supplierName: string;
+    paymentRecipientId: string;
     registrationNumber: string;
     invoiceDate: string;
     dueDate: string;
@@ -75,6 +77,7 @@ interface ExpenseReimbursementFormProps {
     purchaseOrders: PurchaseOrder[];
     departments: Department[];
     allocationDivisions: AllocationDivision[];
+    paymentRecipients: PaymentRecipient[];
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
@@ -91,6 +94,29 @@ const numberFromInput = (value: string) => {
     if (value === '') return 0;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeText = (value?: string | null) => (value ?? '').replace(/\s+/g, '').toLowerCase();
+
+const findMatchingPaymentRecipientId = (supplierName: string, recipients: PaymentRecipient[]) => {
+    const normalizedSupplier = normalizeText(supplierName);
+    if (!normalizedSupplier) return '';
+
+    const exact = recipients.find(rec =>
+        normalizedSupplier === normalizeText(rec.companyName) ||
+        normalizedSupplier === normalizeText(rec.recipientName)
+    );
+    if (exact) return exact.id;
+
+    const partial = recipients.find(rec => {
+        const company = normalizeText(rec.companyName);
+        const recipient = normalizeText(rec.recipientName);
+        return (
+            (company && (company.includes(normalizedSupplier) || normalizedSupplier.includes(company))) ||
+            (recipient && (recipient.includes(normalizedSupplier) || normalizedSupplier.includes(recipient)))
+        );
+    });
+    return partial?.id || '';
 };
 
 const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -114,6 +140,7 @@ const createEmptyLine = (): ExpenseLine => ({
 const createEmptyInvoiceDraft = (): ExpenseInvoiceDraft => ({
     id: generateId('invoice'),
     supplierName: '',
+    paymentRecipientId: '',
     registrationNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: '',
@@ -287,6 +314,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     purchaseOrders,
     departments,
     allocationDivisions,
+    paymentRecipients,
     isAIOff,
     isLoading,
     error: formLoadError,
@@ -316,6 +344,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         () => invoiceDrafts.find(inv => inv.id === selectedInvoiceId) || invoiceDrafts[0],
         [invoiceDrafts, selectedInvoiceId]
     );
+    const paymentRecipientWarning = Boolean(selectedInvoice?.supplierName && !selectedInvoice?.paymentRecipientId);
 
     const effectiveCustomers = useMemo(() => {
         if (customers.length) return customers;
@@ -389,6 +418,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         },
         [selectedInvoice]
     );
+
+    useEffect(() => {
+        if (!selectedInvoice || selectedInvoice.paymentRecipientId || !selectedInvoice.supplierName || !paymentRecipients.length) return;
+        const matchedId = findMatchingPaymentRecipientId(selectedInvoice.supplierName, paymentRecipients);
+        if (!matchedId) return;
+        updateSelectedInvoice(invoice => ({ ...invoice, paymentRecipientId: matchedId }));
+    }, [selectedInvoice, paymentRecipients, updateSelectedInvoice]);
 
     const handleInvoiceFieldChange = (field: keyof ExpenseInvoiceDraft, value: string | number) => {
         updateSelectedInvoice(invoice => ({ ...invoice, [field]: value }));
@@ -494,6 +530,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                 const ocrData: InvoiceData = await extractInvoiceDetails(base64, file.type);
                 const invoice = createEmptyInvoiceDraft();
                 invoice.supplierName = ocrData.vendorName || invoice.supplierName;
+                const matchedRecipientId = findMatchingPaymentRecipientId(invoice.supplierName, paymentRecipients);
+                if (matchedRecipientId) {
+                    invoice.paymentRecipientId = matchedRecipientId;
+                }
                 invoice.invoiceDate = ocrData.invoiceDate || invoice.invoiceDate;
                 invoice.totalGross = Number(ocrData.totalAmount || 0);
                 if (invoice.totalGross > 0) {
@@ -501,11 +541,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     invoice.totalNet = estimatedNet;
                     invoice.taxAmount = Number((invoice.totalGross - estimatedNet).toFixed(2));
                 }
+                const detailAmountSource = invoice.totalNet || invoice.totalGross;
+                const detailAmount = Number(detailAmountSource.toFixed(2));
                 invoice.lines = [
                     {
                         ...createEmptyLine(),
                         description: ocrData.description ? `【OCR】${ocrData.description}` : '',
-                        amountExclTax: Number(ocrData.totalAmount || 0),
+                        amountExclTax: detailAmount,
                     },
                 ];
                 created.push(invoice);
@@ -544,6 +586,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         if (!departmentId) return setError('部門を選択してください。');
         if (!approvalRouteId) return setError('承認ルートを選択してください。');
         if (!selectedInvoice.supplierName.trim()) return setError('サプライヤー名を入力してください。');
+        if (!selectedInvoice.paymentRecipientId) return setError('支払先を選択してください。');
         if (selectedInvoice.lines.length === 0) return setError('少なくとも1件の明細を入力してください。');
         if (selectedInvoice.lines.some(line => !line.description || !line.customerId || !line.projectId || !line.amountExclTax)) {
             return setError('すべての明細で「品名」「顧客」「プロジェクト」「金額（税抜）」を入力してください。');
@@ -775,6 +818,37 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         placeholder="例: 町田印刷株式会社"
                                         disabled={isDisabled}
                                     />
+                                </div>
+                                <div>
+                                    <label htmlFor="paymentRecipientId" className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+                                        支払先 *
+                                    </label>
+                                    <select
+                                        id="paymentRecipientId"
+                                        value={selectedInvoice.paymentRecipientId}
+                                        onChange={e => handleInvoiceFieldChange('paymentRecipientId', e.target.value)}
+                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={isDisabled || paymentRecipients.length === 0}
+                                    >
+                                        <option value="">
+                                            {paymentRecipients.length ? '支払先を選択してください' : '支払先マスタが見つかりません'}
+                                        </option>
+                                        {paymentRecipients.map(rec => (
+                                            <option key={rec.id} value={rec.id}>
+                                                {rec.companyName} {rec.recipientName ? `（${rec.recipientName}）` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {!paymentRecipients.length && (
+                                        <p className="mt-1 text-xs text-amber-600">
+                                            支払先マスタが未設定です。マスタ管理から登録してください。
+                                        </p>
+                                    )}
+                                    {paymentRecipientWarning && (
+                                        <p className="mt-1 text-xs text-amber-600">
+                                            支払先マスタに登録されていません。マスタ登録を確認してください。
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">

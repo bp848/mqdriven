@@ -17,6 +17,7 @@ $$;
 create table if not exists public.expense_invoices (
   id uuid primary key default gen_random_uuid(),
   application_id uuid references public.applications(id),
+  payment_recipient_id uuid references public.payment_recipients(id),
   supplier_name text not null,
   registration_number text,
   invoice_date date not null,
@@ -38,6 +39,9 @@ comment on column public.expense_invoices.bank_account_info
 
 create index if not exists expense_invoices_application_idx
   on public.expense_invoices (application_id);
+
+create index if not exists expense_invoices_payment_recipient_idx
+  on public.expense_invoices (payment_recipient_id);
 
 create index if not exists expense_invoices_submitted_by_idx
   on public.expense_invoices (submitted_by);
