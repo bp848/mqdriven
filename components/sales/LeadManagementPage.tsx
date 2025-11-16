@@ -75,7 +75,20 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         setIsReplyingTo(lead.id);
         try {
             const { subject, body } = await generateLeadReplyEmail(lead, currentUser.name);
-            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${lead.email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            const departmentLine = currentUser.department || '本社';
+            const signature = [
+                '---',
+                '',
+                '文唱堂印刷株式会社',
+                departmentLine,
+                currentUser.name,
+                '〒101-0025 東京都千代田区神田佐久間町3-37',
+                'TEL：03-3851-0111　FAX：03-3861-1979',
+                `Mail: ${currentUser.email}`,
+                'Web: http://b-p.co.jp',
+            ].join('\n');
+            const bodyWithSignature = `${body}\n\n${signature}`;
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${lead.email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyWithSignature)}`;
             window.open(gmailUrl, '_blank');
             
             const timestamp = new Date().toLocaleString('ja-JP');
