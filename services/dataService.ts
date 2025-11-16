@@ -166,46 +166,69 @@ const customerToDbCustomer = (customer: Partial<Customer>): any => {
     return dbData;
 };
 
-const dbLeadToLead = (dbLead: any): Lead => ({
-    id: dbLead.id,
-    status: dbLead.status,
-    createdAt: dbLead.created_at,
-    name: dbLead.name,
-    email: dbLead.email,
-    phone: dbLead.phone,
-    company: dbLead.company,
-    source: dbLead.source,
-    tags: dbLead.tags,
-    message: dbLead.message,
-    updatedAt: dbLead.updated_at,
-    referrer: dbLead.referrer,
-    referrerUrl: dbLead.referrer_url,
-    landingPageUrl: dbLead.landing_page_url,
-    searchKeywords: dbLead.search_keywords,
-    utmSource: dbLead.utm_source,
-    utmMedium: dbLead.utm_medium,
-    utmCampaign: dbLead.utm_campaign,
-    utmTerm: dbLead.utm_term,
-    utmContent: dbLead.utm_content,
-    userAgent: dbLead.user_agent,
-    ipAddress: dbLead.ip_address,
-    deviceType: dbLead.device_type,
-    browserName: dbLead.browser_name,
-    osName: dbLead.os_name,
-    country: dbLead.country,
-    city: dbLead.city,
-    region: dbLead.region,
-    employees: dbLead.employees,
-    budget: dbLead.budget,
-    timeline: dbLead.timeline,
-    inquiryType: dbLead.inquiry_type,
-    inquiryTypes: dbLead.inquiry_types,
-    infoSalesActivity: dbLead.info_sales_activity,
-    score: dbLead.score,
-    aiAnalysisReport: dbLead.ai_analysis_report,
-    aiDraftProposal: dbLead.ai_draft_proposal,
-    aiInvestigation: dbLead.ai_investigation ? { summary: dbLead.ai_investigation.summary, sources: dbLead.ai_investigation.sources } : undefined,
-});
+const dbLeadToLead = (dbLead: any): Lead => {
+    let aiInvestigation: any = undefined;
+
+    if (dbLead.ai_investigation) {
+        let raw = dbLead.ai_investigation as any;
+        // ai_investigation が JSON 文字列として保存されている場合も考慮
+        if (typeof raw === 'string') {
+            try {
+                raw = JSON.parse(raw);
+            } catch {
+                raw = null;
+            }
+        }
+
+        if (raw && typeof raw === 'object') {
+            aiInvestigation = {
+                summary: raw.summary,
+                sources: Array.isArray(raw.sources) ? raw.sources : [],
+            };
+        }
+    }
+
+    return {
+        id: dbLead.id,
+        status: dbLead.status,
+        createdAt: dbLead.created_at,
+        name: dbLead.name,
+        email: dbLead.email,
+        phone: dbLead.phone,
+        company: dbLead.company,
+        source: dbLead.source,
+        tags: dbLead.tags,
+        message: dbLead.message,
+        updatedAt: dbLead.updated_at,
+        referrer: dbLead.referrer,
+        referrerUrl: dbLead.referrer_url,
+        landingPageUrl: dbLead.landing_page_url,
+        searchKeywords: dbLead.search_keywords,
+        utmSource: dbLead.utm_source,
+        utmMedium: dbLead.utm_medium,
+        utmCampaign: dbLead.utm_campaign,
+        utmTerm: dbLead.utm_term,
+        utmContent: dbLead.utm_content,
+        userAgent: dbLead.user_agent,
+        ipAddress: dbLead.ip_address,
+        deviceType: dbLead.device_type,
+        browserName: dbLead.browser_name,
+        osName: dbLead.os_name,
+        country: dbLead.country,
+        city: dbLead.city,
+        region: dbLead.region,
+        employees: dbLead.employees,
+        budget: dbLead.budget,
+        timeline: dbLead.timeline,
+        inquiryType: dbLead.inquiry_type,
+        inquiryTypes: dbLead.inquiry_types,
+        infoSalesActivity: dbLead.info_sales_activity,
+        score: dbLead.score,
+        aiAnalysisReport: dbLead.ai_analysis_report,
+        aiDraftProposal: dbLead.ai_draft_proposal,
+        aiInvestigation,
+    };
+};
 
 const leadToDbLead = (lead: Partial<Lead>): any => {
     const dbData: { [key: string]: any } = {};
