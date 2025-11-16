@@ -64,6 +64,49 @@ const Field: React.FC<{
     );
 };
 
+const renderInvestigationSummary = (text: string) => {
+    const lines = text.split('\n');
+    return (
+        <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
+            {lines.map((line, idx) => {
+                const trimmed = line.trim();
+                if (!trimmed) {
+                    return <div key={idx} className="h-1" />;
+                }
+                if (trimmed.startsWith('### ')) {
+                    return (
+                        <div key={idx} className="text-xs font-semibold text-slate-500 dark:text-slate-300 mt-2">
+                            {trimmed.replace(/^###\s+/, '')}
+                        </div>
+                    );
+                }
+                if (trimmed.startsWith('## ')) {
+                    return (
+                        <div key={idx} className="font-semibold text-slate-800 dark:text-slate-100 mt-3">
+                            {trimmed.replace(/^##\s+/, '')}
+                        </div>
+                    );
+                }
+                if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+                    return (
+                        <div key={idx} className="flex items-start gap-2">
+                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-slate-400" />
+                            <span className="whitespace-pre-wrap break-words">
+                                {trimmed.replace(/^(\*|-)\s+/, '')}
+                            </span>
+                        </div>
+                    );
+                }
+                return (
+                    <div key={idx} className="whitespace-pre-wrap break-words">
+                        {line}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<Lead>>({});
@@ -73,6 +116,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     const [proposalPackage, setProposalPackage] = useState<LeadProposalPackage | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isSavingEstimate, setIsSavingEstimate] = useState(false);
+    const [activeAiTab, setActiveAiTab] = useState<'investigation' | 'proposal' | 'email'>('investigation');
     
     const mounted = useRef(true);
 
@@ -212,52 +256,103 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                         {/* Right Column */}
                         <div className="space-y-6">
                             <DetailSection title="AIアシスタント" className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg">
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">企業調査</h4>
-                                        <button onClick={handleInvestigateCompany} disabled={isInvestigating || isAIOff} className="text-sm font-semibold text-blue-600 flex items-center gap-2 disabled:opacity-50">
-                                            {isInvestigating ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                            {formData.aiInvestigation ? '再調査' : 'AIで企業調査'}
-                                        </button>
-                                    </div>
-                                    {isInvestigating ? <div className="text-sm text-slate-500">Web検索を用いて調査中...</div> :
-                                     formData.aiInvestigation ? <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{formData.aiInvestigation.summary}</p> :
-                                     <p className="text-sm text-slate-500">企業の基本情報や最新ニュースを調査します。</p>
-                                    }
-                                </div>
-                                <div className="space-y-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                     <h4 className="font-semibold text-slate-800 dark:text-slate-100">提案パッケージ</h4>
-                                     <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
-                                         {isGeneratingPackage ? <Loader className="w-5 h-5 animate-spin"/> : <Lightbulb className="w-5 h-5" />}
-                                         AI提案パッケージ作成
-                                     </button>
-                                     {isGeneratingPackage && <p className="text-sm text-slate-500 text-center mt-2">AIが提案書と見積を作成中です...</p>}
-                                     {proposalPackage && (
-                                         <div className="mt-4 space-y-4">
-                                             {!proposalPackage.isSalesLead ? <p className="p-3 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 rounded-md text-sm">AI分析結果: 営業メールの可能性が高いです (理由: {proposalPackage.reason})</p> :
-                                             <>
-                                                {proposalPackage.proposal && <div className="p-3 bg-green-50 dark:bg-green-900/50 rounded-md text-sm">提案書: 「{proposalPackage.proposal.coverTitle}」が生成されました。</div>}
-                                                {proposalPackage.estimate && <div className="p-3 bg-green-50 dark:bg-green-900/50 rounded-md text-sm">見積: {proposalPackage.estimate.length}項目が生成されました。</div>}
-                                                <div className="flex items-center gap-2">
-                                                    <button disabled={isGeneratingPdf} className="text-sm flex-1 flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50">
-                                                        {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/>} 提案書PDF
-                                                    </button>
-                                                    <button disabled={isSavingEstimate} onClick={handleSaveEstimate} className="text-sm flex-1 flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50">
-                                                         {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} 見積を保存
-                                                    </button>
-                                                </div>
-                                             </>
-                                             }
-                                         </div>
-                                     )}
-                                </div>
-                                <div className="space-y-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                    <h4 className="font-semibold text-slate-800 dark:text-slate-100">メール返信</h4>
-                                    {/* FIX: Wrap onGenerateReply in an arrow function to match onClick's expected signature. */}
-                                    <button onClick={() => onGenerateReply(lead)} disabled={isAIOff} className="w-full flex items-center justify-center gap-2 bg-purple-100 text-purple-700 font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
-                                        <Mail className="w-4 h-4"/> AIで返信作成
+                                {/* AIタブ切り替え */}
+                                <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveAiTab('investigation')}
+                                        className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'investigation' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
+                                    >
+                                        企業調査
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveAiTab('proposal')}
+                                        className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'proposal' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
+                                    >
+                                        提案パッケージ
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveAiTab('email')}
+                                        className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'email' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
+                                    >
+                                        メール返信
                                     </button>
                                 </div>
+
+                                {/* 企業調査タブ */}
+                                {activeAiTab === 'investigation' && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-semibold text-slate-800 dark:text-slate-100">企業調査</h4>
+                                            <button onClick={handleInvestigateCompany} disabled={isInvestigating || isAIOff} className="text-sm font-semibold text-blue-600 flex items-center gap-2 disabled:opacity-50">
+                                                {isInvestigating ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                                {formData.aiInvestigation ? '再調査' : 'AIで企業調査'}
+                                            </button>
+                                        </div>
+                                        {isInvestigating ? (
+                                            <div className="text-sm text-slate-500">Web検索を用いて調査中...</div>
+                                        ) : formData.aiInvestigation ? (
+                                            renderInvestigationSummary(formData.aiInvestigation.summary)
+                                        ) : (
+                                            <p className="text-sm text-slate-500">企業の基本情報や最新ニュースを調査します。</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* 提案パッケージタブ */}
+                                {activeAiTab === 'proposal' && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">提案パッケージ</h4>
+                                        <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
+                                            {isGeneratingPackage ? <Loader className="w-5 h-5 animate-spin"/> : <Lightbulb className="w-5 h-5" />}
+                                            AI提案パッケージ作成
+                                        </button>
+                                        {isGeneratingPackage && <p className="text-sm text-slate-500 text-center mt-2">AIが提案書と見積を作成中です...</p>}
+                                        {proposalPackage && (
+                                            <div className="mt-4 space-y-4">
+                                                {!proposalPackage.isSalesLead ? (
+                                                    <p className="p-3 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 rounded-md text-sm">
+                                                        AI分析結果: 営業メールの可能性が高いです (理由: {proposalPackage.reason})
+                                                    </p>
+                                                ) : (
+                                                    <>
+                                                        {proposalPackage.proposal && (
+                                                            <div className="p-3 bg-green-50 dark:bg-green-900/50 rounded-md text-sm">
+                                                                提案書: 「{proposalPackage.proposal.coverTitle}」が生成されました。
+                                                            </div>
+                                                        )}
+                                                        {proposalPackage.estimate && (
+                                                            <div className="p-3 bg-green-50 dark:bg-green-900/50 rounded-md text-sm">
+                                                                見積: {proposalPackage.estimate.length}項目が生成されました。
+                                                            </div>
+                                                        )}
+                                                        <div className="flex items-center gap-2">
+                                                            <button disabled={isGeneratingPdf} className="text-sm flex-1 flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50">
+                                                                {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/>} 提案書PDF
+                                                            </button>
+                                                            <button disabled={isSavingEstimate} onClick={handleSaveEstimate} className="text-sm flex-1 flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50">
+                                                                 {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} 見積を保存
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* メール返信タブ */}
+                                {activeAiTab === 'email' && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">メール返信</h4>
+                                        {/* FIX: Wrap onGenerateReply in an arrow function to match onClick's expected signature. */}
+                                        <button onClick={() => onGenerateReply(lead)} disabled={isAIOff} className="w-full flex items-center justify-center gap-2 bg-purple-100 text-purple-700 font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
+                                            <Mail className="w-4 h-4"/> AIで返信作成
+                                        </button>
+                                    </div>
+                                )}
                             </DetailSection>
                         </div>
                     </div>
