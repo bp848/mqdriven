@@ -57,17 +57,25 @@ const docTypeOptions: { value: FaxIntake['docType']; label: string }[] = [
 ];
 
 const businessStatusClass: Record<FaxIntake['status'], string> = {
-  draft: 'bg-slate-100 text-slate-700',
-  ready: 'bg-amber-100 text-amber-800',
-  linked: 'bg-emerald-100 text-emerald-800',
-  deleted: 'bg-rose-100 text-rose-800',
+  draft:
+    'bg-slate-100 text-slate-700 dark:bg-slate-800/70 dark:text-slate-200',
+  ready:
+    'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
+  linked:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  deleted:
+    'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
 };
 
 const ocrStatusClass: Record<FaxIntake['ocrStatus'], string> = {
-  pending: 'bg-slate-100 text-slate-700',
-  processing: 'bg-blue-100 text-blue-800',
-  done: 'bg-emerald-100 text-emerald-800',
-  failed: 'bg-rose-100 text-rose-800',
+  pending:
+    'bg-slate-100 text-slate-700 dark:bg-slate-800/70 dark:text-slate-200',
+  processing:
+    'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200',
+  done:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  failed:
+    'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
 };
 
 const formatFileSize = (size: number): string => {
@@ -357,14 +365,14 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 text-slate-900 dark:text-slate-100">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">FAXからのデータ自動入力</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">FAXからのデータ自動入力</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             FAXで届いた受注・見積資料をPDF/画像でアップロードし、OCR結果を確認して案件・受注・見積テーブルに反映します。
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             未完了のOCR: {totalPending} 件
           </p>
         </div>
@@ -372,7 +380,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
           <button
             type="button"
             onClick={onNavigateToOrders}
-            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
           >
             案件・受注管理を開く
             <ArrowRight className="h-4 w-4" />
@@ -380,7 +388,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
           <button
             type="button"
             onClick={onNavigateToEstimates}
-            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
           >
             見積管理を開く
             <ArrowRight className="h-4 w-4" />
@@ -388,7 +396,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
           <button
             type="button"
             onClick={() => loadIntakes('refresh')}
-            className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-400/40 dark:bg-slate-800 dark:text-blue-300 dark:hover:bg-blue-500/10 disabled:opacity-60"
             disabled={isRefreshing || isLoading}
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -398,26 +406,28 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
       </header>
 
       {!currentUser && (
-        <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200">
           <AlertTriangle className="h-5 w-5 flex-shrink-0" />
           <p>アップロードにはログインユーザー情報が必要です。サイドバーからユーザーを選択してください。</p>
         </div>
       )}
 
-      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-950/5">
+      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-950/5 dark:bg-slate-900/70 dark:ring-white/10">
         <div className="flex flex-col gap-6 lg:flex-row">
           <label
             htmlFor="fax-ocr-file"
-            className={`flex h-48 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition hover:border-blue-400 ${
-              isDragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-300'
+            className={`flex h-48 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition hover:border-blue-400 dark:hover:border-blue-300 ${
+              isDragActive
+                ? 'border-blue-500 bg-blue-50/50 dark:border-blue-400 dark:bg-blue-500/10'
+                : 'border-slate-300 dark:border-slate-600 dark:bg-slate-900/40'
             } ${!currentUser ? 'pointer-events-none opacity-60' : ''}`}
             {...dragEvents}
           >
-            <Upload className="h-10 w-10 text-slate-400" />
-            <p className="mt-3 text-base font-semibold text-slate-800">
+            <Upload className="h-10 w-10 text-slate-400 dark:text-slate-500" />
+            <p className="mt-3 text-base font-semibold text-slate-800 dark:text-slate-100">
               ファイルをドラッグ＆ドロップ
             </p>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               PDF または 画像ファイル（jpg, png, tiff など）を1件ずつアップロード
             </p>
             <input
@@ -430,7 +440,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
               disabled={!currentUser}
             />
             {selectedFile && (
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                 選択中: {selectedFile.name}（{formatFileSize(selectedFile.size)}）
               </p>
             )}
@@ -438,11 +448,11 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
 
           <div className="flex-1 space-y-4">
             <div>
-              <label className="text-sm font-semibold text-slate-700">文書種別</label>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">文書種別</label>
               <select
                 value={selectedDocType}
                 onChange={(e) => setSelectedDocType(e.target.value as FaxIntake['docType'])}
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                 disabled={!currentUser}
               >
                 {docTypeOptions.map(option => (
@@ -453,18 +463,18 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
               </select>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">備考 / メモ</label>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">備考 / メモ</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={4}
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                 placeholder="FAXで届いた背景や顧客情報をメモできます。"
                 disabled={!currentUser}
               />
             </div>
             {uploadError && (
-              <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <p>{uploadError}</p>
               </div>
@@ -474,7 +484,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                 type="button"
                 onClick={handleUpload}
                 disabled={uploadDisabled}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:disabled:bg-blue-900/40"
               >
                 {isUploading ? (
                   <Loader className="h-4 w-4 animate-spin" />
@@ -486,7 +496,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
               <button
                 type="button"
                 onClick={resetUploadForm}
-                className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 disabled={isUploading}
               >
                 クリア
@@ -496,29 +506,29 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-950/5">
+      <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-950/5 dark:bg-slate-900/70 dark:ring-white/10">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">取り込みキュー</h2>
-            <p className="text-sm text-slate-500">OCR結果の確認や案件・見積へのリンク付けを行います。</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">取り込みキュー</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">OCR結果の確認や案件・見積へのリンク付けを行います。</p>
           </div>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             {faxIntakes.length} 件
           </span>
         </div>
         {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-slate-500">
+          <div className="flex items-center justify-center py-16 text-slate-500 dark:text-slate-300">
             <Loader className="mr-2 h-5 w-5 animate-spin" />
             読み込み中...
           </div>
         ) : faxIntakes.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
             まだFAX取り込みデータがありません。まずはファイルをアップロードしてください。
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                 <tr>
                   <th className="px-4 py-3">ファイル</th>
                   <th className="px-4 py-3">種別 / ステータス</th>
@@ -527,7 +537,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                   <th className="px-4 py-3">操作</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {faxIntakes.map(intake => {
                   const customerName = getOcrCustomerName(intake.ocrJson);
                   const totalAmount = getOcrTotalAmount(intake.ocrJson);
@@ -535,8 +545,8 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                   return (
                     <tr key={intake.id} className="align-top">
                       <td className="px-4 py-4">
-                        <div className="font-medium text-slate-900">{intake.fileName}</div>
-                        <div className="mt-1 text-xs text-slate-500">
+                        <div className="font-medium text-slate-900 dark:text-slate-100">{intake.fileName}</div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {formatDateTime(intake.uploadedAt)} / {formatFileSize(intake.fileSize)} / {intake.fileMimeType}
                         </div>
                         {intake.fileUrl && (
@@ -544,7 +554,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                             href={intake.fileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
                           >
                             <FileText className="h-3.5 w-3.5" />
                             ファイルを開く
@@ -552,7 +562,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                           {docTypeLabels[intake.docType]}
                         </span>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -564,10 +574,10 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                           </span>
                         </div>
                         {intake.ocrStatus === 'failed' && intake.ocrErrorMessage && (
-                          <p className="mt-2 text-xs text-rose-600">{intake.ocrErrorMessage}</p>
+                          <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">{intake.ocrErrorMessage}</p>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-sm text-slate-700">
+                      <td className="px-4 py-4 text-sm text-slate-700 dark:text-slate-300">
                         {intake.ocrStatus === 'done' && (customerName || totalAmount || referenceNo) ? (
                           <div className="space-y-1">
                             {customerName && <div>顧客: {customerName}</div>}
@@ -575,18 +585,18 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                             {totalAmount !== null && <div>金額: {formatJPY(totalAmount)}</div>}
                           </div>
                         ) : (
-                          <div className="text-xs text-slate-400">
+                          <div className="text-xs text-slate-400 dark:text-slate-500">
                             {intake.ocrStatus === 'processing' ? 'OCR解析中' : '表示可能なサマリーがまだありません'}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-sm text-slate-700">
+                      <td className="px-4 py-4 text-sm text-slate-700 dark:text-slate-200">
                         {intake.notes ? (
                           <p className="whitespace-pre-line">{intake.notes}</p>
                         ) : (
-                          <p className="text-xs text-slate-400">メモなし</p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500">メモなし</p>
                         )}
-                        <div className="mt-2 space-y-1 text-xs text-slate-500">
+                        <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
                           {intake.linkedOrderId && <div>受注ID: {intake.linkedOrderId}</div>}
                           {intake.linkedEstimateId && <div>見積ID: {intake.linkedEstimateId}</div>}
                           {intake.linkedProjectId && <div>案件ID: {intake.linkedProjectId}</div>}
@@ -597,7 +607,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                           <button
                             type="button"
                             onClick={() => setEditingIntake(intake)}
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                             編集
@@ -606,7 +616,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                             type="button"
                             onClick={() => handleDelete(intake)}
                             disabled={deleteBusyId === intake.id}
-                            className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                            className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-400/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             削除
@@ -615,7 +625,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                             type="button"
                             onClick={() => handleRetryOcr(intake)}
                             disabled={ocrBusyId === intake.id}
-                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-400/40 dark:text-blue-300 dark:hover:bg-blue-500/10"
                           >
                             {ocrBusyId === intake.id ? (
                               <Loader className="h-3.5 w-3.5 animate-spin" />
@@ -696,20 +706,20 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="mt-6 w-full max-w-4xl rounded-2xl bg-white shadow-xl"
+        className="mt-6 w-full max-w-4xl rounded-2xl bg-white shadow-xl dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
           <div>
-            <h3 className="text-xl font-semibold text-slate-900">{intake.fileName}</h3>
-            <p className="text-sm text-slate-500">
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white">{intake.fileName}</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               アップロード日時: {formatDateTime(intake.uploadedAt)}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+            className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <X className="h-5 w-5" />
           </button>
@@ -718,13 +728,13 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
         <div className="grid gap-6 px-6 py-6 lg:grid-cols-2">
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-semibold text-slate-700">文書種別</label>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">文書種別</label>
               <select
                 value={formState.docType}
                 onChange={(e) =>
                   setFormState(prev => ({ ...prev, docType: e.target.value as FaxIntake['docType'] }))
                 }
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
               >
                 {docTypeOptions.map(option => (
                   <option key={option.value} value={option.value}>
@@ -734,7 +744,7 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">業務ステータス</label>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">業務ステータス</label>
               <select
                 value={formState.status}
                 onChange={(e) =>
@@ -743,7 +753,7 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
                     status: e.target.value as EditableFaxIntakeStatus,
                   }))
                 }
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
               >
                 {intakeStatusOptions.map(option => (
                   <option key={option.value} value={option.value}>
@@ -753,12 +763,12 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">メモ</label>
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">メモ</label>
               <textarea
                 value={formState.notes}
                 onChange={(e) => setFormState(prev => ({ ...prev, notes: e.target.value }))}
                 rows={5}
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                 placeholder="OCR結果の補足や入力メモを追記してください。"
               />
             </div>
@@ -767,38 +777,38 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold text-slate-500">受注ID</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">受注ID</label>
                 <input
                   type="text"
                   value={formState.linkedOrderId}
                   onChange={(e) =>
                     setFormState(prev => ({ ...prev, linkedOrderId: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                   placeholder="例: job_xxx"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">見積ID</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">見積ID</label>
                 <input
                   type="text"
                   value={formState.linkedEstimateId}
                   onChange={(e) =>
                     setFormState(prev => ({ ...prev, linkedEstimateId: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                   placeholder="例: est_xxx"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500">案件ID</label>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">案件ID</label>
                 <input
                   type="text"
                   value={formState.linkedProjectId}
                   onChange={(e) =>
                     setFormState(prev => ({ ...prev, linkedProjectId: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                   placeholder="任意"
                 />
               </div>
@@ -808,7 +818,7 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
                 <button
                   type="button"
                   onClick={onNavigateToOrders}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   <LinkIcon className="h-3.5 w-3.5" />
                   案件・受注管理を開く
@@ -818,14 +828,14 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
                 <button
                   type="button"
                   onClick={onNavigateToEstimates}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   <LinkIcon className="h-3.5 w-3.5" />
                   見積管理を開く
                 </button>
               )}
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
               <div>ファイル種別: {intake.fileMimeType}</div>
               <div>サイズ: {formatFileSize(intake.fileSize)}</div>
               <div>アップロード者: {intake.uploadedBy}</div>
@@ -834,17 +844,17 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
                   href={intake.fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                  className="mt-1 inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline dark:text-blue-400"
                 >
                   <FileText className="h-3.5 w-3.5" />
                   ファイルを開く
                 </a>
               )}
             </div>
-            <div className="rounded-lg border border-slate-200 p-3">
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-900/40">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-700">OCRステータス</p>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">OCRステータス</p>
                   <p className={`text-xs font-semibold ${ocrStatusClass[intake.ocrStatus]} inline-flex rounded-full px-2 py-0.5`}>
                     {ocrStatusLabels[intake.ocrStatus]}
                   </p>
@@ -852,7 +862,7 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onRetryOcr(intake)}
-                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-400/40 dark:text-blue-300 dark:hover:bg-blue-500/10"
                   disabled={isRetryingOcr}
                 >
                   {isRetryingOcr ? (
@@ -864,10 +874,10 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
                 </button>
               </div>
               {intake.ocrErrorMessage && (
-                <p className="mt-2 text-xs text-rose-600">{intake.ocrErrorMessage}</p>
+                <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">{intake.ocrErrorMessage}</p>
               )}
               {intake.ocrStatus === 'done' && (
-                <div className="mt-3 space-y-2 rounded-md bg-white px-3 py-2 text-xs text-slate-600">
+                <div className="mt-3 space-y-2 rounded-md bg-white px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                   {getOcrCustomerName(intake.ocrJson) && (
                     <div>顧客: {getOcrCustomerName(intake.ocrJson)}</div>
                   )}
@@ -884,23 +894,23 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
         </div>
 
         {(intake.ocrJson || intake.ocrRawText) && (
-          <div className="space-y-4 border-t border-slate-100 px-6 py-4">
+          <div className="space-y-4 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
             {intake.ocrJson && (
-              <details className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700" open={false}>
-                <summary className="cursor-pointer font-semibold text-slate-800">
+              <details className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200" open={false}>
+                <summary className="cursor-pointer font-semibold text-slate-800 dark:text-white">
                   OCR構造化データ (JSON)
                 </summary>
-                <pre className="mt-3 max-h-64 overflow-auto rounded bg-white p-3 text-xs text-slate-700">
+                <pre className="mt-3 max-h-64 overflow-auto rounded bg-white p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">
                   {JSON.stringify(intake.ocrJson, null, 2)}
                 </pre>
               </details>
             )}
             {intake.ocrRawText && (
-              <details className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                <summary className="cursor-pointer font-semibold text-slate-800">
+              <details className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                <summary className="cursor-pointer font-semibold text-slate-800 dark:text-white">
                   OCRテキスト全文
                 </summary>
-                <pre className="mt-3 max-h-64 overflow-auto rounded bg-white p-3 text-xs text-slate-700 whitespace-pre-wrap">
+                <pre className="mt-3 max-h-64 overflow-auto rounded bg-white p-3 text-xs text-slate-700 whitespace-pre-wrap dark:bg-slate-950 dark:text-slate-200">
                   {intake.ocrRawText}
                 </pre>
               </details>
@@ -908,11 +918,11 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
             disabled={isSaving}
           >
             キャンセル
@@ -921,7 +931,7 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-blue-300"
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:disabled:bg-blue-900/40"
           >
             {isSaving && <Loader className="h-4 w-4 animate-spin" />}
             保存
