@@ -226,22 +226,11 @@ const buildMqAlerts = (
         if (!line.description.trim()) {
             alerts.push({ id: `${line.id}-desc`, level: 'ERROR', message: '品名を入力してください。', lineId: line.id });
         }
-        if (!line.customerId) {
-            alerts.push({ id: `${line.id}-customer`, level: 'ERROR', message: '顧客は必須です。', lineId: line.id });
-        }
         if (!line.projectId && line.customerId) {
             alerts.push({
                 id: `${line.id}-project`,
                 level: 'WARNING',
                 message: '顧客に紐づくプロジェクトを選択してください。',
-                lineId: line.id,
-            });
-        }
-        if (!line.accountItemId) {
-            alerts.push({
-                id: `${line.id}-account`,
-                level: 'WARNING',
-                message: '勘定科目の割当が未設定です。',
                 lineId: line.id,
             });
         }
@@ -698,11 +687,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         if (!selectedInvoice.supplierName.trim()) return setError('サプライヤー名を入力してください。');
         if (!selectedInvoice.paymentRecipientId) return setError('支払先を選択してください。');
         if (selectedInvoice.lines.length === 0) return setError('少なくとも1件の明細を入力してください。');
-        const invalidLine = selectedInvoice.lines.find(line => !line.description || !line.customerId || !line.projectId || !line.amountExclTax);
+        const invalidLine = selectedInvoice.lines.find(line => !line.description || !line.amountExclTax);
         if (invalidLine) {
             const index = selectedInvoice.lines.findIndex(line => line.id === invalidLine.id);
             setHighlightedLineId(invalidLine.id);
-            return setError(`第${index + 1}行目の「品名」「顧客」「プロジェクト」「金額（税抜）」を確認してください。`);
+            return setError(`第${index + 1}行目の「品名」と「金額（税抜）」を確認してください。`);
         }
 
         setIsSubmitting(true);
@@ -1382,7 +1371,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             name={`accountItem-${line.id}`}
                                                             value={line.accountItemId}
                                                             onChange={value => handleLineChange(line.id, 'accountItemId', value)}
-                                                            required
                                                         />
                                                     </td>
                                                     <td className="py-3 w-40">
@@ -1459,7 +1447,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             value={line.customerId}
                                                             onChange={e => handleLineChange(line.id, 'customerId', e.target.value)}
                                                             className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
-                                                            required
                                                             disabled={isDisabled}
                                                         >
                                                             <option value="">顧客を選択</option>
