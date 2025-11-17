@@ -3,6 +3,16 @@ import { User } from './types';
 declare const jspdf: any;
 declare const html2canvas: any;
 
+export const getEnvValue = (key: string): string | undefined => {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key] !== undefined) {
+    return import.meta.env[key] as string;
+  }
+  if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+    return process.env[key];
+  }
+  return undefined;
+};
+
 export const formatJPY = (amount: number | null | undefined): string => {
   if (amount === null || amount === undefined) return '-';
   return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(Math.round(amount));

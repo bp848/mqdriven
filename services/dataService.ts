@@ -70,9 +70,17 @@ const resolveEnvValue = (key: string): string | undefined => {
     return undefined;
 };
 
-const getFaxOcrFunctionName = (): string => resolveEnvValue('VITE_FAX_OCR_FUNCTION') || 'fax-ocr-intake';
-const getFaxOcrEndpoint = (): string | undefined => resolveEnvValue('VITE_FAX_OCR_ENDPOINT');
-const FAX_STORAGE_BUCKET = resolveEnvValue('VITE_FAX_INTAKE_BUCKET') || 'fax-intakes';
+const getFaxOcrFunctionName = (): string =>
+    resolveEnvValue('VITE_FAX_OCR_FUNCTION')
+    || resolveEnvValue('FAX_OCR_FUNCTION')
+    || 'fax-ocr-intake';
+const getFaxOcrEndpoint = (): string | undefined =>
+    resolveEnvValue('VITE_FAX_OCR_ENDPOINT')
+    || resolveEnvValue('FAX_OCR_ENDPOINT');
+const FAX_STORAGE_BUCKET =
+    resolveEnvValue('VITE_FAX_INTAKE_BUCKET')
+    || resolveEnvValue('FAX_INTAKE_BUCKET')
+    || 'fax-intakes';
 
 // Mappers from snake_case (DB) to camelCase (JS)
 const dbJobToJob = (project: any): Job => ({
@@ -1451,12 +1459,20 @@ export const requestFaxOcr = async (intake: FaxIntake): Promise<void> => {
     }
 };
 
-export const uploadFile = async (file: File, bucket: string): Promise<{ path: string }> => {
+export const uploadFile = async (
+    file: File | Blob,
+    bucket = FAX_STORAGE_BUCKET,
+): Promise<{ path: string; publicUrl?: string }> => {
     const supabase = getSupabase();
-    const filePath = `public/${Date.now()}-${file.name}`;
-    const { data, error } = await supabase.storage.from(bucket).upload(filePath, file);
-    if (error) throw formatSupabaseError(`Failed to upload to ${bucket}`, error as PostgrestError);
-    return { path: data.path };
+    const safeBucket = bucket || FAX_STORAGE_BUCKET;
+    const filename = file instanceof File ? file.name : `blob-${Date.now()}.bin`;
+    const filePath = `public/${Date.now()}-${filename}`;
+    const { data, error } = await supabase.storage.from(safeBucket).upload(filePath, file);
+    if (error) {
+        throw formatSupabaseError(`Failed to upload to ${safeBucket}`, error as unknown as PostgrestError);
+    }
+    const { data: urlData } = supabase.storage.from(safeBucket).getPublicUrl(data.path);
+    return { path: data.path, publicUrl: urlData?.publicUrl };
 };
 
 

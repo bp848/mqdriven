@@ -183,10 +183,17 @@ const CollapsibleNavItem: React.FC<{
 };
 
 
+export const buildNavCategories = (user: EmployeeUser | null): NavCategoryType[] => {
+  if (user?.role === 'admin') {
+    return ALL_NAV_CATEGORIES;
+  }
+  return ALL_NAV_CATEGORIES.filter(category => !category.adminOnly);
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser, allUsers, onUserChange, supabaseUserEmail, onSignOut }) => {
   const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>({});
 
-  const visibleCategories = ALL_NAV_CATEGORIES;
+  const visibleCategories = React.useMemo(() => buildNavCategories(currentUser), [currentUser]);
 
   React.useEffect(() => {
     const activeCategory = visibleCategories.find(cat => cat.items.some(item => item.page === currentPage));

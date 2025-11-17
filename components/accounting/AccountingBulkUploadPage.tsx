@@ -293,7 +293,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
           }
           continue; // 次のファイルへ（保存しない）
         }
-        const { path, url } = await uploadFile(f, 'inbox');
+        const { path, publicUrl } = await uploadFile(f, 'inbox');
         // 登録: inbox_items にも記録
         await addInboxItem({
           fileName: f.name,
@@ -303,7 +303,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
           extractedData: null,
           errorMessage: null,
         });
-        results.push({ name: f.name, url });
+        results.push({ name: f.name, url: publicUrl || '' });
 
         // ドキュメントテキスト抽出
         const mime = (f.type || '').toLowerCase();
@@ -319,7 +319,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             if (text && text.length > 0) {
               const textBlob = new Blob([text], { type: 'text/plain' });
               const textFile = new File([textBlob], `${f.name}.txt`, { type: 'text/plain' });
-              const { path: txtPath, url: txtUrl } = await uploadFile(textFile, 'inbox');
+              const { path: txtPath, publicUrl: txtUrl } = await uploadFile(textFile, 'inbox');
               await addInboxItem({
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
@@ -328,7 +328,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 extractedData: null,
                 errorMessage: null,
               });
-              results.push({ name: `${f.name}.txt`, url: txtUrl });
+              results.push({ name: `${f.name}.txt`, url: txtUrl || '' });
             }
           } catch (e) {
             console.warn('テキスト読み込み失敗:', e);
@@ -339,7 +339,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             if (text && text.length > 0) {
               const textBlob = new Blob([text], { type: 'text/plain' });
               const textFile = new File([textBlob], `${f.name}.txt`, { type: 'text/plain' });
-              const { path: txtPath, url: txtUrl } = await uploadFile(textFile, 'inbox');
+              const { path: txtPath, publicUrl: txtUrl } = await uploadFile(textFile, 'inbox');
               await addInboxItem({
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
@@ -348,7 +348,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 extractedData: null,
                 errorMessage: null,
               });
-              results.push({ name: `${f.name}.txt`, url: txtUrl });
+              results.push({ name: `${f.name}.txt`, url: txtUrl || '' });
             }
           } catch (e) {
             console.warn('DOCX抽出失敗:', e);
@@ -359,7 +359,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             if (text && text.length > 0) {
               const textBlob = new Blob([text], { type: 'text/plain' });
               const textFile = new File([textBlob], `${f.name}.txt`, { type: 'text/plain' });
-              const { path: txtPath, url: txtUrl } = await uploadFile(textFile, 'inbox');
+              const { path: txtPath, publicUrl: txtUrl } = await uploadFile(textFile, 'inbox');
               await addInboxItem({
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
@@ -368,7 +368,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 extractedData: null,
                 errorMessage: null,
               });
-              results.push({ name: `${f.name}.txt`, url: txtUrl });
+              results.push({ name: `${f.name}.txt`, url: txtUrl || '' });
             }
           } catch (e) {
             console.warn('XLSX抽出失敗:', e);
@@ -391,7 +391,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             if (text && text.length > 0) {
               const textBlob = new Blob([text], { type: 'text/plain' });
               const textFile = new File([textBlob], `${f.name}.txt`, { type: 'text/plain' });
-              const { path: txtPath, url: txtUrl } = await uploadFile(textFile, 'inbox');
+              const { path: txtPath, publicUrl: txtUrl } = await uploadFile(textFile, 'inbox');
               await addInboxItem({
                 fileName: `${f.name}.txt`,
                 filePath: txtPath,
@@ -400,7 +400,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
                 extractedData: null,
                 errorMessage: null,
               });
-              results.push({ name: `${f.name}.txt`, url: txtUrl });
+              results.push({ name: `${f.name}.txt`, url: txtUrl || '' });
             }
           } catch (extractErr) {
             console.warn('テキスト抽出に失敗:', extractErr);
@@ -416,7 +416,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
             };
             const metaBlob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
             const metaFile = new File([metaBlob], `${f.name}.meta.json`, { type: 'application/json' });
-            const { path: metaPath, url: metaUrl } = await uploadFile(metaFile, 'inbox');
+            const { path: metaPath, publicUrl: metaUrl } = await uploadFile(metaFile, 'inbox');
             await addInboxItem({
               fileName: `${f.name}.meta.json`,
               filePath: metaPath,
@@ -425,7 +425,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
               extractedData: null,
               errorMessage: null,
             });
-            results.push({ name: `${f.name}.meta.json`, url: metaUrl });
+            results.push({ name: `${f.name}.meta.json`, url: metaUrl || '' });
           } catch (e) {
             console.warn('メタ生成に失敗:', e);
           }
@@ -456,7 +456,7 @@ const AccountingBulkUploadPage: React.FC<AccountingBulkUploadPageProps> = ({ add
     try {
       for (const sf of simFiles) {
         const f = sf.file;
-        const { path, url } = await uploadFile(f, 'inbox');
+        const { path, publicUrl } = await uploadFile(f, 'inbox');
         await addInboxItem({
           fileName: f.name,
           filePath: path,
