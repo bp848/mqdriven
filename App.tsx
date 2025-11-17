@@ -73,7 +73,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_customers: '取引先管理',
     sales_pipeline: 'パイプライン（進捗）',
     sales_estimates: '見積管理',
-    sales_orders: '案件・受注管理',
+    sales_orders: '案件予算管理',
     sales_billing: '売上請求 (AR)',
     fax_ocr_intake: 'FAXからのデータ自動入力',
     analysis_ranking: '売上ランキング',

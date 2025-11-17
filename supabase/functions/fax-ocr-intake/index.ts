@@ -13,6 +13,19 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const API_KEY = Deno.env.get('API_KEY');
 const FAX_BUCKET = Deno.env.get('FAX_INTAKE_BUCKET') ?? 'fax-intakes';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const respondWithCors = (body: BodyInit | null, init?: ResponseInit) =>
+  new Response(body, {
+    ...(init ?? {}),
+    headers: {
+      ...corsHeaders,
+      ...(init?.headers ?? {}),
+    },
+  });
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('[fax-ocr-intake] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.');
@@ -215,20 +228,355 @@ const enrichInvoiceJsonWithMatches = async (invoice: Record<string, any>) => {
   }
 };
 
+type ExpenseLineDraft = {
+  id: string;
+  lineDate: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  amountExclTax: number;
+  taxRate: number;
+  accountItemId: string;
+  allocationDivisionId: string;
+  customerId: string;
+  projectId: string;
+  linkedRevenueId: string;
+};
+
+type ExpenseInvoiceDraftPayload = {
+  id: string;
+  supplierName: string;
+  paymentRecipientId: string;
+  registrationNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  totalGross: number;
+  totalNet: number;
+  taxAmount: number;
+  status: 'Draft';
+  bankAccount: {
+    bankName: string;
+    branchName: string;
+    accountType: string;
+    accountNumber: string;
+  };
+  lines: ExpenseLineDraft[];
+};
+
+type ExpenseDraftTotals = {
+  net: number;
+  tax: number;
+  gross: number;
+};
+
+const nowDateString = () => new Date().toISOString().split('T')[0];
+const generatePrefixedId = (prefix: string) => `${prefix}_${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
+
+const toOptionalString = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return undefined;
+};
+
+const toOptionalNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[,￥¥\s]/g, '').replace(/[^\d.-]/g, '');
+    if (!normalized) return undefined;
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const toDateString = (value: unknown): string => {
+  const raw = toOptionalString(value);
+  if (!raw) return nowDateString();
+  return raw.replace(/[./]/g, '-');
+};
+
+const computeTotalsFromLines = (lines: ExpenseLineDraft[]): ExpenseDraftTotals => {
+  const net = lines.reduce((sum, line) => sum + (Number.isFinite(line.amountExclTax) ? line.amountExclTax : 0), 0);
+  const tax = lines.reduce((sum, line) => {
+    const amount = Number.isFinite(line.amountExclTax) ? line.amountExclTax : 0;
+    const rate = Number.isFinite(line.taxRate) ? line.taxRate : 0;
+    return sum + amount * (rate / 100);
+  }, 0);
+  return { net, tax, gross: net + tax };
+};
+
+const normalizeExpenseLineFromOcr = (line: Record<string, any> | null | undefined, index: number): ExpenseLineDraft => {
+  const quantity = toOptionalNumber(line?.quantity) ?? 1;
+  const unitPrice = toOptionalNumber(line?.unitPrice) ?? toOptionalNumber((line as any)?.unit_price) ?? 0;
+  const amountExclTax =
+    toOptionalNumber(line?.amountExclTax) ??
+    toOptionalNumber((line as any)?.amount_excl_tax) ??
+    toOptionalNumber((line as any)?.amount) ??
+    quantity * unitPrice;
+
+  return {
+    id: toOptionalString(line?.id) ?? generatePrefixedId(`line${index}`),
+    lineDate: toDateString(line?.lineDate || line?.date),
+    description: toOptionalString(line?.description) ?? `自動取込明細${index + 1}`,
+    quantity: quantity > 0 ? quantity : 1,
+    unit: toOptionalString(line?.unit) ?? '式',
+    unitPrice,
+    amountExclTax: amountExclTax > 0 ? amountExclTax : quantity * unitPrice,
+    taxRate: toOptionalNumber(line?.taxRate) ?? 10,
+    accountItemId: toOptionalString(line?.accountItemId) ?? '',
+    allocationDivisionId: toOptionalString(line?.allocationDivisionId) ?? '',
+    customerId: toOptionalString(line?.customerId) ?? '',
+    projectId: toOptionalString(line?.projectId) ?? '',
+    linkedRevenueId: toOptionalString(line?.linkedRevenueId) ?? '',
+  };
+};
+
+const normalizeBankAccount = (account: Record<string, any> | null | undefined) => ({
+  bankName: toOptionalString(account?.bankName) ?? '',
+  branchName: toOptionalString(account?.branchName) ?? '',
+  accountType: toOptionalString(account?.accountType) ?? '',
+  accountNumber: toOptionalString(account?.accountNumber) ?? '',
+});
+
+const pickBestNumber = (candidates: Array<unknown>): number | undefined => {
+  for (const candidate of candidates) {
+    const value = toOptionalNumber(candidate);
+    if (typeof value === 'number') return value;
+  }
+  return undefined;
+};
+
+const looksLikeVendorInvoice = (parsedJson: Record<string, any> | null | undefined): boolean => {
+  if (!parsedJson || typeof parsedJson !== 'object') return false;
+  const hasExpenseDraft = parsedJson.expenseDraft && typeof parsedJson.expenseDraft === 'object';
+  const hasLineItems = Array.isArray(parsedJson.lineItems) && parsedJson.lineItems.length > 0;
+  const hasTotals = Boolean(
+    pickBestNumber([parsedJson.totalAmount, parsedJson.subtotalAmount, parsedJson.taxAmount]),
+  );
+  const hasVendorName = Boolean(toOptionalString(parsedJson.vendorName));
+  return Boolean(hasExpenseDraft || hasLineItems || (hasVendorName && hasTotals));
+};
+
+const buildFallbackExpenseDraft = (parsedJson: Record<string, any>): Record<string, any> | null => {
+  const supplierName =
+    toOptionalString(parsedJson.vendorName) ??
+    toOptionalString(parsedJson.paymentRecipientName) ??
+    toOptionalString(parsedJson.expenseDraft?.supplierName);
+
+  const totalGross = pickBestNumber([
+    parsedJson.totalAmount,
+    parsedJson.expenseDraft?.totalGross,
+  ]);
+  const totalNet = pickBestNumber([
+    parsedJson.subtotalAmount,
+    parsedJson.expenseDraft?.totalNet,
+  ]);
+  const taxAmount = pickBestNumber([
+    parsedJson.taxAmount,
+    parsedJson.expenseDraft?.taxAmount,
+  ]);
+  const lines = Array.isArray(parsedJson.lineItems) ? parsedJson.lineItems : [];
+  const hasMeaningfulData = Boolean(supplierName || lines.length > 0 || totalGross || totalNet || taxAmount);
+
+  if (!hasMeaningfulData) {
+    return null;
+  }
+
+  return {
+    supplierName,
+    registrationNumber:
+      toOptionalString(parsedJson.registrationNumber) ??
+      toOptionalString(parsedJson.expenseDraft?.registrationNumber),
+    invoiceDate: parsedJson.invoiceDate ?? parsedJson.expenseDraft?.invoiceDate,
+    dueDate: parsedJson.dueDate ?? parsedJson.expenseDraft?.dueDate,
+    totalGross,
+    totalNet,
+    taxAmount,
+    paymentRecipientId:
+      toOptionalString(parsedJson.matchedPaymentRecipientId) ??
+      toOptionalString(parsedJson.expenseDraft?.paymentRecipientId),
+    paymentRecipientName:
+      toOptionalString(parsedJson.paymentRecipientName) ??
+      toOptionalString(parsedJson.expenseDraft?.paymentRecipientName),
+    bankAccount: parsedJson.bankAccount ?? parsedJson.expenseDraft?.bankAccount,
+    lines,
+  };
+};
+
+const buildExpenseInvoiceDraft = (
+  rawDraft: Record<string, any>,
+  parsedJson: Record<string, any>,
+): { invoice: ExpenseInvoiceDraftPayload; totals: ExpenseDraftTotals } => {
+  const supplierName =
+    toOptionalString(rawDraft.supplierName) ??
+    toOptionalString(parsedJson.vendorName) ??
+    toOptionalString(parsedJson.paymentRecipientName) ??
+    '未設定のサプライヤー';
+
+  const rawLines = Array.isArray(rawDraft.lines) ? rawDraft.lines : [];
+  const normalizedLines =
+    rawLines.length > 0
+      ? rawLines.map((line, index) => normalizeExpenseLineFromOcr(line, index))
+      : [
+        normalizeExpenseLineFromOcr(
+          {
+            description: `${supplierName} 向け経費`,
+            amountExclTax: pickBestNumber([rawDraft.totalNet, parsedJson.subtotalAmount]) ?? 0,
+          },
+          0,
+        ),
+      ];
+
+  const lineTotals = computeTotalsFromLines(normalizedLines);
+  const totalNet = pickBestNumber([rawDraft.totalNet, parsedJson.subtotalAmount, lineTotals.net]) ?? lineTotals.net;
+  let totalGross = pickBestNumber([rawDraft.totalGross, parsedJson.totalAmount]);
+  let taxAmount = pickBestNumber([rawDraft.taxAmount, parsedJson.taxAmount]);
+
+  if (typeof taxAmount !== 'number' && typeof totalGross === 'number') {
+    taxAmount = totalGross - totalNet;
+  }
+  if (typeof totalGross !== 'number' && typeof taxAmount === 'number') {
+    totalGross = totalNet + taxAmount;
+  }
+  if (typeof taxAmount !== 'number') {
+    taxAmount = lineTotals.tax;
+  }
+  if (typeof totalGross !== 'number') {
+    totalGross = totalNet + taxAmount;
+  }
+
+  const invoice: ExpenseInvoiceDraftPayload = {
+    id: toOptionalString(rawDraft.id) ?? generatePrefixedId('invoice'),
+    supplierName,
+    paymentRecipientId:
+      toOptionalString(rawDraft.paymentRecipientId) ??
+      toOptionalString(parsedJson.matchedPaymentRecipientId) ??
+      '',
+    registrationNumber:
+      toOptionalString(rawDraft.registrationNumber) ?? toOptionalString(parsedJson.registrationNumber) ?? '',
+    invoiceDate: toDateString(rawDraft.invoiceDate ?? parsedJson.invoiceDate),
+    dueDate: toDateString(rawDraft.dueDate ?? parsedJson.dueDate),
+    totalGross,
+    totalNet,
+    taxAmount,
+    status: 'Draft',
+    bankAccount: normalizeBankAccount(rawDraft.bankAccount ?? parsedJson.bankAccount),
+    lines: normalizedLines,
+  };
+
+  return { invoice, totals: { net: totalNet, tax: taxAmount, gross: totalGross } };
+};
+
+let cachedExpenseApplicationCodeId: string | null = null;
+
+const getExpenseApplicationCodeId = async (): Promise<string | null> => {
+  if (!supabase) return null;
+  if (cachedExpenseApplicationCodeId) return cachedExpenseApplicationCodeId;
+  const { data, error } = await supabase
+    .from('application_codes')
+    .select('id')
+    .eq('code', 'EXP')
+    .maybeSingle();
+  if (error) {
+    console.warn('[fax-ocr-intake] Failed to load EXP application code id', error);
+    return null;
+  }
+  if (!data?.id) {
+    console.warn('[fax-ocr-intake] EXP application code not found');
+    return null;
+  }
+  cachedExpenseApplicationCodeId = data.id;
+  return data.id;
+};
+
+const maybeCreateExpenseDraftFromOcr = async (
+  docTypeKey: NonNullable<FaxOcrPayload['docType']>,
+  intake: Record<string, any>,
+  parsedJson: Record<string, any> | null,
+) => {
+  if (!supabase) return;
+  const treatAsVendorInvoice =
+    docTypeKey === 'vendor_invoice' || (docTypeKey === 'unknown' && looksLikeVendorInvoice(parsedJson));
+  if (!treatAsVendorInvoice) return;
+  if (!parsedJson || typeof parsedJson !== 'object') return;
+  if (!intake?.uploaded_by) return;
+
+  let rawExpenseDraft = parsedJson.expenseDraft;
+  if (!rawExpenseDraft || typeof rawExpenseDraft !== 'object') {
+    rawExpenseDraft = buildFallbackExpenseDraft(parsedJson) ?? undefined;
+  }
+  if (!rawExpenseDraft || typeof rawExpenseDraft !== 'object') return;
+
+  const applicationCodeId = await getExpenseApplicationCodeId();
+  if (!applicationCodeId) return;
+
+  try {
+    const { invoice, totals } = buildExpenseInvoiceDraft(rawExpenseDraft as Record<string, any>, parsedJson);
+    const nowIso = new Date().toISOString();
+    const notesBase = toOptionalString(rawExpenseDraft.notes) ?? '';
+    const intakeLabel = toOptionalString(intake.file_name) ?? toOptionalString(intake.file_path) ?? intake.id;
+    const autoNote = `FAX自動取込ドラフト: ${intakeLabel}`;
+    const formData = {
+      departmentId: '',
+      approvalRouteId: '',
+      invoiceDrafts: [invoice],
+      selectedInvoiceId: invoice.id,
+      invoice,
+      mqAlerts: [],
+      computedTotals: totals,
+      notes: notesBase ? `${notesBase}\n${autoNote}` : autoNote,
+      sourceFaxIntakeId: intake.id,
+    };
+
+    const { error } = await supabase
+      .from('application_drafts')
+      .upsert(
+        {
+          application_code_id: applicationCodeId,
+          applicant_id: intake.uploaded_by,
+          form_data: formData,
+          approval_route_id: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+        { onConflict: 'application_code_id,applicant_id' },
+      )
+      .select('id')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+    console.log('[fax-ocr-intake] Expense draft upserted for applicant', intake.uploaded_by);
+  } catch (draftError) {
+    console.warn('[fax-ocr-intake] Failed to create expense reimbursement draft', draftError);
+  }
+};
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return respondWithCors('ok');
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
+    return respondWithCors('Method Not Allowed', { status: 405 });
   }
 
   let payload: FaxOcrPayload;
   try {
     payload = await req.json();
   } catch {
-    return new Response('Invalid JSON payload', { status: 400 });
+    return respondWithCors('Invalid JSON payload', { status: 400 });
   }
 
   if (!payload?.intakeId || !payload.filePath) {
-    return new Response('Missing intakeId or filePath', { status: 400 });
+    return respondWithCors('Missing intakeId or filePath', { status: 400 });
   }
 
   if (!supabase || !API_KEY || !ai) {
@@ -236,7 +584,7 @@ serve(async (req) => {
       ocr_status: 'failed',
       ocr_error_message: 'OCR backend is not configured properly.',
     });
-    return new Response('Server configuration error', { status: 500 });
+    return respondWithCors('Server configuration error', { status: 500 });
   }
 
   try {
@@ -249,7 +597,7 @@ serve(async (req) => {
       .single();
 
     if (fetchError || !intake) {
-      return new Response('fax_intakes record not found', { status: 404 });
+      return respondWithCors('fax_intakes record not found', { status: 404 });
     }
 
     await updateFaxIntakeStatus(payload.intakeId, {
@@ -309,8 +657,9 @@ serve(async (req) => {
       ocr_raw_text: rawText,
       ocr_error_message: null,
     });
+    await maybeCreateExpenseDraftFromOcr(docTypeKey, intake, parsedJson);
 
-    return new Response(JSON.stringify({ status: 'ok' }), {
+    return respondWithCors(JSON.stringify({ status: 'ok' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -321,6 +670,6 @@ serve(async (req) => {
       ocr_status: 'failed',
       ocr_error_message: message,
     });
-    return new Response(message, { status: 500 });
+    return respondWithCors(message, { status: 500 });
   }
 });
