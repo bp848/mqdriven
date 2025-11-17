@@ -137,7 +137,7 @@ const SupplierSearchSelect: React.FC<SupplierSearchSelectProps> = ({
                     </option>
                 ))}
             </select>
-            {!disabled && visibleSuppliers.length === 0 && (
+            {!disabled && !selectedSupplier && visibleSuppliers.length === 0 && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">候補が見つかりません。</p>
             )}
             {hasMore && (
