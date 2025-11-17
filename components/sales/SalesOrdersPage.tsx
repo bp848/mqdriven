@@ -158,6 +158,16 @@ const OrdersSection: React.FC<{ orders: PurchaseOrder[]; jobs: Job[] }> = ({ ord
 };
 
 const SalesOrdersPage: React.FC<SalesOrdersPageProps> = ({ jobs, orders, searchTerm, onSelectJob, onNewJob }) => {
+  const ordersByProject = useMemo(() => {
+    return orders.reduce<Record<string, PurchaseOrder[]>>((acc, order) => {
+      const key = order.itemName ? String(order.itemName) : '';
+      if (!key) return acc;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(order);
+      return acc;
+    }, {});
+  }, [orders]);
+
   return (
     <div className="space-y-10">
       <section className="space-y-4">
@@ -167,7 +177,13 @@ const SalesOrdersPage: React.FC<SalesOrdersPageProps> = ({ jobs, orders, searchT
             projects テーブルの内容を集計表示しています。案件を選択すると詳細モーダルが開きます。
           </p>
         </div>
-        <JobList jobs={jobs} searchTerm={searchTerm} onSelectJob={onSelectJob} onNewJob={onNewJob} />
+        <JobList
+          jobs={jobs}
+          searchTerm={searchTerm}
+          onSelectJob={onSelectJob}
+          onNewJob={onNewJob}
+          ordersByProject={ordersByProject}
+        />
       </section>
 
       <section className="space-y-4">
