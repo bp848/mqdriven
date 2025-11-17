@@ -44,15 +44,6 @@ const AuthCallbackPage: React.FC = () => {
           isProcessing.current = false;
           return;
         }
-
-        const urlHash = hashParamsString || currentUrl.split('?')[1] || '';
-        const processedKey = `auth_processed_${btoa(urlHash).slice(0, 20)}`;
-        if (localStorage.getItem(processedKey)) {
-          setIsError(true);
-          setMessage('このログインリンクは既に使用済みです。\n\n新しいリンクを取得してください。');
-          isProcessing.current = false;
-          return;
-        }
         let exchangeError: Error | null = null;
         if (accessToken && refreshToken) {
           const { error } = await supabaseClient.auth.setSession({
@@ -95,23 +86,6 @@ const AuthCallbackPage: React.FC = () => {
           setMessage('🚀 マジックリンクログイン成功！\n\nダッシュボードに移動中...');
         } else {
           setMessage('ログイン成功！リダイレクト中...');
-        }
-
-        try {
-          const timestamp = Date.now();
-          localStorage.setItem(processedKey, timestamp.toString());
-
-          const cleanupThreshold = 24 * 60 * 60 * 1000;
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('auth_processed_')) {
-              const storedTime = parseInt(localStorage.getItem(key) || '0', 10);
-              if (timestamp - storedTime > cleanupThreshold) {
-                localStorage.removeItem(key);
-              }
-            }
-          });
-        } catch (storageError) {
-          console.warn('ローカルストレージエラー:', storageError);
         }
 
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);

@@ -41,14 +41,6 @@ export default function AuthCallbackPage() {
         }
         
         // 既に使用済みのコードかチェック（ローカルストレージで管理）
-        const urlHash = hashParamsString || currentUrl.split('?')[1] || '';
-        const processedKey = `auth_processed_${btoa(urlHash).slice(0, 20)}`;
-        if (localStorage.getItem(processedKey)) {
-          setIsError(true);
-          setMessage('このログインリンクは既に使用済みです。\n\n新しいリンクを取得してください。');
-          isProcessing.current = false;
-          return;
-        }
         
         let exchangeError: Error | null = null;
         if (accessToken && refreshToken) {
@@ -90,25 +82,6 @@ export default function AuthCallbackPage() {
           console.log('マジックリンクログイン成功');
         } else {
           setMessage('ログイン成功！リダイレクト中...');
-        }
-        
-        // 成功したコードをローカルストレージに記録（重複使用防止）
-        try {
-          const timestamp = Date.now();
-          localStorage.setItem(processedKey, timestamp.toString());
-          
-          // 古いキーをクリーンアップ（24時間以上前のもの）
-          const cleanupThreshold = 24 * 60 * 60 * 1000; // 24時間
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('auth_processed_')) {
-              const storedTime = parseInt(localStorage.getItem(key) || '0');
-              if (timestamp - storedTime > cleanupThreshold) {
-                localStorage.removeItem(key);
-              }
-            }
-          });
-        } catch (storageError) {
-          console.warn('ローカルストレージエラー:', storageError);
         }
         
         // iPhone/Safari対応: ループ防止と確実なリダイレクト
