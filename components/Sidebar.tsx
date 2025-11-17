@@ -37,7 +37,7 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
             { page: 'sales_customers', name: '取引先' },
             { page: 'sales_pipeline', name: 'パイプライン（進捗）' },
             { page: 'sales_estimates', name: '見積' },
-            { page: 'sales_orders', name: '案件・受注管理' },
+            { page: 'sales_orders', name: '案件予算管理' },
             { page: 'sales_billing', name: '売上請求 (AR)' },
             { page: 'analysis_ranking', name: '売上ランキング' },
             { page: 'business_support_proposal', name: '提案書作成' },
