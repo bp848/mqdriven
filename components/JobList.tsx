@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Job, SortConfig } from '../types';
+import { Job, PurchaseOrder, PurchaseOrderStatus, SortConfig } from '../types';
 import JobStatusBadge from './JobStatusBadge';
 import { formatJPY, formatDate } from '../utils';
 import EmptyState from './ui/EmptyState';
@@ -11,9 +11,16 @@ interface JobListProps {
   searchTerm: string;
   onSelectJob: (job: Job) => void;
   onNewJob: () => void;
+  ordersByProject?: Record<string, PurchaseOrder[]>;
 }
 
-const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJob }) => {
+const orderStatusStyles: Record<PurchaseOrderStatus, string> = {
+  [PurchaseOrderStatus.Ordered]: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  [PurchaseOrderStatus.Received]: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  [PurchaseOrderStatus.Cancelled]: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300',
+};
+
+const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJob, ordersByProject }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'jobNumber', direction: 'descending' });
 
   const filteredJobs = useMemo(() => {
@@ -82,35 +89,93 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
           </thead>
           <tbody>
             {sortedJobs.map((job) => (
-                <tr key={job.id} onClick={() => onSelectJob(job)} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50">
-                  <td className="px-6 py-5 font-mono text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                    {job.jobNumber}
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="font-medium text-base text-slate-800 dark:text-slate-200">{job.clientName}</div>
-                    <div className="text-slate-500 dark:text-slate-400">{job.title}</div>
-                  </td>
-                  <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
-                  <td className="px-6 py-5 whitespace-nowrap">{(job.totalQuantity ?? job.quantity ?? 0).toLocaleString()}</td>
-                  <td className="px-6 py-5 whitespace-nowrap font-semibold">{formatJPY(job.totalAmount ?? job.price ?? 0)}</td>
-                  <td className="px-6 py-5 whitespace-nowrap">{formatJPY(job.totalCost ?? job.variableCost ?? 0)}</td>
-                  <td className="px-6 py-5 whitespace-nowrap">
-                    <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            (job.grossMargin ?? 0) >= 0
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
-                        }`}
-                    >
-                        {formatJPY(job.grossMargin ?? (job.totalAmount ?? 0) - (job.totalCost ?? 0))}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5">
-                    <JobStatusBadge status={job.status} />
-                  </td>
-                </tr>
-              )
-            )}
+                <React.Fragment key={job.id}>
+                  <tr onClick={() => onSelectJob(job)} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50">
+                    <td className="px-6 py-5 font-mono text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      {job.jobNumber}
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="font-medium text-base text-slate-800 dark:text-slate-200">{job.clientName}</div>
+                      <div className="text-slate-500 dark:text-slate-400">{job.title}</div>
+                    </td>
+                    <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
+                    <td className="px-6 py-5 whitespace-nowrap">{(job.totalQuantity ?? job.quantity ?? 0).toLocaleString()}</td>
+                    <td className="px-6 py-5 whitespace-nowrap font-semibold">{formatJPY(job.totalAmount ?? job.price ?? 0)}</td>
+                    <td className="px-6 py-5 whitespace-nowrap">{formatJPY(job.totalCost ?? job.variableCost ?? 0)}</td>
+                    <td className="px-6 py-5 whitespace-nowrap">
+                      <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              (job.grossMargin ?? 0) >= 0
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                          }`}
+                      >
+                          {formatJPY(job.grossMargin ?? (job.totalAmount ?? 0) - (job.totalCost ?? 0))}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <JobStatusBadge status={job.status} />
+                    </td>
+                  </tr>
+                  {(() => {
+                    const projectKey = job.projectCode
+                        ? String(job.projectCode)
+                        : job.jobNumber
+                            ? String(job.jobNumber)
+                            : '';
+                    const relatedOrders = projectKey && ordersByProject ? ordersByProject[projectKey] : undefined;
+                    if (!relatedOrders || relatedOrders.length === 0) return null;
+                    return (
+                        <tr className="bg-slate-50/60 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-slate-700/40">
+                          <td colSpan={8} className="px-6 py-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">関連受注（orders）</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">project_code / jobNumber: {projectKey}</p>
+                              </div>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {relatedOrders.length}件
+                              </span>
+                            </div>
+                            <div className="mt-3 overflow-x-auto">
+                              <table className="min-w-full text-sm text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/60 rounded-lg">
+                                <thead className="bg-white dark:bg-slate-800 text-slate-500 uppercase text-xs">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left">受注ID</th>
+                                    <th className="px-3 py-2 text-left">受注日</th>
+                                    <th className="px-3 py-2 text-right">数量</th>
+                                    <th className="px-3 py-2 text-right">単価</th>
+                                    <th className="px-3 py-2 text-right">売上高</th>
+                                    <th className="px-3 py-2 text-right">ステータス</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {relatedOrders.map(order => {
+                                    const total = (order.quantity ?? 0) * (order.unitPrice ?? 0);
+                                    return (
+                                      <tr key={order.id} className="odd:bg-slate-50/60 dark:odd:bg-slate-900/30">
+                                        <td className="px-3 py-2 font-mono text-xs">{order.id?.slice(0, 8)}...</td>
+                                        <td className="px-3 py-2">{formatDate(order.orderDate)}</td>
+                                        <td className="px-3 py-2 text-right">{Number(order.quantity ?? 0).toLocaleString()}</td>
+                                        <td className="px-3 py-2 text-right">{formatJPY(order.unitPrice ?? 0)}</td>
+                                        <td className="px-3 py-2 text-right font-semibold">{formatJPY(total)}</td>
+                                        <td className="px-3 py-2 text-right">
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${orderStatusStyles[order.status] || 'bg-slate-200 text-slate-700'}`}>
+                                            {order.status}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                    );
+                  })()}
+                </React.Fragment>
+              ))}
              {sortedJobs.length === 0 && (
                 <tr>
                     <td colSpan={7}>

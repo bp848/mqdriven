@@ -49,7 +49,7 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         icon: ShoppingCart,
         adminOnly: true,
         items: [
-            { page: 'purchasing_orders', name: '発注 (PO)' },
+            { page: 'purchasing_orders', name: '受注一覧' },
             { page: 'purchasing_invoices', name: '仕入計上 (AP)' },
             { page: 'purchasing_payments', name: '支払' },
         ]

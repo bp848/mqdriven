@@ -288,7 +288,7 @@ const mapFaxIntakeFromDb = (row: any, publicUrl?: string): FaxIntake => ({
     ocrRawText: row.ocr_raw_text,
     ocrJson: parseJsonColumn(row.ocr_json),
     docType: (row.doc_type ?? 'unknown') as FaxIntake['docType'],
-    sourceChannel: (row.source_channel ?? 'fax') as FaxIntake['sourceChannel'],
+    sourceChannel: 'fax',
     linkedProjectId: row.linked_project_id,
     linkedOrderId: row.linked_order_id,
     linkedEstimateId: row.linked_estimate_id,
@@ -1462,7 +1462,6 @@ export const createFaxIntake = async (payload: {
             notes: payload.notes ?? null,
             ocr_status: 'pending',
             status: 'draft',
-            source_channel: 'fax',
         })
         .select('*')
         .single();
