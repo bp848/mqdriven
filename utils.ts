@@ -38,6 +38,16 @@ export const formatDateTime = (dateString: string | Date | null | undefined): st
   }
 };
 
+export const normalizeSearchText = (value: string | undefined | null): string => {
+    if (!value) return '';
+    return value
+        .toString()
+        .trim()
+        .toLowerCase()
+        .normalize('NFKC')
+        .replace(/\s+/g, ' ');
+};
+
 export const createSignature = (): string => {
     try {
         const settingsStr = localStorage.getItem('signatureSettings');

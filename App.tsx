@@ -471,6 +471,18 @@ const App: React.FC = () => {
         addToast('案件が正常に追加されました。', 'success');
         await loadAllData();
     };
+    const handleCreateCustomerInline = async (customerData: Partial<Customer>): Promise<Customer> => {
+        const created = await dataService.addCustomer(customerData);
+        setCustomers(prev => [created, ...prev]);
+        addToast('顧客を登録しました。', 'success');
+        return created;
+    };
+    const handleCreatePaymentRecipientInline = async (recipientData: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
+        const created = await dataService.createPaymentRecipient(recipientData);
+        setPaymentRecipients(prev => [created, ...prev]);
+        addToast('支払先を登録しました。', 'success');
+        return created;
+    };
     const handleUpdateJob = async (jobId: string, updatedData: Partial<Job>) => {
         await dataService.updateJob(jobId, updatedData);
         addToast('案件が更新されました。', 'success');
@@ -672,7 +684,7 @@ const App: React.FC = () => {
                 return <BusinessPlanPage allUsers={allUsers} />;
             case 'approval_list':
                 return <ApprovalWorkflowPage currentUser={currentUser} view="list" addToast={addToast} searchTerm={searchTerm} />;
-            case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} />;
+            case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} onCreatePaymentRecipient={handleCreatePaymentRecipientInline} />;
             case 'approval_form_transport': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="TRP" addToast={addToast} isAIOff={isAIOff} />;
             case 'approval_form_leave': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="LEV" addToast={addToast} isAIOff={isAIOff} />;
             case 'approval_form_approval': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="APL" addToast={addToast} isAIOff={isAIOff} />;
@@ -758,7 +770,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="flex h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
+        <div className="flex min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
             <Sidebar
                 currentPage={currentPage}
                 onNavigate={handleNavigate}
@@ -779,9 +791,17 @@ const App: React.FC = () => {
             </main>
             
             {/* Modals */}
-            {isCreateJobModalOpen && <CreateJobModal isOpen={isCreateJobModalOpen} onClose={() => setCreateJobModalOpen(false)} onAddJob={handleAddJob} />}
+            {isCreateJobModalOpen && <CreateJobModal isOpen={isCreateJobModalOpen} onClose={() => setCreateJobModalOpen(false)} onAddJob={handleAddJob} customers={customers} onCreateCustomer={handleCreateCustomerInline} />}
             {isCreateLeadModalOpen && <CreateLeadModal isOpen={isCreateLeadModalOpen} onClose={() => setCreateLeadModalOpen(false)} onAddLead={handleAddLead} />}
-            {isCreatePOModalOpen && <CreatePurchaseOrderModal isOpen={isCreatePOModalOpen} onClose={() => setCreatePOModalOpen(false)} onAddPurchaseOrder={handleAddPurchaseOrder} />}
+            {isCreatePOModalOpen && (
+                <CreatePurchaseOrderModal
+                    isOpen={isCreatePOModalOpen}
+                    onClose={() => setCreatePOModalOpen(false)}
+                    onAddPurchaseOrder={handleAddPurchaseOrder}
+                    paymentRecipients={paymentRecipients}
+                    onCreatePaymentRecipient={handleCreatePaymentRecipientInline}
+                />
+            )}
             {isCreateInventoryItemModalOpen && <CreateInventoryItemModal isOpen={isCreateInventoryItemModalOpen} onClose={() => setIsCreateInventoryItemModalOpen(false)} onSave={handleSaveInventoryItem} item={selectedInventoryItem} />}
             {isJobDetailModalOpen && <JobDetailModal isOpen={isJobDetailModalOpen} job={selectedJob} onClose={() => setJobDetailModalOpen(false)} onUpdateJob={handleUpdateJob} onDeleteJob={handleDeleteJob} requestConfirmation={requestConfirmation} onNavigate={handleNavigate} addToast={addToast} />}
             {isCustomerDetailModalOpen && <CustomerDetailModal customer={selectedCustomer} mode={customerModalMode} onClose={() => setCustomerDetailModalOpen(false)} onSave={handleSaveCustomer} onSetMode={setCustomerModalMode} onAnalyzeCustomer={handleAnalyzeCustomer} isAIOff={isAIOff} />}

@@ -1,18 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Job, JobStatus, AISuggestions, InvoiceStatus, ManufacturingStatus } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Job, JobStatus, InvoiceStatus, ManufacturingStatus, Customer } from '../types';
 import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants';
 import { suggestJobParameters } from '../services/geminiService';
 import { Sparkles, Loader, X } from './Icons';
 import { formatJPY } from '../utils';
+import CustomerSearchSelect from './forms/CustomerSearchSelect';
 
 interface CreateJobModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddJob: (job: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>) => Promise<void>;
+  customers: Customer[];
+  onCreateCustomer: (customerData: Partial<Customer>) => Promise<Customer>;
 }
 
 const initialFormState = {
   clientName: '',
+  customerId: null as string | null,
+  customerCode: null as string | null,
   title: '',
   quantity: 1000,
   paperType: PAPER_TYPES[0],
@@ -23,12 +28,15 @@ const initialFormState = {
   variableCost: 0,
 };
 
-const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJob }) => {
+const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJob, customers, onCreateCustomer }) => {
   const [formData, setFormData] = useState(initialFormState);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const mounted = useRef(false);
 
   useEffect(() => {
@@ -40,13 +48,37 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
 
   useEffect(() => {
     if (!isOpen) {
-      setFormData(initialFormState);
+      setFormData({ ...initialFormState });
+      setSelectedCustomerId('');
+      setNewCustomerName('');
       setAiPrompt('');
       setError('');
       setIsAiLoading(false);
       setIsSubmitting(false);
     }
   }, [isOpen]);
+
+  const selectedCustomer = useMemo(
+    () => customers.find(customer => customer.id === selectedCustomerId) || null,
+    [customers, selectedCustomerId]
+  );
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      setFormData(prev => ({
+        ...prev,
+        clientName: selectedCustomer.customerName,
+        customerId: selectedCustomer.id,
+        customerCode: selectedCustomer.customerCode || '',
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        customerId: '',
+        customerCode: '',
+      }));
+    }
+  }, [selectedCustomer]);
 
   if (!isOpen) return null;
 
@@ -93,8 +125,12 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.customerId) {
+      setError("顧客を選択してください。");
+      return;
+    }
     if (!formData.clientName || !formData.title || !formData.dueDate || formData.price <= 0) {
-      setError("クライアント名、案件タイトル、納期、売上高は必須項目です。");
+      setError("顧客、案件タイトル、納期、売上高は必須項目です。");
       return;
     }
     setError('');
@@ -113,12 +149,33 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
     } catch (err) {
         console.error(err);
         if (mounted.current) {
-            setError('案件の追加に失敗しました。データベースの接続を確認し、もう一度お試しください。');
+            const message = err instanceof Error ? err.message : '案件の追加に失敗しました。';
+            setError(`案件の追加に失敗しました: ${message}`);
         }
     } finally {
         if (mounted.current) {
             setIsSubmitting(false);
         }
+    }
+  };
+
+  const handleCreateCustomerInline = async () => {
+    if (!newCustomerName.trim()) {
+        setError('新規顧客名を入力してください。');
+        return;
+    }
+    setIsCreatingCustomer(true);
+    setError('');
+    try {
+        const created = await onCreateCustomer({
+            customerName: newCustomerName.trim(),
+        });
+        setNewCustomerName('');
+        setSelectedCustomerId(created.id);
+    } catch (err: any) {
+        setError(err?.message || '顧客の登録に失敗しました。');
+    } finally {
+        setIsCreatingCustomer(false);
     }
   };
   
@@ -164,8 +221,34 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
             <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className={formRowClass}>
-                        <label htmlFor="clientName" className={labelClass}>クライアント名</label>
-                        <input type="text" id="clientName" name="clientName" value={formData.clientName} onChange={handleChange} className={inputClass} required disabled={isSubmitting} autoComplete="organization" />
+                        <label htmlFor="clientName" className={labelClass}>顧客</label>
+                        <CustomerSearchSelect
+                            customers={customers}
+                            value={selectedCustomerId}
+                            onChange={setSelectedCustomerId}
+                            disabled={isSubmitting}
+                            required
+                            name="customerId"
+                            id="customerId"
+                        />
+                        <div className="flex gap-2 mt-2">
+                            <input
+                                type="text"
+                                value={newCustomerName}
+                                onChange={(e) => setNewCustomerName(e.target.value)}
+                                placeholder="新規顧客名を入力"
+                                className={inputClass}
+                                disabled={isSubmitting || isCreatingCustomer}
+                            />
+                            <button
+                                type="button"
+                                onClick={handleCreateCustomerInline}
+                                className="px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold disabled:opacity-50"
+                                disabled={isSubmitting || isCreatingCustomer}
+                            >
+                                {isCreatingCustomer ? '登録中...' : '顧客を登録'}
+                            </button>
+                        </div>
                     </div>
                      <div className={formRowClass}>
                         <label htmlFor="title" className={labelClass}>案件タイトル</label>

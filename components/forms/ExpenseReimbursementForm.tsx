@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { submitApplication } from '../../services/dataService';
+import { submitApplication, saveApplicationDraft } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
 import DepartmentSelect from './DepartmentSelect';
+import SupplierSearchSelect from './SupplierSearchSelect';
 import { Loader, Upload, PlusCircle, Trash2, AlertTriangle, CheckCircle, FileText, RefreshCw } from '../Icons';
 import {
     User,
@@ -78,6 +79,7 @@ interface ExpenseReimbursementFormProps {
     departments: Department[];
     allocationDivisions: AllocationDivision[];
     paymentRecipients: PaymentRecipient[];
+    onCreatePaymentRecipient?: (recipient: Partial<PaymentRecipient>) => Promise<PaymentRecipient>;
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
@@ -315,6 +317,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     departments,
     allocationDivisions,
     paymentRecipients,
+    onCreatePaymentRecipient,
     isAIOff,
     isLoading,
     error: formLoadError,
@@ -326,13 +329,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [notes, setNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
     const [customerSearchTerms, setCustomerSearchTerms] = useState<Record<string, string>>({});
     const [highlightedLineId, setHighlightedLineId] = useState<string>('');
     const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
-    const isDisabled = isSubmitting || isLoading || !!formLoadError;
+    const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
 
     useEffect(() => {
         if (!selectedInvoiceId && invoiceDrafts.length > 0) {
@@ -428,6 +432,15 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
 
     const handleInvoiceFieldChange = (field: keyof ExpenseInvoiceDraft, value: string | number) => {
         updateSelectedInvoice(invoice => ({ ...invoice, [field]: value }));
+    };
+
+    const handleSupplierSelectChange = (recipientId: string, supplier?: PaymentRecipient | null) => {
+        handleInvoiceFieldChange('paymentRecipientId', recipientId);
+        if (supplier) {
+            handleInvoiceFieldChange('supplierName', supplier.companyName || supplier.recipientName || '');
+        } else if (!recipientId) {
+            handleInvoiceFieldChange('supplierName', '');
+        }
     };
 
     const handleBankAccountChange = (field: keyof BankAccountInfo, value: string) => {
@@ -577,6 +590,18 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         await ingestFiles(event.dataTransfer.files);
     };
 
+    const buildApplicationPayload = () => ({
+        applicationCodeId,
+        formData: {
+            departmentId,
+            invoice: selectedInvoice,
+            mqAlerts: diagnosticsForSelected?.alerts ?? [],
+            computedTotals: diagnosticsForSelected?.totals,
+            notes,
+        },
+        approvalRouteId,
+    });
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setError('');
@@ -588,32 +613,39 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         if (!selectedInvoice.supplierName.trim()) return setError('サプライヤー名を入力してください。');
         if (!selectedInvoice.paymentRecipientId) return setError('支払先を選択してください。');
         if (selectedInvoice.lines.length === 0) return setError('少なくとも1件の明細を入力してください。');
-        if (selectedInvoice.lines.some(line => !line.description || !line.customerId || !line.projectId || !line.amountExclTax)) {
-            return setError('すべての明細で「品名」「顧客」「プロジェクト」「金額（税抜）」を入力してください。');
+        const invalidLine = selectedInvoice.lines.find(line => !line.description || !line.customerId || !line.projectId || !line.amountExclTax);
+        if (invalidLine) {
+            const index = selectedInvoice.lines.findIndex(line => line.id === invalidLine.id);
+            setHighlightedLineId(invalidLine.id);
+            return setError(`第${index + 1}行目の「品名」「顧客」「プロジェクト」「金額（税抜）」を確認してください。`);
         }
 
         setIsSubmitting(true);
         try {
-            await submitApplication(
-                {
-                    applicationCodeId,
-                    formData: {
-                        departmentId,
-                        invoice: selectedInvoice,
-                        mqAlerts: diagnosticsForSelected?.alerts ?? [],
-                        computedTotals: diagnosticsForSelected?.totals,
-                        notes,
-                    },
-                    approvalRouteId,
-                },
-                currentUser.id
-            );
+            await submitApplication(buildApplicationPayload(), currentUser.id);
             addToast?.('経費精算を送信しました。', 'success');
             onSuccess();
         } catch (err: any) {
             setError(err.message || '申請の提出に失敗しました。');
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleSaveDraft = async () => {
+        setError('');
+        if (!currentUser) return setError('ユーザー情報が見つかりません。');
+        if (!selectedInvoice) return setError('請求書を追加してください。');
+
+        setIsSavingDraft(true);
+        try {
+            await saveApplicationDraft(buildApplicationPayload(), currentUser.id);
+            addToast?.('下書きを保存しました。', 'success');
+            onSuccess();
+        } catch (err: any) {
+            setError(err.message || '下書きの保存に失敗しました。');
+        } finally {
+            setIsSavingDraft(false);
         }
     };
 
@@ -806,47 +838,36 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     <div className="lg:col-span-7 space-y-6">
                         <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
-                                        サプライヤー名 *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={selectedInvoice.supplierName}
-                                        onChange={e => handleInvoiceFieldChange('supplierName', e.target.value)}
-                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
-                                        placeholder="例: 町田印刷株式会社"
-                                        disabled={isDisabled}
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="paymentRecipientId" className="block text-sm font-medium text-slate-600 dark:text-slate-300">
-                                        支払先 *
-                                    </label>
-                                    <select
-                                        id="paymentRecipientId"
+                                <div className="md:col-span-2 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                                            サプライヤー / 支払先 *
+                                        </label>
+                                        {paymentRecipientWarning && (
+                                            <span className="text-xs text-amber-600 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-full">
+                                                支払先を選択してください
+                                            </span>
+                                        )}
+                                    </div>
+                                    <SupplierSearchSelect
+                                        suppliers={paymentRecipients}
                                         value={selectedInvoice.paymentRecipientId}
-                                        onChange={e => handleInvoiceFieldChange('paymentRecipientId', e.target.value)}
-                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
-                                        disabled={isDisabled || paymentRecipients.length === 0}
-                                    >
-                                        <option value="">
-                                            {paymentRecipients.length ? '支払先を選択してください' : '支払先マスタが見つかりません'}
-                                        </option>
-                                        {paymentRecipients.map(rec => (
-                                            <option key={rec.id} value={rec.id}>
-                                                {rec.companyName} {rec.recipientName ? `（${rec.recipientName}）` : ''}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={handleSupplierSelectChange}
+                                        onCreateSupplier={
+                                            onCreatePaymentRecipient
+                                                ? async (name) => {
+                                                    const created = await onCreatePaymentRecipient({ companyName: name });
+                                                    handleSupplierSelectChange(created.id, created);
+                                                    return created;
+                                                }
+                                                : undefined
+                                        }
+                                        disabled={isDisabled}
+                                        required
+                                    />
                                     {!paymentRecipients.length && (
                                         <p className="mt-1 text-xs text-amber-600">
                                             支払先マスタが未設定です。マスタ管理から登録してください。
-                                        </p>
-                                    )}
-                                    {paymentRecipientWarning && (
-                                        <p className="mt-1 text-xs text-amber-600">
-                                            支払先マスタに登録されていません。マスタ登録を確認してください。
                                         </p>
                                     )}
                                 </div>
@@ -1061,6 +1082,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                                         {selectedInvoice.lines.map((line, index) => {
+                                            const lineAlerts = diagnosticsForSelected?.alerts.filter(alert => alert.lineId === line.id) || [];
+                                            const hasErrorAlert = lineAlerts.some(alert => alert.level === 'ERROR');
                                             const customerFilter = (customerSearchTerms[line.id] || '').toLowerCase();
                                             const filteredCustomers = effectiveCustomers.filter(customer =>
                                                 customer.customerName.toLowerCase().includes(customerFilter)
@@ -1092,7 +1115,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                     key={line.id}
                                                     id={`expense-line-${line.id}`}
                                                     className={`align-top ${
-                                                        highlightedLineId === line.id ? 'bg-blue-50 dark:bg-blue-500/10' : ''
+                                                        highlightedLineId === line.id
+                                                            ? 'bg-blue-50 dark:bg-blue-500/10'
+                                                            : hasErrorAlert
+                                                                ? 'bg-rose-50 dark:bg-rose-900/20'
+                                                                : ''
                                                     }`}
                                                 >
                                                     <td className="py-3 text-xs text-slate-500">{index + 1}</td>
@@ -1297,6 +1324,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                                 </option>
                                                             ))}
                                                         </select>
+                                                        {lineAlerts
+                                                            .filter(alert => alert.level === 'ERROR' && alert.message.includes('顧客'))
+                                                            .map(alert => (
+                                                                <p key={alert.id} className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                                                    {alert.message}
+                                                                </p>
+                                                            ))}
                                                     </td>
                                                     <td className="py-3 w-56">
                                                         <label className="sr-only" htmlFor={`project-${line.id}`}>
@@ -1408,9 +1442,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     <div className="flex gap-3">
                         <button
                             type="button"
-                            className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-50"
-                            disabled={isDisabled}
+                            onClick={handleSaveDraft}
+                            className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-2 disabled:opacity-50"
+                            disabled={isDisabled || isSavingDraft}
                         >
+                            {isSavingDraft && <Loader className="w-4 h-4 animate-spin" />}
                             下書き保存
                         </button>
                         <button
