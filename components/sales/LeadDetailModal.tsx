@@ -129,7 +129,16 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         if (lead) {
             setFormData({ ...lead });
             setIsEditing(false);
-            setProposalPackage(null); // Reset package on new lead
+            if (lead.aiDraftProposal) {
+                try {
+                    setProposalPackage(JSON.parse(lead.aiDraftProposal));
+                } catch (error) {
+                    console.warn('Failed to parse saved proposal package', error);
+                    setProposalPackage(null);
+                }
+            } else {
+                setProposalPackage(null);
+            }
         }
     }, [lead]);
 
@@ -220,7 +229,11 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 notes: 'AIによる自動生成見積です。内容は担当者にご確認ください。',
                 version: 1,
             });
-            addToast('見積が下書きとして保存されました。', 'success');
+
+            const serializedPackage = JSON.stringify(proposalPackage);
+            await onSave(lead.id, { aiDraftProposal: serializedPackage });
+            setFormData(prev => ({ ...prev, aiDraftProposal: serializedPackage }));
+            addToast('提案書と見積もりを保存しました。', 'success');
         } catch (e) {
             addToast(e instanceof Error ? `見積保存エラー: ${e.message}`: '見積の保存に失敗しました。', 'error');
         } finally {

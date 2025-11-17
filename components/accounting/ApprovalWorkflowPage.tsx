@@ -29,6 +29,7 @@ interface ApprovalWorkflowPageProps {
     // FIX: Add missing 'allocationDivisions' property.
     allocationDivisions?: AllocationDivision[];
     paymentRecipients?: PaymentRecipient[];
+    onCreatePaymentRecipient?: (recipient: Partial<PaymentRecipient>) => Promise<PaymentRecipient>;
 }
 
 const TABS_CONFIG = {
@@ -37,7 +38,7 @@ const TABS_CONFIG = {
     completed: { title: "完了済", description: "承認または却下されたすべての申請の履歴です。" },
 };
 
-const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser, view, formCode, searchTerm, addToast, customers, accountItems, jobs, purchaseOrders, departments, isAIOff, allocationDivisions, paymentRecipients }) => {
+const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser, view, formCode, searchTerm, addToast, customers, accountItems, jobs, purchaseOrders, departments, isAIOff, allocationDivisions, paymentRecipients, onCreatePaymentRecipient }) => {
     // State for list view
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -188,7 +189,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
         };
 
         switch(formCode) {
-            case 'EXP': return <ExpenseReimbursementForm {...formProps} customers={customers || []} accountItems={accountItems || []} jobs={jobs || []} purchaseOrders={purchaseOrders || []} departments={departments || []} allocationDivisions={allocationDivisions || []} paymentRecipients={paymentRecipients || []} />;
+            case 'EXP': return <ExpenseReimbursementForm {...formProps} customers={customers || []} accountItems={accountItems || []} jobs={jobs || []} purchaseOrders={purchaseOrders || []} departments={departments || []} allocationDivisions={allocationDivisions || []} paymentRecipients={paymentRecipients || []} onCreatePaymentRecipient={onCreatePaymentRecipient} />;
             case 'TRP': return <TransportExpenseForm {...formProps} />;
             case 'LEV': return <LeaveApplicationForm {...formProps} />;
             case 'APL': return <ApprovalForm {...formProps} />;

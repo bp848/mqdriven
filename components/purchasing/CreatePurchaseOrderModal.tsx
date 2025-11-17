@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { PurchaseOrder, PurchaseOrderStatus } from '../../types';
+import { PaymentRecipient, PurchaseOrder, PurchaseOrderStatus } from '../../types';
 import { Loader, X, Save } from '../Icons';
+import SupplierSearchSelect from '../forms/SupplierSearchSelect';
 
 interface CreatePurchaseOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddPurchaseOrder: (order: Omit<PurchaseOrder, 'id'>) => Promise<void>;
+  paymentRecipients: PaymentRecipient[];
+  onCreatePaymentRecipient: (input: Partial<PaymentRecipient>) => Promise<PaymentRecipient>;
 }
 
-const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isOpen, onClose, onAddPurchaseOrder }) => {
+const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isOpen, onClose, onAddPurchaseOrder, paymentRecipients, onCreatePaymentRecipient }) => {
     const [formData, setFormData] = useState({
         supplierName: '',
         itemName: '',
@@ -18,6 +21,7 @@ const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isO
     });
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
+    const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type } = e.target;
@@ -26,8 +30,8 @@ const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isO
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.supplierName || !formData.itemName || formData.quantity <= 0 || formData.unitPrice <= 0) {
-            setError('すべての項目を正しく入力してください。');
+        if (!selectedSupplierId || !formData.supplierName || !formData.itemName || formData.quantity <= 0 || formData.unitPrice <= 0) {
+            setError('発注先とすべての項目を正しく入力してください。');
             return;
         }
         setIsSaving(true);
@@ -47,6 +51,14 @@ const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isO
     const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1";
     const total = formData.quantity * formData.unitPrice;
 
+    const handleSupplierChange = (id: string, supplier?: PaymentRecipient | null) => {
+        setSelectedSupplierId(id);
+        setFormData(prev => ({
+            ...prev,
+            supplierName: supplier?.companyName || supplier?.recipientName || prev.supplierName,
+        }));
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg">
@@ -59,7 +71,17 @@ const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isO
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="supplierName" className={labelClass}>発注先 *</label>
-                            <input id="supplierName" name="supplierName" type="text" value={formData.supplierName} onChange={handleChange} required className={inputClass} />
+                            <SupplierSearchSelect
+                                suppliers={paymentRecipients}
+                                value={selectedSupplierId}
+                                onChange={handleSupplierChange}
+                                onCreateSupplier={async (name) => {
+                                    const created = await onCreatePaymentRecipient({ companyName: name });
+                                    handleSupplierChange(created.id, created);
+                                    return created;
+                                }}
+                                disabled={isSaving}
+                            />
                         </div>
                         <div>
                             <label htmlFor="orderDate" className={labelClass}>発注日 *</label>

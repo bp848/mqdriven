@@ -60,7 +60,9 @@ const dbJobToJob = (project: any): Job => ({
     jobNumber: typeof project.project_code === 'number'
         ? project.project_code
         : parseInt(project.project_code, 10) || 0,
-    clientName: project.customer_code || project.client_name || '',
+    clientName: project.customer_name || project.client_name || project.customer_code || '',
+    customerId: project.customer_id ?? null,
+    customerCode: project.customer_code ?? null,
     title: project.project_name || project.title || '',
     status: mapProjectStatus(project.project_status || project.status),
     dueDate: project.delivery_date || project.due_date || '',
@@ -71,6 +73,10 @@ const dbJobToJob = (project: any): Job => ({
     createdAt: project.create_date || project.created_at || new Date().toISOString(),
     price: Number(project.amount ?? project.price ?? 0),
     variableCost: Number(project.variable_cost ?? project.subamount ?? 0),
+    totalQuantity: Number(project.quantity ?? 0),
+    totalAmount: Number(project.amount ?? project.price ?? 0),
+    totalCost: Number(project.variable_cost ?? project.subamount ?? 0),
+    grossMargin: Number(project.amount ?? project.price ?? 0) - Number(project.variable_cost ?? project.subamount ?? 0),
     invoiceStatus: project.invoice_status || InvoiceStatus.Uninvoiced,
     invoicedAt: project.invoiced_at ?? null,
     paidAt: project.paid_at ?? null,
@@ -82,7 +88,12 @@ const dbJobToJob = (project: any): Job => ({
 const jobToDbJob = (job: Partial<Job>): any => {
     const row: Record<string, any> = {};
     if (job.jobNumber !== undefined) row.project_code = job.jobNumber;
-    if (job.clientName !== undefined) row.customer_code = job.clientName;
+    if (job.customerId !== undefined) row.customer_id = job.customerId;
+    if (job.customerCode !== undefined) {
+        row.customer_code = job.customerCode;
+    } else if (job.clientName !== undefined) {
+        row.customer_code = job.clientName;
+    }
     if (job.title !== undefined) row.project_name = job.title;
     if (job.status !== undefined) row.project_status = job.status;
     if (job.createdAt) row.create_date = job.createdAt;
@@ -289,12 +300,67 @@ export const isSupabaseUnavailableError = (error: any): boolean => {
 
 export const getJobs = async (): Promise<Job[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('project_code', { ascending: false });
-    if (error) throw new Error(`Failed to fetch jobs: ${error.message}`);
-    return (data || []).map(dbJobToJob);
+    const [
+        { data: projectRows, error: projectError },
+        { data: customerRows, error: customerError },
+        { data: orderRows, error: orderError },
+    ] = await Promise.all([
+        supabase.from('projects').select('*').order('project_code', { ascending: false }),
+        supabase.from('customers').select('id, customer_code, customer_name'),
+        supabase.from('orders').select('project_code, quantity, amount, subamount, total_amount, total_cost'),
+    ]);
+
+    if (projectError) throw new Error(`Failed to fetch jobs: ${projectError.message}`);
+    if (customerError) console.warn('Failed to fetch customers for job mapping:', customerError.message);
+    if (orderError) console.warn('Failed to fetch orders for job mapping:', orderError.message);
+
+    const customerById = new Map<string, { customer_name: string; customer_code: string | null }>();
+    const customerByCode = new Map<string, { customer_name: string; customer_code: string | null }>();
+    (customerRows || []).forEach(customer => {
+        if (customer.id) {
+            customerById.set(customer.id, { customer_name: customer.customer_name, customer_code: customer.customer_code });
+        }
+        if (customer.customer_code) {
+            customerByCode.set(customer.customer_code, { customer_name: customer.customer_name, customer_code: customer.customer_code });
+        }
+    });
+
+    const orderSummaries = new Map<string, { amount: number; cost: number; quantity: number }>();
+    (orderRows || []).forEach(order => {
+        const key = order?.project_code ? String(order.project_code) : undefined;
+        if (!key) return;
+        const summary = orderSummaries.get(key) || { amount: 0, cost: 0, quantity: 0 };
+        summary.amount += Number(order.total_amount ?? order.amount ?? 0) || 0;
+        summary.cost += Number(order.total_cost ?? order.subamount ?? 0) || 0;
+        summary.quantity += Number(order.quantity ?? 0) || 0;
+        orderSummaries.set(key, summary);
+    });
+
+    return (projectRows || []).map(project => {
+        const baseJob = dbJobToJob(project);
+        const projectCodeKey = project.project_code ? String(project.project_code) : baseJob.jobNumber ? String(baseJob.jobNumber) : '';
+        const summary = projectCodeKey ? orderSummaries.get(projectCodeKey) : undefined;
+        const totalAmount = summary?.amount ?? Number(project.amount ?? baseJob.price ?? 0);
+        const totalCost = summary?.cost ?? Number(project.subamount ?? baseJob.variableCost ?? 0);
+        const totalQuantity = summary?.quantity ?? Number(project.quantity ?? baseJob.quantity ?? 0);
+        const customerInfo =
+            (project.customer_id && customerById.get(project.customer_id)) ||
+            (project.customer_code && customerByCode.get(project.customer_code)) ||
+            null;
+
+        return {
+            ...baseJob,
+            clientName: customerInfo?.customer_name || baseJob.clientName,
+            customerCode: customerInfo?.customer_code || baseJob.customerCode,
+            totalAmount,
+            totalCost,
+            totalQuantity,
+            grossMargin: totalAmount - totalCost,
+            price: totalAmount,
+            variableCost: totalCost,
+            quantity: totalQuantity,
+        };
+    });
 };
 
 export const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>): Promise<Job> => {
@@ -520,6 +586,23 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
 
     return data;
 };
+
+export const saveApplicationDraft = async (appData: any, applicantId: string): Promise<Application> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('applications').insert({
+        application_code_id: appData.applicationCodeId,
+        form_data: appData.formData,
+        approval_route_id: appData.approvalRouteId ?? null,
+        applicant_id: applicantId,
+        status: 'draft',
+        submitted_at: null,
+        current_level: null,
+        approver_id: null,
+    }).select().single();
+
+    if (error) throw new Error(`Failed to save draft: ${error.message}`);
+    return data;
+};
 export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
     return Promise.resolve();
 };
@@ -571,6 +654,30 @@ export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Pro
     const dbItem = { recipient_code: item.recipientCode, company_name: item.companyName, recipient_name: item.recipientName };
     const { error } = await supabase.from('payment_recipients').upsert({ id: item.id, ...dbItem });
     if (error) throw new Error(`支払先の保存に失敗しました: ${error.message}`);
+};
+
+export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
+    if (!item.companyName && !item.recipientName) {
+        throw new Error('支払先の名称を入力してください。');
+    }
+    const supabase = getSupabase();
+    const payload = {
+        recipient_code: item.recipientCode || `PR-${Date.now()}`,
+        company_name: item.companyName ?? item.recipientName ?? '',
+        recipient_name: item.recipientName ?? item.companyName ?? '',
+    };
+    const { data, error } = await supabase
+        .from('payment_recipients')
+        .insert(payload)
+        .select('id, recipient_code, company_name, recipient_name')
+        .single();
+    if (error) throw new Error(`支払先の登録に失敗しました: ${error.message}`);
+    return {
+        id: data.id,
+        recipientCode: data.recipient_code,
+        companyName: data.company_name,
+        recipientName: data.recipient_name,
+    };
 };
 
 export const deletePaymentRecipient = async (id: string): Promise<void> => {

@@ -72,10 +72,11 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
             <tr>
               <SortableHeader sortKey="jobNumber" label="案件番号" sortConfig={sortConfig} requestSort={requestSort}/>
               <SortableHeader sortKey="clientName" label="顧客名 / 案件名" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader sortKey="paperType" label="紙種" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader sortKey="quantity" label="部数" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="dueDate" label="納期" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader sortKey="price" label="金額" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader sortKey="totalQuantity" label="部数" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader sortKey="totalAmount" label="売上高" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader sortKey="totalCost" label="原価" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader sortKey="grossMargin" label="限界利益" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
             </tr>
           </thead>
@@ -89,10 +90,21 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                     <div className="font-medium text-base text-slate-800 dark:text-slate-200">{job.clientName}</div>
                     <div className="text-slate-500 dark:text-slate-400">{job.title}</div>
                   </td>
-                  <td className="px-6 py-5 whitespace-nowrap">{job.paperType}</td>
-                  <td className="px-6 py-5 whitespace-nowrap">{job.quantity.toLocaleString()}</td>
                   <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
-                  <td className="px-6 py-5 whitespace-nowrap font-semibold">{formatJPY(job.price)}</td>
+                  <td className="px-6 py-5 whitespace-nowrap">{(job.totalQuantity ?? job.quantity ?? 0).toLocaleString()}</td>
+                  <td className="px-6 py-5 whitespace-nowrap font-semibold">{formatJPY(job.totalAmount ?? job.price ?? 0)}</td>
+                  <td className="px-6 py-5 whitespace-nowrap">{formatJPY(job.totalCost ?? job.variableCost ?? 0)}</td>
+                  <td className="px-6 py-5 whitespace-nowrap">
+                    <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            (job.grossMargin ?? 0) >= 0
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                        }`}
+                    >
+                        {formatJPY(job.grossMargin ?? (job.totalAmount ?? 0) - (job.totalCost ?? 0))}
+                    </span>
+                  </td>
                   <td className="px-6 py-5">
                     <JobStatusBadge status={job.status} />
                   </td>

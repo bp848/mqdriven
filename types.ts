@@ -70,6 +70,12 @@ export interface Job {
   id: string;
   jobNumber: number;
   clientName: string;
+  customerId?: string | null;
+  customerCode?: string | null;
+  totalQuantity?: number;
+  totalAmount?: number;
+  totalCost?: number;
+  grossMargin?: number;
   title: string;
   status: JobStatus;
   dueDate: string;
@@ -475,6 +481,11 @@ export interface PaymentRecipient {
   recipientCode: string;
   companyName: string | null;
   recipientName: string | null;
+  phoneNumber?: string | null;
+  bankName?: string | null;
+  branchName?: string | null;
+  accountNumber?: string | null;
+  bankBranch?: string | null;
 }
 
 export interface Department {
