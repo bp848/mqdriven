@@ -188,19 +188,34 @@ const insertInitialOrder = async (
 };
 
 const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
-    const quantity = Number(order.quantity ?? 0);
-    const totalAmount = Number(order.amount ?? order.subamount ?? order.total_amount ?? 0);
+    const quantity = Number(order.quantity ?? order.copies ?? 0);
+    const rawAmount = order.amount ?? order.subamount ?? order.total_amount ?? 0;
+    const totalAmount = Number(rawAmount);
     const unitPrice = quantity > 0 ? totalAmount / quantity : totalAmount;
+    const projectCode = order.project_code || order.order_code || '';
+    const normalizeNumber = (value: any): number | null => {
+        if (value === null || value === undefined || value === '') return null;
+        const parsed = Number(value);
+        return Number.isNaN(parsed) ? null : parsed;
+    };
 
     return {
         id: order.id,
         supplierName: order.client_custmer || order.customer_name || '',
         paymentRecipientId: order.payment_recipient_id ?? null,
-        itemName: order.project_code || order.order_code || '',
+        itemName: projectCode,
+        projectId: order.project_id ?? null,
+        projectCode,
+        orderCode: order.order_code ?? null,
         orderDate: order.order_date || order.create_date || '',
         quantity,
         unitPrice: Number(unitPrice ?? 0),
+        amount: Number.isFinite(totalAmount) ? totalAmount : null,
+        subamount: normalizeNumber(order.subamount ?? order.total_amount),
+        copies: normalizeNumber(order.copies),
+        totalCost: normalizeNumber(order.total_cost),
         status: mapOrderStatus(order.approval_status1 || order.status),
+        raw: order,
     };
 };
 

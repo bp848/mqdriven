@@ -19,7 +19,9 @@ import {
     Toast,
     InvoiceStatus,
     PaymentRecipient,
+    BankAccountInfo,
 } from '../../types';
+import { findMatchingPaymentRecipientId, findMatchingCustomerId } from '../../utils/matching';
 
 type MQAlertLevel = 'INFO' | 'WARNING' | 'ERROR';
 
@@ -28,13 +30,6 @@ interface MQAlert {
     level: MQAlertLevel;
     message: string;
     lineId?: string;
-}
-
-interface BankAccountInfo {
-    bankName: string;
-    branchName: string;
-    accountType: string;
-    accountNumber: string;
 }
 
 interface ExpenseLine {
@@ -97,29 +92,6 @@ const numberFromInput = (value: string) => {
     if (value === '') return 0;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const normalizeText = (value?: string | null) => (value ?? '').replace(/\s+/g, '').toLowerCase();
-
-const findMatchingPaymentRecipientId = (supplierName: string, recipients: PaymentRecipient[]) => {
-    const normalizedSupplier = normalizeText(supplierName);
-    if (!normalizedSupplier) return '';
-
-    const exact = recipients.find(rec =>
-        normalizedSupplier === normalizeText(rec.companyName) ||
-        normalizedSupplier === normalizeText(rec.recipientName)
-    );
-    if (exact) return exact.id;
-
-    const partial = recipients.find(rec => {
-        const company = normalizeText(rec.companyName);
-        const recipient = normalizeText(rec.recipientName);
-        return (
-            (company && (company.includes(normalizedSupplier) || normalizedSupplier.includes(company))) ||
-            (recipient && (recipient.includes(normalizedSupplier) || normalizedSupplier.includes(recipient)))
-        );
-    });
-    return partial?.id || '';
 };
 
 const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -616,27 +588,85 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                 const base64 = await readFileAsBase64(file);
                 const ocrData: InvoiceData = await extractInvoiceDetails(base64, file.type);
                 const invoice = createEmptyInvoiceDraft();
-                invoice.supplierName = ocrData.vendorName || invoice.supplierName;
-                const matchedRecipientId = findMatchingPaymentRecipientId(invoice.supplierName, paymentRecipients);
-                if (matchedRecipientId) {
-                    invoice.paymentRecipientId = matchedRecipientId;
-                }
-                invoice.invoiceDate = ocrData.invoiceDate || invoice.invoiceDate;
-                invoice.totalGross = Number(ocrData.totalAmount || 0);
-                if (invoice.totalGross > 0) {
+                const expenseDraft = ocrData.expenseDraft;
+                invoice.supplierName = expenseDraft?.supplierName || ocrData.vendorName || invoice.supplierName;
+                invoice.registrationNumber = expenseDraft?.registrationNumber || ocrData.registrationNumber || invoice.registrationNumber;
+                invoice.invoiceDate = expenseDraft?.invoiceDate || ocrData.invoiceDate || invoice.invoiceDate;
+                invoice.dueDate = expenseDraft?.dueDate || ocrData.dueDate || invoice.dueDate;
+                invoice.totalGross = Number(expenseDraft?.totalGross ?? ocrData.totalAmount ?? invoice.totalGross);
+                invoice.totalNet = Number(expenseDraft?.totalNet ?? ocrData.subtotalAmount ?? invoice.totalNet);
+                invoice.taxAmount = Number(expenseDraft?.taxAmount ?? ocrData.taxAmount ?? invoice.taxAmount);
+
+                if (!invoice.totalNet && invoice.totalGross) {
                     const estimatedNet = Number((invoice.totalGross / 1.1).toFixed(2));
                     invoice.totalNet = estimatedNet;
-                    invoice.taxAmount = Number((invoice.totalGross - estimatedNet).toFixed(2));
+                    if (!invoice.taxAmount) {
+                        invoice.taxAmount = Number((invoice.totalGross - estimatedNet).toFixed(2));
+                    }
+                } else if (!invoice.totalGross && invoice.totalNet) {
+                    invoice.totalGross = Number((invoice.totalNet * 1.1).toFixed(2));
+                    if (!invoice.taxAmount) {
+                        invoice.taxAmount = Number((invoice.totalGross - invoice.totalNet).toFixed(2));
+                    }
                 }
-                const detailAmountSource = invoice.totalNet || invoice.totalGross;
-                const detailAmount = Number(detailAmountSource.toFixed(2));
-                invoice.lines = [
-                    {
-                        ...createEmptyLine(),
-                        description: ocrData.description ? `【OCR】${ocrData.description}` : '',
-                        amountExclTax: detailAmount,
-                    },
-                ];
+
+                const bankSource = expenseDraft?.bankAccount || ocrData.bankAccount;
+                if (bankSource) {
+                    invoice.bankAccount = {
+                        bankName: bankSource.bankName ?? invoice.bankAccount.bankName,
+                        branchName: bankSource.branchName ?? invoice.bankAccount.branchName,
+                        accountType: bankSource.accountType ?? invoice.bankAccount.accountType,
+                        accountNumber: bankSource.accountNumber ?? invoice.bankAccount.accountNumber,
+                    };
+                }
+
+                const availablePaymentRecipientId = expenseDraft?.paymentRecipientId ||
+                    ocrData.matchedPaymentRecipientId ||
+                    findMatchingPaymentRecipientId(invoice.supplierName, paymentRecipients);
+                if (availablePaymentRecipientId) {
+                    invoice.paymentRecipientId = availablePaymentRecipientId;
+                }
+
+                const resolveCustomerId = (name?: string) => findMatchingCustomerId(name || ocrData.relatedCustomer, customers);
+
+                const ocrLines = expenseDraft?.lines || ocrData.lineItems;
+                if (ocrLines && ocrLines.length) {
+                    invoice.lines = ocrLines.map(line => {
+                        const quantity = line.quantity !== undefined ? Number(line.quantity) : undefined;
+                        const unitPrice = line.unitPrice !== undefined ? Number(line.unitPrice) : undefined;
+                        const normalized = normalizeExpenseLine({
+                            description: line.description ? `【OCR】${line.description}` : '',
+                            lineDate: line.lineDate || invoice.invoiceDate,
+                            quantity,
+                            unit: line.unit,
+                            unitPrice,
+                            amountExclTax:
+                                line.amountExclTax !== undefined
+                                    ? Number(line.amountExclTax)
+                                    : unitPrice !== undefined && quantity !== undefined
+                                        ? unitPrice * quantity
+                                        : undefined,
+                            taxRate: line.taxRate,
+                        });
+                        const matchedCustomerId = resolveCustomerId(line.customerName);
+                        if (matchedCustomerId) {
+                            normalized.customerId = matchedCustomerId;
+                        }
+                        return normalized;
+                    });
+                } else {
+                    const detailAmountSource = invoice.totalNet || invoice.totalGross;
+                    const detailAmount = Number(detailAmountSource.toFixed(2));
+                    const fallbackCustomerId = resolveCustomerId();
+                    invoice.lines = [
+                        {
+                            ...createEmptyLine(),
+                            description: ocrData.description ? `【OCR】${ocrData.description}` : '',
+                            amountExclTax: detailAmount,
+                            customerId: fallbackCustomerId,
+                        },
+                    ];
+                }
                 created.push(invoice);
 
                 const previewId = generateId('preview');

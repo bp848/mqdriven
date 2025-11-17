@@ -261,6 +261,48 @@ export const enrichCustomerData = async (
   });
 };
 
+const expenseLineSchema = {
+  type: Type.OBJECT,
+  properties: {
+    description: { type: Type.STRING, description: "明細の品名や内容。" },
+    lineDate: { type: Type.STRING, description: "明細対象日 (YYYY-MM-DD)。" },
+    quantity: { type: Type.NUMBER, description: "数量。" },
+    unit: { type: Type.STRING, description: "単位（式、枚など）。" },
+    unitPrice: { type: Type.NUMBER, description: "単価（税抜）。" },
+    amountExclTax: { type: Type.NUMBER, description: "金額（税抜）。" },
+    taxRate: { type: Type.NUMBER, description: "税率 (例: 10)。" },
+    customerName: { type: Type.STRING, description: "紐づく顧客名。" },
+    projectName: { type: Type.STRING, description: "紐づく案件/プロジェクト名。" },
+  },
+};
+
+const bankAccountSchema = {
+  type: Type.OBJECT,
+  properties: {
+    bankName: { type: Type.STRING, description: "金融機関名。" },
+    branchName: { type: Type.STRING, description: "支店名。" },
+    accountType: { type: Type.STRING, description: "口座種別（普通/当座など）。" },
+    accountNumber: { type: Type.STRING, description: "口座番号。" },
+  },
+};
+
+const expenseDraftSchema = {
+  type: Type.OBJECT,
+  properties: {
+    supplierName: { type: Type.STRING, description: "請求書ヘッダーの発行元。" },
+    registrationNumber: { type: Type.STRING, description: "請求書の登録番号。" },
+    invoiceDate: { type: Type.STRING, description: "請求日。" },
+    dueDate: { type: Type.STRING, description: "支払期日。" },
+    totalGross: { type: Type.NUMBER, description: "税込合計。" },
+    totalNet: { type: Type.NUMBER, description: "税抜合計。" },
+    taxAmount: { type: Type.NUMBER, description: "税額。" },
+    paymentRecipientId: { type: Type.STRING, description: "社内マスタの支払先コードが明記されていれば入力。" },
+    paymentRecipientName: { type: Type.STRING, description: "支払先名称。" },
+    bankAccount: bankAccountSchema,
+    lines: { type: Type.ARRAY, items: expenseLineSchema },
+  },
+};
+
 const extractInvoiceSchema = {
   type: Type.OBJECT,
   properties: {
@@ -269,7 +311,10 @@ const extractInvoiceSchema = {
       type: Type.STRING,
       description: "請求書の発行日 (YYYY-MM-DD形式)。",
     },
+    dueDate: { type: Type.STRING, description: "支払期日。" },
     totalAmount: { type: Type.NUMBER, description: "請求書の合計金額（税込）。" },
+    subtotalAmount: { type: Type.NUMBER, description: "税抜金額。" },
+    taxAmount: { type: Type.NUMBER, description: "消費税額。" },
     description: { type: Type.STRING, description: "請求内容の簡潔な説明。" },
     costType: {
       type: Type.STRING,
@@ -289,6 +334,11 @@ const extractInvoiceSchema = {
       type: Type.STRING,
       description: "この費用に関連する案件名やプロジェクト名（もしあれば）。",
     },
+    registrationNumber: { type: Type.STRING, description: "請求書に記載の登録番号。" },
+    paymentRecipientName: { type: Type.STRING, description: "請求書に記載された支払先名。" },
+    bankAccount: bankAccountSchema,
+    lineItems: { type: Type.ARRAY, items: expenseLineSchema },
+    expenseDraft: expenseDraftSchema,
   },
   required: [
     "vendorName",
@@ -307,7 +357,10 @@ export const extractInvoiceDetails = async (
   checkOnlineAndAIOff();
   return withRetry(async () => {
     const imagePart = { inlineData: { data: imageBase64, mimeType } };
-    const textPart = { text: "この画像から請求書の詳細情報を抽出してください。" };
+    const textPart = {
+      text:
+        "この画像から請求書の詳細情報をJSONで抽出してください。経費精算フォームと同じ構造になるように、支払期日・登録番号・支払先銀行情報・明細行（品名/数量/単価）も含めてください。",
+    };
     const response = await ai.models.generateContent({
       model,
       contents: { parts: [imagePart, textPart] },
