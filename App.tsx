@@ -780,9 +780,9 @@ const App: React.FC = () => {
                 supabaseUserEmail={shouldRequireAuth ? (supabaseUser?.email ?? null) : null}
                 onSignOut={shouldRequireAuth && isAuthenticated ? handleSignOut : undefined}
             />
-            <main className="flex-1 flex flex-col overflow-hidden">
+            <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
-                <div className="flex-1 overflow-y-auto p-8">
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900">
                     <Header {...headerConfig} />
                     <div className="mt-8">
                         {renderContent()}

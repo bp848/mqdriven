@@ -200,7 +200,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
   };
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4">
+    <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen">
       <div className="flex items-center gap-2 px-3 py-4 border-b border-slate-700">
         <Package className="w-8 h-8 text-blue-400" />
         <h1 className="text-xl font-bold tracking-tight">MQ会計ドリブン</h1>
