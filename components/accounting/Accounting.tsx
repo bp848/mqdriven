@@ -43,8 +43,7 @@ const AccountingPage: React.FC<any> = (props) => {
                 onAddEntry(debitEntry);
                 addToast('買掛金と経費が計上されました。', 'success');
             };
-            // FIX: Pass accountItems and allocationDivisions to InvoiceOCR
-            return <InvoiceOCR onSaveExpenses={handleSaveExpenses} addToast={addToast} requestConfirmation={requestConfirmation} isAIOff={props.isAIOff} accountItems={accountItems} allocationDivisions={allocationDivisions} />;
+            return <InvoiceOCR onSaveExpenses={handleSaveExpenses} addToast={addToast} requestConfirmation={requestConfirmation} isAIOff={props.isAIOff} />;
 
         case 'purchasing_payments':
              const handleExecutePayment = async (supplier: string, amount: number) => {

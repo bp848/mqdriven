@@ -1,6 +1,6 @@
 export type Page =
   | 'analysis_dashboard' | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
-  | 'sales_estimates' | 'sales_orders' | 'sales_billing' | 'analysis_ranking'
+  | 'sales_estimates' | 'sales_orders' | 'sales_billing' | 'fax_ocr_intake' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
   | 'inventory_management' | 'manufacturing_orders' | 'manufacturing_progress' | 'manufacturing_cost'
   | 'hr_attendance' | 'hr_man_hours' | 'hr_labor_cost'
@@ -95,6 +95,35 @@ export interface Job {
   manufacturingStatus?: ManufacturingStatus;
 }
 
+export enum ProjectStatus {
+  Draft = 'Draft',
+  New = 'New',
+  InProgress = 'InProgress',
+  Completed = 'Completed',
+  Cancelled = 'Cancelled',
+  Archived = 'Archived',
+}
+
+export interface ProjectAttachment {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  category?: string;
+}
+
+export interface Project {
+  id: string;
+  projectName: string;
+  customerName: string;
+  overview?: string;
+  extracted_details?: string;
+  status: ProjectStatus;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  attachments?: ProjectAttachment[];
+}
+
 export interface JournalEntry {
   id: number;
   date: string;
@@ -167,6 +196,7 @@ export interface Customer {
   infoSalesIdeas?: string;
   customerContactInfo?: string; // for mailto
   aiAnalysis?: CompanyAnalysis | null;
+  isActive?: boolean;
 }
 
 export interface SortConfig {
@@ -201,6 +231,27 @@ export interface CompanyInvestigation {
         uri: string;
         title: string;
     }[];
+}
+
+export interface AnalysisResult {
+    title: string;
+    summary: string;
+    table: {
+        headers: string[];
+        rows: string[][];
+    };
+    chart: {
+        type: 'bar' | 'line';
+        data: { name: string; value: number }[];
+    };
+}
+
+export interface AnalysisHistory {
+    id: string;
+    userId: string;
+    viewpoint: string;
+    createdAt: string;
+    result: AnalysisResult;
 }
 
 export interface InvoiceData {
@@ -239,7 +290,13 @@ export interface EstimateItem {
     cost: number;
     costRate: number;
     subtotal: number;
+    name?: string;
+    qty?: number;
+    taxAmount?: number;
+    total?: number;
 }
+
+export type EstimateLineItem = EstimateItem;
 
 export interface Estimate {
     id: string;
@@ -249,6 +306,7 @@ export interface Estimate {
     items: EstimateItem[];
     total: number;
     deliveryDate: string;
+    deliveryTerms?: string;
     paymentTerms: string;
     deliveryMethod: string;
     notes: string;
@@ -258,6 +316,9 @@ export interface Estimate {
     user?: User;
     createdAt: string;
     updatedAt: string;
+    subtotal?: number;
+    taxTotal?: number;
+    grandTotal?: number;
 }
 
 export interface Lead {
@@ -333,6 +394,15 @@ export interface ApplicationWithDetails extends Application {
     approvalRoute?: ApprovalRoute;
 }
 
+export interface ApplicationNotificationEmail {
+    id: string;
+    applicationId: string;
+    subject: string;
+    body: string;
+    sentAt: string;
+    recipient?: string;
+}
+
 export interface Employee {
     id: string;
     name: string;
@@ -347,11 +417,12 @@ export interface AccountItem {
     id: string;
     code: string;
     name: string;
-    categoryCode: string;
-    isActive: boolean;
-    sortOrder: number;
-    createdAt: string;
-    updatedAt: string;
+    categoryCode: string | null;
+    isActive?: boolean;
+    sortOrder?: number;
+    createdAt?: string;
+    updatedAt?: string;
+    mqCode?: Record<string, string>;
 }
 
 export interface PurchaseOrder {
@@ -471,6 +542,28 @@ export interface InboxItem {
     createdAt: string;
 }
 
+export interface FaxIntake {
+  id: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  filePath: string;
+  fileName: string;
+  fileMimeType: string;
+  fileSize: number;
+  fileUrl?: string;
+  ocrStatus: 'pending' | 'processing' | 'done' | 'failed';
+  ocrErrorMessage?: string | null;
+  ocrRawText?: string | null;
+  ocrJson?: any | null;
+  docType: 'order' | 'estimate' | 'unknown';
+  sourceChannel: 'fax';
+  linkedProjectId?: string | null;
+  linkedOrderId?: string | null;
+  linkedEstimateId?: string | null;
+  status: 'draft' | 'ready' | 'linked' | 'deleted';
+  notes?: string | null;
+}
+
 export interface MasterAccountItem {
   id: string;
   code: string;
@@ -488,6 +581,7 @@ export interface PaymentRecipient {
   branchName?: string | null;
   accountNumber?: string | null;
   bankBranch?: string | null;
+  bankAccountNumber?: string | null;
 }
 
 export interface Department {

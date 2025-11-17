@@ -1,0 +1,147 @@
+[1mdiff --git a/App.tsx b/App.tsx[m
+[1mindex f4a9033..a84d98a 100644[m
+[1m--- a/App.tsx[m
+[1m+++ b/App.tsx[m
+[36m@@ -38,15 +38,32 @@[m [mimport AuditLogPage from './components/admin/AuditLogPage';[m
+ import JournalQueuePage from './components/admin/JournalQueuePage';[m
+ import MasterManagementPage from './components/admin/MasterManagementPage';[m
+ import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructionsModal';[m
+[32m+[m[32mimport LoginPage from './components/LoginPage';[m
+[32m+[m[32mimport RegisterPage from './components/RegisterPage';[m
+[32m+[m[32mimport AuthCallbackPage from './components/AuthCallbackPage';[m
+ [m
+ [m
+ import * as dataService from './services/dataService';[m
+ import * as geminiService from './services/geminiService';[m
+[31m-import { hasSupabaseCredentials } from './services/supabaseClient';[m
+[32m+[m[32mimport { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';[m
+[32m+[m[32mimport type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';[m
+ [m
+ import { Page, Job, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title } from './types';[m
+ import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';[m
+ [m
+[32m+[m[32mconst getEnvValue = (key: string): string | undefined => {[m
+[32m+[m[32m    if (typeof import.meta !== 'undefined' && import.meta.env) {[m
+[32m+[m[32m        const envMap = import.meta.env as Record<string, string | undefined>;[m
+[32m+[m[32m        if (envMap[key] !== undefined) {[m
+[32m+[m[32m            return envMap[key];[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m[32m    if (typeof process !== 'undefined' && process.env) {[m
+[32m+[m[32m        return process.env[key];[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return undefined;[m
+[32m+[m[32m};[m
+[32m+[m
+ const PAGE_TITLES: Record<Page, string> = {[m
+     analysis_dashboard: 'ホーム',[m
+     sales_dashboard: '販売ダッシュボード',[m
+[36m@@ -115,6 +132,14 @@[m [mconst GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSe[m
+ [m
+ [m
+ const App: React.FC = () => {[m
+[32m+[m[32m    const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);[m
+[32m+[m[32m    const isAuthBypassEnabled = useMemo(() => getEnvValue('VITE_BYPASS_SUPABASE_AUTH') === '1', []);[m
+[32m+[m[32m    const shouldRequireAuth = isSupabaseConfigured && !isAuthBypassEnabled;[m
+[32m+[m[32m    const [authView, setAuthView] = useState<'login' | 'register'>('login');[m
+[32m+[m[32m    const [supabaseSession, setSupabaseSession] = useState<Session | null>(null);[m
+[32m+[m[32m    const [supabaseUser, setSupabaseUser] = useState<SupabaseAuthUser | null>(null);[m
+[32m+[m[32m    const [isAuthChecking, setIsAuthChecking] = useState<boolean>(shouldRequireAuth);[m
+[32m+[m[32m    const [authError, setAuthError] = useState<string | null>(null);[m
+     // Global State[m
+     const [currentPage, setCurrentPage] = useState<Page>('analysis_dashboard');[m
+     const [searchTerm, setSearchTerm] = useState('');[m
+[36m@@ -164,6 +189,9 @@[m [mconst App: React.FC = () => {[m
+     const abortControllerRef = useRef<AbortController | null>(null);[m
+     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);[m
+ [m
+[32m+[m[32m    const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;[m
+[32m+[m[32m    const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');[m
+[32m+[m
+     // Navigation and Modals[m
+     const handleNavigate = (page: Page) => {[m
+         setCurrentPage(page);[m
+[36m@@ -183,6 +211,108 @@[m [mconst App: React.FC = () => {[m
+         setConfirmationDialog({ ...dialog, isOpen: true, onClose: () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });[m
+     };[m
+ [m
+[32m+[m[32m    const resetAppData = useCallback(() => {[m
+[32m+[m[32m        setJobs([]);[m
+[32m+[m[32m        setCustomers([]);[m
+[32m+[m[32m        setJournalEntries([]);[m
+[32m+[m[32m        setAccountItems([]);[m
+[32m+[m[32m        setPaymentRecipients([]);[m
+[32m+[m[32m        setLeads([]);[m
+[32m+[m[32m        setApprovalRoutes([]);[m
+[32m+[m[32m        setPurchaseOrders([]);[m
+[32m+[m[32m        setInventoryItems([]);[m
+[32m+[m[32m        setEmployees([]);[m
+[32m+[m[32m        setEstimates([]);[m
+[32m+[m[32m        setApplications([]);[m
+[32m+[m[32m        setDepartments([]);[m
+[32m+[m[32m        setAllocationDivisions([]);[m
+[32m+[m[32m        setTitles([]);[m
+[32m+[m[32m        setCurrentUser(null);[m
+[32m+[m[32m        setAllUsers([]);[m
+[32m+[m[32m        setDbError(null);[m
+[32m+[m[32m    }, []);[m
+[32m+[m
+[32m+[m[32m    const handleSignOut = useCallback(async () => {[m
+[32m+[m[32m        if (!isSupabaseConfigured) {[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            const supabaseClient = getSupabase();[m
+[32m+[m[32m            await supabaseClient.auth.signOut();[m
+[32m+[m[32m            resetAppData();[m
+[32m+[m[32m            setSupabaseSession(null);[m
+[32m+[m[32m            setSupabaseUser(null);[m
+[32m+[m[32m            setAuthView('login');[m
+[32m+[m[32m        } catch (error) {[m
+[32m+[m[32m            console.error('Failed to sign out:', error);[m
+[32m+[m[32m            addToast('ログアウトに失敗しました。', 'error');[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }, [isSupabaseConfigured, resetAppData, addToast]);[m
+[32m+[m
+[32m+[m[32m    useEffect(() => {[m
+[32m+[m[32m        if (!shouldRequireAuth) {[m
+[32m+[m[32m            setSupabaseSession(null);[m
+[32m+[m[32m            setSupabaseUser(null);[m
+[32m+[m[32m            setIsAuthChecking(false);[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (!isSupabaseConfigured) {[m
+[32m+[m[32m            setIsAuthChecking(false);[m
+[32m+[m[32m            setSupabaseSession(null);[m
+[32m+[m[32m            setSupabaseUser(null);[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        const supabaseClient = getSupabase();[m
+[32m+[m[32m        let isMounted = true;[m
+[32m+[m
+[32m+[m[32m        const resolveSession = async () => {[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                const { data, error } = await supabaseClient.auth.getSession();[m
+[32m+[m[32m                if (!isMounted) return;[m
+[32m+[m[32m                if (error) {[m
+[32m+[m[32m                    console.error('Failed to fetch auth session:', error.message);[m
+[32m+[m[32m                    setAuthError(error.message);[m
+[32m+[m[32m                    setSupabaseSession(null);[m
+[32m+[m[32m                    setSupabaseUser(null);[m
+[32m+[m[32m                } else {[m
+[32m+[m[32m                    setAuthError(null);[m
+[32m+[m[32m                    setSupabaseSession(data.session ?? null);[m
+[32m+[m[32m                    setSupabaseUser(data.session?.user ?? null);[m
+[32m+[m[32m                }[m
+[32m+[m[32m            } catch (error: any) {[m
+[32m+[m[32m                if (!isMounted) return;[m
+[32m+[m[32m                console.error('Unexpected auth session error:', error);[m
+[32m+[m[32m                setAuthError(error?.message ?? 'ログイン状態の取得に失敗しました。');[m
+[32m+[m[32m                setSupabaseSession(null);[m
+[32m+[m[32m                setSupabaseUser(null);[m
+[32m+[m[32m            } finally {[m
+[32m+[m[32m                if (isMounted) {[m
+[32m+[m[32m                    setIsAuthChecking(false);[m
+

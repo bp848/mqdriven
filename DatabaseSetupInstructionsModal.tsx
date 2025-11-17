@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { X, BookOpen, ArrowRight } from './Icons';
+import { X, BookOpen, ArrowRight } from './components/Icons';
 
 interface Props {
     onRetry: () => void;

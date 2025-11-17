@@ -10,6 +10,7 @@ import CustomerDetailModal from './components/CustomerDetailModal';
 import { CompanyAnalysisModal } from './components/CompanyAnalysisModal';
 import LeadManagementPage from './components/sales/LeadManagementPage';
 import CreateLeadModal from './components/sales/CreateLeadModal';
+import FaxOcrIntakePage from './components/sales/FaxOcrIntakePage';
 import PlaceholderPage from './components/PlaceholderPage';
 import UserManagementPage from './components/admin/UserManagementPage';
 import ApprovalRouteManagementPage from './components/admin/ApprovalRouteManagementPage';
@@ -73,6 +74,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_estimates: '見積管理',
     sales_orders: '案件・受注管理',
     sales_billing: '売上請求 (AR)',
+    fax_ocr_intake: 'FAXからのデータ自動入力',
     analysis_ranking: '売上ランキング',
     purchasing_orders: '発注 (PO)',
     purchasing_invoices: '仕入計上 (AP)',
@@ -633,6 +635,15 @@ const App: React.FC = () => {
                 return <SalesDashboard jobs={jobs} leads={leads} />;
             case 'sales_orders':
                 return <JobList jobs={jobs} searchTerm={searchTerm} onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} onNewJob={() => setCreateJobModalOpen(true)} />;
+            case 'fax_ocr_intake':
+                return (
+                    <FaxOcrIntakePage
+                        currentUser={currentUser}
+                        addToast={addToast}
+                        onNavigateToOrders={() => handleNavigate('sales_orders')}
+                        onNavigateToEstimates={() => handleNavigate('sales_estimates')}
+                    />
+                );
             case 'sales_customers':
                 return <CustomerList customers={customers} searchTerm={searchTerm} onSelectCustomer={(customer) => { setSelectedCustomer(customer); setCustomerModalMode('view'); setCustomerDetailModalOpen(true); }} onUpdateCustomer={handleUpdateCustomer} onAnalyzeCustomer={handleAnalyzeCustomer} addToast={addToast} currentUser={currentUser} onNewCustomer={() => { setSelectedCustomer(null); setCustomerModalMode('new'); setCustomerDetailModalOpen(true); }} isAIOff={isAIOff} />;
             case 'sales_leads':
