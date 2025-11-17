@@ -240,9 +240,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
             <p className="text-sm font-semibold text-white break-all">{supabaseUserEmail}</p>
           </div>
         )}
-        <div className="px-3 py-2">
-           <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替</label>
-           <select 
+        {currentUser?.role === 'admin' && (
+          <div className="px-3 py-2">
+            <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
+            <select 
                 id="user-select"
                 className="w-full mt-1 bg-slate-700 border-slate-600 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                 value={currentUser?.id || ''}
@@ -250,12 +251,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     const selectedUser = allUsers.find(u => u.id === e.target.value);
                     onUserChange(selectedUser || null);
                 }}
-           >
+            >
                 {allUsers.map(user => (
                     <option key={user.id} value={user.id}>{user.name}</option>
                 ))}
-           </select>
-        </div>
+            </select>
+          </div>
+        )}
         {onSignOut && (
           <button
             type="button"
