@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { PurchaseOrder, PurchaseOrderStatus, SortConfig } from '../../types';
+import { Job, PurchaseOrder, PurchaseOrderStatus, SortConfig } from '../../types';
 import SortableHeader from '../ui/SortableHeader';
 import EmptyState from '../ui/EmptyState';
 import { Briefcase } from '../Icons';
@@ -7,14 +7,68 @@ import { formatDate, formatJPY } from '../../utils';
 
 interface PurchasingManagementPageProps {
     purchaseOrders: PurchaseOrder[];
+    jobs: Job[];
 }
 
 type OrderRow = PurchaseOrder & {
-  projectCode: string;
-  quantity: number;
-  unitPrice: number;
-  totalAmount: number;
+    projectCode: string;
+    projectId: string | null;
+    quantity: number;
+    unitPrice: number;
+    totalAmount: number;
+    customerName: string;
+    raw: Record<string, any>;
 };
+
+const RAW_ORDER_FIELD_KEYS = [
+    'id',
+    'order_code',
+    'project_id',
+    'project_code',
+    'copies',
+    'amount',
+    'subamount',
+    'order_date',
+    'delivery_date',
+    'create_user_id',
+    'create_user_code',
+    'update_user_id',
+    'update_user_code',
+    'user_code',
+    'user_id',
+    'applicant_id',
+    'approval1',
+    'approval2',
+    'approval3',
+    'approval4',
+    'approval_status1',
+    'approval_status2',
+    'approval_status3',
+    'approval_status4',
+    'version',
+    'delivery_form',
+    'quality',
+    'quantity',
+    'reserve_cnt',
+    'delivery_cnt',
+    'size',
+    'total_page',
+    'first_proof',
+    'second_proof',
+    'end_proof',
+    'lower_version',
+    'before_note',
+    'after_note',
+    'client_custmer',
+    'repayment_id',
+    'repayment_comment',
+    'specialsize_remarks',
+    'claim_date',
+    'claim_month',
+    'delivery_note',
+    'create_date',
+    'update_date',
+] as const;
 
 const statusStyles: Record<PurchaseOrderStatus, string> = {
   [PurchaseOrderStatus.Ordered]: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
@@ -30,24 +84,69 @@ const StatusBadge: React.FC<{ status: PurchaseOrderStatus }> = ({ status }) => {
   );
 };
 
-const PurchasingManagementPage: React.FC<PurchasingManagementPageProps> = ({ purchaseOrders }) => {
+const PRIMARY_HEADERS = [
+    { key: 'id', label: '受注ID (id)', sortKey: 'id' },
+    { key: 'customerName', label: '顧客名 (project_id参照)', sortKey: 'customerName' },
+    { key: 'projectCode', label: '案件番号 (project_code)', sortKey: 'projectCode' },
+    { key: 'orderDate', label: '受注日 (order_date)', sortKey: 'orderDate' },
+    { key: 'quantity', label: '数量 (quantity)', sortKey: 'quantity', alignRight: true },
+    { key: 'unitPrice', label: '単価', sortKey: 'unitPrice', alignRight: true },
+    { key: 'totalAmount', label: '受注金額', sortKey: 'totalAmount', alignRight: true },
+    { key: 'status', label: 'ステータス', sortKey: 'status' },
+] as const;
+
+const formatRawValue = (value: unknown): string => {
+    if (value === null || value === undefined || value === '') return '-';
+    if (typeof value === 'number') return value.toLocaleString();
+    if (typeof value === 'string') return value;
+    return String(value);
+};
+
+const PurchasingManagementPage: React.FC<PurchasingManagementPageProps> = ({ purchaseOrders, jobs }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'orderDate', direction: 'descending' });
+
+    const jobsById = useMemo(() => {
+        const lookup = new Map<string, Job>();
+        jobs.forEach(job => {
+            if (job.id) lookup.set(job.id, job);
+        });
+        return lookup;
+    }, [jobs]);
+
+    const jobsByProjectCode = useMemo(() => {
+        const lookup = new Map<string, Job>();
+        jobs.forEach(job => {
+            if (job.projectCode) lookup.set(String(job.projectCode), job);
+            if (job.jobNumber) lookup.set(String(job.jobNumber), job);
+        });
+        return lookup;
+    }, [jobs]);
 
     const orderRows = useMemo<OrderRow[]>(() => {
         return purchaseOrders.map(order => {
-            const projectCode = order.itemName ? String(order.itemName) : '';
-            const quantity = Number(order.quantity ?? 0);
+            const raw = order.raw || {};
+            const projectId = order.projectId ?? raw.project_id ?? null;
+            const projectCodeValue = order.projectCode ?? raw.project_code ?? order.itemName ?? '';
+            const projectCode = projectCodeValue ? String(projectCodeValue) : '';
+            const linkedJob = (projectId && jobsById.get(projectId)) || (projectCode && jobsByProjectCode.get(projectCode)) || null;
+            const quantity = Number(order.quantity ?? raw.quantity ?? raw.copies ?? 0);
             const unitPrice = Number(order.unitPrice ?? 0);
-            const totalAmount = quantity * unitPrice;
+            const totalAmount =
+                Number(order.amount ?? raw.amount ?? order.subamount ?? raw.subamount ?? quantity * unitPrice) || 0;
+            const customerName = linkedJob?.clientName || raw.client_custmer || order.supplierName || '-';
+
             return {
                 ...order,
+                projectId,
                 projectCode,
                 quantity,
                 unitPrice,
                 totalAmount,
+                customerName,
+                raw,
             };
         });
-    }, [purchaseOrders]);
+    }, [purchaseOrders, jobsById, jobsByProjectCode]);
 
     const sortedOrders = useMemo(() => {
         if (!sortConfig) return orderRows;
@@ -95,25 +194,32 @@ const PurchasingManagementPage: React.FC<PurchasingManagementPageProps> = ({ pur
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-base text-left text-slate-600 dark:text-slate-300">
-                        <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-700/70 text-slate-600 dark:text-slate-200">
+                    <table className="min-w-full text-left text-slate-600 dark:text-slate-300 text-sm">
+                        <thead className="text-xs uppercase bg-slate-50 dark:bg-slate-700/70 text-slate-600 dark:text-slate-200">
                             <tr>
-                                <th scope="col" className="px-6 py-3 font-medium">受注ID</th>
-                                <SortableHeader sortKey="supplierName" label="顧客名" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="projectCode" label="案件番号" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="orderDate" label="受注日" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="quantity" label="数量" sortConfig={sortConfig} requestSort={requestSort} className="text-right" />
-                                <SortableHeader sortKey="unitPrice" label="単価" sortConfig={sortConfig} requestSort={requestSort} className="text-right" />
-                                <SortableHeader sortKey="totalAmount" label="受注金額" sortConfig={sortConfig} requestSort={requestSort} className="text-right" />
-                                <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
+                                {PRIMARY_HEADERS.map(header => (
+                                    <SortableHeader
+                                        key={header.key}
+                                        sortKey={header.sortKey}
+                                        label={header.label}
+                                        sortConfig={sortConfig}
+                                        requestSort={requestSort}
+                                        className={header.alignRight ? 'text-right min-w-[120px]' : 'min-w-[160px]'}
+                                    />
+                                ))}
+                                {RAW_ORDER_FIELD_KEYS.map(fieldKey => (
+                                    <th key={fieldKey} scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                                        {fieldKey}
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
                             {sortedOrders.map((order) => (
-                                <tr key={order.id} className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700/60">
-                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{order.id?.slice(0, 8)}...</td>
+                                <tr key={order.id} className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700/60 align-top">
+                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{order.id || '-'}</td>
                                     <td className="px-6 py-4">
-                                        <div className="font-medium text-slate-900 dark:text-white">{order.supplierName || '-'}</div>
+                                        <div className="font-medium text-slate-900 dark:text-white">{order.customerName}</div>
                                         {order.paymentRecipientId && (
                                             <div className="text-xs text-slate-500 dark:text-slate-400">支払先ID: {order.paymentRecipientId}</div>
                                         )}
@@ -126,6 +232,11 @@ const PurchasingManagementPage: React.FC<PurchasingManagementPageProps> = ({ pur
                                         {formatJPY(order.totalAmount)}
                                     </td>
                                     <td className="px-6 py-4"><StatusBadge status={order.status} /></td>
+                                    {RAW_ORDER_FIELD_KEYS.map(fieldKey => (
+                                        <td key={`${order.id}-${fieldKey}`} className="px-4 py-4 text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words">
+                                            {formatRawValue(order.raw?.[fieldKey])}
+                                        </td>
+                                    ))}
                                 </tr>
                             ))}
                         </tbody>

@@ -6,7 +6,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 type FaxOcrPayload = {
   intakeId: string;
   filePath: string;
-  docType?: 'order' | 'estimate' | 'unknown';
+  docType?: 'order' | 'estimate' | 'vendor_invoice' | 'unknown';
 };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -28,12 +28,64 @@ const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 const model = 'gemini-2.5-flash';
 
+const docTypeLabels: Record<NonNullable<FaxOcrPayload['docType']>, string> = {
+  order: '受注',
+  estimate: '見積',
+  vendor_invoice: '外注請求書',
+  unknown: '資料',
+};
+
+const expenseLineSchema = {
+  type: Type.OBJECT,
+  properties: {
+    description: { type: Type.STRING, description: '明細の品名や内容。' },
+    lineDate: { type: Type.STRING, description: '対象日 (YYYY-MM-DD)。' },
+    quantity: { type: Type.NUMBER, description: '数量。' },
+    unit: { type: Type.STRING, description: '単位（式、枚など）。' },
+    unitPrice: { type: Type.NUMBER, description: '単価（税抜）。' },
+    amountExclTax: { type: Type.NUMBER, description: '金額（税抜）。' },
+    taxRate: { type: Type.NUMBER, description: '税率(%)。' },
+    customerName: { type: Type.STRING, description: '明細に記載された顧客名。' },
+    projectName: { type: Type.STRING, description: '記載されている案件名。' },
+  },
+};
+
+const bankAccountSchema = {
+  type: Type.OBJECT,
+  properties: {
+    bankName: { type: Type.STRING, description: '金融機関名。' },
+    branchName: { type: Type.STRING, description: '支店名。' },
+    accountType: { type: Type.STRING, description: '口座種別（普通・当座など）。' },
+    accountNumber: { type: Type.STRING, description: '口座番号。' },
+  },
+};
+
+const expenseDraftSchema = {
+  type: Type.OBJECT,
+  properties: {
+    supplierName: { type: Type.STRING, description: '請求書ヘッダーの発行元。' },
+    registrationNumber: { type: Type.STRING, description: '請求書に記載の登録番号。' },
+    invoiceDate: { type: Type.STRING, description: '請求日。' },
+    dueDate: { type: Type.STRING, description: '支払期日。' },
+    totalGross: { type: Type.NUMBER, description: '税込合計。' },
+    totalNet: { type: Type.NUMBER, description: '税抜合計。' },
+    taxAmount: { type: Type.NUMBER, description: '税額。' },
+    paymentRecipientId: { type: Type.STRING, description: '社内マスタの支払先コードが明記されている場合。' },
+    paymentRecipientName: { type: Type.STRING, description: '支払先名称。' },
+    bankAccount: bankAccountSchema,
+    lines: { type: Type.ARRAY, items: expenseLineSchema },
+  },
+};
+
 const extractInvoiceSchema = {
   type: Type.OBJECT,
   properties: {
     vendorName: { type: Type.STRING, description: '請求書の発行元企業名。' },
     invoiceDate: { type: Type.STRING, description: '請求書の発行日 (YYYY-MM-DD形式)。' },
+    dueDate: { type: Type.STRING, description: '支払期日。' },
     totalAmount: { type: Type.NUMBER, description: '請求書の合計金額（税込）。' },
+    subtotalAmount: { type: Type.NUMBER, description: '税抜金額。' },
+    taxAmount: { type: Type.NUMBER, description: '消費税額。' },
     description: { type: Type.STRING, description: '請求内容の簡潔な説明。' },
     costType: {
       type: Type.STRING,
@@ -52,6 +104,11 @@ const extractInvoiceSchema = {
       type: Type.STRING,
       description: 'この費用に関連する案件名やプロジェクト名（もしあれば）。',
     },
+    registrationNumber: { type: Type.STRING, description: '請求書の登録番号。' },
+    paymentRecipientName: { type: Type.STRING, description: '請求書に記載された支払先名。' },
+    bankAccount: bankAccountSchema,
+    lineItems: { type: Type.ARRAY, items: expenseLineSchema },
+    expenseDraft: expenseDraftSchema,
   },
   required: ['vendorName', 'invoiceDate', 'totalAmount', 'description', 'costType', 'account'],
 };
@@ -82,6 +139,80 @@ const updateFaxIntakeStatus = async (
     .from('fax_intakes')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', intakeId);
+};
+
+const normalizeText = (value?: string | null) => (value ?? '').replace(/\s+/g, '').toLowerCase();
+const includesMatch = (needle: string, haystack: string) => haystack.includes(needle) || needle.includes(haystack);
+
+const ensureExpenseDraft = (invoice: Record<string, any>) => {
+  if (!invoice.expenseDraft || typeof invoice.expenseDraft !== 'object') {
+    invoice.expenseDraft = {};
+  }
+  return invoice.expenseDraft as Record<string, any>;
+};
+
+const enrichInvoiceJsonWithMatches = async (invoice: Record<string, any>) => {
+  if (!supabase) return;
+  try {
+    const [recipientsRes, customersRes] = await Promise.all([
+      supabase.from('payment_recipients').select('id, company_name, recipient_name'),
+      supabase.from('customers').select('id, customer_name'),
+    ]);
+
+    if (recipientsRes.error) {
+      console.warn('[fax-ocr-intake] Failed to fetch payment recipients', recipientsRes.error);
+    }
+    if (customersRes.error) {
+      console.warn('[fax-ocr-intake] Failed to fetch customers', customersRes.error);
+    }
+
+    const recipients = (recipientsRes.data ?? []).map(rec => ({
+      id: rec.id,
+      labels: [rec.company_name, rec.recipient_name]
+        .map(label => normalizeText(label))
+        .filter(Boolean),
+      display: rec.company_name || rec.recipient_name || '',
+    }));
+    const customers = (customersRes.data ?? []).map(customer => ({
+      id: customer.id,
+      label: normalizeText(customer.customer_name),
+      display: customer.customer_name,
+    }));
+
+    const supplierName = invoice.expenseDraft?.supplierName || invoice.vendorName;
+    const normalizedSupplier = normalizeText(supplierName);
+    if (normalizedSupplier && recipients.length > 0) {
+      const recipientMatch =
+        recipients.find(item => item.labels.includes(normalizedSupplier)) ||
+        recipients.find(item => item.labels.some(label => includesMatch(normalizedSupplier, label)));
+      if (recipientMatch) {
+        invoice.matchedPaymentRecipientId = recipientMatch.id;
+        invoice.matchedPaymentRecipientName = recipientMatch.display;
+        const expenseDraft = ensureExpenseDraft(invoice);
+        if (!expenseDraft.paymentRecipientId) {
+          expenseDraft.paymentRecipientId = recipientMatch.id;
+        }
+        if (!expenseDraft.paymentRecipientName) {
+          expenseDraft.paymentRecipientName = recipientMatch.display;
+        }
+      }
+    }
+
+    const lineCustomer = invoice.expenseDraft?.lines?.find((line: any) => line?.customerName)?.customerName;
+    const fallbackCustomer = invoice.relatedCustomer || invoice.project;
+    const normalizedCustomer = normalizeText(lineCustomer || fallbackCustomer);
+    if (normalizedCustomer && customers.length > 0) {
+      const customerMatch =
+        customers.find(item => item.label === normalizedCustomer) ||
+        customers.find(item => item.label && includesMatch(normalizedCustomer, item.label));
+      if (customerMatch) {
+        invoice.matchedCustomerId = customerMatch.id;
+        invoice.matchedCustomerName = customerMatch.display;
+      }
+    }
+  } catch (matchError) {
+    console.warn('[fax-ocr-intake] Failed to enrich OCR JSON with matches', matchError);
+  }
 };
 
 serve(async (req) => {
@@ -136,16 +267,18 @@ serve(async (req) => {
 
     const base64Data = await toBase64(fileData);
     const mimeType: string = intake.file_mime_type || guessMimeType(payload.filePath);
-    const docTypeLabel = payload.docType ?? intake.doc_type ?? 'unknown';
+    const docTypeKey = (payload.docType ?? intake.doc_type ?? 'unknown') as NonNullable<FaxOcrPayload['docType']>;
+    const docTypeLabel = docTypeLabels[docTypeKey] ?? '資料';
+    const promptText = docTypeKey === 'vendor_invoice'
+      ? '添付された外注先からの請求書をOCRし、経費精算フォームと同じ構造（expenseDraft）でJSONを出力してください。サプライヤー名、請求日、支払期日、税抜/税込金額、銀行口座、明細行（品名・数量・単価・税率）を必ず含めてください。'
+      : `添付されたFAX資料（想定種別: ${docTypeLabel}）から、請求書/受注/見積に関連する情報をJSONで抽出してください。金額、顧客名、案件番号が含まれる場合は必ず出力してください。`;
 
     const response = await ai.models.generateContent({
       model,
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          {
-            text: `添付されたFAX資料（想定種別: ${docTypeLabel}）から、請求書/受注/見積に関連する情報をJSONで抽出してください。金額、顧客名、案件番号が含まれる場合は必ず出力してください。`,
-          },
+          { text: promptText },
         ],
       },
       config: {
@@ -164,6 +297,10 @@ serve(async (req) => {
       parsedJson = JSON.parse(rawText);
     } catch (jsonError) {
       console.warn('[fax-ocr-intake] Failed to parse Gemini JSON', jsonError);
+    }
+
+    if (parsedJson && typeof parsedJson === 'object') {
+      await enrichInvoiceJsonWithMatches(parsedJson as Record<string, any>);
     }
 
     await updateFaxIntakeStatus(payload.intakeId, {

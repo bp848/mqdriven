@@ -687,6 +687,8 @@ const App: React.FC = () => {
                         addToast={addToast}
                         onNavigateToOrders={() => handleNavigate('sales_orders')}
                         onNavigateToEstimates={() => handleNavigate('sales_estimates')}
+                        customers={customers}
+                        paymentRecipients={paymentRecipients}
                     />
                 );
             case 'sales_customers':
@@ -732,7 +734,7 @@ const App: React.FC = () => {
             case 'manufacturing_cost':
                 return <ManufacturingCostManagement jobs={jobs} />;
             case 'purchasing_orders':
-                return <PurchasingManagementPage purchaseOrders={purchaseOrders} />;
+                return <PurchasingManagementPage purchaseOrders={purchaseOrders} jobs={jobs} />;
             case 'sales_estimates':
                 return <EstimateManagementPage estimates={estimates} customers={customers} allUsers={allUsers} onAddEstimate={handleAddEstimate} addToast={addToast} currentUser={currentUser} searchTerm={searchTerm} isAIOff={isAIOff} />;
             case 'analysis_ranking':

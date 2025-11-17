@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EmployeeUser, FaxIntake } from '../../types';
+import { Customer, EmployeeUser, FaxIntake, InvoiceData, PaymentRecipient } from '../../types';
 import * as dataService from '../../services/dataService';
 import { formatDateTime, formatJPY } from '../../utils';
 import {
@@ -14,6 +14,7 @@ import {
   Upload,
   X,
 } from '../Icons';
+import { findMatchingCustomerId, findMatchingPaymentRecipientId } from '../../utils/matching';
 
 type EditableFaxIntakeStatus = Exclude<FaxIntake['status'], 'deleted'>;
 
@@ -22,11 +23,14 @@ interface FaxOcrIntakePageProps {
   addToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   onNavigateToOrders: () => void;
   onNavigateToEstimates: () => void;
+  customers: Customer[];
+  paymentRecipients: PaymentRecipient[];
 }
 
 const docTypeLabels: Record<FaxIntake['docType'], string> = {
   order: '受注',
   estimate: '見積',
+  vendor_invoice: '外注請求書',
   unknown: '不明',
 };
 
@@ -53,6 +57,7 @@ const intakeStatusOptions: { value: EditableFaxIntakeStatus; label: string }[] =
 const docTypeOptions: { value: FaxIntake['docType']; label: string }[] = [
   { value: 'order', label: docTypeLabels.order },
   { value: 'estimate', label: docTypeLabels.estimate },
+  { value: 'vendor_invoice', label: docTypeLabels.vendor_invoice },
   { value: 'unknown', label: docTypeLabels.unknown },
 ];
 
@@ -95,6 +100,11 @@ const isSupportedFileType = (file: File): boolean => {
 };
 
 const getOcrCustomerName = (ocrJson: any): string | null => {
+  const invoiceData = parseInvoiceData(ocrJson);
+  const lineCustomer = invoiceData?.expenseDraft?.lines?.find(line => line?.customerName)?.customerName;
+  if (lineCustomer) return lineCustomer;
+  if (invoiceData?.relatedCustomer) return invoiceData.relatedCustomer;
+  if (invoiceData?.project) return invoiceData.project;
   if (!ocrJson || typeof ocrJson !== 'object') return null;
   return (
     ocrJson.customerName ||
@@ -106,13 +116,16 @@ const getOcrCustomerName = (ocrJson: any): string | null => {
 };
 
 const getOcrTotalAmount = (ocrJson: any): number | null => {
-  if (!ocrJson || typeof ocrJson !== 'object') return null;
+  const invoiceData = parseInvoiceData(ocrJson);
+  const rawFallback =
+    ocrJson && typeof ocrJson === 'object'
+      ? ocrJson.grandTotal ?? ocrJson.amount ?? ocrJson.total ?? null
+      : null;
   const candidate =
-    ocrJson.totalAmount ??
-    ocrJson.grandTotal ??
-    ocrJson.amount ??
-    ocrJson.total ??
-    null;
+    invoiceData?.expenseDraft?.totalGross ??
+    invoiceData?.totalAmount ??
+    invoiceData?.subtotalAmount ??
+    rawFallback;
   if (candidate === null || candidate === undefined) return null;
   const numeric =
     typeof candidate === 'string'
@@ -124,6 +137,73 @@ const getOcrTotalAmount = (ocrJson: any): number | null => {
 const deriveReferenceNo = (ocrJson: any): string | null => {
   if (!ocrJson || typeof ocrJson !== 'object') return null;
   return ocrJson.orderNumber || ocrJson.estimateNumber || ocrJson.referenceNo || null;
+};
+
+const parseInvoiceData = (ocrJson: any): InvoiceData | null => {
+  if (!ocrJson || typeof ocrJson !== 'object') return null;
+  return ocrJson as InvoiceData;
+};
+
+const getInvoiceLineItems = (invoiceData: InvoiceData | null) =>
+  invoiceData?.expenseDraft?.lines || invoiceData?.lineItems || [];
+
+const getBankAccountText = (invoiceData: InvoiceData | null): string | null => {
+  if (!invoiceData) return null;
+  const bank = invoiceData.expenseDraft?.bankAccount || invoiceData.bankAccount;
+  if (!bank) return null;
+  const parts = [bank.bankName, bank.branchName, bank.accountType, bank.accountNumber]
+    .map(part => (typeof part === 'string' ? part.trim() : ''))
+    .filter(Boolean);
+  return parts.length ? parts.join(' / ') : null;
+};
+
+const guessCustomerNameFromInvoice = (invoiceData: InvoiceData | null): string | null => {
+  if (!invoiceData) return null;
+  const lineWithCustomer = invoiceData.expenseDraft?.lines?.find(line => line?.customerName);
+  if (lineWithCustomer?.customerName) {
+    return lineWithCustomer.customerName;
+  }
+  return invoiceData.relatedCustomer || invoiceData.project || null;
+};
+
+const guessPaymentRecipientNameFromInvoice = (invoiceData: InvoiceData | null): string | null => {
+  if (!invoiceData) return null;
+  return (
+    invoiceData.expenseDraft?.paymentRecipientName ||
+    invoiceData.paymentRecipientName ||
+    invoiceData.expenseDraft?.supplierName ||
+    invoiceData.vendorName ||
+    null
+  );
+};
+
+const matchPaymentRecipientFromInvoice = (
+  invoiceData: InvoiceData | null,
+  recipients: PaymentRecipient[],
+): PaymentRecipient | null => {
+  if (!invoiceData || recipients.length === 0) return null;
+  const candidateId =
+    invoiceData.matchedPaymentRecipientId ||
+    invoiceData.expenseDraft?.paymentRecipientId ||
+    findMatchingPaymentRecipientId(
+      invoiceData.expenseDraft?.supplierName || invoiceData.vendorName,
+      recipients,
+    );
+  if (!candidateId) return null;
+  return recipients.find(rec => rec.id === candidateId) || null;
+};
+
+const matchCustomerFromInvoice = (
+  invoiceData: InvoiceData | null,
+  customers: Customer[],
+): Customer | null => {
+  if (!invoiceData || customers.length === 0) return null;
+  const candidateName = guessCustomerNameFromInvoice(invoiceData) || undefined;
+  const candidateId =
+    invoiceData.matchedCustomerId ||
+    findMatchingCustomerId(candidateName, customers);
+  if (!candidateId) return null;
+  return customers.find(customer => customer.id === candidateId) || null;
 };
 
 interface EditModalState {
@@ -144,6 +224,8 @@ interface EditFaxIntakeModalProps {
   onRetryOcr: (intake: FaxIntake) => void;
   onNavigateToOrders: () => void;
   onNavigateToEstimates: () => void;
+  customers: Customer[];
+  paymentRecipients: PaymentRecipient[];
 }
 
 const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
@@ -151,11 +233,13 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
   addToast,
   onNavigateToOrders,
   onNavigateToEstimates,
+  customers,
+  paymentRecipients,
 }) => {
   const [faxIntakes, setFaxIntakes] = useState<FaxIntake[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedDocType, setSelectedDocType] = useState<FaxIntake['docType']>('order');
+  const [selectedDocType, setSelectedDocType] = useState<FaxIntake['docType']>('vendor_invoice');
   const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -167,6 +251,16 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
   const [ocrBusyId, setOcrBusyId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resolvePaymentRecipient = useCallback(
+    (invoiceData: InvoiceData | null) => matchPaymentRecipientFromInvoice(invoiceData, paymentRecipients),
+    [paymentRecipients],
+  );
+
+  const resolveCustomer = useCallback(
+    (invoiceData: InvoiceData | null) => matchCustomerFromInvoice(invoiceData, customers),
+    [customers],
+  );
 
   const loadIntakes = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -301,10 +395,18 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
       await loadIntakes('refresh');
     } catch (error) {
       console.error(error);
-      addToast(
-        error instanceof Error ? error.message : 'OCR解析の再実行に失敗しました。',
-        'error'
-      );
+      const message =
+        error instanceof Error ? error.message : 'OCR解析の再実行に失敗しました。';
+      addToast(message, 'error');
+      try {
+        await dataService.updateFaxIntake(intake.id, {
+          ocrStatus: 'failed',
+          ocrErrorMessage: message,
+        });
+        await loadIntakes('refresh');
+      } catch (updateError) {
+        console.error('[FaxOCR] Failed to mark OCR retry error', updateError);
+      }
     } finally {
       setOcrBusyId(null);
     }
@@ -539,9 +641,25 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {faxIntakes.map(intake => {
+                  const invoiceData = parseInvoiceData(intake.ocrJson);
                   const customerName = getOcrCustomerName(intake.ocrJson);
-                  const totalAmount = getOcrTotalAmount(intake.ocrJson);
                   const referenceNo = deriveReferenceNo(intake.ocrJson);
+                  const paymentRecipientMatch = resolvePaymentRecipient(invoiceData);
+                  const customerMatch = resolveCustomer(invoiceData);
+                  const bankAccountText = getBankAccountText(invoiceData);
+                  const lineItems = getInvoiceLineItems(invoiceData);
+                  const limitedLines = lineItems.slice(0, 3);
+                  const remainingLines = lineItems.length - limitedLines.length;
+                  const totalGross = invoiceData?.expenseDraft?.totalGross ?? invoiceData?.totalAmount ?? null;
+                  const totalNet = invoiceData?.expenseDraft?.totalNet ?? invoiceData?.subtotalAmount ?? null;
+                  const taxAmount =
+                    invoiceData?.expenseDraft?.taxAmount ??
+                    invoiceData?.taxAmount ??
+                    (totalGross && totalNet ? totalGross - totalNet : null);
+                  const supplierName = invoiceData?.expenseDraft?.supplierName || invoiceData?.vendorName || intake.fileName;
+                  const paymentRecipientLabel = paymentRecipientMatch?.companyName || paymentRecipientMatch?.recipientName || null;
+                  const fallbackRecipientName = guessPaymentRecipientNameFromInvoice(invoiceData);
+                  const fallbackCustomerName = guessCustomerNameFromInvoice(invoiceData);
                   return (
                     <tr key={intake.id} className="align-top">
                       <td className="px-4 py-4">
@@ -578,11 +696,65 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                         )}
                       </td>
                       <td className="px-4 py-4 text-sm text-slate-700 dark:text-slate-300">
-                        {intake.ocrStatus === 'done' && (customerName || totalAmount || referenceNo) ? (
-                          <div className="space-y-1">
-                            {customerName && <div>顧客: {customerName}</div>}
-                            {referenceNo && <div>番号: {referenceNo}</div>}
-                            {totalAmount !== null && <div>金額: {formatJPY(totalAmount)}</div>}
+                        {intake.ocrStatus === 'done' && invoiceData ? (
+                          <div className="space-y-2">
+                            <div>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">発行元</span>
+                              <div className="font-semibold text-slate-900 dark:text-slate-100">{supplierName}</div>
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              請求日: {invoiceData.invoiceDate || '-'} / 支払期日: {invoiceData.dueDate || invoiceData.expenseDraft?.dueDate || '-'}
+                            </div>
+                            {(totalGross !== null || totalNet !== null) && (
+                              <div className="space-y-1">
+                                <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                  税込 {totalGross !== null ? formatJPY(totalGross) : '-'}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  税抜 {totalNet !== null ? formatJPY(totalNet) : '-'} / 税額 {taxAmount !== null ? formatJPY(taxAmount) : '-'}
+                                </div>
+                              </div>
+                            )}
+                            {referenceNo && (
+                              <div className="text-xs text-slate-500 dark:text-slate-400">参照番号: {referenceNo}</div>
+                            )}
+                            {bankAccountText && (
+                              <div className="text-xs text-slate-500 dark:text-slate-400">振込先: {bankAccountText}</div>
+                            )}
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              支払先候補:{' '}
+                              {paymentRecipientLabel ? (
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{paymentRecipientLabel}（自動突合）</span>
+                              ) : (
+                                fallbackRecipientName || '未検出'
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              顧客候補:{' '}
+                              {customerMatch ? (
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{customerMatch.customerName}（自動突合）</span>
+                              ) : (
+                                fallbackCustomerName || customerName || '未記載'
+                              )}
+                            </div>
+                            {limitedLines.length > 0 && (
+                              <div className="rounded-md bg-slate-50 p-2 text-xs dark:bg-slate-800/50">
+                                <div className="font-semibold text-slate-700 dark:text-slate-200">明細</div>
+                                <ul className="mt-1 space-y-1">
+                                  {limitedLines.map((line, idx) => (
+                                    <li key={`${intake.id}-line-${idx}`} className="flex items-center justify-between gap-3">
+                                      <span className="truncate text-slate-600 dark:text-slate-300">{line.description || '内容未検出'}</span>
+                                      <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                        {line.amountExclTax !== undefined ? formatJPY(Number(line.amountExclTax)) : '-'}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                                {remainingLines > 0 && (
+                                  <div className="mt-1 text-right text-[11px] text-slate-500 dark:text-slate-400">+{remainingLines} 行</div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-xs text-slate-400 dark:text-slate-500">
@@ -654,6 +826,8 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
         onRetryOcr={handleRetryOcr}
         onNavigateToOrders={onNavigateToOrders}
         onNavigateToEstimates={onNavigateToEstimates}
+        customers={customers}
+        paymentRecipients={paymentRecipients}
       />
     </div>
   );
@@ -668,6 +842,8 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
   onRetryOcr,
   onNavigateToOrders,
   onNavigateToEstimates,
+  customers,
+  paymentRecipients,
 }) => {
   const [formState, setFormState] = useState<EditModalState>({
     docType: 'order',
@@ -690,6 +866,23 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
       });
     }
   }, [intake]);
+
+  const invoiceData = parseInvoiceData(intake?.ocrJson);
+  const paymentRecipientMatch = matchPaymentRecipientFromInvoice(invoiceData, paymentRecipients);
+  const customerMatch = matchCustomerFromInvoice(invoiceData, customers);
+  const bankAccountText = getBankAccountText(invoiceData);
+  const lineItems = getInvoiceLineItems(invoiceData);
+  const limitedLines = lineItems.slice(0, 3);
+  const remainingLines = lineItems.length - limitedLines.length;
+  const totalGross = invoiceData?.expenseDraft?.totalGross ?? invoiceData?.totalAmount ?? null;
+  const totalNet = invoiceData?.expenseDraft?.totalNet ?? invoiceData?.subtotalAmount ?? null;
+  const taxAmount =
+    invoiceData?.expenseDraft?.taxAmount ??
+    invoiceData?.taxAmount ??
+    (totalGross && totalNet ? totalGross - totalNet : null);
+  const supplierName = invoiceData?.expenseDraft?.supplierName || invoiceData?.vendorName || intake?.fileName || '';
+  const fallbackRecipientName = guessPaymentRecipientNameFromInvoice(invoiceData);
+  const fallbackCustomerName = guessCustomerNameFromInvoice(invoiceData);
 
   if (!intake) return null;
 
@@ -876,16 +1069,43 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
               {intake.ocrErrorMessage && (
                 <p className="mt-2 text-xs text-rose-600 dark:text-rose-300">{intake.ocrErrorMessage}</p>
               )}
-              {intake.ocrStatus === 'done' && (
+              {intake.ocrStatus === 'done' && invoiceData && (
                 <div className="mt-3 space-y-2 rounded-md bg-white px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                  {getOcrCustomerName(intake.ocrJson) && (
-                    <div>顧客: {getOcrCustomerName(intake.ocrJson)}</div>
+                  <div>
+                    <span className="text-[11px] text-slate-400">発行元</span>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{supplierName}</div>
+                  </div>
+                  <div>請求日: {invoiceData.invoiceDate || '-'} / 支払期日: {invoiceData.dueDate || invoiceData.expenseDraft?.dueDate || '-'}</div>
+                  {(totalGross !== null || totalNet !== null) && (
+                    <div>
+                      税込 {totalGross !== null ? formatJPY(totalGross) : '-'} （税抜 {totalNet !== null ? formatJPY(totalNet) : '-'} / 税額 {taxAmount !== null ? formatJPY(taxAmount) : '-'})
+                    </div>
+                  )}
+                  {bankAccountText && <div>振込先: {bankAccountText}</div>}
+                  <div>
+                    支払先候補:{' '}
+                    {paymentRecipientMatch ? `${paymentRecipientMatch.companyName || paymentRecipientMatch.recipientName}（自動突合）` : fallbackRecipientName || '未検出'}
+                  </div>
+                  <div>
+                    顧客候補:{' '}
+                    {customerMatch ? `${customerMatch.customerName}（自動突合）` : fallbackCustomerName || getOcrCustomerName(intake.ocrJson) || '未記載'}
+                  </div>
+                  {lineItems.length > 0 && (
+                    <div className="rounded bg-slate-50 p-2 text-[11px] dark:bg-slate-800/40">
+                      <div className="font-semibold">明細</div>
+                      <ul className="mt-1 space-y-1">
+                        {limitedLines.map((line, idx) => (
+                          <li key={`${intake.id}-modal-line-${idx}`} className="flex items-center justify-between gap-3">
+                            <span className="truncate">{line.description || '内容未検出'}</span>
+                            <span>{line.amountExclTax !== undefined ? formatJPY(Number(line.amountExclTax)) : '-'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {remainingLines > 0 && <div className="mt-1 text-right text-[10px] text-slate-500 dark:text-slate-400">+{remainingLines} 行</div>}
+                    </div>
                   )}
                   {deriveReferenceNo(intake.ocrJson) && (
-                    <div>番号: {deriveReferenceNo(intake.ocrJson)}</div>
-                  )}
-                  {getOcrTotalAmount(intake.ocrJson) !== null && (
-                    <div>金額: {formatJPY(getOcrTotalAmount(intake.ocrJson) as number)}</div>
+                    <div>参照番号: {deriveReferenceNo(intake.ocrJson)}</div>
                   )}
                 </div>
               )}

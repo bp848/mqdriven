@@ -264,6 +264,39 @@ export interface AnalysisHistory {
     result: AnalysisResult;
 }
 
+export interface BankAccountInfo {
+    bankName: string;
+    branchName: string;
+    accountType: string;
+    accountNumber: string;
+}
+
+export interface OcrExpenseLine {
+    lineDate?: string;
+    description?: string;
+    quantity?: number;
+    unit?: string;
+    unitPrice?: number;
+    amountExclTax?: number;
+    taxRate?: number;
+    customerName?: string;
+    projectName?: string;
+}
+
+export interface OcrExpenseDraft {
+    supplierName?: string;
+    registrationNumber?: string;
+    invoiceDate?: string;
+    dueDate?: string;
+    totalGross?: number;
+    totalNet?: number;
+    taxAmount?: number;
+    paymentRecipientId?: string;
+    paymentRecipientName?: string;
+    bankAccount?: Partial<BankAccountInfo>;
+    lines?: OcrExpenseLine[];
+}
+
 export interface InvoiceData {
     vendorName: string;
     invoiceDate: string;
@@ -273,6 +306,18 @@ export interface InvoiceData {
     account: string;
     relatedCustomer?: string;
     project?: string;
+    dueDate?: string;
+    subtotalAmount?: number;
+    taxAmount?: number;
+    registrationNumber?: string;
+    paymentRecipientName?: string;
+    bankAccount?: Partial<BankAccountInfo>;
+    lineItems?: OcrExpenseLine[];
+    expenseDraft?: OcrExpenseDraft | null;
+    matchedCustomerId?: string | null;
+    matchedCustomerName?: string | null;
+    matchedPaymentRecipientId?: string | null;
+    matchedPaymentRecipientName?: string | null;
 }
 
 export interface AIJournalSuggestion {
@@ -440,10 +485,18 @@ export interface PurchaseOrder {
     supplierName: string;
     paymentRecipientId?: string | null;
     itemName: string;
+    projectId?: string | null;
+    projectCode?: string | null;
+    orderCode?: string | null;
     orderDate: string;
     quantity: number;
     unitPrice: number;
+    amount?: number | null;
+    subamount?: number | null;
+    copies?: number | null;
+    totalCost?: number | null;
     status: PurchaseOrderStatus;
+    raw?: Record<string, any>;
 }
 
 export interface InventoryItem {
@@ -565,7 +618,7 @@ export interface FaxIntake {
   ocrErrorMessage?: string | null;
   ocrRawText?: string | null;
   ocrJson?: any | null;
-  docType: 'order' | 'estimate' | 'unknown';
+  docType: 'order' | 'estimate' | 'vendor_invoice' | 'unknown';
   sourceChannel: 'fax';
   linkedProjectId?: string | null;
   linkedOrderId?: string | null;
