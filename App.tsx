@@ -358,7 +358,7 @@ const App: React.FC = () => {
             }));
             
             const results = await Promise.allSettled([
-                dataService.getJobs(),
+                dataService.getJobsWithAggregation(),
                 dataService.getCustomers(),
                 dataService.getJournalEntries(),
                 dataService.getAccountItems(),

@@ -241,7 +241,8 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} />
+                {/* AI提案カードは一時的に非表示 */}
+                {/* <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} /> */}
                 <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
             </div>
 
