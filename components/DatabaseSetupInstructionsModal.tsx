@@ -75,6 +75,19 @@ CREATE TABLE IF NOT EXISTS public.applications (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.application_drafts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    applicant_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    application_code_id UUID REFERENCES public.application_codes(id) ON DELETE CASCADE,
+    approval_route_id UUID REFERENCES public.approval_routes(id),
+    form_data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS application_drafts_applicant_code_idx
+ON public.application_drafts (applicant_id, application_code_id);
+
 -- usersテーブルに関連するemployeesテーブルとビューが存在しない場合に作成
 CREATE TABLE IF NOT EXISTS public.employees (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -311,6 +324,14 @@ BEFORE UPDATE ON public.applications
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_updated_at();
 
+ALTER TABLE public.application_drafts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+DROP TRIGGER IF EXISTS on_application_drafts_update ON public.application_drafts;
+CREATE TRIGGER on_application_drafts_update
+BEFORE UPDATE ON public.application_drafts
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_updated_at();
+
 -- 3. 'v_departments'ビューを作成 (departmentsテーブルも存在しない場合に作成)
 CREATE TABLE IF NOT EXISTS public.departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -361,6 +382,7 @@ ALTER TABLE public.forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.application_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.approval_routes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.application_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.account_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_recipients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
@@ -379,6 +401,7 @@ DROP POLICY IF EXISTS "Allow authenticated read access" ON public.forms;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.application_codes;
 DROP POLICY IF EXISTS "Allow authenticated read access" ON public.approval_routes;
 DROP POLICY IF EXISTS "Allow all access to authenticated users" ON public.applications;
+DROP POLICY IF EXISTS "Allow owner access to application drafts" ON public.application_drafts;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.account_items;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.payment_recipients;
 DROP POLICY IF EXISTS "Allow all access for authenticated users" ON public.leads;
@@ -405,6 +428,7 @@ CREATE POLICY "Allow authenticated read access" ON public.invoice_items FOR SELE
 -- データ操作用テーブルにALL権限を付与
 CREATE POLICY "Allow all authenticated users" ON public.inbox_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to authenticated users" ON public.applications FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow owner access to application drafts" ON public.application_drafts FOR ALL TO authenticated USING (auth.uid() = applicant_id) WITH CHECK (auth.uid() = applicant_id);
 CREATE POLICY "Allow all access for authenticated users" ON public.leads FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.customers FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access for authenticated users" ON public.employees FOR ALL TO authenticated USING (true) WITH CHECK (true);

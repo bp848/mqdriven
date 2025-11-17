@@ -392,6 +392,23 @@ const dbApprovalRouteToApprovalRoute = (d: any): ApprovalRoute => ({
     createdAt: d.created_at,
 });
 
+const dbApplicationDraftToApplication = (draft: any): Application => ({
+    id: draft.id,
+    applicantId: draft.applicant_id,
+    applicationCodeId: draft.application_code_id,
+    formData: draft.form_data,
+    status: 'draft',
+    submittedAt: null,
+    approvedAt: null,
+    rejectedAt: null,
+    currentLevel: 0,
+    approverId: null,
+    rejectionReason: null,
+    approvalRouteId: draft.approval_route_id || '',
+    createdAt: draft.created_at,
+    updatedAt: draft.updated_at,
+});
+
 const extractApproverIdsFromRoute = (route?: ApprovalRoute): string[] => {
     if (!route?.routeData?.steps?.length) return [];
     return route.routeData.steps
@@ -804,11 +821,10 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
 const findExistingDraftId = async (applicationCodeId: string, applicantId: string): Promise<string | null> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
-        .from('applications')
+        .from('application_drafts')
         .select('id')
         .eq('application_code_id', applicationCodeId)
         .eq('applicant_id', applicantId)
-        .eq('status', 'draft')
         .order('updated_at', { ascending: false })
         .limit(1);
 
@@ -820,52 +836,62 @@ const findExistingDraftId = async (applicationCodeId: string, applicantId: strin
 export const getApplicationDraft = async (applicationCodeId: string, applicantId: string): Promise<Application | null> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
-        .from('applications')
+        .from('application_drafts')
         .select('*')
         .eq('application_code_id', applicationCodeId)
         .eq('applicant_id', applicantId)
-        .eq('status', 'draft')
         .order('updated_at', { ascending: false })
         .limit(1);
 
     ensureSupabaseSuccess(error, 'Failed to fetch application draft');
     if (!data || data.length === 0) return null;
-    return dbApplicationToApplication(data[0]);
+    return dbApplicationDraftToApplication(data[0]);
 };
 
 export const saveApplicationDraft = async (appData: any, applicantId: string): Promise<Application> => {
+    if (!appData?.applicationCodeId) {
+        throw new Error('applicationCodeId is required to save drafts.');
+    }
+
     const supabase = getSupabase();
     const existingDraftId = await findExistingDraftId(appData.applicationCodeId, applicantId);
+    const now = new Date().toISOString();
+    const sanitizedApprovalRouteId =
+        typeof appData.approvalRouteId === 'string' && appData.approvalRouteId.trim().length > 0
+            ? appData.approvalRouteId
+            : null;
+
+    const draftUpdate = {
+        form_data: appData.formData,
+        approval_route_id: sanitizedApprovalRouteId,
+        updated_at: now,
+    };
 
     if (existingDraftId) {
         const { data, error } = await supabase
-            .from('applications')
-            .update({
-                form_data: appData.formData,
-                approval_route_id: appData.approvalRouteId ?? null,
-                updated_at: new Date().toISOString(),
-            })
+            .from('application_drafts')
+            .update(draftUpdate)
             .eq('id', existingDraftId)
             .select()
             .single();
 
         ensureSupabaseSuccess(error, 'Failed to update draft');
-        return dbApplicationToApplication(data);
+        return dbApplicationDraftToApplication(data);
     }
 
-    const { data, error } = await supabase.from('applications').insert({
-        application_code_id: appData.applicationCodeId,
-        form_data: appData.formData,
-        approval_route_id: appData.approvalRouteId ?? null,
-        applicant_id: applicantId,
-        status: 'draft',
-        submitted_at: null,
-        current_level: 1,
-        approver_id: null,
-    }).select().single();
+    const { data, error } = await supabase
+        .from('application_drafts')
+        .insert({
+            application_code_id: appData.applicationCodeId,
+            applicant_id: applicantId,
+            ...draftUpdate,
+            created_at: now,
+        })
+        .select()
+        .single();
 
     ensureSupabaseSuccess(error, 'Failed to save draft');
-    return dbApplicationToApplication(data);
+    return dbApplicationDraftToApplication(data);
 };
 
 export const clearApplicationDraft = async (applicationCodeId: string, applicantId: string): Promise<void> => {
@@ -873,7 +899,7 @@ export const clearApplicationDraft = async (applicationCodeId: string, applicant
     if (!draftId) return;
 
     const supabase = getSupabase();
-    const { error } = await supabase.from('applications').delete().eq('id', draftId);
+    const { error } = await supabase.from('application_drafts').delete().eq('id', draftId);
     ensureSupabaseSuccess(error, 'Failed to clear application draft');
 };
 export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
