@@ -416,16 +416,25 @@ const fetchJobCostSummaries = async (): Promise<Map<string, JobCostSummary>> => 
 };
 
 export const getJobsWithAggregation = async (): Promise<Job[]> => {
-    const [jobs, salesSummaries, costSummaries] = await Promise.all([
-        getJobs(),
-        fetchJobSalesSummaries(),
-        fetchJobCostSummaries(),
-    ]);
+    const jobs = await getJobs();
+
+    let salesSummaries: Map<string, JobSalesSummary> | null = null;
+    let costSummaries: Map<string, JobCostSummary> | null = null;
+
+    try {
+        [salesSummaries, costSummaries] = await Promise.all([
+            fetchJobSalesSummaries(),
+            fetchJobCostSummaries(),
+        ]);
+    } catch (error) {
+        console.error('Failed to aggregate job totals. Falling back to raw jobs.', error);
+        return jobs;
+    }
 
     return jobs.map(job => {
-        const sales = salesSummaries.get(job.id);
+        const sales = salesSummaries?.get(job.id);
         const costKey = job.projectCode ? String(job.projectCode) : job.jobNumber ? String(job.jobNumber) : '';
-        const cost = costKey ? costSummaries.get(costKey) : undefined;
+        const cost = costKey ? costSummaries?.get(costKey) : undefined;
 
         const totalQuantity = sales?.quantity ?? cost?.quantity ?? job.totalQuantity ?? job.quantity ?? 0;
         const totalAmount = sales?.amount ?? job.totalAmount ?? job.price ?? 0;
