@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Job, JobStatus, InvoiceStatus, ManufacturingStatus, Customer } from '../types';
+import { Job, JobCreationPayload, JobStatus, InvoiceStatus, ManufacturingStatus, Customer } from '../types';
 import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants';
 import { suggestJobParameters } from '../services/geminiService';
 import { Sparkles, Loader, X } from './Icons';
@@ -9,7 +9,7 @@ import CustomerSearchSelect from './forms/CustomerSearchSelect';
 interface CreateJobModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddJob: (job: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>) => Promise<void>;
+  onAddJob: (job: JobCreationPayload) => Promise<void>;
   customers: Customer[];
   onCreateCustomer: (customerData: Partial<Customer>) => Promise<Customer>;
 }
@@ -28,8 +28,15 @@ const initialFormState = {
   variableCost: 0,
 };
 
+const buildInitialOrderState = () => ({
+  orderDate: new Date().toISOString().split('T')[0],
+  orderQuantity: 1000,
+  orderUnitPrice: 0,
+});
+
 const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJob, customers, onCreateCustomer }) => {
   const [formData, setFormData] = useState(initialFormState);
+  const [orderData, setOrderData] = useState(buildInitialOrderState());
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,6 +56,7 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
   useEffect(() => {
     if (!isOpen) {
       setFormData({ ...initialFormState });
+      setOrderData(buildInitialOrderState());
       setSelectedCustomerId('');
       setNewCustomerName('');
       setAiPrompt('');
@@ -85,6 +93,14 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: ['quantity', 'price', 'variableCost'].includes(name) ? parseInt(value) || 0 : value }));
+  };
+
+  const handleOrderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setOrderData(prev => ({
+      ...prev,
+      [name]: ['orderQuantity', 'orderUnitPrice'].includes(name) ? parseFloat(value) || 0 : value,
+    }));
   };
 
   const handleAiGenerate = async () => {
@@ -133,14 +149,23 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
       setError("顧客、案件タイトル、納期、売上高は必須項目です。");
       return;
     }
+    if (!orderData.orderDate || orderData.orderQuantity <= 0 || orderData.orderUnitPrice <= 0) {
+      setError("受注明細の発注日・数量・単価は必須項目です。");
+      return;
+    }
     setError('');
     setIsSubmitting(true);
     try {
-        const newJob: Omit<Job, 'id' | 'createdAt' | 'jobNumber'> = {
+        const newJob: JobCreationPayload = {
           status: JobStatus.Pending,
           invoiceStatus: InvoiceStatus.Uninvoiced,
           manufacturingStatus: ManufacturingStatus.OrderReceived,
           ...formData,
+          initialOrder: {
+            orderDate: orderData.orderDate,
+            quantity: orderData.orderQuantity,
+            unitPrice: orderData.orderUnitPrice,
+          },
         };
         await onAddJob(newJob);
         if (mounted.current) {
@@ -182,6 +207,7 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
   const formRowClass = "flex flex-col gap-2";
   const labelClass = "text-sm font-medium text-slate-700 dark:text-slate-300";
   const inputClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+  const orderTotal = orderData.orderQuantity * orderData.orderUnitPrice;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
@@ -265,11 +291,32 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
                         <label htmlFor="variableCost" className={labelClass}>変動費 (V)</label>
                         <input type="number" id="variableCost" name="variableCost" placeholder="例: 35000" value={formData.variableCost} onChange={handleChange} className={inputClass} disabled={isSubmitting}/>
                     </div>
-                    <div className={`${formRowClass} justify-center`}>
-                        <label className={labelClass}>限界利益 (M)</label>
-                        <p className="text-xl font-bold p-2.5 text-slate-900 dark:text-white">{formatJPY(formData.price - formData.variableCost)}</p>
+                <div className={`${formRowClass} justify-center`}>
+                    <label className={labelClass}>限界利益 (M)</label>
+                    <p className="text-xl font-bold p-2.5 text-slate-900 dark:text-white">{formatJPY(formData.price - formData.variableCost)}</p>
+                </div>
+            </div>
+
+            <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-900/50 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">受注明細</h3>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">合計金額: {formatJPY(orderTotal)}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className={formRowClass}>
+                        <label htmlFor="orderDate" className={labelClass}>受注日 *</label>
+                        <input type="date" id="orderDate" name="orderDate" value={orderData.orderDate} onChange={handleOrderChange} className={inputClass} required disabled={isSubmitting} />
+                    </div>
+                    <div className={formRowClass}>
+                        <label htmlFor="orderQuantity" className={labelClass}>数量 *</label>
+                        <input type="number" id="orderQuantity" name="orderQuantity" value={orderData.orderQuantity} onChange={handleOrderChange} className={inputClass} min={1} required disabled={isSubmitting} />
+                    </div>
+                    <div className={formRowClass}>
+                        <label htmlFor="orderUnitPrice" className={labelClass}>単価 *</label>
+                        <input type="number" id="orderUnitPrice" name="orderUnitPrice" value={orderData.orderUnitPrice} onChange={handleOrderChange} className={inputClass} min={1} required disabled={isSubmitting} />
                     </div>
                 </div>
+            </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                     <div className={formRowClass}>
@@ -308,7 +355,15 @@ const CreateJobModal: React.FC<CreateJobModalProps> = ({ isOpen, onClose, onAddJ
           <button onClick={onClose} disabled={isSubmitting} className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">キャンセル</button>
           <button 
               onClick={handleSubmit}
-              disabled={isSubmitting || !formData.clientName || !formData.title || !formData.dueDate}
+              disabled={
+                isSubmitting ||
+                !formData.clientName ||
+                !formData.title ||
+                !formData.dueDate ||
+                !orderData.orderDate ||
+                orderData.orderQuantity <= 0 ||
+                orderData.orderUnitPrice <= 0
+              }
               className="w-32 flex items-center justify-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
           >
               {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '案件を追加'}

@@ -95,6 +95,16 @@ export interface Job {
   manufacturingStatus?: ManufacturingStatus;
 }
 
+export interface JobOrderInput {
+  orderDate: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface JobCreationPayload extends Omit<Job, 'id' | 'createdAt' | 'jobNumber'> {
+  initialOrder: JobOrderInput;
+}
+
 export enum ProjectStatus {
   Draft = 'Draft',
   New = 'New',

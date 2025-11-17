@@ -84,6 +84,7 @@ interface ExpenseReimbursementFormProps {
     isLoading: boolean;
     error: string;
     addToast?: (message: string, type: Toast['type']) => void;
+    draftApplication?: ApplicationWithDetails | null;
 }
 
 interface ComputedTotals {
@@ -350,6 +351,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     isLoading,
     error: formLoadError,
     addToast,
+    draftApplication,
 }) => {
     const [invoiceDrafts, setInvoiceDrafts] = useState<ExpenseInvoiceDraft[]>([createEmptyInvoiceDraft()]);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
@@ -477,7 +479,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     }, []);
 
     useEffect(() => {
-        if (!currentUser?.id || !applicationCodeId) return;
+        if (!currentUser?.id || !applicationCodeId || draftApplication) return;
         let isMounted = true;
         setIsRestoringDraft(true);
 
@@ -498,7 +500,17 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         return () => {
             isMounted = false;
         };
-    }, [applicationCodeId, currentUser?.id, restoreDraftFromPayload]);
+    }, [applicationCodeId, currentUser?.id, restoreDraftFromPayload, draftApplication]);
+
+    useEffect(() => {
+        if (!draftApplication?.formData || draftApplication.applicationCodeId !== applicationCodeId) return;
+        setIsRestoringDraft(true);
+        try {
+            restoreDraftFromPayload(draftApplication.formData);
+        } finally {
+            setIsRestoringDraft(false);
+        }
+    }, [draftApplication, applicationCodeId, restoreDraftFromPayload]);
 
     useEffect(() => {
         if (!selectedInvoice || selectedInvoice.paymentRecipientId || !selectedInvoice.supplierName || !paymentRecipients.length) return;

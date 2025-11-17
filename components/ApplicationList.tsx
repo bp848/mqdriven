@@ -1,16 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { ApplicationWithDetails, SortConfig } from '../types';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
-import { ArrowUpDown, ChevronDown, Eye } from './Icons';
+import { ArrowUpDown, ChevronDown, Eye, RefreshCw } from './Icons';
 import { formatDateTime } from '../utils';
 
 interface ApplicationListProps {
   applications: ApplicationWithDetails[];
   onApplicationSelect: (app: ApplicationWithDetails) => void;
   selectedApplicationId: string | null;
+  onResumeDraft?: (app: ApplicationWithDetails) => void;
 }
 
-const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onApplicationSelect, selectedApplicationId }) => {
+const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onApplicationSelect, selectedApplicationId, onResumeDraft }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
 
   const sortedApplications = useMemo(() => {
@@ -107,9 +108,28 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
                 <td className="px-6 py-4">{formatDateTime(app.updatedAt || app.createdAt)}</td>
                 <td className="px-6 py-4"><ApplicationStatusBadge status={app.status} /></td>
                 <td className="px-6 py-4 text-center">
-                  <button onClick={() => onApplicationSelect(app)} className="flex items-center justify-center gap-1.5 w-full text-blue-600 dark:text-blue-400 font-semibold hover:underline">
-                    <Eye className="w-4 h-4" />
-                    <span>詳細表示</span>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (app.status === 'draft' && onResumeDraft) {
+                        onResumeDraft(app);
+                        return;
+                      }
+                      onApplicationSelect(app);
+                    }}
+                    className="flex items-center justify-center gap-1.5 w-full text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                  >
+                    {app.status === 'draft' ? (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        <span>下書きを再開</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-4 h-4" />
+                        <span>詳細表示</span>
+                      </>
+                    )}
                   </button>
                 </td>
               </tr>
