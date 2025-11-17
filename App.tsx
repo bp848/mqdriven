@@ -34,6 +34,7 @@ import MarketResearchPage from './components/MarketResearchPage';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SalesDashboard from './components/sales/SalesDashboard';
+import SalesOrdersPage from './components/sales/SalesOrdersPage';
 import ManufacturingCostManagement from './components/accounting/ManufacturingCostManagement';
 import AuditLogPage from './components/admin/AuditLogPage';
 import JournalQueuePage from './components/admin/JournalQueuePage';
@@ -670,7 +671,15 @@ const App: React.FC = () => {
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;
             case 'sales_orders':
-                return <JobList jobs={jobs} searchTerm={searchTerm} onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} onNewJob={() => setCreateJobModalOpen(true)} />;
+                return (
+                    <SalesOrdersPage
+                        jobs={jobs}
+                        orders={purchaseOrders}
+                        searchTerm={searchTerm}
+                        onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }}
+                        onNewJob={() => setCreateJobModalOpen(true)}
+                    />
+                );
             case 'fax_ocr_intake':
                 return (
                     <FaxOcrIntakePage
