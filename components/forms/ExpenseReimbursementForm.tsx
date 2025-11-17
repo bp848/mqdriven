@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { submitApplication, saveApplicationDraft } from '../../services/dataService';
+import { submitApplication, saveApplicationDraft, getApplicationDraft, clearApplicationDraft } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
@@ -157,6 +157,45 @@ const createEmptyInvoiceDraft = (): ExpenseInvoiceDraft => ({
         accountNumber: '',
     },
     lines: [createEmptyLine()],
+});
+
+const normalizeExpenseLine = (line?: Partial<ExpenseLine>): ExpenseLine => ({
+    id: line?.id || generateId('line'),
+    lineDate: line?.lineDate || new Date().toISOString().split('T')[0],
+    description: line?.description || '',
+    quantity: Number(line?.quantity ?? 1) || 1,
+    unit: line?.unit || '式',
+    unitPrice: Number(line?.unitPrice ?? 0) || 0,
+    amountExclTax: Number(line?.amountExclTax ?? 0) || 0,
+    taxRate: Number(line?.taxRate ?? 10) || 10,
+    accountItemId: line?.accountItemId || '',
+    allocationDivisionId: line?.allocationDivisionId || '',
+    customerId: line?.customerId || '',
+    projectId: line?.projectId || '',
+    linkedRevenueId: line?.linkedRevenueId || '',
+});
+
+const normalizeExpenseInvoiceDraft = (draft?: Partial<ExpenseInvoiceDraft>): ExpenseInvoiceDraft => ({
+    id: draft?.id || generateId('invoice'),
+    supplierName: draft?.supplierName || '',
+    paymentRecipientId: draft?.paymentRecipientId || '',
+    registrationNumber: draft?.registrationNumber || '',
+    invoiceDate: draft?.invoiceDate || new Date().toISOString().split('T')[0],
+    dueDate: draft?.dueDate || '',
+    totalGross: Number(draft?.totalGross ?? 0) || 0,
+    totalNet: Number(draft?.totalNet ?? 0) || 0,
+    taxAmount: Number(draft?.taxAmount ?? 0) || 0,
+    status: (draft?.status as ExpenseInvoiceDraft['status']) || 'Draft',
+    bankAccount: {
+        bankName: draft?.bankAccount?.bankName || '',
+        branchName: draft?.bankAccount?.branchName || '',
+        accountType: draft?.bankAccount?.accountType || '',
+        accountNumber: draft?.bankAccount?.accountNumber || '',
+    },
+    lines: (() => {
+        const lines = Array.isArray(draft?.lines) ? (draft?.lines as Partial<ExpenseLine>[]) : [];
+        return lines.length > 0 ? lines.map(line => normalizeExpenseLine(line)) : [createEmptyLine()];
+    })(),
 });
 
 const computeLineTotals = (invoice: ExpenseInvoiceDraft): ComputedTotals => {
@@ -330,13 +369,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     const [notes, setNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const [isRestoringDraft, setIsRestoringDraft] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
     const [customerSearchTerms, setCustomerSearchTerms] = useState<Record<string, string>>({});
     const [highlightedLineId, setHighlightedLineId] = useState<string>('');
     const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+    const [previewFiles, setPreviewFiles] = useState<{ id: string; name: string; url: string; type: string }[]>([]);
+    const [selectedPreviewId, setSelectedPreviewId] = useState<string>('');
 
-    const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
+    const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoringDraft || !!formLoadError;
 
     useEffect(() => {
         if (!selectedInvoiceId && invoiceDrafts.length > 0) {
@@ -423,6 +465,52 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         [selectedInvoice]
     );
 
+    const restoreDraftFromPayload = useCallback((draftPayload: any) => {
+        if (!draftPayload) return;
+        const normalizedDrafts =
+            Array.isArray(draftPayload.invoiceDrafts) && draftPayload.invoiceDrafts.length
+                ? draftPayload.invoiceDrafts.map((draft: Partial<ExpenseInvoiceDraft>) => normalizeExpenseInvoiceDraft(draft))
+                : draftPayload.invoice
+                    ? [normalizeExpenseInvoiceDraft(draftPayload.invoice as Partial<ExpenseInvoiceDraft>)]
+                    : [createEmptyInvoiceDraft()];
+
+        setInvoiceDrafts(normalizedDrafts);
+        const nextSelectedId =
+            draftPayload.selectedInvoiceId && normalizedDrafts.some(inv => inv.id === draftPayload.selectedInvoiceId)
+                ? draftPayload.selectedInvoiceId
+                : normalizedDrafts[0].id;
+        setSelectedInvoiceId(nextSelectedId);
+        setDepartmentId(draftPayload.departmentId || '');
+        setApprovalRouteId(draftPayload.approvalRouteId || '');
+        setNotes(draftPayload.notes || '');
+        setCustomerSearchTerms({});
+        setHighlightedLineId('');
+    }, []);
+
+    useEffect(() => {
+        if (!currentUser?.id || !applicationCodeId) return;
+        let isMounted = true;
+        setIsRestoringDraft(true);
+
+        (async () => {
+            try {
+                const draft = await getApplicationDraft(applicationCodeId, currentUser.id);
+                if (!isMounted || !draft?.formData) return;
+                restoreDraftFromPayload(draft.formData);
+            } catch (err) {
+                console.error('Failed to restore draft', err);
+            } finally {
+                if (isMounted) {
+                    setIsRestoringDraft(false);
+                }
+            }
+        })();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [applicationCodeId, currentUser?.id, restoreDraftFromPayload]);
+
     useEffect(() => {
         if (!selectedInvoice || selectedInvoice.paymentRecipientId || !selectedInvoice.supplierName || !paymentRecipients.length) return;
         const matchedId = findMatchingPaymentRecipientId(selectedInvoice.supplierName, paymentRecipients);
@@ -493,22 +581,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         setCustomerSearchTerms(prev => ({ ...prev, [lineId]: value }));
     };
 
-    const suggestedCustomers = useMemo(() => {
-        if (!selectedInvoice?.supplierName) return effectiveCustomers.slice(0, 3);
-        const keyword = selectedInvoice.supplierName.toLowerCase();
-        const matches = effectiveCustomers.filter(customer => customer.customerName.toLowerCase().includes(keyword));
-        if (matches.length >= 3) return matches.slice(0, 3);
-
-        const merged = [...matches];
-        for (const customer of effectiveCustomers) {
-            if (merged.length >= 3) break;
-            if (!merged.find(item => item.id === customer.id)) {
-                merged.push(customer);
-            }
-        }
-        return merged.slice(0, 3);
-    }, [effectiveCustomers, selectedInvoice?.supplierName]);
-
     const getAccountItemSuggestions = (description: string) => {
         if (!description.trim()) return [];
         const keyword = description.toLowerCase();
@@ -536,6 +608,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         setIsOcrLoading(true);
         setError('');
         const created: ExpenseInvoiceDraft[] = [];
+        const newPreviews: { id: string; name: string; url: string; type: string }[] = [];
 
         try {
             for (const file of Array.from(fileList)) {
@@ -564,6 +637,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     },
                 ];
                 created.push(invoice);
+
+                const previewId = generateId('preview');
+                const objectUrl = URL.createObjectURL(file);
+                newPreviews.push({ id: previewId, name: file.name, url: objectUrl, type: file.type || '' });
             }
         } catch (err: any) {
             setError(err.message || 'OCR処理でエラーが発生しました。');
@@ -575,6 +652,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
             setInvoiceDrafts(prev => [...created, ...prev]);
             setSelectedInvoiceId(created[0].id);
             addToast?.(`${created.length}件の請求書をDraftに取り込みました。`, 'info');
+        }
+
+        if (newPreviews.length > 0) {
+            setPreviewFiles(prev => [...newPreviews, ...prev]);
+            setSelectedPreviewId(newPreviews[0].id);
         }
     };
 
@@ -594,6 +676,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         applicationCodeId,
         formData: {
             departmentId,
+            approvalRouteId,
+            invoiceDrafts,
+            selectedInvoiceId,
             invoice: selectedInvoice,
             mqAlerts: diagnosticsForSelected?.alerts ?? [],
             computedTotals: diagnosticsForSelected?.totals,
@@ -623,6 +708,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         setIsSubmitting(true);
         try {
             await submitApplication(buildApplicationPayload(), currentUser.id);
+            try {
+                await clearApplicationDraft(applicationCodeId, currentUser.id);
+            } catch (cleanupError) {
+                console.warn('Failed to clear expense draft after submission', cleanupError);
+            }
             addToast?.('経費精算を送信しました。', 'success');
             onSuccess();
         } catch (err: any) {
@@ -664,6 +754,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     };
 
     const totalsLabel = diagnosticsForSelected?.totals || { net: 0, tax: 0, gross: 0 };
+    const selectedPreview = useMemo(
+        () => previewFiles.find(f => f.id === selectedPreviewId) || previewFiles[0],
+        [previewFiles, selectedPreviewId]
+    );
 
     if (!selectedInvoice) {
         return (
@@ -683,9 +777,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
 
     return (
         <div className="relative">
-            {(isLoading || formLoadError) && (
+            {(isLoading || formLoadError || isRestoringDraft) && (
                 <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/70 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
-                    {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
+                    {(isLoading || isRestoringDraft) && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                 </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -700,6 +794,55 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
 
                 <div className="grid lg:grid-cols-12 gap-6">
                     <div className="lg:col-span-5 space-y-6">
+                        <section className="bg-slate-950/70 dark:bg-slate-950/80 rounded-xl p-4 shadow-sm min-h-[360px] flex flex-col">
+                            <p className="text-sm font-semibold text-slate-200 mb-2">請求書プレビュー</p>
+                            {previewFiles.length === 0 ? (
+                                <p className="text-xs text-slate-400">
+                                    PDF / 画像をアップロードするとここにプレビューが表示されます。
+                                </p>
+                            ) : (
+                                <div className="flex-1 flex gap-3 overflow-hidden">
+                                    <div className="w-32 flex-shrink-0 space-y-2 overflow-y-auto pr-1">
+                                        {previewFiles.map(file => (
+                                            <button
+                                                key={file.id}
+                                                type="button"
+                                                onClick={() => setSelectedPreviewId(file.id)}
+                                                className={`w-full text-left px-2 py-1 rounded-md text-xs border transition-colors ${
+                                                    selectedPreview?.id === file.id
+                                                        ? 'bg-blue-600 text-white border-blue-400'
+                                                        : 'bg-slate-900 text-slate-200 border-slate-700 hover:border-blue-400'
+                                                }`}
+                                            >
+                                                <span className="block truncate" title={file.name}>{file.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex-1 bg-slate-900 border border-slate-700 rounded-lg flex items-center justify-center overflow-hidden">
+                                        {selectedPreview ? (
+                                            selectedPreview.type.startsWith('image/') ? (
+                                                <img
+                                                    src={selectedPreview.url}
+                                                    alt={selectedPreview.name}
+                                                    className="max-h-full max-w-full object-contain"
+                                                />
+                                            ) : selectedPreview.type === 'application/pdf' ? (
+                                                <iframe
+                                                    src={selectedPreview.url}
+                                                    title={selectedPreview.name}
+                                                    className="w-full h-full"
+                                                />
+                                            ) : (
+                                                <p className="text-xs text-slate-400">このファイル形式のプレビューには対応していません。</p>
+                                            )
+                                        ) : (
+                                            <p className="text-xs text-slate-400">プレビュー対象のファイルがありません。</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+
                         <section
                             onDragOver={e => {
                                 e.preventDefault();
@@ -1291,23 +1434,25 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-2 py-1 text-xs mb-1"
                                                             disabled={isDisabled}
                                                         />
-                                                        <div className="flex flex-wrap gap-1 mb-1">
-                                                            {suggestedCustomers.map(customer => (
-                                                                <button
-                                                                    type="button"
-                                                                    key={customer.id}
-                                                                    onClick={() => handleLineChange(line.id, 'customerId', customer.id)}
-                                                                    className={`px-2 py-0.5 text-[11px] rounded-full border ${
-                                                                        line.customerId === customer.id
-                                                                            ? 'bg-blue-100 border-blue-400 text-blue-700'
-                                                                            : 'bg-white border-slate-200 text-slate-600'
-                                                                    }`}
-                                                                    disabled={isDisabled}
-                                                                >
-                                                                    {customer.customerName}
-                                                                </button>
-                                                            ))}
-                                                        </div>
+                                                        {customerFilter && (
+                                                            <div className="flex flex-wrap gap-1 mb-1">
+                                                                {filteredCustomers.slice(0, 3).map(customer => (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={customer.id}
+                                                                        onClick={() => handleLineChange(line.id, 'customerId', customer.id)}
+                                                                        className={`px-2 py-0.5 text-[11px] rounded-full border ${
+                                                                            line.customerId === customer.id
+                                                                                ? 'bg-blue-100 border-blue-400 text-blue-700'
+                                                                                : 'bg-white border-slate-200 text-slate-600'
+                                                                        }`}
+                                                                        disabled={isDisabled}
+                                                                    >
+                                                                        {customer.customerName}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                         <select
                                                             id={`customer-${line.id}`}
                                                             aria-label="顧客"

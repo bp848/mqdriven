@@ -69,6 +69,7 @@ export enum BugReportStatus {
 export interface Job {
   id: string;
   jobNumber: number;
+  projectCode?: string | null;
   clientName: string;
   customerId?: string | null;
   customerCode?: string | null;
@@ -356,6 +357,7 @@ export interface AccountItem {
 export interface PurchaseOrder {
     id: string;
     supplierName: string;
+    paymentRecipientId?: string | null;
     itemName: string;
     orderDate: string;
     quantity: number;

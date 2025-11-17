@@ -37,7 +37,11 @@ const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isO
         setIsSaving(true);
         setError('');
         try {
-            await onAddPurchaseOrder({ ...formData, status: PurchaseOrderStatus.Ordered });
+            await onAddPurchaseOrder({
+                ...formData,
+                paymentRecipientId: selectedSupplierId,
+                status: PurchaseOrderStatus.Ordered,
+            });
         } catch (err) {
             setError(err instanceof Error ? err.message : '保存に失敗しました。');
         } finally {

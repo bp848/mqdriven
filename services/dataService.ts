@@ -1,4 +1,5 @@
 import { getSupabase } from './supabaseClient';
+import type { PostgrestError } from '@supabase/supabase-js';
 import {
     EmployeeUser,
     Job,
@@ -60,6 +61,7 @@ const dbJobToJob = (project: any): Job => ({
     jobNumber: typeof project.project_code === 'number'
         ? project.project_code
         : parseInt(project.project_code, 10) || 0,
+    projectCode: project.project_code ?? null,
     clientName: project.customer_name || project.client_name || project.customer_code || '',
     customerId: project.customer_id ?? null,
     customerCode: project.customer_code ?? null,
@@ -112,6 +114,7 @@ const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
     return {
         id: order.id,
         supplierName: order.client_custmer || order.customer_name || '',
+        paymentRecipientId: order.payment_recipient_id ?? null,
         itemName: order.project_code || order.order_code || '',
         orderDate: order.order_date || order.create_date || '',
         quantity,
@@ -277,6 +280,23 @@ const dbApplicationCodeToApplicationCode = (d: any): ApplicationCode => ({
     createdAt: d.created_at,
 });
 
+const dbApplicationToApplication = (app: any): Application => ({
+    id: app.id,
+    applicantId: app.applicant_id,
+    applicationCodeId: app.application_code_id,
+    formData: app.form_data,
+    status: app.status,
+    submittedAt: app.submitted_at,
+    approvedAt: app.approved_at,
+    rejectedAt: app.rejected_at,
+    currentLevel: typeof app.current_level === 'number' ? app.current_level : (app.current_level ? Number(app.current_level) : 0),
+    approverId: app.approver_id,
+    rejectionReason: app.rejection_reason,
+    approvalRouteId: app.approval_route_id || '',
+    createdAt: app.created_at,
+    updatedAt: app.updated_at,
+});
+
 const dbApprovalRouteToApprovalRoute = (d: any): ApprovalRoute => ({
     id: d.id,
     name: d.name,
@@ -296,6 +316,21 @@ export const isSupabaseUnavailableError = (error: any): boolean => {
     return /fetch failed/i.test(message) || /failed to fetch/i.test(message) || /network/i.test(message);
 };
 
+const formatSupabaseError = (context: string, error?: PostgrestError | null): Error => {
+    if (!error) return new Error(context);
+    const codePart = error.code ? `[${error.code}] ` : '';
+    const detailsPart = error.details ? ` ${error.details}` : '';
+    const hintPart = error.hint ? ` ${error.hint}` : '';
+    const message = error.message || JSON.stringify(error);
+    return new Error(`${context}: ${codePart}${message}${detailsPart}${hintPart}`.trim());
+};
+
+const ensureSupabaseSuccess = (error: PostgrestError | null, context: string): void => {
+    if (error) {
+        throw formatSupabaseError(context, error);
+    }
+};
+
 // --- Data Service Functions ---
 
 export const getJobs = async (): Promise<Job[]> => {
@@ -303,16 +338,13 @@ export const getJobs = async (): Promise<Job[]> => {
     const [
         { data: projectRows, error: projectError },
         { data: customerRows, error: customerError },
-        { data: orderRows, error: orderError },
     ] = await Promise.all([
         supabase.from('projects').select('*').order('project_code', { ascending: false }),
         supabase.from('customers').select('id, customer_code, customer_name'),
-        supabase.from('orders').select('project_code, quantity, amount, subamount, total_amount, total_cost'),
     ]);
 
-    if (projectError) throw new Error(`Failed to fetch jobs: ${projectError.message}`);
+    if (projectError) throw formatSupabaseError('Failed to fetch jobs', projectError);
     if (customerError) console.warn('Failed to fetch customers for job mapping:', customerError.message);
-    if (orderError) console.warn('Failed to fetch orders for job mapping:', orderError.message);
 
     const customerById = new Map<string, { customer_name: string; customer_code: string | null }>();
     const customerByCode = new Map<string, { customer_name: string; customer_code: string | null }>();
@@ -325,24 +357,8 @@ export const getJobs = async (): Promise<Job[]> => {
         }
     });
 
-    const orderSummaries = new Map<string, { amount: number; cost: number; quantity: number }>();
-    (orderRows || []).forEach(order => {
-        const key = order?.project_code ? String(order.project_code) : undefined;
-        if (!key) return;
-        const summary = orderSummaries.get(key) || { amount: 0, cost: 0, quantity: 0 };
-        summary.amount += Number(order.total_amount ?? order.amount ?? 0) || 0;
-        summary.cost += Number(order.total_cost ?? order.subamount ?? 0) || 0;
-        summary.quantity += Number(order.quantity ?? 0) || 0;
-        orderSummaries.set(key, summary);
-    });
-
     return (projectRows || []).map(project => {
         const baseJob = dbJobToJob(project);
-        const projectCodeKey = project.project_code ? String(project.project_code) : baseJob.jobNumber ? String(baseJob.jobNumber) : '';
-        const summary = projectCodeKey ? orderSummaries.get(projectCodeKey) : undefined;
-        const totalAmount = summary?.amount ?? Number(project.amount ?? baseJob.price ?? 0);
-        const totalCost = summary?.cost ?? Number(project.subamount ?? baseJob.variableCost ?? 0);
-        const totalQuantity = summary?.quantity ?? Number(project.quantity ?? baseJob.quantity ?? 0);
         const customerInfo =
             (project.customer_id && customerById.get(project.customer_id)) ||
             (project.customer_code && customerByCode.get(project.customer_code)) ||
@@ -352,13 +368,75 @@ export const getJobs = async (): Promise<Job[]> => {
             ...baseJob,
             clientName: customerInfo?.customer_name || baseJob.clientName,
             customerCode: customerInfo?.customer_code || baseJob.customerCode,
+        };
+    });
+};
+
+type JobSalesSummary = { amount: number; quantity: number };
+type JobCostSummary = { cost: number; quantity: number };
+
+const fetchJobSalesSummaries = async (): Promise<Map<string, JobSalesSummary>> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('invoice_items')
+        .select('job_id, quantity, line_total');
+
+    ensureSupabaseSuccess(error, 'Failed to fetch invoice items for aggregation');
+
+    const summaries = new Map<string, JobSalesSummary>();
+    (data || []).forEach(item => {
+        const jobId = item?.job_id;
+        if (!jobId) return;
+        const summary = summaries.get(jobId) || { amount: 0, quantity: 0 };
+        summary.amount += Number(item.line_total ?? 0) || 0;
+        summary.quantity += Number(item.quantity ?? 0) || 0;
+        summaries.set(jobId, summary);
+    });
+    return summaries;
+};
+
+const fetchJobCostSummaries = async (): Promise<Map<string, JobCostSummary>> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('orders')
+        .select('project_code, quantity, total_cost, subamount');
+
+    ensureSupabaseSuccess(error, 'Failed to fetch purchase orders for aggregation');
+
+    const summaries = new Map<string, JobCostSummary>();
+    (data || []).forEach(order => {
+        const projectCode = order?.project_code ? String(order.project_code) : null;
+        if (!projectCode) return;
+        const summary = summaries.get(projectCode) || { cost: 0, quantity: 0 };
+        summary.cost += Number(order.total_cost ?? order.subamount ?? 0) || 0;
+        summary.quantity += Number(order.quantity ?? 0) || 0;
+        summaries.set(projectCode, summary);
+    });
+    return summaries;
+};
+
+export const getJobsWithAggregation = async (): Promise<Job[]> => {
+    const [jobs, salesSummaries, costSummaries] = await Promise.all([
+        getJobs(),
+        fetchJobSalesSummaries(),
+        fetchJobCostSummaries(),
+    ]);
+
+    return jobs.map(job => {
+        const sales = salesSummaries.get(job.id);
+        const costKey = job.projectCode ? String(job.projectCode) : job.jobNumber ? String(job.jobNumber) : '';
+        const cost = costKey ? costSummaries.get(costKey) : undefined;
+
+        const totalQuantity = sales?.quantity ?? cost?.quantity ?? job.totalQuantity ?? job.quantity ?? 0;
+        const totalAmount = sales?.amount ?? job.totalAmount ?? job.price ?? 0;
+        const totalCost = cost?.cost ?? job.totalCost ?? job.variableCost ?? 0;
+
+        return {
+            ...job,
+            totalQuantity,
             totalAmount,
             totalCost,
-            totalQuantity,
             grossMargin: totalAmount - totalCost,
-            price: totalAmount,
-            variableCost: totalCost,
-            quantity: totalQuantity,
         };
     });
 };
@@ -367,41 +445,41 @@ export const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'jobNumber'
     const supabase = getSupabase();
     const dbJob = jobToDbJob({ ...jobData, createdAt: new Date().toISOString() });
     const { data, error } = await supabase.from('projects').insert(dbJob).select().single();
-    if (error) throw new Error(`Failed to add job: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add job');
     return dbJobToJob(data);
 };
 
 export const updateJob = async (id: string, updates: Partial<Job>): Promise<Job> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('projects').update(jobToDbJob(updates)).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update job: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update job');
     return dbJobToJob(data);
 };
 
 export const deleteJob = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('projects').delete().eq('id', id);
-    if (error) throw new Error(`Failed to delete job: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to delete job');
 };
 
 export const getCustomers = async (): Promise<Customer[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(`Failed to fetch customers: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch customers');
     return (data || []).map(dbCustomerToCustomer);
 };
 
 export const addCustomer = async (customerData: Partial<Customer>): Promise<Customer> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('customers').insert(customerToDbCustomer(customerData)).select().single();
-    if (error) throw new Error(`Failed to add customer: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add customer');
     return dbCustomerToCustomer(data);
 };
 
 export const updateCustomer = async (id: string, updates: Partial<Customer>): Promise<Customer> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('customers').update(customerToDbCustomer(updates)).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update customer: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update customer');
     return dbCustomerToCustomer(data);
 };
 
@@ -409,14 +487,14 @@ export const updateCustomer = async (id: string, updates: Partial<Customer>): Pr
 export const getJournalEntries = async (): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('journal_entries').select('*').order('date', { ascending: false });
-    if (error) throw new Error(`Failed to fetch journal entries: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
     return data || [];
 };
 
 export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>): Promise<JournalEntry> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('journal_entries').insert(entryData).select().single();
-    if (error) throw new Error(`Failed to add journal entry: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add journal entry');
     return data;
 };
 
@@ -435,7 +513,7 @@ export async function getUsers(): Promise<EmployeeUser[]> {
         supabase.from('employee_titles').select('id, name'),
     ]);
 
-    if (userError) throw new Error(`Failed to fetch users: ${userError.message}`);
+    if (userError) throw formatSupabaseError('Failed to fetch users', userError);
     if (departmentError) console.warn('Failed to fetch departments for user mapping:', departmentError.message);
     if (titleError) console.warn('Failed to fetch titles for user mapping:', titleError.message);
 
@@ -473,33 +551,35 @@ export async function getUsers(): Promise<EmployeeUser[]> {
 export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user' }): Promise<void> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('users').insert({ email: userData.email, name: userData.name, role: userData.role }).select().single();
-    if (error) throw new Error(`Failed to add user: ${error.message}. This might fail if the user doesn't exist in auth.users. An invite flow might be required.`);
+    if (error) {
+        throw formatSupabaseError('Failed to add user (user must exist in auth.users)', error);
+    }
     return;
 };
 
 export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<void> => {
     const supabase = getSupabase();
     const { error: userError } = await supabase.from('users').update({ name: updates.name, email: updates.email, role: updates.role }).eq('id', id);
-    if (userError) throw new Error(`Failed to update user: ${userError.message}`);
+    if (userError) throw formatSupabaseError('Failed to update user', userError);
 };
 
 export const deleteUser = async (userId: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('users').delete().eq('id', userId);
-    if (error) throw new Error(`Failed to delete user: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to delete user');
 };
 
 export const getLeads = async (): Promise<Lead[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(`Failed to fetch leads: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch leads');
     return (data || []).map(dbLeadToLead);
 };
 
 export const addLead = async (leadData: Partial<Lead>): Promise<Lead> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('leads').insert(leadToDbLead(leadData)).select().single();
-    if (error) throw new Error(`Failed to add lead: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add lead');
     return dbLeadToLead(data);
 };
 
@@ -507,40 +587,40 @@ export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Le
     const supabase = getSupabase();
     const { updatedAt, ...restOfUpdates } = updates;
     const { data, error } = await supabase.from('leads').update(leadToDbLead(restOfUpdates)).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update lead: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update lead');
     return dbLeadToLead(data);
 };
 
 export const deleteLead = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('leads').delete().eq('id', id);
-    if (error) throw new Error(`Failed to delete lead: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to delete lead');
 };
 
 export const getApprovalRoutes = async (): Promise<ApprovalRoute[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('approval_routes').select('*');
-    if (error) throw new Error(`Failed to fetch approval routes: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch approval routes');
     return (data || []).map(dbApprovalRouteToApprovalRoute);
 };
 export const addApprovalRoute = async (routeData: any): Promise<ApprovalRoute> => {
     const supabase = getSupabase();
     const dbRouteData = { name: routeData.name, route_data: { steps: routeData.routeData.steps.map((s:any) => ({ approver_id: s.approverId })) } };
     const { data, error } = await supabase.from('approval_routes').insert(dbRouteData).select().single();
-    if (error) throw new Error(`Failed to add approval route: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add approval route');
     return dbApprovalRouteToApprovalRoute(data);
 };
 export const updateApprovalRoute = async (id: string, updates: Partial<ApprovalRoute>): Promise<ApprovalRoute> => {
     const supabase = getSupabase();
     const dbUpdates = { name: updates.name, route_data: { steps: updates.routeData!.steps.map(s => ({ approver_id: s.approverId }))}};
     const { data, error } = await supabase.from('approval_routes').update(dbUpdates).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update approval route: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update approval route');
     return dbApprovalRouteToApprovalRoute(data);
 };
 export const deleteApprovalRoute = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('approval_routes').delete().eq('id', id);
-    if (error) throw new Error(`Failed to delete approval route: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to delete approval route');
 };
 
 export const getApplications = async (currentUser: User | null): Promise<ApplicationWithDetails[]> => {
@@ -551,12 +631,9 @@ export const getApplications = async (currentUser: User | null): Promise<Applica
         .or(`applicant_id.eq.${currentUser?.id},approver_id.eq.${currentUser?.id}`)
         .order('created_at', { ascending: false });
         
-    if (error) throw new Error(`Failed to fetch applications: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch applications');
     return (data || []).map(app => ({
-        id: app.id, applicantId: app.applicant_id, applicationCodeId: app.application_code_id, formData: app.form_data, status: app.status,
-        submittedAt: app.submitted_at, approvedAt: app.approved_at, rejectedAt: app.rejected_at, currentLevel: app.current_level,
-        approverId: app.approver_id, rejectionReason: app.rejection_reason, approvalRouteId: app.approval_route_id,
-        createdAt: app.created_at, updatedAt: app.updated_at,
+        ...dbApplicationToApplication(app),
         applicant: app.applicant,
         applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
         approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
@@ -565,14 +642,14 @@ export const getApplications = async (currentUser: User | null): Promise<Applica
 export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('application_codes').select('*');
-    if (error) throw new Error(`Failed to fetch application codes: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch application codes');
     return (data || []).map(dbApplicationCodeToApplicationCode);
 };
 export const submitApplication = async (appData: any, applicantId: string): Promise<Application> => {
     const supabase = getSupabase();
 
     const { data: routeData, error: routeError } = await supabase.from('approval_routes').select('route_data').eq('id', appData.approvalRouteId).single();
-    if (routeError) throw new Error(`承認ルートの取得に失敗しました: ${routeError.message}`);
+    if (routeError) throw formatSupabaseError('承認ルートの取得に失敗しました', routeError);
     if (!routeData?.route_data?.steps || routeData.route_data.steps.length === 0) throw new Error('選択された承認ルートに承認者が設定されていません。');
 
     const firstApproverId = routeData.route_data.steps[0].approver_id;
@@ -582,13 +659,63 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
         applicant_id: applicantId, status: 'pending_approval', submitted_at: new Date().toISOString(), current_level: 1, approver_id: firstApproverId,
     }).select().single();
 
-    if (error) throw new Error(`Failed to submit application: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to submit application');
 
     return data;
 };
 
+const findExistingDraftId = async (applicationCodeId: string, applicantId: string): Promise<string | null> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('applications')
+        .select('id')
+        .eq('application_code_id', applicationCodeId)
+        .eq('applicant_id', applicantId)
+        .eq('status', 'draft')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+    ensureSupabaseSuccess(error, 'Failed to look up existing draft');
+    if (!data || data.length === 0) return null;
+    return data[0].id;
+};
+
+export const getApplicationDraft = async (applicationCodeId: string, applicantId: string): Promise<Application | null> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('applications')
+        .select('*')
+        .eq('application_code_id', applicationCodeId)
+        .eq('applicant_id', applicantId)
+        .eq('status', 'draft')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+    ensureSupabaseSuccess(error, 'Failed to fetch application draft');
+    if (!data || data.length === 0) return null;
+    return dbApplicationToApplication(data[0]);
+};
+
 export const saveApplicationDraft = async (appData: any, applicantId: string): Promise<Application> => {
     const supabase = getSupabase();
+    const existingDraftId = await findExistingDraftId(appData.applicationCodeId, applicantId);
+
+    if (existingDraftId) {
+        const { data, error } = await supabase
+            .from('applications')
+            .update({
+                form_data: appData.formData,
+                approval_route_id: appData.approvalRouteId ?? null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingDraftId)
+            .select()
+            .single();
+
+        ensureSupabaseSuccess(error, 'Failed to update draft');
+        return dbApplicationToApplication(data);
+    }
+
     const { data, error } = await supabase.from('applications').insert({
         application_code_id: appData.applicationCodeId,
         form_data: appData.formData,
@@ -600,8 +727,17 @@ export const saveApplicationDraft = async (appData: any, applicantId: string): P
         approver_id: null,
     }).select().single();
 
-    if (error) throw new Error(`Failed to save draft: ${error.message}`);
-    return data;
+    ensureSupabaseSuccess(error, 'Failed to save draft');
+    return dbApplicationToApplication(data);
+};
+
+export const clearApplicationDraft = async (applicationCodeId: string, applicantId: string): Promise<void> => {
+    const draftId = await findExistingDraftId(applicationCodeId, applicantId);
+    if (!draftId) return;
+
+    const supabase = getSupabase();
+    const { error } = await supabase.from('applications').delete().eq('id', draftId);
+    ensureSupabaseSuccess(error, 'Failed to clear application draft');
 };
 export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
     return Promise.resolve();
@@ -613,14 +749,14 @@ export const rejectApplication = async (app: ApplicationWithDetails, reason: str
 export const getAccountItems = async (): Promise<AccountItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('account_items').select('*');
-    if (error) throw new Error(`Failed to fetch account items: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch account items');
     return (data || []).map(d => ({ ...d, sortOrder: d.sort_order, categoryCode: d.category_code, createdAt: d.created_at, updatedAt: d.updated_at, isActive: d.is_active }));
 };
 
 export const getActiveAccountItems = async (): Promise<MasterAccountItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('account_items').select('id, code, name, category_code').eq('is_active', true).order('sort_order', { nullsFirst: false }).order('code');
-    if (error) throw new Error(`Failed to fetch active account items: ${error.message || JSON.stringify(error)}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch active account items');
     return (data || []).map(d => ({ ...d, id: d.id, code: d.code, name: d.name, categoryCode: d.category_code }));
 };
 
@@ -628,13 +764,13 @@ export const saveAccountItem = async (item: Partial<AccountItem>): Promise<void>
     const supabase = getSupabase();
     const dbItem = { code: item.code, name: item.name, category_code: item.categoryCode, is_active: item.isActive, sort_order: item.sortOrder };
     const { error } = await supabase.from('account_items').upsert({ id: item.id, ...dbItem });
-    if (error) throw new Error(`勘定科目の保存に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '勘定科目の保存に失敗しました');
 };
 
 export const deactivateAccountItem = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('account_items').update({ is_active: false }).eq('id', id);
-    if (error) throw new Error(`勘定科目の無効化に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '勘定科目の無効化に失敗しました');
 };
 
 export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
@@ -645,7 +781,7 @@ export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient
         query = query.ilike('company_name', `%${q}%`);
     }
     const { data, error } = await query.limit(1000);
-    if (error) throw new Error(`Failed to fetch payment recipients: ${error.message || JSON.stringify(error)}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch payment recipients');
     return (data || []).map(d => ({ id: d.id, recipientCode: d.recipient_code, companyName: d.company_name, recipientName: d.recipient_name }));
 };
 
@@ -653,7 +789,7 @@ export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Pro
     const supabase = getSupabase();
     const dbItem = { recipient_code: item.recipientCode, company_name: item.companyName, recipient_name: item.recipientName };
     const { error } = await supabase.from('payment_recipients').upsert({ id: item.id, ...dbItem });
-    if (error) throw new Error(`支払先の保存に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '支払先の保存に失敗しました');
 };
 
 export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
@@ -671,7 +807,7 @@ export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): P
         .insert(payload)
         .select('id, recipient_code, company_name, recipient_name')
         .single();
-    if (error) throw new Error(`支払先の登録に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '支払先の登録に失敗しました');
     return {
         id: data.id,
         recipientCode: data.recipient_code,
@@ -683,64 +819,64 @@ export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): P
 export const deletePaymentRecipient = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('payment_recipients').delete().eq('id', id);
-    if (error) throw new Error(`支払先の削除に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '支払先の削除に失敗しました');
 };
 
 export const getAllocationDivisions = async (): Promise<AllocationDivision[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('allocation_divisions').select('*').order('name');
-    if (error) throw new Error(`振分区分の取得に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '振分区分の取得に失敗しました');
     return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
 };
 
 export const saveAllocationDivision = async (item: Partial<AllocationDivision>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('allocation_divisions').upsert({ id: item.id, name: item.name, is_active: item.isActive });
-    if (error) throw new Error(`振分区分の保存に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '振分区分の保存に失敗しました');
 };
 
 export const deleteAllocationDivision = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('allocation_divisions').delete().eq('id', id);
-    if (error) throw new Error(`振分区分の削除に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '振分区分の削除に失敗しました');
 };
 
 export const getDepartments = async (): Promise<Department[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('departments').select('id, name').order('name');
-    if (error) throw new Error(`Failed to fetch departments: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch departments');
     return data as Department[];
 };
 
 export const saveDepartment = async (item: Partial<Department>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('departments').upsert({ id: item.id, name: item.name });
-    if (error) throw new Error(`部署の保存に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '部署の保存に失敗しました');
 };
 
 export const deleteDepartment = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('departments').delete().eq('id', id);
-    if (error) throw new Error(`部署の削除に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '部署の削除に失敗しました');
 };
 
 export const getTitles = async (): Promise<Title[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('employee_titles').select('*').order('name');
-    if (error) throw new Error(`役職の取得に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '役職の取得に失敗しました');
     return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
 };
 
 export const saveTitle = async (item: Partial<Title>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('employee_titles').upsert({ id: item.id, name: item.name, is_active: item.isActive });
-    if (error) throw new Error(`役職の保存に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '役職の保存に失敗しました');
 };
 
 export const deleteTitle = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('employee_titles').delete().eq('id', id);
-    if (error) throw new Error(`役職の削除に失敗しました: ${error.message}`);
+    ensureSupabaseSuccess(error, '役職の削除に失敗しました');
 };
 
 
@@ -750,7 +886,7 @@ export const getPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
         .from('orders')
         .select('*')
         .order('order_date', { ascending: false });
-    if (error) throw new Error(`Failed to fetch purchase orders: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch purchase orders');
     return (data || []).map(dbOrderToPurchaseOrder);
 };
 
@@ -758,6 +894,7 @@ export const addPurchaseOrder = async (order: Omit<PurchaseOrder, 'id'>): Promis
     const supabase = getSupabase();
     const insertPayload = {
         client_custmer: order.supplierName,
+        payment_recipient_id: order.paymentRecipientId ?? null,
         project_code: order.itemName,
         order_date: order.orderDate,
         quantity: order.quantity,
@@ -765,7 +902,7 @@ export const addPurchaseOrder = async (order: Omit<PurchaseOrder, 'id'>): Promis
         approval_status1: order.status,
     };
     const { data, error } = await supabase.from('orders').insert(insertPayload).select().single();
-    if (error) throw new Error(`Failed to add purchase order: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add purchase order');
     return dbOrderToPurchaseOrder(data);
 };
 
@@ -773,7 +910,7 @@ export const addPurchaseOrder = async (order: Omit<PurchaseOrder, 'id'>): Promis
 export const getInventoryItems = async (): Promise<InventoryItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('inventory_items').select('*').order('name');
-    if (error) throw new Error(`Failed to fetch inventory items: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch inventory items');
     return (data || []).map(d => ({ ...d, unitPrice: d.unit_price }));
 };
 
@@ -782,7 +919,7 @@ export const addInventoryItem = async (item: Omit<InventoryItem, 'id'>): Promise
     const { data, error } = await supabase.from('inventory_items').insert({
         name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, unit_price: item.unitPrice
     }).select().single();
-    if (error) throw new Error(`Failed to add inventory item: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add inventory item');
     return data as InventoryItem;
 }
 
@@ -791,7 +928,7 @@ export const updateInventoryItem = async (id: string, item: Partial<InventoryIte
     const { data, error } = await supabase.from('inventory_items').update({
         name: item.name, category: item.category, quantity: item.quantity, unit: item.unit, unit_price: item.unitPrice
     }).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update inventory item: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update inventory item');
     return data as InventoryItem;
 }
 
@@ -799,36 +936,36 @@ export const updateInventoryItem = async (id: string, item: Partial<InventoryIte
 export const getBugReports = async (): Promise<BugReport[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', {ascending: false});
-    if (error) throw new Error(`Failed to fetch bug reports: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch bug reports');
     return (data || []).map(dbBugReportToBugReport);
 };
 export const addBugReport = async (report: any): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('bug_reports').insert({ ...bugReportToDbBugReport(report), status: '未対応' });
-    if (error) throw new Error(`Failed to add bug report: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add bug report');
 };
 export const updateBugReport = async (id: string, updates: Partial<BugReport>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('bug_reports').update(bugReportToDbBugReport(updates)).eq('id', id);
-    if (error) throw new Error(`Failed to update bug report: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update bug report');
 };
 
 export const getEstimates = async (): Promise<Estimate[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('estimates').select('*');
-    if (error) throw new Error(`Failed to fetch estimates: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch estimates');
     return data || [];
 };
 export const addEstimate = async (estimateData: any): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('estimates').insert(estimateData);
-    if (error) throw new Error(`Failed to add estimate: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add estimate');
 };
 
 export const updateEstimate = async (id: string, updates: Partial<Estimate>): Promise<Estimate> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('estimates').update(updates).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update estimate: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update estimate');
     return data;
 };
 
@@ -839,7 +976,7 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice>): Prom
     if (updates.paidAt) dbUpdates.paid_at = updates.paidAt;
     
     const { data, error } = await supabase.from('invoices').update(dbUpdates).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update invoice: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update invoice');
     return data;
 };
 
@@ -849,7 +986,7 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice>): Prom
 export const getInvoices = async (): Promise<Invoice[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('invoices').select('*, items:invoice_items(*)').order('invoice_date', { ascending: false });
-    if (error) throw new Error(`Failed to fetch invoices: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch invoices');
     return (data || []).map(inv => ({
         id: inv.id, invoiceNo: inv.invoice_no, invoiceDate: inv.invoice_date, dueDate: inv.due_date, customerName: inv.customer_name,
         subtotalAmount: inv.subtotal_amount, taxAmount: inv.tax_amount, totalAmount: inv.total_amount, status: inv.status,
@@ -864,7 +1001,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
 export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoiceNo: string }> => {
     const supabase = getSupabase();
     const { data: jobsToInvoice, error: jobsError } = await supabase.from('jobs').select('*').in('id', jobIds);
-    if (jobsError) throw new Error(`Failed to fetch jobs for invoicing: ${jobsError.message}`);
+    if (jobsError) throw formatSupabaseError('Failed to fetch jobs for invoicing', jobsError);
     if (!jobsToInvoice || jobsToInvoice.length === 0) throw new Error("No jobs found for invoicing.");
 
     const customerName = jobsToInvoice[0].client_name;
@@ -877,19 +1014,19 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
         invoice_no: invoiceNo, invoice_date: new Date().toISOString().split('T')[0], customer_name: customerName,
         subtotal_amount: subtotal, tax_amount: tax, total_amount: total, status: 'issued',
     }).select().single();
-    if (invoiceError) throw new Error(`Failed to create invoice record: ${invoiceError.message}`);
+    if (invoiceError) throw formatSupabaseError('Failed to create invoice record', invoiceError);
 
     const invoiceItems: Omit<InvoiceItem, 'id'>[] = jobsToInvoice.map((job, index) => ({
         invoiceId: newInvoice.id, jobId: job.id, description: `${job.title} (案件番号: ${job.job_number})`,
         quantity: 1, unit: '式', unitPrice: job.price, lineTotal: job.price, sortIndex: index,
     }));
     const { error: itemsError } = await supabase.from('invoice_items').insert(invoiceItems.map(item => ({...item, invoice_id: item.invoiceId, job_id: item.jobId, unit_price: item.unitPrice, line_total: item.lineTotal, sort_index: item.sortIndex})));
-    if (itemsError) throw new Error(`Failed to create invoice items: ${itemsError.message}`);
+    if (itemsError) throw formatSupabaseError('Failed to create invoice items', itemsError);
 
     const { error: updateJobsError } = await supabase.from('jobs').update({
         invoice_id: newInvoice.id, invoice_status: InvoiceStatus.Invoiced, invoiced_at: new Date().toISOString(),
     }).in('id', jobIds);
-    if (updateJobsError) throw new Error(`Failed to update jobs after invoicing: ${updateJobsError.message}`);
+    if (updateJobsError) throw formatSupabaseError('Failed to update jobs after invoicing', updateJobsError);
 
     return { invoiceNo };
 };
@@ -898,7 +1035,7 @@ export const uploadFile = async (file: File, bucket: string): Promise<{ path: st
     const supabase = getSupabase();
     const filePath = `public/${Date.now()}-${file.name}`;
     const { data, error } = await supabase.storage.from(bucket).upload(filePath, file);
-    if (error) throw new Error(`Failed to upload to ${bucket}: ${error.message}`);
+    if (error) throw formatSupabaseError(`Failed to upload to ${bucket}`, error as PostgrestError);
     return { path: data.path };
 };
 
@@ -906,7 +1043,7 @@ export const uploadFile = async (file: File, bucket: string): Promise<{ path: st
 export const getInboxItems = async (): Promise<InboxItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('inbox_items').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(`Failed to fetch inbox items: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to fetch inbox items');
 
     return (data || []).map(item => {
         const { data: urlData } = supabase.storage.from('inbox').getPublicUrl(item.file_path);
@@ -923,7 +1060,7 @@ export const addInboxItem = async (item: Omit<InboxItem, 'id' | 'createdAt' | 'f
         file_name: item.fileName, file_path: item.filePath, mime_type: item.mimeType, status: item.status,
         extracted_data: item.extractedData, error_message: item.errorMessage,
     }).select().single();
-    if (error) throw new Error(`Failed to add inbox item: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to add inbox item');
     return data as InboxItem;
 };
 
@@ -932,7 +1069,7 @@ export const updateInboxItem = async (id: string, updates: Partial<InboxItem>): 
     const { data, error } = await supabase.from('inbox_items').update({
         status: updates.status, extracted_data: updates.extractedData,
     }).eq('id', id).select().single();
-    if (error) throw new Error(`Failed to update inbox item: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update inbox item');
     
     const { data: urlData } = supabase.storage.from('inbox').getPublicUrl(data.file_path);
     return { ...data, fileUrl: urlData.publicUrl, extractedData: data.extracted_data } as InboxItem;
@@ -944,11 +1081,11 @@ export const deleteInboxItem = async (itemToDelete: InboxItem): Promise<void> =>
     if (storageError) console.error("Storage deletion failed, proceeding with DB deletion:", storageError);
 
     const { error: dbError } = await supabase.from('inbox_items').delete().eq('id', itemToDelete.id);
-    if (dbError) throw new Error(`Failed to delete inbox item from DB: ${dbError.message}`);
+    if (dbError) throw formatSupabaseError('Failed to delete inbox item from DB', dbError);
 };
 
 export const updateJobReadyToInvoice = async (jobId: string, value: boolean): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('jobs').update({ ready_to_invoice: value }).eq('id', jobId);
-    if (error) throw new Error(`Failed to update job ready status: ${error.message}`);
+    ensureSupabaseSuccess(error, 'Failed to update job ready status');
 };
