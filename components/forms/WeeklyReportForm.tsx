@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { submitApplication } from '../../services/dataService';
 import { generateWeeklyReportSummary } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
-import { User, Toast } from '../../types';
+import { User, Toast, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 
 interface WeeklyReportFormProps {
@@ -14,9 +14,10 @@ interface WeeklyReportFormProps {
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
+    draftApplication?: ApplicationWithDetails | null;
 }
 
-const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicationCodeId, currentUser, addToast, isAIOff, isLoading, error: formLoadError }) => {
+const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicationCodeId, currentUser, addToast, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
     const [formData, setFormData] = useState({ title: `週報 ${new Date().toLocaleDateString('ja-JP')}`, details: '' });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,6 +26,16 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
+
+    useEffect(() => {
+        if (!draftApplication || draftApplication.applicationCodeId !== applicationCodeId) return;
+        const data = draftApplication.formData || {};
+        setFormData({
+            title: data.title || `週報 ${new Date().toLocaleDateString('ja-JP')}`,
+            details: data.details || '',
+        });
+        setApprovalRouteId(draftApplication.approvalRouteId || '');
+    }, [draftApplication, applicationCodeId]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;

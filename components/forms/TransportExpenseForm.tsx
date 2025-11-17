@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { submitApplication } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
-import { User, InvoiceData } from '../../types';
+import { User, InvoiceData, ApplicationWithDetails } from '../../types';
 
 interface TransportExpenseFormProps {
     onSuccess: () => void;
@@ -12,6 +12,7 @@ interface TransportExpenseFormProps {
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
+    draftApplication?: ApplicationWithDetails | null;
 }
 
 interface TransportDetail {
@@ -25,6 +26,15 @@ interface TransportDetail {
 
 const TRANSPORT_MODES = ['電車', 'バス', 'タクシー', '飛行機', 'その他'];
 
+const createEmptyDetail = (): TransportDetail => ({
+    id: `row_${Date.now()}`,
+    travelDate: new Date().toISOString().split('T')[0],
+    departure: '',
+    arrival: '',
+    transportMode: TRANSPORT_MODES[0],
+    amount: 0,
+});
+
 const readFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -34,15 +44,8 @@ const readFileAsBase64 = (file: File): Promise<string> => {
     });
 };
 
-const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError }) => {
-    const [details, setDetails] = useState<TransportDetail[]>(() => [{
-        id: `row_${Date.now()}`,
-        travelDate: new Date().toISOString().split('T')[0],
-        departure: '',
-        arrival: '',
-        transportMode: TRANSPORT_MODES[0],
-        amount: 0,
-    }]);
+const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
+    const [details, setDetails] = useState<TransportDetail[]>(() => [createEmptyDetail()]);
     const [notes, setNotes] = useState('');
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,14 +56,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
 
     const addNewRow = () => {
-        setDetails(prev => [...prev, {
-            id: `row_${Date.now()}`,
-            travelDate: new Date().toISOString().split('T')[0],
-            departure: '',
-            arrival: '',
-            transportMode: TRANSPORT_MODES[0],
-            amount: 0,
-        }]);
+        setDetails(prev => [...prev, createEmptyDetail()]);
     };
 
     const handleDetailChange = (id: string, field: keyof TransportDetail, value: string | number) => {
@@ -133,11 +129,27 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     };
 
     const clearForm = () => {
-        setDetails([]);
+        setDetails([createEmptyDetail()]);
         setNotes('');
         setError('');
-        addNewRow();
     };
+
+    useEffect(() => {
+        if (!draftApplication || draftApplication.applicationCodeId !== applicationCodeId) return;
+        const rawDetails = Array.isArray(draftApplication.formData?.details) ? draftApplication.formData.details : [];
+        const restoredDetails = rawDetails.map((detail: any, index: number) => ({
+            id: detail.id || `draft_${index}_${Date.now()}`,
+            travelDate: detail.travelDate || new Date().toISOString().split('T')[0],
+            departure: detail.departure || '',
+            arrival: detail.arrival || '',
+            transportMode: detail.transportMode || TRANSPORT_MODES[0],
+            amount: Number(detail.amount) || 0,
+        }));
+        setDetails(restoredDetails.length ? restoredDetails : [createEmptyDetail()]);
+        setNotes(draftApplication.formData?.notes || '');
+        setApprovalRouteId(draftApplication.approvalRouteId || '');
+        setError('');
+    }, [draftApplication, applicationCodeId]);
 
     const inputClass = "w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
 

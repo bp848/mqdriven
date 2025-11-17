@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { submitApplication } from '../../services/dataService';
 import { generateDailyReportSummary } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
-import { User, Toast } from '../../types';
+import { User, Toast, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 
 interface DailyReportFormProps {
@@ -14,6 +14,7 @@ interface DailyReportFormProps {
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
+    draftApplication?: ApplicationWithDetails | null;
 }
 
 interface DailyReportData {
@@ -25,7 +26,7 @@ interface DailyReportData {
     nextDayPlan: string;
 }
 
-const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicationCodeId, currentUser, addToast, isAIOff, isLoading, error: formLoadError }) => {
+const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicationCodeId, currentUser, addToast, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
     const [formData, setFormData] = useState<DailyReportData>({
         reportDate: new Date().toISOString().split('T')[0],
         startTime: '09:00',
@@ -41,6 +42,20 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
+
+    useEffect(() => {
+        if (!draftApplication || draftApplication.applicationCodeId !== applicationCodeId) return;
+        const data = draftApplication.formData || {};
+        setFormData({
+            reportDate: data.reportDate || new Date().toISOString().split('T')[0],
+            startTime: data.startTime || '09:00',
+            endTime: data.endTime || '18:00',
+            customerName: data.customerName || '',
+            activityContent: data.activityContent || '',
+            nextDayPlan: data.nextDayPlan || '',
+        });
+        setApprovalRouteId(draftApplication.approvalRouteId || '');
+    }, [draftApplication, applicationCodeId]);
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;

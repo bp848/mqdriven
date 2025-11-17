@@ -26,10 +26,12 @@ interface ApprovalWorkflowPageProps {
     purchaseOrders?: PurchaseOrder[];
     departments?: Department[];
     isAIOff?: boolean;
-    // FIX: Add missing 'allocationDivisions' property.
     allocationDivisions?: AllocationDivision[];
     paymentRecipients?: PaymentRecipient[];
     onCreatePaymentRecipient?: (recipient: Partial<PaymentRecipient>) => Promise<PaymentRecipient>;
+    onResumeDraft?: (application: ApplicationWithDetails) => void;
+    resumedApplication?: ApplicationWithDetails | null;
+    onResumeDraftClear?: () => void;
 }
 
 const TABS_CONFIG = {
@@ -38,7 +40,25 @@ const TABS_CONFIG = {
     completed: { title: "完了済", description: "承認または却下されたすべての申請の履歴です。" },
 };
 
-const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser, view, formCode, searchTerm, addToast, customers, accountItems, jobs, purchaseOrders, departments, isAIOff, allocationDivisions, paymentRecipients, onCreatePaymentRecipient }) => {
+const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
+    currentUser,
+    view,
+    formCode,
+    searchTerm,
+    addToast,
+    customers,
+    accountItems,
+    jobs,
+    purchaseOrders,
+    departments,
+    isAIOff,
+    allocationDivisions,
+    paymentRecipients,
+    onCreatePaymentRecipient,
+    onResumeDraft,
+    resumedApplication,
+    onResumeDraftClear,
+}) => {
     // State for list view
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +66,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
     const [selectedApplication, setSelectedApplication] = useState<ApplicationWithDetails | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'pending' | 'submitted' | 'completed'>('pending');
+    const [activeResumedApplication, setActiveResumedApplication] = useState<ApplicationWithDetails | null>(null);
 
     // State for form view
     const [applicationCodes, setApplicationCodes] = useState<ApplicationCode[]>([]);
@@ -85,6 +106,23 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
             fetchFormData();
         }
     }, [view, currentUser]);
+
+    useEffect(() => {
+        if (view !== 'form') {
+            setActiveResumedApplication(null);
+            return;
+        }
+        if (!resumedApplication) return;
+
+        const targetCodeId = applicationCodes.find(code => code.code === formCode)?.id;
+        const matchesCode = resumedApplication.applicationCode?.code === formCode;
+        const matchesId = targetCodeId ? resumedApplication.applicationCodeId === targetCodeId : false;
+
+        if ((matchesCode || matchesId) && activeResumedApplication?.id !== resumedApplication.id) {
+            setActiveResumedApplication(resumedApplication);
+            onResumeDraftClear?.();
+        }
+    }, [view, resumedApplication, formCode, applicationCodes, activeResumedApplication, onResumeDraftClear]);
 
     // List View Logic
     const handleSelectApplication = (app: ApplicationWithDetails) => {
@@ -162,6 +200,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
     // Form View Logic
     const handleFormSuccess = () => {
         addToast('申請が提出されました。承認一覧で確認できます。', 'success');
+        setActiveResumedApplication(null);
     };
 
     const renderActiveForm = () => {
@@ -189,12 +228,12 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
         };
 
         switch(formCode) {
-            case 'EXP': return <ExpenseReimbursementForm {...formProps} customers={customers || []} accountItems={accountItems || []} jobs={jobs || []} purchaseOrders={purchaseOrders || []} departments={departments || []} allocationDivisions={allocationDivisions || []} paymentRecipients={paymentRecipients || []} onCreatePaymentRecipient={onCreatePaymentRecipient} />;
-            case 'TRP': return <TransportExpenseForm {...formProps} />;
-            case 'LEV': return <LeaveApplicationForm {...formProps} />;
-            case 'APL': return <ApprovalForm {...formProps} />;
-            case 'DLY': return <DailyReportForm {...formProps} />;
-            case 'WKR': return <WeeklyReportForm {...formProps} />;
+            case 'EXP': return <ExpenseReimbursementForm {...formProps} customers={customers || []} accountItems={accountItems || []} jobs={jobs || []} purchaseOrders={purchaseOrders || []} departments={departments || []} allocationDivisions={allocationDivisions || []} paymentRecipients={paymentRecipients || []} onCreatePaymentRecipient={onCreatePaymentRecipient} draftApplication={activeResumedApplication} />;
+            case 'TRP': return <TransportExpenseForm {...formProps} draftApplication={activeResumedApplication} />;
+            case 'LEV': return <LeaveApplicationForm {...formProps} draftApplication={activeResumedApplication} />;
+            case 'APL': return <ApprovalForm {...formProps} draftApplication={activeResumedApplication} />;
+            case 'DLY': return <DailyReportForm {...formProps} draftApplication={activeResumedApplication} />;
+            case 'WKR': return <WeeklyReportForm {...formProps} draftApplication={activeResumedApplication} />;
             default: return (
                 <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm text-center">
                     <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
@@ -265,6 +304,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({ currentUser
                         applications={displayedApplications}
                         onApplicationSelect={handleSelectApplication}
                         selectedApplicationId={selectedApplication?.id || null}
+                        onResumeDraft={onResumeDraft}
                     />
                 ) : (
                     <EmptyState />

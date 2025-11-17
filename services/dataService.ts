@@ -4,6 +4,7 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import {
     EmployeeUser,
     Job,
+    JobCreationPayload,
     JobStatus,
     Customer,
     JournalEntry,
@@ -82,6 +83,12 @@ const FAX_STORAGE_BUCKET =
     || resolveEnvValue('FAX_INTAKE_BUCKET')
     || 'fax-intakes';
 
+const normalizeLookupKey = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null;
+    const key = String(value).trim();
+    return key.length > 0 ? key : null;
+};
+
 // Mappers from snake_case (DB) to camelCase (JS)
 const dbJobToJob = (project: any): Job => ({
     id: project.id,
@@ -131,6 +138,53 @@ const jobToDbJob = (job: Partial<Job>): any => {
     if (job.price !== undefined) row.amount = job.price;
     if (job.variableCost !== undefined) row.subamount = job.variableCost;
     return row;
+};
+
+const fetchNextProjectCode = async (supabase: SupabaseClient): Promise<number> => {
+    const { data, error } = await supabase.rpc('next_project_code');
+    if (!error && data !== null && data !== undefined) {
+        const value =
+            typeof data === 'object' && data !== null && 'project_code' in data
+                ? Number((data as any).project_code)
+                : Number(data);
+        if (Number.isFinite(value)) return value;
+    } else if (error) {
+        console.warn('next_project_code RPC unavailable. Falling back to manual query.', error.message);
+    }
+
+    const { data: fallbackRows, error: fallbackError } = await supabase
+        .from('projects')
+        .select('project_code')
+        .order('project_code', { ascending: false })
+        .limit(1);
+    ensureSupabaseSuccess(fallbackError, 'Failed to determine next project code');
+    const fallbackRow = Array.isArray(fallbackRows) && fallbackRows.length > 0 ? fallbackRows[0] : null;
+    const currentMax = fallbackRow?.project_code ? Number(fallbackRow.project_code) : 0;
+    const next = Number.isFinite(currentMax) ? currentMax + 1 : 1;
+    return next;
+};
+
+const insertInitialOrder = async (
+    supabase: SupabaseClient,
+    projectCode: number | string,
+    clientName: string,
+    initialOrder: JobCreationPayload['initialOrder']
+): Promise<void> => {
+    const totalAmount = Number(initialOrder.unitPrice * initialOrder.quantity);
+    const orderPayload: Record<string, any> = {
+        client_custmer: clientName,
+        project_code: String(projectCode),
+        order_date: initialOrder.orderDate,
+        quantity: initialOrder.quantity,
+        amount: totalAmount,
+        subamount: totalAmount,
+        total_cost: totalAmount,
+        approval_status1: PurchaseOrderStatus.Ordered,
+    };
+    const { error } = await supabase.from('orders').insert(orderPayload);
+    if (error) {
+        throw formatSupabaseError('Failed to create initial order for project', error);
+    }
 };
 
 const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
@@ -485,19 +539,28 @@ export const getJobs = async (): Promise<Job[]> => {
     const customerById = new Map<string, { customer_name: string; customer_code: string | null }>();
     const customerByCode = new Map<string, { customer_name: string; customer_code: string | null }>();
     (customerRows || []).forEach(customer => {
-        if (customer.id) {
-            customerById.set(customer.id, { customer_name: customer.customer_name, customer_code: customer.customer_code });
+        const idKey = normalizeLookupKey(customer.id);
+        const codeKey = normalizeLookupKey(customer.customer_code);
+        if (!idKey && !codeKey) return;
+        const payload = {
+            customer_name: customer.customer_name,
+            customer_code: codeKey,
+        };
+        if (idKey) {
+            customerById.set(idKey, payload);
         }
-        if (customer.customer_code) {
-            customerByCode.set(customer.customer_code, { customer_name: customer.customer_name, customer_code: customer.customer_code });
+        if (codeKey) {
+            customerByCode.set(codeKey, payload);
         }
     });
 
     return (projectRows || []).map(project => {
         const baseJob = dbJobToJob(project);
+        const projectCustomerId = normalizeLookupKey(project.customer_id);
+        const projectCustomerCode = normalizeLookupKey(project.customer_code);
         const customerInfo =
-            (project.customer_id && customerById.get(project.customer_id)) ||
-            (project.customer_code && customerByCode.get(project.customer_code)) ||
+            (projectCustomerId && customerById.get(projectCustomerId)) ||
+            (projectCustomerCode && customerByCode.get(projectCustomerCode)) ||
             null;
 
         return {
@@ -509,7 +572,7 @@ export const getJobs = async (): Promise<Job[]> => {
 };
 
 type JobSalesSummary = { amount: number; quantity: number };
-type JobCostSummary = { cost: number; quantity: number };
+type JobCostSummary = { cost: number; quantity: number; amount: number };
 
 const fetchJobSalesSummaries = async (): Promise<Map<string, JobSalesSummary>> => {
     const supabase = getSupabase();
@@ -535,7 +598,7 @@ const fetchJobCostSummaries = async (): Promise<Map<string, JobCostSummary>> => 
     const supabase = getSupabase();
     const { data, error } = await supabase
         .from('orders')
-        .select('project_code, quantity, total_cost, subamount');
+        .select('project_code, quantity, total_cost, subamount, amount');
 
     ensureSupabaseSuccess(error, 'Failed to fetch purchase orders for aggregation');
 
@@ -543,8 +606,9 @@ const fetchJobCostSummaries = async (): Promise<Map<string, JobCostSummary>> => 
     (data || []).forEach(order => {
         const projectCode = order?.project_code ? String(order.project_code) : null;
         if (!projectCode) return;
-        const summary = summaries.get(projectCode) || { cost: 0, quantity: 0 };
-        summary.cost += Number(order.total_cost ?? order.subamount ?? 0) || 0;
+        const summary = summaries.get(projectCode) || { cost: 0, quantity: 0, amount: 0 };
+        summary.amount += Number(order.amount ?? order.subamount ?? order.total_cost ?? 0) || 0;
+        summary.cost += Number(order.total_cost ?? order.subamount ?? order.amount ?? 0) || 0;
         summary.quantity += Number(order.quantity ?? 0) || 0;
         summaries.set(projectCode, summary);
     });
@@ -573,7 +637,7 @@ export const getJobsWithAggregation = async (): Promise<Job[]> => {
         const cost = costKey ? costSummaries?.get(costKey) : undefined;
 
         const totalQuantity = sales?.quantity ?? cost?.quantity ?? job.totalQuantity ?? job.quantity ?? 0;
-        const totalAmount = sales?.amount ?? job.totalAmount ?? job.price ?? 0;
+        const totalAmount = sales?.amount ?? cost?.amount ?? job.totalAmount ?? job.price ?? 0;
         const totalCost = cost?.cost ?? job.totalCost ?? job.variableCost ?? 0;
 
         return {
@@ -586,11 +650,22 @@ export const getJobsWithAggregation = async (): Promise<Job[]> => {
     });
 };
 
-export const addJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>): Promise<Job> => {
+export const addJob = async (jobData: JobCreationPayload): Promise<Job> => {
     const supabase = getSupabase();
-    const dbJob = jobToDbJob({ ...jobData, createdAt: new Date().toISOString() });
+    const projectCode = await fetchNextProjectCode(supabase);
+    const payload = { ...jobData, jobNumber: projectCode, createdAt: new Date().toISOString() };
+    const dbJob = jobToDbJob(payload);
     const { data, error } = await supabase.from('projects').insert(dbJob).select().single();
     ensureSupabaseSuccess(error, 'Failed to add job');
+
+    try {
+        await insertInitialOrder(supabase, projectCode, jobData.clientName, jobData.initialOrder);
+    } catch (orderError) {
+        // Attempt to keep data consistent by removing the orphaned project.
+        await supabase.from('projects').delete().eq('id', data?.id);
+        throw orderError;
+    }
+
     return dbJobToJob(data);
 };
 
@@ -1466,7 +1541,11 @@ export const uploadFile = async (
     const supabase = getSupabase();
     const safeBucket = bucket || FAX_STORAGE_BUCKET;
     const filename = file instanceof File ? file.name : `blob-${Date.now()}.bin`;
-    const filePath = `public/${Date.now()}-${filename}`;
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const rawExtension = filename.includes('.') ? filename.split('.').pop() ?? '' : '';
+    const safeExtension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const extension = safeExtension || 'bin';
+    const filePath = `public/${uniqueId}.${extension}`;
     const { data, error } = await supabase.storage.from(safeBucket).upload(filePath, file);
     if (error) {
         throw formatSupabaseError(`Failed to upload to ${safeBucket}`, error as unknown as PostgrestError);

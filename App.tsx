@@ -49,7 +49,7 @@ import * as geminiService from './services/geminiService';
 import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-import { Page, Job, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title } from './types';
+import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
 
 const getEnvValue = (key: string): string | undefined => {
@@ -110,6 +110,15 @@ const PAGE_TITLES: Record<Page, string> = {
     settings: '設定',
 };
 
+const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
+    EXP: 'approval_form_expense',
+    TRP: 'approval_form_transport',
+    LEV: 'approval_form_leave',
+    APL: 'approval_form_approval',
+    DLY: 'approval_form_daily',
+    WKR: 'approval_form_weekly',
+};
+
 const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSetup: () => void; }> = ({ error, onRetry, onShowSetup }) => (
     <div className="bg-red-600 text-white p-3 flex items-center justify-between gap-4 flex-shrink-0 z-20">
       <div className="flex items-center gap-3">
@@ -161,6 +170,7 @@ const App: React.FC = () => {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [estimates, setEstimates] = useState<Estimate[]>([]);
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
+    const [resumedApplication, setResumedApplication] = useState<ApplicationWithDetails | null>(null);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [allocationDivisions, setAllocationDivisions] = useState<AllocationDivision[]>([]);
     const [titles, setTitles] = useState<Title[]>([]);
@@ -213,6 +223,31 @@ const App: React.FC = () => {
     const requestConfirmation = (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => {
         setConfirmationDialog({ ...dialog, isOpen: true, onClose: () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });
     };
+    const clearResumedApplication = useCallback(() => {
+        setResumedApplication(null);
+    }, []);
+
+    const handleResumeApplicationDraft = useCallback((application: ApplicationWithDetails) => {
+        if (application.status !== 'draft') {
+            return;
+        }
+        const applicationCode = application.applicationCode?.code;
+
+        if (!applicationCode) {
+            addToast('申請種別を特定できず、下書きを再開できません。', 'error');
+            return;
+        }
+
+        const targetPage = APPLICATION_FORM_PAGE_MAP[applicationCode];
+        if (!targetPage) {
+            addToast(`申請種別「${application.applicationCode?.name || applicationCode}」のフォームにはまだ対応していません。`, 'error');
+            return;
+        }
+
+        setResumedApplication(application);
+        setSearchTerm('');
+        setCurrentPage(targetPage);
+    }, [addToast]);
 
     const resetAppData = useCallback(() => {
         setJobs([]);
@@ -227,6 +262,7 @@ const App: React.FC = () => {
         setEmployees([]);
         setEstimates([]);
         setApplications([]);
+        setResumedApplication(null);
         setDepartments([]);
         setAllocationDivisions([]);
         setTitles([]);
@@ -469,7 +505,7 @@ const App: React.FC = () => {
     }, [currentUser, applications]);
 
     // Data Handlers
-    const handleAddJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'jobNumber'>) => {
+    const handleAddJob = async (jobData: JobCreationPayload) => {
         await dataService.addJob(jobData);
         addToast('案件が正常に追加されました。', 'success');
         await loadAllData();
@@ -695,13 +731,13 @@ const App: React.FC = () => {
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
             case 'approval_list':
-                return <ApprovalWorkflowPage currentUser={currentUser} view="list" addToast={addToast} searchTerm={searchTerm} />;
-            case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} onCreatePaymentRecipient={handleCreatePaymentRecipientInline} />;
-            case 'approval_form_transport': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="TRP" addToast={addToast} isAIOff={isAIOff} />;
-            case 'approval_form_leave': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="LEV" addToast={addToast} isAIOff={isAIOff} />;
-            case 'approval_form_approval': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="APL" addToast={addToast} isAIOff={isAIOff} />;
-            case 'approval_form_daily': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="DLY" addToast={addToast} isAIOff={isAIOff} />;
-            case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} />;
+                return <ApprovalWorkflowPage currentUser={currentUser} view="list" addToast={addToast} searchTerm={searchTerm} onResumeDraft={handleResumeApplicationDraft} />;
+            case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} onCreatePaymentRecipient={handleCreatePaymentRecipientInline} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'approval_form_transport': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="TRP" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'approval_form_leave': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="LEV" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'approval_form_approval': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="APL" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'approval_form_daily': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="DLY" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
             case 'business_support_proposal':
                 return <BusinessSupportPage customers={customers} jobs={jobs} estimates={estimates} currentUser={currentUser} addToast={addToast} isAIOff={isAIOff} />;
             case 'ai_business_consultant':

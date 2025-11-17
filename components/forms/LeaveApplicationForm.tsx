@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { submitApplication } from '../../services/dataService';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
-import { User } from '../../types';
+import { User, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 
@@ -12,9 +12,10 @@ interface LeaveApplicationFormProps {
     isAIOff: boolean;
     isLoading: boolean;
     error: string;
+    draftApplication?: ApplicationWithDetails | null;
 }
 
-const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError }) => {
+const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
     const [formData, setFormData] = useState({
         leaveType: '有給休暇',
         startDate: new Date().toISOString().split('T')[0],
@@ -27,6 +28,18 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
+
+    useEffect(() => {
+        if (!draftApplication || draftApplication.applicationCodeId !== applicationCodeId) return;
+        const data = draftApplication.formData || {};
+        setFormData({
+            leaveType: data.leaveType || '有給休暇',
+            startDate: data.startDate || new Date().toISOString().split('T')[0],
+            endDate: data.endDate || new Date().toISOString().split('T')[0],
+            reason: data.reason || '',
+        });
+        setApprovalRouteId(draftApplication.approvalRouteId || '');
+    }, [draftApplication, applicationCodeId]);
 
      const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
