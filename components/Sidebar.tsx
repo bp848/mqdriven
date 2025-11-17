@@ -221,6 +221,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     <span className="ml-4 font-medium">ホーム</span>
                 </a>
             </li>
+            <li>
+                <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onNavigate('fax_ocr_intake'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage === 'fax_ocr_intake'
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <FileText className="w-5 h-5" />
+                    <span className="ml-4 font-medium">FAXからのデータ自動入力</span>
+                </a>
+            </li>
           {visibleCategories.map(category => (
             <CollapsibleNavItem
               key={category.id}

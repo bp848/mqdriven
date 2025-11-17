@@ -1,4 +1,5 @@
 import { getSupabase } from './supabaseClient';
+import { sendApprovalNotification } from './notificationService';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
     EmployeeUser,
@@ -35,7 +36,10 @@ import {
     PurchaseOrderStatus,
     AllocationDivision,
     Title,
+    FaxIntake,
 } from '../types';
+
+type SupabaseClient = ReturnType<typeof getSupabase>;
 
 const jobStatusValues = new Set<string>(Object.values(JobStatus));
 const poStatusValues = new Set<string>(Object.values(PurchaseOrderStatus));
@@ -54,6 +58,21 @@ const mapOrderStatus = (status?: string | null): PurchaseOrderStatus => {
     // Fallback to the standard “発注済” state so UI badges remain consistent.
     return PurchaseOrderStatus.Ordered;
 };
+
+const resolveEnvValue = (key: string): string | undefined => {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        const value = (import.meta.env as Record<string, string | undefined>)[key];
+        if (value !== undefined) return value;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+        return process.env[key];
+    }
+    return undefined;
+};
+
+const getFaxOcrFunctionName = (): string => resolveEnvValue('VITE_FAX_OCR_FUNCTION') || 'fax-ocr-intake';
+const getFaxOcrEndpoint = (): string | undefined => resolveEnvValue('VITE_FAX_OCR_ENDPOINT');
+const FAX_STORAGE_BUCKET = resolveEnvValue('VITE_FAX_INTAKE_BUCKET') || 'fax-intakes';
 
 // Mappers from snake_case (DB) to camelCase (JS)
 const dbJobToJob = (project: any): Job => ({
@@ -179,6 +198,71 @@ const customerToDbCustomer = (customer: Partial<Customer>): any => {
     }
     return dbData;
 };
+
+const parseJsonColumn = (value: any) => {
+    if (value === null || value === undefined) return value;
+    if (typeof value === 'object') return value;
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return value;
+        }
+    }
+    return value;
+};
+
+const mapFaxIntakeFromDb = (row: any, publicUrl?: string): FaxIntake => ({
+    id: row.id,
+    uploadedBy: row.uploaded_by,
+    uploadedAt: row.uploaded_at,
+    filePath: row.file_path,
+    fileName: row.file_name,
+    fileMimeType: row.file_mime_type,
+    fileSize: Number(row.file_size ?? 0),
+    fileUrl: publicUrl,
+    ocrStatus: (row.ocr_status ?? 'pending') as FaxIntake['ocrStatus'],
+    ocrErrorMessage: row.ocr_error_message,
+    ocrRawText: row.ocr_raw_text,
+    ocrJson: parseJsonColumn(row.ocr_json),
+    docType: (row.doc_type ?? 'unknown') as FaxIntake['docType'],
+    sourceChannel: (row.source_channel ?? 'fax') as FaxIntake['sourceChannel'],
+    linkedProjectId: row.linked_project_id,
+    linkedOrderId: row.linked_order_id,
+    linkedEstimateId: row.linked_estimate_id,
+    status: (row.status ?? 'draft') as FaxIntake['status'],
+    notes: row.notes,
+});
+
+const buildFaxIntakeUpdates = (
+    changes: Partial<{
+        docType: FaxIntake['docType'];
+        notes: string | null;
+        linkedProjectId: string | null;
+        linkedOrderId: string | null;
+        linkedEstimateId: string | null;
+        status: FaxIntake['status'];
+        ocrStatus: FaxIntake['ocrStatus'];
+        ocrRawText: string | null;
+        ocrJson: any | null;
+        ocrErrorMessage: string | null;
+    }>
+): Record<string, any> => {
+    const updates: Record<string, any> = {};
+    if (changes.docType !== undefined) updates.doc_type = changes.docType;
+    if (changes.notes !== undefined) updates.notes = changes.notes ?? null;
+    if (changes.linkedProjectId !== undefined) updates.linked_project_id = changes.linkedProjectId;
+    if (changes.linkedOrderId !== undefined) updates.linked_order_id = changes.linkedOrderId;
+    if (changes.linkedEstimateId !== undefined) updates.linked_estimate_id = changes.linkedEstimateId;
+    if (changes.status !== undefined) updates.status = changes.status;
+    if (changes.ocrStatus !== undefined) updates.ocr_status = changes.ocrStatus;
+    if (changes.ocrRawText !== undefined) updates.ocr_raw_text = changes.ocrRawText;
+    if (changes.ocrJson !== undefined) updates.ocr_json = changes.ocrJson ?? null;
+    if (changes.ocrErrorMessage !== undefined) updates.ocr_error_message = changes.ocrErrorMessage;
+    return updates;
+};
+
+type FaxIntakeUpdateChanges = Parameters<typeof buildFaxIntakeUpdates>[0];
 
 const dbLeadToLead = (dbLead: any): Lead => {
     let aiInvestigation: any = undefined;
@@ -307,6 +391,33 @@ const dbApprovalRouteToApprovalRoute = (d: any): ApprovalRoute => ({
     },
     createdAt: d.created_at,
 });
+
+const extractApproverIdsFromRoute = (route?: ApprovalRoute): string[] => {
+    if (!route?.routeData?.steps?.length) return [];
+    return route.routeData.steps
+        .map(step => step.approverId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+};
+
+const fetchRouteApproverIds = async (supabase: SupabaseClient, routeId: string): Promise<string[]> => {
+    const { data, error } = await supabase
+        .from('approval_routes')
+        .select('route_data')
+        .eq('id', routeId)
+        .single();
+    ensureSupabaseSuccess(error, 'Failed to fetch approval route definition');
+    const steps = data?.route_data?.steps || [];
+    return steps
+        .map((step: any) => step?.approver_id ?? step?.approverId)
+        .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
+};
+
+const resolveApprovalRouteApprovers = async (supabase: SupabaseClient, app: ApplicationWithDetails): Promise<string[]> => {
+    const inline = extractApproverIdsFromRoute(app.approvalRoute);
+    if (inline.length) return inline;
+    if (!app.approvalRouteId) return [];
+    return fetchRouteApproverIds(supabase, app.approvalRouteId);
+};
 
 
 export const isSupabaseUnavailableError = (error: any): boolean => {
@@ -670,7 +781,24 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
 
     ensureSupabaseSuccess(error, 'Failed to submit application');
 
-    return data;
+    const createdApplication = dbApplicationToApplication(data);
+
+    try {
+        await sendApprovalNotification({
+            type: 'submitted',
+            application: createdApplication,
+            recipientUserId: firstApproverId,
+            metadata: {
+                applicationCodeId: createdApplication.applicationCodeId,
+                currentLevel: createdApplication.currentLevel,
+                approvalRouteId: createdApplication.approvalRouteId,
+            },
+        });
+    } catch (notificationError) {
+        console.warn('Failed to send submission notification', notificationError);
+    }
+
+    return createdApplication;
 };
 
 const findExistingDraftId = async (applicationCodeId: string, applicantId: string): Promise<string | null> => {
@@ -732,7 +860,7 @@ export const saveApplicationDraft = async (appData: any, applicantId: string): P
         applicant_id: applicantId,
         status: 'draft',
         submitted_at: null,
-        current_level: null,
+        current_level: 1,
         approver_id: null,
     }).select().single();
 
@@ -749,10 +877,142 @@ export const clearApplicationDraft = async (applicationCodeId: string, applicant
     ensureSupabaseSuccess(error, 'Failed to clear application draft');
 };
 export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
-    return Promise.resolve();
+    if (app.approverId !== currentUser.id) {
+        throw new Error('この申請を承認する権限がありません。');
+    }
+    if (app.status !== 'pending_approval') {
+        throw new Error('承認待ちの申請ではありません。');
+    }
+
+    const supabase = getSupabase();
+    const now = new Date().toISOString();
+    const currentLevel = app.currentLevel && app.currentLevel > 0 ? app.currentLevel : 1;
+    const approverSequence = await resolveApprovalRouteApprovers(supabase, app);
+    const totalSteps = approverSequence.length || currentLevel || 1;
+    const isFinalStep = approverSequence.length === 0 || currentLevel >= totalSteps;
+
+    const updates: Record<string, any> = {
+        updated_at: now,
+        rejection_reason: null,
+        rejected_at: null,
+    };
+
+    let nextLevel = currentLevel;
+    let nextApproverId: string | null = null;
+
+    if (isFinalStep) {
+        updates.status = 'approved';
+        updates.approved_at = now;
+        updates.current_level = currentLevel;
+        updates.approver_id = currentUser.id;
+    } else {
+        nextLevel = currentLevel + 1;
+        nextApproverId = approverSequence[nextLevel - 1] ?? null;
+        if (!nextApproverId) {
+            throw new Error('承認ルートの設定に問題があります。');
+        }
+        updates.status = 'pending_approval';
+        updates.current_level = nextLevel;
+        updates.approver_id = nextApproverId;
+        updates.approved_at = null;
+    }
+
+    const { error } = await supabase.from('applications').update(updates).eq('id', app.id);
+    ensureSupabaseSuccess(error, 'Failed to approve application');
+
+    const updatedApplication: ApplicationWithDetails = {
+        ...app,
+        status: updates.status,
+        approvedAt: isFinalStep ? now : null,
+        rejectedAt: null,
+        rejectionReason: null,
+        currentLevel: updates.current_level ?? currentLevel,
+        approverId: updates.approver_id ?? app.approverId,
+        updatedAt: now,
+    };
+
+    try {
+        if (isFinalStep) {
+            await sendApprovalNotification({
+                type: 'approved',
+                application: updatedApplication,
+                recipientUserId: updatedApplication.applicantId,
+                recipientEmail: app.applicant?.email ?? null,
+                metadata: {
+                    applicationCodeId: updatedApplication.applicationCodeId,
+                    approvalRouteId: updatedApplication.approvalRouteId,
+                    approvedAt: now,
+                },
+            });
+        } else if (nextApproverId) {
+            await sendApprovalNotification({
+                type: 'step_forward',
+                application: updatedApplication,
+                recipientUserId: nextApproverId,
+                metadata: {
+                    applicationCodeId: updatedApplication.applicationCodeId,
+                    approvalRouteId: updatedApplication.approvalRouteId,
+                    currentLevel: updatedApplication.currentLevel,
+                },
+            });
+        }
+    } catch (notificationError) {
+        console.warn('Failed to send approval notification', notificationError);
+    }
 };
 export const rejectApplication = async (app: ApplicationWithDetails, reason: string, currentUser: User): Promise<void> => {
-    return Promise.resolve();
+    if (app.approverId !== currentUser.id) {
+        throw new Error('この申請を差し戻す権限がありません。');
+    }
+    if (app.status !== 'pending_approval') {
+        throw new Error('承認待ちの申請ではありません。');
+    }
+
+    const supabase = getSupabase();
+    const now = new Date().toISOString();
+    const currentLevel = app.currentLevel && app.currentLevel > 0 ? app.currentLevel : 1;
+    const rejectionReason = reason ?? '';
+
+    const { error } = await supabase
+        .from('applications')
+        .update({
+            status: 'rejected',
+            rejected_at: now,
+            rejection_reason: rejectionReason,
+            approver_id: currentUser.id,
+            current_level: currentLevel,
+            approved_at: null,
+            updated_at: now,
+        })
+        .eq('id', app.id);
+    ensureSupabaseSuccess(error, 'Failed to reject application');
+
+    const updatedApplication: ApplicationWithDetails = {
+        ...app,
+        status: 'rejected',
+        rejectedAt: now,
+        rejectionReason,
+        approverId: currentUser.id,
+        approvedAt: null,
+        currentLevel,
+        updatedAt: now,
+    };
+
+    try {
+        await sendApprovalNotification({
+            type: 'rejected',
+            application: updatedApplication,
+            recipientUserId: updatedApplication.applicantId,
+            recipientEmail: app.applicant?.email ?? null,
+            metadata: {
+                applicationCodeId: updatedApplication.applicationCodeId,
+                approvalRouteId: updatedApplication.approvalRouteId,
+                reason: rejectionReason,
+            },
+        });
+    } catch (notificationError) {
+        console.warn('Failed to send rejection notification', notificationError);
+    }
 };
 
 export const getAccountItems = async (): Promise<AccountItem[]> => {
@@ -1038,6 +1298,131 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
     if (updateJobsError) throw formatSupabaseError('Failed to update jobs after invoicing', updateJobsError);
 
     return { invoiceNo };
+};
+
+export const getFaxIntakes = async (): Promise<FaxIntake[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('fax_intakes')
+        .select('*')
+        .neq('status', 'deleted')
+        .order('uploaded_at', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to load fax intakes');
+
+    return (data || []).map(row => {
+        const { data: urlData } = supabase.storage.from(FAX_STORAGE_BUCKET).getPublicUrl(row.file_path);
+        return mapFaxIntakeFromDb(row, urlData?.publicUrl);
+    });
+};
+
+export const getFaxIntakeById = async (id: string): Promise<FaxIntake | null> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('fax_intakes')
+        .select('*')
+        .eq('id', id)
+        .single();
+    if (error && error.code === 'PGRST116') {
+        return null;
+    }
+    ensureSupabaseSuccess(error, 'Failed to load fax intake');
+    if (!data) return null;
+    const { data: urlData } = supabase.storage.from(FAX_STORAGE_BUCKET).getPublicUrl(data.file_path);
+    return mapFaxIntakeFromDb(data, urlData?.publicUrl);
+};
+
+export const createFaxIntake = async (payload: {
+    filePath: string;
+    fileName: string;
+    fileMimeType: string;
+    fileSize: number;
+    docType: FaxIntake['docType'];
+    notes?: string;
+    uploadedBy: string;
+}): Promise<FaxIntake> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('fax_intakes')
+        .insert({
+            uploaded_by: payload.uploadedBy,
+            file_path: payload.filePath,
+            file_name: payload.fileName,
+            file_mime_type: payload.fileMimeType,
+            file_size: payload.fileSize,
+            doc_type: payload.docType,
+            notes: payload.notes ?? null,
+            ocr_status: 'pending',
+            status: 'draft',
+            source_channel: 'fax',
+        })
+        .select('*')
+        .single();
+    ensureSupabaseSuccess(error, 'Failed to create fax intake');
+    const { data: urlData } = supabase.storage.from(FAX_STORAGE_BUCKET).getPublicUrl(data.file_path);
+    return mapFaxIntakeFromDb(data, urlData?.publicUrl);
+};
+
+export const updateFaxIntake = async (
+    id: string,
+    changes: FaxIntakeUpdateChanges,
+): Promise<void> => {
+    const supabase = getSupabase();
+    const updates = buildFaxIntakeUpdates(changes);
+    if (Object.keys(updates).length === 0) {
+        return;
+    }
+    updates.updated_at = new Date().toISOString();
+
+    const { error } = await supabase
+        .from('fax_intakes')
+        .update(updates)
+        .eq('id', id);
+    ensureSupabaseSuccess(error, 'Failed to update fax intake');
+};
+
+export const deleteFaxIntake = async (id: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase
+        .from('fax_intakes')
+        .update({ status: 'deleted', updated_at: new Date().toISOString() })
+        .eq('id', id);
+    ensureSupabaseSuccess(error, 'Failed to delete fax intake');
+};
+
+export const requestFaxOcr = async (intake: FaxIntake): Promise<void> => {
+    const payload = {
+        intakeId: intake.id,
+        filePath: intake.filePath,
+        docType: intake.docType,
+    };
+
+    const endpoint = getFaxOcrEndpoint();
+    try {
+        if (endpoint && typeof fetch !== 'undefined') {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'Failed to trigger fax OCR endpoint');
+            }
+            return;
+        }
+
+        const supabase = getSupabase();
+        const { error } = await supabase.functions.invoke(getFaxOcrFunctionName(), { body: payload });
+        if (error) {
+            throw new Error(error.message || 'Failed to invoke fax OCR function');
+        }
+    } catch (err) {
+        console.error('[FaxOCR] Failed to trigger OCR workflow', err);
+        if (err instanceof Error) {
+            throw err;
+        }
+        throw new Error('Failed to trigger fax OCR workflow');
+    }
 };
 
 export const uploadFile = async (file: File, bucket: string): Promise<{ path: string }> => {
