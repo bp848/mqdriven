@@ -25,8 +25,15 @@ export default function AuthCallbackPage() {
         
         console.log('コールバック処理開始:', currentUrl);
         
-        // URLにコードが含まれているか確認
-        if (!currentUrl.includes('code=') && !currentUrl.includes('#access_token=')) {
+        const urlObj = new URL(currentUrl);
+        const searchParams = urlObj.searchParams;
+        const hashParamsString = currentUrl.includes('#') ? currentUrl.split('#')[1] : '';
+        const hashParams = new URLSearchParams(hashParamsString);
+        const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+        const hasCode = searchParams.has('code');
+
+        if (!accessToken && !refreshToken && !hasCode) {
           setIsError(true);
           setMessage('無効なコールバックURLです。\n\nログインページから再度お試しください。');
           isProcessing.current = false;
@@ -34,7 +41,7 @@ export default function AuthCallbackPage() {
         }
         
         // 既に使用済みのコードかチェック（ローカルストレージで管理）
-        const urlHash = currentUrl.split('#')[1] || currentUrl.split('?')[1] || '';
+        const urlHash = hashParamsString || currentUrl.split('?')[1] || '';
         const processedKey = `auth_processed_${btoa(urlHash).slice(0, 20)}`;
         if (localStorage.getItem(processedKey)) {
           setIsError(true);
@@ -43,24 +50,35 @@ export default function AuthCallbackPage() {
           return;
         }
         
-        const { data, error } = await supabaseClient.auth.exchangeCodeForSession(currentUrl);
+        let exchangeError: Error | null = null;
+        if (accessToken && refreshToken) {
+          const { error } = await supabaseClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          exchangeError = error ?? null;
+        } else {
+          const { data, error } = await supabaseClient.auth.exchangeCodeForSession(currentUrl);
+          exchangeError = error ?? null;
+          if (!exchangeError) {
+            console.log('セッション交換成功:', data);
+          }
+        }
         
-        if (error) {
-          console.error('セッション交換エラー:', error);
+        if (exchangeError) {
+          console.error('セッション交換エラー:', exchangeError);
           setIsError(true);
           isProcessing.current = false;
           
-          if (error.message?.includes('expired') || error.message?.includes('invalid') || error.message?.includes('not found')) {
+          if (exchangeError.message?.includes('expired') || exchangeError.message?.includes('invalid') || exchangeError.message?.includes('not found')) {
             setMessage('ログインリンクが無効または期限切れです。\n\n最新のメールから再度お試しください。\n\nヒント: メールクライアントのプレビュー機能でリンクが先に開かれた可能性があります。');
-          } else if (error.message?.includes('both auth code and code verifier should be non-empty')) {
+          } else if (exchangeError.message?.includes('both auth code and code verifier should be non-empty')) {
             setMessage('コード交換エラーです。\n\nこのリンクは既に使用済みか、無効です。\n\n新しいログインリンクを取得してください。');
           } else {
-            setMessage(`ログイン処理に失敗しました。\n\nエラー: ${error.message}`);
+            setMessage(`ログイン処理に失敗しました。\n\nエラー: ${exchangeError.message}`);
           }
           return;
         }
-        
-        console.log('セッション交換成功:', data);
         
         // マジックリンクかどうかを判定
         const isMagicLink = currentUrl.includes('type=magiclink') || 
