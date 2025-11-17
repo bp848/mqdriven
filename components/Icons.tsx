@@ -173,3 +173,80 @@ export const KanbanSquare: React.FC<IconProps> = ({ className }) => (
 export const Bug: React.FC<IconProps> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 20c-3.3 0-6-2.7-6-6v-4c0-3.3 2.7-6 6-6s6 2.7 6 6v4c0 3.3-2.7 6-6 6z"/><path d="M12 20v-4"/><path d="m10 4 2-2 2 2"/><path d="m14 4-2-2-2 2"/><path d="M4 14H2"/><path d="M22 14h-2"/><path d="M19 9c1.7 0 3 1.3 3 3v1"/><path d="M5 9c-1.7 0-3 1.3-3 3v1"/></svg>
 );
+
+export const GoogleIcon: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M21.54 11.1h-9.17v2.98h5.33A5.46 5.46 0 0 1 9.9 18.94 6.94 6.94 0 0 1 9.9 6.06a6.74 6.74 0 0 1 4.79 1.82l2.08-2.32a9.35 9.35 0 0 0-6.87-2.66A9.94 9.94 0 1 0 17 20.91a9.22 9.22 0 0 0 2.59-6.6c0-.56-.05-1.1-.15-1.61Z" />
+  </svg>
+);
+
+export const User: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="12" cy="7" r="4" />
+    <path d="M5 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2" />
+  </svg>
+);
+
+export const Building: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18" />
+    <path d="M6 18h12" />
+    <path d="M10 6h.01" />
+    <path d="M14 6h.01" />
+    <path d="M10 10h.01" />
+    <path d="M14 10h.01" />
+    <path d="M10 14h.01" />
+    <path d="M14 14h.01" />
+  </svg>
+);
+
+export const Phone: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="7" y="2" width="10" height="20" rx="2" />
+    <line x1="12" y1="18" x2="12" y2="18" />
+  </svg>
+);
+
+export const Shield: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+  </svg>
+);
+
+export const FileAudio: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+    <path d="M14 2v6h6" />
+    <path d="M8 17h1a3 3 0 0 0 3 3v-7a3 3 0 0 0-3 3H8" />
+    <path d="M16 16.5a2.5 2.5 0 0 0 0-5" />
+  </svg>
+);
+
+export const Link: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M10 13a5 5 0 0 1 0-7l2-2a5 5 0 0 1 7 7l-1.5 1.5" />
+    <path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 0 1-7-7L6.5 11.5" />
+  </svg>
+);
+
+export const Copy: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+export const History: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M3 3v6h6" />
+    <path d="M3.05 13A9 9 0 1 0 6 5.3" />
+    <path d="M12 7v5l3 3" />
+  </svg>
+);
+
+export const ArrowLeft: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <line x1="19" y1="12" x2="5" y2="12" />
+    <polyline points="12 19 5 12 12 5" />
+  </svg>
+);

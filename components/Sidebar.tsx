@@ -87,8 +87,6 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
             { page: 'approval_form_transport', name: '交通費申請' },
             { page: 'approval_form_leave', name: '休暇申請' },
             { page: 'approval_form_approval', name: '稟議' },
-            { page: 'approval_form_daily', name: '日報' },
-            { page: 'approval_form_weekly', name: '週報' },
         ]
     },
     {

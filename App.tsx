@@ -38,14 +38,31 @@ import AuditLogPage from './components/admin/AuditLogPage';
 import JournalQueuePage from './components/admin/JournalQueuePage';
 import MasterManagementPage from './components/admin/MasterManagementPage';
 import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructionsModal';
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
+import AuthCallbackPage from './components/AuthCallbackPage';
 
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
-import { hasSupabaseCredentials } from './services/supabaseClient';
+import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
+import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
+
+const getEnvValue = (key: string): string | undefined => {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        const envMap = import.meta.env as Record<string, string | undefined>;
+        if (envMap[key] !== undefined) {
+            return envMap[key];
+        }
+    }
+    if (typeof process !== 'undefined' && process.env) {
+        return process.env[key];
+    }
+    return undefined;
+};
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ホーム',
@@ -115,6 +132,14 @@ const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSe
 
 
 const App: React.FC = () => {
+    const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
+    const isAuthBypassEnabled = useMemo(() => getEnvValue('VITE_BYPASS_SUPABASE_AUTH') === '1', []);
+    const shouldRequireAuth = isSupabaseConfigured && !isAuthBypassEnabled;
+    const [authView, setAuthView] = useState<'login' | 'register'>('login');
+    const [supabaseSession, setSupabaseSession] = useState<Session | null>(null);
+    const [supabaseUser, setSupabaseUser] = useState<SupabaseAuthUser | null>(null);
+    const [isAuthChecking, setIsAuthChecking] = useState<boolean>(shouldRequireAuth);
+    const [authError, setAuthError] = useState<string | null>(null);
     // Global State
     const [currentPage, setCurrentPage] = useState<Page>('analysis_dashboard');
     const [searchTerm, setSearchTerm] = useState('');
@@ -164,6 +189,9 @@ const App: React.FC = () => {
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
 
+    const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
+    const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
+
     // Navigation and Modals
     const handleNavigate = (page: Page) => {
         setCurrentPage(page);
@@ -182,6 +210,108 @@ const App: React.FC = () => {
     const requestConfirmation = (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => {
         setConfirmationDialog({ ...dialog, isOpen: true, onClose: () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });
     };
+
+    const resetAppData = useCallback(() => {
+        setJobs([]);
+        setCustomers([]);
+        setJournalEntries([]);
+        setAccountItems([]);
+        setPaymentRecipients([]);
+        setLeads([]);
+        setApprovalRoutes([]);
+        setPurchaseOrders([]);
+        setInventoryItems([]);
+        setEmployees([]);
+        setEstimates([]);
+        setApplications([]);
+        setDepartments([]);
+        setAllocationDivisions([]);
+        setTitles([]);
+        setCurrentUser(null);
+        setAllUsers([]);
+        setDbError(null);
+    }, []);
+
+    const handleSignOut = useCallback(async () => {
+        if (!isSupabaseConfigured) {
+            return;
+        }
+        try {
+            const supabaseClient = getSupabase();
+            await supabaseClient.auth.signOut();
+            resetAppData();
+            setSupabaseSession(null);
+            setSupabaseUser(null);
+            setAuthView('login');
+        } catch (error) {
+            console.error('Failed to sign out:', error);
+            addToast('ログアウトに失敗しました。', 'error');
+        }
+    }, [isSupabaseConfigured, resetAppData, addToast]);
+
+    useEffect(() => {
+        if (!shouldRequireAuth) {
+            setSupabaseSession(null);
+            setSupabaseUser(null);
+            setIsAuthChecking(false);
+            return;
+        }
+
+        if (!isSupabaseConfigured) {
+            setIsAuthChecking(false);
+            setSupabaseSession(null);
+            setSupabaseUser(null);
+            return;
+        }
+
+        const supabaseClient = getSupabase();
+        let isMounted = true;
+
+        const resolveSession = async () => {
+            try {
+                const { data, error } = await supabaseClient.auth.getSession();
+                if (!isMounted) return;
+                if (error) {
+                    console.error('Failed to fetch auth session:', error.message);
+                    setAuthError(error.message);
+                    setSupabaseSession(null);
+                    setSupabaseUser(null);
+                } else {
+                    setAuthError(null);
+                    setSupabaseSession(data.session ?? null);
+                    setSupabaseUser(data.session?.user ?? null);
+                }
+            } catch (error: any) {
+                if (!isMounted) return;
+                console.error('Unexpected auth session error:', error);
+                setAuthError(error?.message ?? 'ログイン状態の取得に失敗しました。');
+                setSupabaseSession(null);
+                setSupabaseUser(null);
+            } finally {
+                if (isMounted) {
+                    setIsAuthChecking(false);
+                }
+            }
+        };
+
+        setIsAuthChecking(true);
+        resolveSession();
+
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+            if (!isMounted) return;
+            setAuthError(null);
+            setSupabaseSession(session);
+            setSupabaseUser(session?.user ?? null);
+            if (!session) {
+                resetAppData();
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe();
+        };
+    }, [isSupabaseConfigured, shouldRequireAuth, resetAppData]);
 
     const loadAllData = useCallback(async () => {
         if (abortControllerRef.current) {
@@ -202,8 +332,18 @@ const App: React.FC = () => {
             if (signal.aborted) return;
             setAllUsers(usersData);
             
-            const effectiveUser: User | null = currentUser ?? (usersData.length > 0 ? usersData[0] : null);
-            if (!currentUser && effectiveUser) {
+            let effectiveUser: User | null = currentUser ?? null;
+            if (!effectiveUser && supabaseUser) {
+                effectiveUser = usersData.find(user => user.id === supabaseUser.id) ?? null;
+                if (!effectiveUser && supabaseUser.email) {
+                    const normalizedEmail = supabaseUser.email.toLowerCase();
+                    effectiveUser = usersData.find(user => user.email?.toLowerCase() === normalizedEmail) ?? null;
+                }
+            }
+            if (!effectiveUser && usersData.length > 0) {
+                effectiveUser = usersData[0];
+            }
+            if (effectiveUser && (!currentUser || currentUser.id !== effectiveUser.id)) {
                 setCurrentUser(effectiveUser as EmployeeUser);
             }
             
@@ -217,35 +357,54 @@ const App: React.FC = () => {
                 createdAt: user.createdAt,
             }));
             
-            const [
-                jobsData, customersData, journalData, accountItemsData,
-                leadsData, routesData, poData, inventoryData,
-                estimatesData, departmentsData, paymentRecipientsData,
-                allocationDivisionsData, titlesData
-            ] = await Promise.all([
-                dataService.getJobs(), dataService.getCustomers(), dataService.getJournalEntries(),
-                dataService.getAccountItems(), dataService.getLeads(), dataService.getApprovalRoutes(),
-                dataService.getPurchaseOrders(), dataService.getInventoryItems(),
-                dataService.getEstimates(), dataService.getDepartments(),
-                dataService.getPaymentRecipients(), dataService.getAllocationDivisions(), dataService.getTitles()
+            const results = await Promise.allSettled([
+                dataService.getJobs(),
+                dataService.getCustomers(),
+                dataService.getJournalEntries(),
+                dataService.getAccountItems(),
+                dataService.getLeads(),
+                dataService.getApprovalRoutes(),
+                dataService.getPurchaseOrders(),
+                dataService.getInventoryItems(),
+                dataService.getEstimates(),
+                dataService.getDepartments(),
+                dataService.getPaymentRecipients(),
+                dataService.getAllocationDivisions(),
+                dataService.getTitles(),
             ]);
-            
+
             if (signal.aborted) return;
 
-            setJobs(jobsData);
-            setCustomers(customersData);
-            setJournalEntries(journalData);
-            setAccountItems(accountItemsData);
-            setLeads(leadsData);
-            setApprovalRoutes(routesData);
-            setPurchaseOrders(poData);
-            setInventoryItems(inventoryData);
+            const [
+                jobsResult,
+                customersResult,
+                journalResult,
+                accountItemsResult,
+                leadsResult,
+                routesResult,
+                poResult,
+                inventoryResult,
+                estimatesResult,
+                departmentsResult,
+                paymentRecipientsResult,
+                allocationDivisionsResult,
+                titlesResult,
+            ] = results;
+
+            if (jobsResult.status === 'fulfilled') setJobs(jobsResult.value); else console.error('Failed to load jobs:', jobsResult.reason);
+            if (customersResult.status === 'fulfilled') setCustomers(customersResult.value); else console.error('Failed to load customers:', customersResult.reason);
+            if (journalResult.status === 'fulfilled') setJournalEntries(journalResult.value); else console.error('Failed to load journal entries:', journalResult.reason);
+            if (accountItemsResult.status === 'fulfilled') setAccountItems(accountItemsResult.value); else console.error('Failed to load account items:', accountItemsResult.reason);
+            if (leadsResult.status === 'fulfilled') setLeads(leadsResult.value); else console.error('Failed to load leads:', leadsResult.reason);
+            if (routesResult.status === 'fulfilled') setApprovalRoutes(routesResult.value); else console.error('Failed to load approval routes:', routesResult.reason);
+            if (poResult.status === 'fulfilled') setPurchaseOrders(poResult.value); else console.error('Failed to load purchase orders:', poResult.reason);
+            if (inventoryResult.status === 'fulfilled') setInventoryItems(inventoryResult.value); else console.error('Failed to load inventory items:', inventoryResult.reason);
             setEmployees(employeesFromUsers);
-            setEstimates(estimatesData);
-            setDepartments(departmentsData);
-            setPaymentRecipients(paymentRecipientsData);
-            setAllocationDivisions(allocationDivisionsData);
-            setTitles(titlesData);
+            if (estimatesResult.status === 'fulfilled') setEstimates(estimatesResult.value); else console.error('Failed to load estimates:', estimatesResult.reason);
+            if (departmentsResult.status === 'fulfilled') setDepartments(departmentsResult.value); else console.error('Failed to load departments:', departmentsResult.reason);
+            if (paymentRecipientsResult.status === 'fulfilled') setPaymentRecipients(paymentRecipientsResult.value); else console.error('Failed to load payment recipients:', paymentRecipientsResult.reason);
+            if (allocationDivisionsResult.status === 'fulfilled') setAllocationDivisions(allocationDivisionsResult.value); else console.error('Failed to load allocation divisions:', allocationDivisionsResult.reason);
+            if (titlesResult.status === 'fulfilled') setTitles(titlesResult.value); else console.error('Failed to load titles:', titlesResult.reason);
             
             if (effectiveUser) {
                 const applicationsData = await dataService.getApplications(effectiveUser);
@@ -269,12 +428,20 @@ const App: React.FC = () => {
                 setIsLoading(false);
             }
         }
-    }, [currentUser, addToast]);
+    }, [currentUser, supabaseUser, addToast]);
 
 
     useEffect(() => {
+        if (!isSupabaseConfigured) {
+            setIsLoading(false);
+            return;
+        }
+        if (!isAuthenticated) {
+            setIsLoading(false);
+            return;
+        }
         loadAllData();
-    }, [loadAllData]);
+    }, [isSupabaseConfigured, isAuthenticated, loadAllData]);
     
     useEffect(() => {
         if (currentPage === 'analysis_dashboard' && jobs.length > 0 && !isAIOff) {
@@ -526,6 +693,60 @@ const App: React.FC = () => {
         }
     };
     
+    if (shouldRequireAuth && isAuthCallbackRoute) {
+        return <AuthCallbackPage />;
+    }
+
+    if (!isSupabaseConfigured) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 px-6">
+                <div className="w-full max-w-xl bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 space-y-4 text-center">
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Supabase接続設定が必要です</h2>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        データベースと認証を利用するには、プロジェクトルートの <code className="font-mono px-1 py-0.5 bg-slate-100 dark:bg-slate-900 rounded">supabaseCredentials.ts</code> に
+                        SupabaseのURLとAnon Keyを設定してください。
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Supabaseダッシュボードの「Project Settings &gt; API」で確認できます。
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        設定後に再読み込み
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    if (shouldRequireAuth && isAuthChecking) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
+                <Loader className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                <p className="text-sm">ログイン状態を確認しています...</p>
+            </div>
+        );
+    }
+
+    if (shouldRequireAuth && !isAuthenticated) {
+        return (
+            <>
+                {authError && (
+                    <div className="w-full bg-red-600 text-white text-center text-sm font-semibold py-3 px-4">
+                        {authError}
+                    </div>
+                )}
+                {authView === 'login' ? (
+                    <LoginPage onSwitchToRegister={() => setAuthView('register')} />
+                ) : (
+                    <RegisterPage onBackToLogin={() => setAuthView('login')} />
+                )}
+            </>
+        );
+    }
+
     const headerConfig = {
       title: PAGE_TITLES[currentPage],
       primaryAction: ['sales_orders', 'sales_leads', 'sales_customers', 'purchasing_orders', 'inventory_management'].includes(currentPage)
@@ -538,7 +759,15 @@ const App: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
-            <Sidebar currentPage={currentPage} onNavigate={handleNavigate} currentUser={currentUser} allUsers={allUsers} onUserChange={setCurrentUser} />
+            <Sidebar
+                currentPage={currentPage}
+                onNavigate={handleNavigate}
+                currentUser={currentUser}
+                allUsers={allUsers}
+                onUserChange={setCurrentUser}
+                supabaseUserEmail={shouldRequireAuth ? (supabaseUser?.email ?? null) : null}
+                onSignOut={shouldRequireAuth && isAuthenticated ? handleSignOut : undefined}
+            />
             <main className="flex-1 flex flex-col overflow-hidden">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
                 <div className="flex-1 overflow-y-auto p-8">
