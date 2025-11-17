@@ -2,14 +2,28 @@ import { test, expect, Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { LeadStatus } from '../types';
 
-test.use({ timezoneId: 'Asia/Tokyo', locale: 'ja-JP' });
-
-const APP_URL = process.env.APP_URL || 'http://localhost:5173'; // Fallback for local testing
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5174'; // Fallback for local testing
 
 test('APP_URL に単純アクセスできるか', async ({ page }) => {
   await page.goto(APP_URL);
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByRole('heading', { name: 'ホーム' })).toBeVisible();
+});
+
+test('サイドバー: 申請・承認メニューに5項目のみ表示される', async ({ page }) => {
+  await page.goto(APP_URL);
+  await page.waitForLoadState('domcontentloaded');
+
+  await page.getByRole('button', { name: '申請・承認' }).click();
+
+  await expect(page.getByRole('link', { name: '承認一覧' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '経費精算' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '交通費申請' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '休暇申請' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '稟議' })).toBeVisible();
+
+  await expect(page.getByRole('link', { name: '日報' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '週報' })).toHaveCount(0);
 });
 
 // Helper function to dismiss toasts
@@ -279,20 +293,6 @@ test.describe('Approval Workflow E2E Tests', () => {
   test('アクセシビリティ監査 (経費精算)', async ({ page }) => {
     await page.getByRole('link', { name: '経費精算' }).click();
     await expect(page.getByRole('heading', { name: '経費精算フォーム' })).toBeVisible();
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations).toEqual([]);
-  });
-  
-  test('アクセシビリティ監査 (日報)', async ({ page }) => {
-    await page.getByRole('link', { name: '日報' }).click();
-    await expect(page.getByRole('heading', { name: '日報作成' })).toBeVisible();
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations).toEqual([]);
-  });
-
-  test('アクセシビリティ監査 (週報)', async ({ page }) => {
-    await page.getByRole('link', { name: '週報' }).click();
-    await expect(page.getByRole('heading', { name: '週報作成' })).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
