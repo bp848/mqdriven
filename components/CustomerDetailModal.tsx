@@ -254,7 +254,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
     
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[90vw] max-h-[90vh] flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{title}</h2>
                     <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">

@@ -32,15 +32,11 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         icon: Briefcase,
         adminOnly: true,
         items: [
-            { page: 'sales_dashboard', name: '販売ダッシュボード' },
-            { page: 'sales_leads', name: 'リード' },
+            { page: 'sales_leads', name: 'お問い合わせ' },
             { page: 'sales_customers', name: '取引先/お客様カルテ' },
             { page: 'sales_pipeline', name: 'パイプライン（進捗）' },
-            { page: 'sales_estimates', name: '見積' },
-            { page: 'sales_orders', name: '案件予算管理' },
+            { page: 'sales_estimates', name: '見積管理' },
             { page: 'sales_billing', name: '売上請求 (AR)' },
-            { page: 'analysis_ranking', name: '売上ランキング' },
-            { page: 'business_support_proposal', name: '提案書作成' },
         ]
     },
     {
@@ -53,6 +49,25 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
             { page: 'purchasing_invoices', name: '仕入計上 (AP)' },
             { page: 'purchasing_payments', name: '支払' },
         ]
+    },
+    {
+        id: 'analysis',
+        name: 'データ分析メニュー',
+        icon: PieChart,
+        adminOnly: true,
+        items: [
+            { page: 'analysis_ranking', name: '売上ランキング' },
+        ],
+    },
+    {
+        id: 'project_management',
+        name: '案件管理',
+        icon: DollarSign,
+        adminOnly: true,
+        items: [
+            { page: 'sales_orders', name: '案件予算管理' },
+            { page: 'purchasing_orders', name: '受注一覧' },
+        ],
     },
     {
         id: 'inventory',
@@ -88,6 +103,16 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
             { page: 'approval_form_leave', name: '休暇申請' },
             { page: 'approval_form_approval', name: '稟議' },
         ]
+    },
+    {
+        id: 'reports',
+        name: '報告',
+        icon: ClipboardList,
+        adminOnly: true,
+        items: [
+            { page: 'approval_form_daily', name: '日報' },
+            { page: 'approval_form_weekly', name: '週報' },
+        ],
     },
     {
         id: 'accounting',
@@ -210,7 +235,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
     <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen">
       <div className="flex items-center gap-2 px-3 py-4 border-b border-slate-700">
         <Package className="w-8 h-8 text-blue-400" />
-        <h1 className="text-xl font-bold tracking-tight">MQ会計ドリブン</h1>
+        <h1 className="text-xl font-bold tracking-tight">業務管理</h1>
       </div>
       <nav className="flex-1 mt-6 space-y-2">
         <ul>

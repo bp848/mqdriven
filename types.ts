@@ -106,6 +106,19 @@ export interface JobCreationPayload extends Omit<Job, 'id' | 'createdAt' | 'jobN
   initialOrder: JobOrderInput;
 }
 
+export interface ProjectBudgetSummary extends Job {
+  orderCount: number;
+  orderTotalQuantity: number;
+  orderTotalAmount: number;
+  orderTotalCost: number;
+  orders: PurchaseOrder[];
+}
+
+export interface ProjectBudgetFilter {
+  startDate?: string;
+  endDate?: string;
+}
+
 export enum ProjectStatus {
   Draft = 'Draft',
   New = 'New',
