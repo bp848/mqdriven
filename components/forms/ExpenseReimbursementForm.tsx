@@ -112,6 +112,38 @@ const createEmptyLine = (): ExpenseLine => ({
     linkedRevenueId: '',
 });
 
+const normalizeMatchKey = (value?: string | null) => value?.replace(/\s+/g, '').toLowerCase() ?? '';
+
+const splitAccountComponents = (raw?: string | null) => {
+    if (!raw) return { type: undefined, number: undefined };
+    const trimmed = raw.trim();
+    if (!trimmed) return { type: undefined, number: undefined };
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) return { type: undefined, number: parts[0] };
+    return { type: parts[0], number: parts.slice(1).join(' ') };
+};
+
+const isInvoiceRegistrationFormat = (value?: string | null) => {
+    if (!value) return false;
+    return /^T\d{13}$/.test(value.trim());
+};
+
+const blankBankAccount: BankAccountInfo = {
+    bankName: '',
+    branchName: '',
+    accountType: '',
+    accountNumber: '',
+};
+
+const invoiceStatusOptions = [
+    { value: 'Draft', label: 'Draft（編集中）' },
+    { value: '要修正', label: '要修正（対応中）' },
+    { value: '検証済', label: '検証済（送信準備OK）' },
+    { value: 'Pending', label: 'Pending（承認中）' },
+    { value: 'Approved', label: 'Approved（承認済）' },
+    { value: 'Rejected', label: 'Rejected（差戻し）' },
+];
+
 const createEmptyInvoiceDraft = (): ExpenseInvoiceDraft => ({
     id: generateId('invoice'),
     supplierName: '',
@@ -340,6 +372,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     const [isDraggingFiles, setIsDraggingFiles] = useState(false);
     const [previewFiles, setPreviewFiles] = useState<{ id: string; name: string; url: string; type: string }[]>([]);
     const [selectedPreviewId, setSelectedPreviewId] = useState<string>('');
+    const [manualTotalsInvoices, setManualTotalsInvoices] = useState<Record<string, boolean>>({});
 
     const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoringDraft || !!formLoadError;
 
@@ -353,7 +386,80 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         () => invoiceDrafts.find(inv => inv.id === selectedInvoiceId) || invoiceDrafts[0],
         [invoiceDrafts, selectedInvoiceId]
     );
+    const isManualTotals = selectedInvoice ? manualTotalsInvoices[selectedInvoice.id] ?? false : false;
     const paymentRecipientWarning = Boolean(selectedInvoice?.supplierName && !selectedInvoice?.paymentRecipientId);
+
+    const getCustomerForSupplier = useCallback(
+        (supplier?: PaymentRecipient | null): Customer | undefined => {
+            if (!supplier) return undefined;
+            const supplierKeys = [supplier.companyName, supplier.recipientName].map(normalizeMatchKey).filter(Boolean);
+            if (!supplierKeys.length) return undefined;
+            return customers.find(customer => {
+                const customerKeys = [
+                    normalizeMatchKey(customer.customerName),
+                    normalizeMatchKey(customer.customerNameKana),
+                    normalizeMatchKey(customer.name2),
+                ].filter(Boolean);
+                return customerKeys.some(key => supplierKeys.includes(key));
+            });
+        },
+        [customers]
+    );
+
+    const deriveBankAccountInfo = useCallback(
+        (current: BankAccountInfo, supplier?: PaymentRecipient | null): BankAccountInfo => {
+            if (!supplier) return current;
+            const matchedCustomer = getCustomerForSupplier(supplier);
+            const supplierAccount = splitAccountComponents(supplier.bankAccountNumber ?? supplier.accountNumber);
+            const customerAccount = splitAccountComponents(matchedCustomer?.accountNo);
+            return {
+                bankName: supplier.bankName ?? matchedCustomer?.bankName ?? current.bankName,
+                branchName: supplier.branchName ?? supplier.bankBranch ?? matchedCustomer?.branchName ?? current.branchName,
+                accountType:
+                    supplier.bankAccountType ??
+                    supplierAccount.type ??
+                    customerAccount.type ??
+                    current.accountType,
+                accountNumber:
+                    supplier.bankAccountNumber ??
+                    supplier.accountNumber ??
+                    supplierAccount.number ??
+                    customerAccount.number ??
+                    current.accountNumber,
+            };
+        },
+        [getCustomerForSupplier]
+    );
+
+    const applySupplierDefaults = useCallback(
+        (supplier?: PaymentRecipient | null) => {
+            if (!supplier) return;
+            updateSelectedInvoice(invoice => {
+                const derivedRegistration =
+                    supplier.invoiceRegistrationNumber ||
+                    (isInvoiceRegistrationFormat(supplier.recipientCode) ? supplier.recipientCode : undefined);
+                return {
+                    ...invoice,
+                    supplierName: supplier.companyName || supplier.recipientName || invoice.supplierName,
+                    registrationNumber: derivedRegistration || invoice.registrationNumber,
+                    bankAccount: deriveBankAccountInfo(invoice.bankAccount, supplier),
+                };
+            });
+        },
+        [deriveBankAccountInfo, updateSelectedInvoice]
+    );
+
+    const syncSelectedInvoiceTotals = useCallback(() => {
+        updateSelectedInvoice(invoice => {
+            const totals = computeLineTotals(invoice);
+            return {
+                ...invoice,
+                totalNet: Number(totals.net.toFixed(2)),
+                taxAmount: Number(totals.tax.toFixed(2)),
+                totalGross: Number(totals.gross.toFixed(2)),
+            };
+        });
+    }, [updateSelectedInvoice]);
 
     const effectiveCustomers = useMemo(() => {
         if (customers.length) return customers;
@@ -407,6 +513,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         if (!selectedInvoice) return undefined;
         return invoiceDiagnostics.find(d => d.invoiceId === selectedInvoice.id);
     }, [invoiceDiagnostics, selectedInvoice]);
+
+    useEffect(() => {
+        if (!selectedInvoice) return;
+        if (manualTotalsInvoices[selectedInvoice.id]) return;
+        const totals = computeLineTotals(selectedInvoice);
+        const epsilon = 0.01;
+        const hasDiff =
+            Math.abs((selectedInvoice.totalNet ?? 0) - totals.net) > epsilon ||
+            Math.abs((selectedInvoice.taxAmount ?? 0) - totals.tax) > epsilon ||
+            Math.abs((selectedInvoice.totalGross ?? 0) - totals.gross) > epsilon;
+        if (hasDiff) {
+            syncSelectedInvoiceTotals();
+        }
+    }, [selectedInvoice, manualTotalsInvoices, syncSelectedInvoiceTotals]);
 
     useEffect(() => {
         if (!highlightedLineId) return;
@@ -489,18 +609,39 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         const matchedId = findMatchingPaymentRecipientId(selectedInvoice.supplierName, paymentRecipients);
         if (!matchedId) return;
         updateSelectedInvoice(invoice => ({ ...invoice, paymentRecipientId: matchedId }));
-    }, [selectedInvoice, paymentRecipients, updateSelectedInvoice]);
+        const matchedSupplier = paymentRecipients.find(recipient => recipient.id === matchedId);
+        if (matchedSupplier) {
+            applySupplierDefaults(matchedSupplier);
+        }
+    }, [selectedInvoice, paymentRecipients, updateSelectedInvoice, applySupplierDefaults]);
 
     const handleInvoiceFieldChange = (field: keyof ExpenseInvoiceDraft, value: string | number) => {
         updateSelectedInvoice(invoice => ({ ...invoice, [field]: value }));
     };
 
+    const handleTotalsModeChange = (manual: boolean) => {
+        if (!selectedInvoice) return;
+        setManualTotalsInvoices(prev => {
+            const previous = prev[selectedInvoice.id] ?? false;
+            if (previous === manual) return prev;
+            return { ...prev, [selectedInvoice.id]: manual };
+        });
+        if (!manual) {
+            syncSelectedInvoiceTotals();
+        }
+    };
+
     const handleSupplierSelectChange = (recipientId: string, supplier?: PaymentRecipient | null) => {
         handleInvoiceFieldChange('paymentRecipientId', recipientId);
         if (supplier) {
-            handleInvoiceFieldChange('supplierName', supplier.companyName || supplier.recipientName || '');
+            applySupplierDefaults(supplier);
         } else if (!recipientId) {
-            handleInvoiceFieldChange('supplierName', '');
+            updateSelectedInvoice(invoice => ({
+                ...invoice,
+                supplierName: '',
+                registrationNumber: '',
+                bankAccount: { ...blankBankAccount },
+            }));
         }
     };
 
@@ -620,14 +761,39 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     };
                 }
 
-                const availablePaymentRecipientId = expenseDraft?.paymentRecipientId ||
+                const availablePaymentRecipientId =
+                    expenseDraft?.paymentRecipientId ||
                     ocrData.matchedPaymentRecipientId ||
                     findMatchingPaymentRecipientId(invoice.supplierName, paymentRecipients);
+                let matchedRecipient: PaymentRecipient | undefined;
                 if (availablePaymentRecipientId) {
                     invoice.paymentRecipientId = availablePaymentRecipientId;
+                    matchedRecipient = paymentRecipients.find(rec => rec.id === availablePaymentRecipientId);
+                }
+                if (matchedRecipient) {
+                    invoice.supplierName =
+                        invoice.supplierName ||
+                        matchedRecipient.companyName ||
+                        matchedRecipient.recipientName ||
+                        invoice.supplierName;
+                    if (!invoice.registrationNumber) {
+                        const derivedRegistration =
+                            matchedRecipient.invoiceRegistrationNumber ||
+                            (isInvoiceRegistrationFormat(matchedRecipient.recipientCode) ? matchedRecipient.recipientCode : undefined);
+                        if (derivedRegistration) {
+                            invoice.registrationNumber = derivedRegistration;
+                        }
+                    }
+                    invoice.bankAccount = deriveBankAccountInfo(invoice.bankAccount, matchedRecipient);
                 }
 
                 const resolveCustomerId = (name?: string) => findMatchingCustomerId(name || ocrData.relatedCustomer, customers);
+                const resolveProjectId = (name?: string) => {
+                    const normalized = normalizeMatchKey(name);
+                    if (!normalized) return '';
+                    const matchedJob = effectiveJobs.find(job => normalizeMatchKey(job.title) === normalized);
+                    return matchedJob?.id || '';
+                };
 
                 const ocrLines = expenseDraft?.lines || ocrData.lineItems;
                 if (ocrLines && ocrLines.length) {
@@ -651,6 +817,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                         const matchedCustomerId = resolveCustomerId(line.customerName);
                         if (matchedCustomerId) {
                             normalized.customerId = matchedCustomerId;
+                        }
+                        const matchedProjectId = resolveProjectId(line.projectName);
+                        if (matchedProjectId) {
+                            normalized.projectId = matchedProjectId;
+                            if (!normalized.customerId) {
+                                const matchedJob = effectiveJobs.find(job => job.id === matchedProjectId);
+                                if (matchedJob?.customerId) {
+                                    normalized.customerId = matchedJob.customerId;
+                                }
+                            }
                         }
                         return normalized;
                     });
@@ -762,7 +938,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         try {
             await saveApplicationDraft(buildApplicationPayload(), currentUser.id);
             addToast?.('下書きを保存しました。', 'success');
-            onSuccess();
         } catch (err: any) {
             setError(err.message || '下書きの保存に失敗しました。');
         } finally {
@@ -983,6 +1158,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                 <AlertTriangle className="w-5 h-5 text-amber-500" aria-hidden />
                                 <p className="font-semibold text-slate-800 dark:text-slate-100">MQルール警告</p>
                             </div>
+                            <p className="text-xs text-slate-500">
+                                WARNING/INFO は目視確認用です。ERROR が残っている場合のみ送信・保存がブロックされます。
+                            </p>
                             {diagnosticsForSelected?.alerts.length ? (
                                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                                     {diagnosticsForSelected.alerts.map(alert => (
@@ -1093,9 +1271,18 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         onChange={e =>
                                             handleInvoiceFieldChange('totalGross', numberFromInput(e.target.value))
                                         }
-                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-right text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        readOnly={!isManualTotals}
+                                        aria-readonly={!isManualTotals}
+                                        className={`mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm text-right text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 ${
+                                            isManualTotals ? 'bg-white dark:bg-slate-700' : 'bg-slate-50 dark:bg-slate-800'
+                                        }`}
                                         disabled={isDisabled}
                                     />
+                                    {!isManualTotals && (
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            明細の集計結果を自動表示しています。手動入力に切り替える場合は下のボタンを使用してください。
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex items-end justify-between gap-2">
                                     <div className="w-full">
@@ -1110,12 +1297,15 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                             className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
                                             disabled={isDisabled}
                                         >
-                                            {['Draft', '要修正', '検証済', 'Pending', 'Approved', 'Rejected'].map(status => (
-                                                <option key={status} value={status}>
-                                                    {status}
+                                            {invoiceStatusOptions.map(option => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
                                                 </option>
                                             ))}
                                         </select>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            Draft/要修正は作業中メモ、検証済は送信準備完了の目印として利用できます。
+                                        </p>
                                     </div>
                                     <button
                                         type="button"
@@ -1131,6 +1321,23 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                 </div>
                             </div>
 
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
+                                <p className="text-sm font-medium text-slate-600 dark:text-slate-300">ヘッダー金額の入力モード</p>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTotalsModeChange(!isManualTotals)}
+                                    className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200"
+                                    disabled={isDisabled}
+                                >
+                                    {isManualTotals ? '明細の自動集計に戻す' : '手動入力に切り替える'}
+                                </button>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                                {isManualTotals
+                                    ? '手動モードではヘッダー金額を自由に入力できます。明細を編集した場合は「明細の自動集計に戻す」でリセットできます。'
+                                    : '明細行から税抜・消費税・税込を自動算出しています。'}
+                            </p>
+
                             <div className="grid md:grid-cols-3 gap-4">
                                 {(['totalNet', 'taxAmount'] as const).map(field => (
                                     <div key={field}>
@@ -1144,7 +1351,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                             onChange={e =>
                                                 handleInvoiceFieldChange(field, numberFromInput(e.target.value))
                                             }
-                                            className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-right text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                            readOnly={!isManualTotals}
+                                            aria-readonly={!isManualTotals}
+                                            className={`mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm text-right text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 ${
+                                                isManualTotals ? 'bg-white dark:bg-slate-700' : 'bg-slate-50 dark:bg-slate-800'
+                                            }`}
                                             disabled={isDisabled}
                                         />
                                     </div>
@@ -1235,23 +1446,24 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                 </button>
                             </div>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <p className="text-xs text-slate-500 mb-2">行を横スクロールして全ての項目を入力できます。</p>
+                                <table className="w-full min-w-[1200px] text-sm whitespace-nowrap">
                                     <thead>
                                         <tr className="text-left text-xs text-slate-500 uppercase tracking-wider">
-                                            <th className="py-2">#</th>
-                                            <th className="py-2">日付</th>
-                                            <th className="py-2">品名</th>
-                                            <th className="py-2">数量</th>
-                                            <th className="py-2">単位</th>
-                                            <th className="py-2">単価</th>
-                                            <th className="py-2">金額（税抜）</th>
-                                            <th className="py-2">勘定科目</th>
-                                            <th className="py-2">振分区分</th>
-                                            <th className="py-2">税率</th>
-                                            <th className="py-2">顧客</th>
-                                            <th className="py-2">プロジェクト</th>
-                                            <th className="py-2">売上/見積</th>
-                                            <th />
+                                            <th className="py-2 px-2 min-w-[40px]">#</th>
+                                            <th className="py-2 px-2 min-w-[120px]">日付</th>
+                                            <th className="py-2 px-2 min-w-[240px]">品名</th>
+                                            <th className="py-2 px-2 min-w-[90px]">数量</th>
+                                            <th className="py-2 px-2 min-w-[90px]">単位</th>
+                                            <th className="py-2 px-2 min-w-[120px]">単価</th>
+                                            <th className="py-2 px-2 min-w-[140px]">金額（税抜）</th>
+                                            <th className="py-2 px-2 min-w-[140px]">勘定科目</th>
+                                            <th className="py-2 px-2 min-w-[150px]">振分区分</th>
+                                            <th className="py-2 px-2 min-w-[100px]">税率</th>
+                                            <th className="py-2 px-2 min-w-[220px]">顧客</th>
+                                            <th className="py-2 px-2 min-w-[220px]">プロジェクト</th>
+                                            <th className="py-2 px-2 min-w-[200px]">売上/見積</th>
+                                            <th className="px-2" />
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -1263,9 +1475,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                 customer.customerName.toLowerCase().includes(customerFilter)
                                             );
                                             const selectedCustomer = effectiveCustomers.find(customer => customer.id === line.customerId);
-                                            const availableProjects = effectiveJobs.filter(
-                                                job => selectedCustomer && job.clientName === selectedCustomer.customerName
-                                            );
+                                            const availableProjects = effectiveJobs.filter(job => {
+                                                if (!selectedCustomer) return false;
+                                                if (job.customerId && selectedCustomer.id) {
+                                                    return job.customerId === selectedCustomer.id;
+                                                }
+                                                return (
+                                                    job.clientName?.trim().toLowerCase() ===
+                                                    selectedCustomer.customerName?.trim().toLowerCase()
+                                                );
+                                            });
                                             const revenueOptions = [
                                                 ...availableProjects
                                                     .filter(job => job.invoiceId)
@@ -1296,8 +1515,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                                 : ''
                                                     }`}
                                                 >
-                                                    <td className="py-3 text-xs text-slate-500">{index + 1}</td>
-                                                    <td className="py-3 w-32">
+                                                    <td className="py-3 px-2 text-xs text-slate-500">{index + 1}</td>
+                                                    <td className="py-3 px-2 min-w-[120px]">
                                                         <label htmlFor={`lineDate-${line.id}`} className="sr-only">
                                                             日付
                                                         </label>
@@ -1311,7 +1530,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-64">
+                                                    <td className="py-3 px-2 min-w-[240px]">
                                                         <label htmlFor={`description-${line.id}`} className="sr-only">
                                                             品名
                                                         </label>
@@ -1341,7 +1560,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="py-3 w-24">
+                                                    <td className="py-3 px-2 min-w-[100px]">
                                                         <label htmlFor={`quantity-${line.id}`} className="sr-only">
                                                             数量
                                                         </label>
@@ -1358,7 +1577,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-24">
+                                                    <td className="py-3 px-2 min-w-[100px]">
                                                         <label htmlFor={`unit-${line.id}`} className="sr-only">
                                                             単位
                                                         </label>
@@ -1371,7 +1590,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-28">
+                                                    <td className="py-3 px-2 min-w-[120px]">
                                                         <label htmlFor={`unitPrice-${line.id}`} className="sr-only">
                                                             単価
                                                         </label>
@@ -1387,7 +1606,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-32">
+                                                    <td className="py-3 px-2 min-w-[150px]">
                                                         <label htmlFor={`amount-${line.id}`} className="sr-only">
                                                             金額（税抜）
                                                         </label>
@@ -1404,7 +1623,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-48">
+                                                    <td className="py-3 px-2 min-w-[160px]">
                                                         <label htmlFor={`accountItem-${line.id}`} className="sr-only">
                                                             勘定科目
                                                         </label>
@@ -1415,7 +1634,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             onChange={value => handleLineChange(line.id, 'accountItemId', value)}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-40">
+                                                    <td className="py-3 px-2 min-w-[160px]">
                                                         <label className="sr-only" htmlFor={`allocation-${line.id}`}>
                                                             振分区分
                                                         </label>
@@ -1436,7 +1655,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             ))}
                                                         </select>
                                                     </td>
-                                                    <td className="py-3 w-24">
+                                                    <td className="py-3 px-2 min-w-[100px]">
                                                         <label htmlFor={`taxRate-${line.id}`} className="sr-only">
                                                             税率
                                                         </label>
@@ -1452,7 +1671,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 w-56">
+                                                    <td className="py-3 px-2 min-w-[220px]">
                                                         <label className="sr-only" htmlFor={`customer-${line.id}`}>
                                                             顧客
                                                         </label>
@@ -1506,7 +1725,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                                 </p>
                                                             ))}
                                                     </td>
-                                                    <td className="py-3 w-56">
+                                                    <td className="py-3 px-2 min-w-[220px]">
                                                         <label className="sr-only" htmlFor={`project-${line.id}`}>
                                                             プロジェクト
                                                         </label>
@@ -1532,7 +1751,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             ))}
                                                         </select>
                                                     </td>
-                                                    <td className="py-3 w-56">
+                                                    <td className="py-3 px-2 min-w-[200px]">
                                                         <label className="sr-only" htmlFor={`revenue-${line.id}`}>
                                                             売上/見積
                                                         </label>
@@ -1554,7 +1773,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             ))}
                                                         </select>
                                                     </td>
-                                                    <td className="py-3 align-middle text-right">
+                                                    <td className="py-3 px-2 align-middle text-right">
                                                         <button
                                                             type="button"
                                                             onClick={() => removeLine(line.id)}

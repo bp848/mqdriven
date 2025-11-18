@@ -692,8 +692,28 @@ export const createDemoDataState = (): DemoDataState => {
   ];
   
   const paymentRecipients: PaymentRecipient[] = [
-    { id: 'rec-1', recipientCode: 'V001', companyName: '東日本旅客鉄道株式会社', recipientName: 'JR東日本' },
-    { id: 'rec-2', recipientCode: 'V002', companyName: 'KDDI株式会社', recipientName: 'KDDI' },
+    {
+      id: 'rec-1',
+      recipientCode: 'V001',
+      companyName: '東日本旅客鉄道株式会社',
+      recipientName: 'JR東日本',
+      bankName: 'みずほ銀行',
+      bankBranch: '本店営業部',
+      bankAccountType: '普通',
+      bankAccountNumber: '1234567',
+      invoiceRegistrationNumber: 'T1010101010101',
+    },
+    {
+      id: 'rec-2',
+      recipientCode: 'V002',
+      companyName: 'KDDI株式会社',
+      recipientName: 'KDDI',
+      bankName: '三井住友銀行',
+      bankBranch: '青山支店',
+      bankAccountType: '当座',
+      bankAccountNumber: '7654321',
+      invoiceRegistrationNumber: 'T2020202020202',
+    },
   ];
 
   return {

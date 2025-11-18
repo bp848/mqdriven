@@ -47,6 +47,40 @@ const PaymentRecipientModal: React.FC<PaymentRecipientModalProps> = ({ item, onC
             <label htmlFor="recipientName" className={labelClass}>受取人名</label>
             <input id="recipientName" name="recipientName" type="text" value={formData.recipientName || ''} onChange={handleChange} className={inputClass} />
           </div>
+          <div>
+            <label htmlFor="phoneNumber" className={labelClass}>電話番号</label>
+            <input id="phoneNumber" name="phoneNumber" type="tel" value={formData.phoneNumber || ''} onChange={handleChange} className={inputClass} placeholder="03-1234-5678" />
+          </div>
+          <div>
+            <label htmlFor="invoiceRegistrationNumber" className={labelClass}>登録番号（インボイス）</label>
+            <input
+              id="invoiceRegistrationNumber"
+              name="invoiceRegistrationNumber"
+              type="text"
+              value={formData.invoiceRegistrationNumber || ''}
+              onChange={handleChange}
+              className={inputClass}
+              placeholder="T1234567890123"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="bankName" className={labelClass}>銀行名</label>
+              <input id="bankName" name="bankName" type="text" value={formData.bankName || ''} onChange={handleChange} className={inputClass} placeholder="○○銀行" />
+            </div>
+            <div>
+              <label htmlFor="bankBranch" className={labelClass}>支店名</label>
+              <input id="bankBranch" name="bankBranch" type="text" value={formData.bankBranch || formData.branchName || ''} onChange={handleChange} className={inputClass} placeholder="本店営業部" />
+            </div>
+            <div>
+              <label htmlFor="bankAccountType" className={labelClass}>口座種別</label>
+              <input id="bankAccountType" name="bankAccountType" type="text" value={formData.bankAccountType || ''} onChange={handleChange} className={inputClass} placeholder="普通 / 当座" />
+            </div>
+            <div>
+              <label htmlFor="bankAccountNumber" className={labelClass}>口座番号</label>
+              <input id="bankAccountNumber" name="bankAccountNumber" type="text" value={formData.bankAccountNumber || formData.accountNumber || ''} onChange={handleChange} className={inputClass} placeholder="1234567" />
+            </div>
+          </div>
         </div>
         <div className="flex justify-end gap-4 p-6 border-t">
           <button type="button" onClick={onClose} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg">キャンセル</button>
