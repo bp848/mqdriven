@@ -778,7 +778,43 @@ const toNumberOrZero = (value: unknown): number => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const refreshProjectFinancialTotals = async (
+    supabase: SupabaseClient,
+    projectCode: string | number,
+): Promise<void> => {
+    const { data: orderRows, error: ordersError } = await supabase
+        .from('orders')
+        .select('quantity, amount, subamount, total_cost, approval_status1')
+        .eq('project_code', String(projectCode));
+    ensureSupabaseSuccess(ordersError, 'Failed to load orders for project financial sync');
+
+    const totals = (orderRows || []).reduce(
+        (agg, order) => {
+            if (order.approval_status1 === PurchaseOrderStatus.Cancelled) {
+                return agg;
+            }
+            agg.quantity += toNumberOrZero(order.quantity);
+            agg.amount += toNumberOrZero(order.amount ?? order.total_cost ?? order.subamount);
+            agg.cost += toNumberOrZero(order.total_cost ?? order.subamount ?? order.amount);
+            return agg;
+        },
+        { quantity: 0, amount: 0, cost: 0 },
+    );
+
+    const { error: projectUpdateError } = await supabase
+        .from('projects')
+        .update({
+            quantity: totals.quantity,
+            amount: totals.amount,
+            subamount: totals.cost,
+            total_cost: totals.cost,
+        })
+        .eq('project_code', String(projectCode));
+    ensureSupabaseSuccess(projectUpdateError, 'Failed to sync project financial totals');
+};
+
 export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {}): Promise<ProjectBudgetSummary[]> => {
+    const supabase = getSupabase();
     const [jobs, purchaseOrders] = await Promise.all([
         getJobs(),
         fetchPurchaseOrdersWithFilters(filters),
@@ -795,7 +831,10 @@ export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {
         return acc;
     }, new Map());
 
-    return jobs.map(job => {
+    const summaries: ProjectBudgetSummary[] = [];
+    const syncPayloads: Array<{ id: string; data: Record<string, any> }> = [];
+
+    jobs.forEach(job => {
         const projectKey = normalizeProjectKey(job);
         const relatedOrders = projectKey ? ordersByProject.get(projectKey) ?? [] : [];
         const totals = relatedOrders.reduce(
@@ -817,7 +856,7 @@ export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {
         const totalCost = totals.cost || job.totalCost || job.variableCost || 0;
         const grossMargin = totalAmount - totalCost;
 
-        return {
+        const summary: ProjectBudgetSummary = {
             ...job,
             totalQuantity,
             totalAmount,
@@ -829,7 +868,36 @@ export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {
             orderTotalCost: totals.cost,
             orders: relatedOrders,
         };
+
+        summaries.push(summary);
+
+        const projectTotalsOutOfSync =
+            Math.abs((job.totalQuantity ?? 0) - totalQuantity) >= 1 ||
+            Math.abs((job.totalAmount ?? 0) - totalAmount) >= 1 ||
+            Math.abs((job.totalCost ?? 0) - totalCost) >= 1;
+
+        if (projectTotalsOutOfSync && job.id) {
+            syncPayloads.push({
+                id: job.id,
+                data: {
+                    quantity: totalQuantity,
+                    amount: totalAmount,
+                    subamount: totalCost,
+                    total_cost: totalCost,
+                },
+            });
+        }
     });
+
+    if (syncPayloads.length) {
+        await Promise.all(
+            syncPayloads.map(payload =>
+                supabase.from('projects').update(payload.data).eq('id', payload.id),
+            ),
+        );
+    }
+
+    return summaries;
 };
 
 export const getJobsWithAggregation = async (): Promise<Job[]> => {
@@ -846,6 +914,7 @@ export const addJob = async (jobData: JobCreationPayload): Promise<Job> => {
 
     try {
         await insertInitialOrder(supabase, projectCode, jobData.clientName, jobData.initialOrder);
+        await refreshProjectFinancialTotals(supabase, projectCode);
     } catch (orderError) {
         // Attempt to keep data consistent by removing the orphaned project.
         await supabase.from('projects').delete().eq('id', data?.id);
