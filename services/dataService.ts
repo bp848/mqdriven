@@ -318,11 +318,16 @@ const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
     aiAnalysis: dbCustomer.ai_analysis,
 });
 
+const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
+    address1: 'address_1',
+    address2: 'address_2',
+};
+
 const customerToDbCustomer = (customer: Partial<Customer>): any => {
     const dbData: { [key: string]: any } = {};
     for (const key in customer) {
         const camelKey = key as keyof Customer;
-        const snakeKey = camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        const snakeKey = CUSTOMER_FIELD_OVERRIDES[camelKey] ?? camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
         dbData[snakeKey] = customer[camelKey];
     }
     return dbData;
