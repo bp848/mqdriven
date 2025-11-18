@@ -3,20 +3,20 @@ import JobList from '../JobList';
 import EmptyState from '../ui/EmptyState';
 import SortableHeader from '../ui/SortableHeader';
 import { Briefcase } from '../Icons';
-import { Job, PurchaseOrder, PurchaseOrderStatus, SortConfig } from '../../types';
+import { ProjectBudgetSummary, PurchaseOrder, PurchaseOrderStatus, SortConfig } from '../../types';
 import { formatDate, formatJPY } from '../../utils';
 
 interface SalesOrdersPageProps {
-  jobs: Job[];
+  projectSummaries: ProjectBudgetSummary[];
   orders: PurchaseOrder[];
   searchTerm: string;
-  onSelectJob: (job: Job) => void;
+  onSelectJob: (job: ProjectBudgetSummary) => void;
   onNewJob: () => void;
 }
 
 type OrderRow = PurchaseOrder & {
   projectCode: string;
-  linkedJob?: Job;
+  linkedProject?: ProjectBudgetSummary;
   totalAmount: number;
 };
 
@@ -32,25 +32,25 @@ const StatusBadge: React.FC<{ status: PurchaseOrderStatus }> = ({ status }) => (
   </span>
 );
 
-const OrdersSection: React.FC<{ orders: PurchaseOrder[]; jobs: Job[] }> = ({ orders, jobs }) => {
+const OrdersSection: React.FC<{ orders: PurchaseOrder[]; projects: ProjectBudgetSummary[] }> = ({ orders, projects }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'orderDate', direction: 'descending' });
 
   const jobLookup = useMemo(() => {
-    const lookup = new Map<string, Job>();
-    jobs.forEach(job => {
-      if (job.projectCode) {
-        lookup.set(String(job.projectCode), job);
+    const lookup = new Map<string, ProjectBudgetSummary>();
+    projects.forEach(project => {
+      if (project.projectCode) {
+        lookup.set(String(project.projectCode), project);
       }
-      if (job.jobNumber) {
-        lookup.set(String(job.jobNumber), job);
+      if (project.jobNumber) {
+        lookup.set(String(project.jobNumber), project);
       }
     });
     return lookup;
-  }, [jobs]);
+  }, [projects]);
 
   const orderRows = useMemo<OrderRow[]>(() => {
     return orders.map(order => {
-      const projectCode = order.itemName ? String(order.itemName) : '';
+      const projectCode = order.projectCode ? String(order.projectCode) : order.itemName ? String(order.itemName) : '';
       const normalizedQuantity = Number(order.quantity ?? 0);
       const normalizedUnitPrice = Number(order.unitPrice ?? 0);
       const totalAmount = normalizedQuantity * normalizedUnitPrice;
@@ -59,7 +59,7 @@ const OrdersSection: React.FC<{ orders: PurchaseOrder[]; jobs: Job[] }> = ({ ord
         quantity: normalizedQuantity,
         unitPrice: normalizedUnitPrice,
         projectCode,
-        linkedJob: projectCode ? jobLookup.get(projectCode) : undefined,
+        linkedProject: projectCode ? jobLookup.get(projectCode) : undefined,
         totalAmount,
       };
     });
@@ -130,14 +130,14 @@ const OrdersSection: React.FC<{ orders: PurchaseOrder[]; jobs: Job[] }> = ({ ord
                   <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{order.id?.slice(0, 8)}...</td>
                   <td className="px-6 py-4">
                     <div className="font-mono text-sm text-slate-700 dark:text-slate-200">{order.projectCode || '-'}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">{order.linkedJob ? '紐付済み' : '未紐付'}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{order.linkedProject ? '紐付済み' : '未紐付'}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-medium text-slate-900 dark:text-white">
-                      {order.linkedJob?.clientName ?? order.supplierName}
+                      {order.linkedProject?.clientName ?? order.supplierName}
                     </div>
                     <div className="text-sm text-slate-500 dark:text-slate-400">
-                      {order.linkedJob?.title ?? '案件情報なし'}
+                      {order.linkedProject?.title ?? '案件情報なし'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">{formatDate(order.orderDate)}</td>
@@ -157,37 +157,26 @@ const OrdersSection: React.FC<{ orders: PurchaseOrder[]; jobs: Job[] }> = ({ ord
   );
 };
 
-const SalesOrdersPage: React.FC<SalesOrdersPageProps> = ({ jobs, orders, searchTerm, onSelectJob, onNewJob }) => {
-  const ordersByProject = useMemo(() => {
-    return orders.reduce<Record<string, PurchaseOrder[]>>((acc, order) => {
-      const key = order.itemName ? String(order.itemName) : '';
-      if (!key) return acc;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(order);
-      return acc;
-    }, {});
-  }, [orders]);
-
+const SalesOrdersPage: React.FC<SalesOrdersPageProps> = ({ projectSummaries, orders, searchTerm, onSelectJob, onNewJob }) => {
   return (
     <div className="space-y-10">
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white">案件 / プロジェクト一覧</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            projects テーブルの内容を集計表示しています。案件を選択すると詳細モーダルが開きます。
+            projects + orders のハイブリッド集計で、売上高 (P)・限界利益 (M)・受注件数を同一テーブルで確認できます。案件を選択すると詳細モーダルが開きます。
           </p>
         </div>
         <JobList
-          jobs={jobs}
+          jobs={projectSummaries}
           searchTerm={searchTerm}
           onSelectJob={onSelectJob}
           onNewJob={onNewJob}
-          ordersByProject={ordersByProject}
         />
       </section>
 
       <section className="space-y-4">
-        <OrdersSection orders={orders} jobs={jobs} />
+        <OrdersSection orders={orders} projects={projectSummaries} />
       </section>
     </div>
   );
