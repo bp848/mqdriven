@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { LayoutDashboard, Users, Settings, Package, FileText, Briefcase, ChevronDown, DollarSign, TrendingUp, Inbox, PieChart, ShoppingCart, BookOpen, CreditCard, HardHat, CheckCircle, Archive, Lightbulb } from './Icons';
+import { LayoutDashboard, Calendar, ClipboardList, Users, Settings, Package, FileText, Briefcase, ChevronDown, DollarSign, TrendingUp, Inbox, PieChart, ShoppingCart, BookOpen, CreditCard, HardHat, CheckCircle, Archive, Lightbulb } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -240,6 +240,34 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                 >
                     <FileText className="w-5 h-5" />
                     <span className="ml-4 font-medium">FAXからのデータ自動入力</span>
+                </a>
+            </li>
+            <li>
+                <a
+                    href="#"
+                    onClick={e => { e.preventDefault(); onNavigate('my_schedule'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage === 'my_schedule'
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <Calendar className="w-5 h-5" />
+                    <span className="ml-4 font-medium">マイスケジュール（カレンダー）</span>
+                </a>
+            </li>
+            <li>
+                <a
+                    href="#"
+                    onClick={e => { e.preventDefault(); onNavigate('my_tasks'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage === 'my_tasks'
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <ClipboardList className="w-5 h-5" />
+                    <span className="ml-4 font-medium">マイタスク（タスク管理）</span>
                 </a>
             </li>
           {visibleCategories.map(category => (
