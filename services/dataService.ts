@@ -99,16 +99,24 @@ company_name,
 recipient_name,
 phone_number,
 bank_name,
-branch_name,
 bank_branch,
+branch_name,
 account_type,
-bank_account_type,
 account_number,
 bank_account_number,
-account_holder,
-invoice_registration_number
+account_holder
 `;
-const PAYMENT_RECIPIENT_LEGACY_SELECT = 'id, recipient_code, company_name, recipient_name, phone_number, bank_name, bank_branch, bank_account_type, bank_account_number, invoice_registration_number';
+const PAYMENT_RECIPIENT_LEGACY_SELECT = `
+id,
+recipient_code,
+company_name,
+recipient_name,
+phone_number,
+bank_name,
+bank_branch,
+bank_account_type,
+bank_account_number
+`;
 
 const isMissingColumnError = (error?: PostgrestError | null) =>
     Boolean(error?.message && /column.+does not exist/i.test(error.message));
@@ -142,11 +150,20 @@ const buildPaymentRecipientPayload = (item: Partial<PaymentRecipient>) => ({
     branch_name: item.branchName ?? item.bankBranch ?? null,
     bank_branch: item.bankBranch ?? item.branchName ?? null,
     account_type: item.bankAccountType ?? null,
-    bank_account_type: item.bankAccountType ?? null,
-    account_number: item.bankAccountNumber ?? item.accountNumber ?? null,
+    account_number: item.accountNumber ?? item.bankAccountNumber ?? null,
     bank_account_number: item.bankAccountNumber ?? item.accountNumber ?? null,
     account_holder: (item as any)?.accountHolder ?? item.recipientName ?? item.companyName ?? null,
-    invoice_registration_number: item.invoiceRegistrationNumber ?? null,
+});
+
+const buildLegacyPaymentRecipientPayload = (item: Partial<PaymentRecipient>) => ({
+    recipient_code: item.recipientCode,
+    company_name: item.companyName,
+    recipient_name: item.recipientName,
+    phone_number: item.phoneNumber ?? null,
+    bank_name: item.bankName ?? null,
+    bank_branch: item.bankBranch ?? item.branchName ?? null,
+    bank_account_type: item.bankAccountType ?? null,
+    bank_account_number: item.bankAccountNumber ?? item.accountNumber ?? null,
 });
 
 // Mappers from snake_case (DB) to camelCase (JS)
@@ -1443,8 +1460,8 @@ export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient
         let query = supabase
             .from('payment_recipients')
             .select(columns)
-            .order('company_name', { nullsFirst: false })
-            .order('recipient_name', { nullsFirst: false });
+            .order('company_name', { ascending: true })
+            .order('recipient_name', { ascending: true });
         if (q && q.trim()) {
             query = query.ilike('company_name', `%${q}%`);
         }
@@ -1466,11 +1483,7 @@ export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Pro
     const { error } = await supabase.from('payment_recipients').upsert({ id: item.id, ...payload });
     if (error && isMissingColumnError(error)) {
         console.warn('payment_recipients table missing extended columns; retrying save with legacy payload');
-        const legacyPayload = {
-            recipient_code: payload.recipient_code,
-            company_name: payload.company_name,
-            recipient_name: payload.recipient_name,
-        };
+        const legacyPayload = buildLegacyPaymentRecipientPayload(item);
         const { error: fallbackError } = await supabase
             .from('payment_recipients')
             .upsert({ id: item.id, ...legacyPayload });
@@ -1501,11 +1514,7 @@ export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): P
 
     if (error && isMissingColumnError(error)) {
         console.warn('payment_recipients table missing extended columns; retrying insert with legacy payload');
-        const legacyPayload = {
-            recipient_code: payload.recipient_code,
-            company_name: payload.company_name,
-            recipient_name: payload.recipient_name,
-        };
+        const legacyPayload = buildLegacyPaymentRecipientPayload(hydratedItem);
         ({ data, error } = await supabase
             .from('payment_recipients')
             .insert(legacyPayload)
