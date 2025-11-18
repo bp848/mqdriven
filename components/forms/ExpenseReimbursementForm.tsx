@@ -401,6 +401,18 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     const isManualTotals = selectedInvoice ? manualTotalsInvoices[selectedInvoice.id] ?? false : false;
     const paymentRecipientWarning = Boolean(selectedInvoice?.supplierName && !selectedInvoice?.paymentRecipientId);
 
+    const updateSelectedInvoice = useCallback(
+        (updater: (invoice: ExpenseInvoiceDraft) => ExpenseInvoiceDraft) => {
+            setInvoiceDrafts(prev =>
+                prev.map(invoice => {
+                    if (!selectedInvoice || invoice.id !== selectedInvoice.id) return invoice;
+                    return updater(invoice);
+                })
+            );
+        },
+        [selectedInvoice]
+    );
+
     const getCustomerForSupplier = useCallback(
         (supplier?: PaymentRecipient | null): Customer | undefined => {
             if (!supplier) return undefined;
@@ -547,18 +559,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
             row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }, [highlightedLineId]);
-
-    const updateSelectedInvoice = useCallback(
-        (updater: (invoice: ExpenseInvoiceDraft) => ExpenseInvoiceDraft) => {
-            setInvoiceDrafts(prev =>
-                prev.map(invoice => {
-                    if (!selectedInvoice || invoice.id !== selectedInvoice.id) return invoice;
-                    return updater(invoice);
-                })
-            );
-        },
-        [selectedInvoice]
-    );
 
     const restoreDraftFromPayload = useCallback((draftPayload: any) => {
         if (!draftPayload) return;
