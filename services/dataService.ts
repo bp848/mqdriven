@@ -7,6 +7,7 @@ import {
     JobCreationPayload,
     JobStatus,
     Customer,
+    CustomerInfo,
     JournalEntry,
     User,
     AccountItem,
@@ -323,6 +324,111 @@ const customerToDbCustomer = (customer: Partial<Customer>): any => {
         dbData[snakeKey] = customer[camelKey];
     }
     return dbData;
+};
+
+const dbCustomerInfoToCustomerInfo = (row: any): CustomerInfo => ({
+    id: row.id,
+    rank: row.rank ?? null,
+    phoneNumber: row.phone_number ?? null,
+    faxNumber: row.fax_number ?? null,
+    introducer: row.introducer ?? null,
+    introductionDetail: row.introduction_detail ?? null,
+    previousPerson: row.previous_person ?? null,
+    salesTrends: row.sales_trends ?? null,
+    grossProfit: row.gross_profit ?? null,
+    grossProfitByProduct: row.gross_profit_by_product ?? null,
+    companyContent: row.company_content ?? null,
+    keyPerson: row.key_person ?? null,
+    orderRate: row.order_rate ?? null,
+    generalNewspaperCoverage: row.general_newspaper_coverage ?? null,
+    specialtyMagazineCoverage: row.specialty_magazine_coverage ?? null,
+    industryNewspaperCoverage: row.industry_newspaper_coverage ?? null,
+    chamberOfCommerce: row.chamber_of_commerce ?? null,
+    correspondenceEducation: row.correspondence_education ?? null,
+    otherMedia: row.other_media ?? null,
+    codeNo: row.code_no ?? null,
+    businessResult: row.business_result ?? null,
+    companyFeatures: row.company_features ?? null,
+    customerTrends: row.customer_trends ?? null,
+    incidents: row.incidents ?? null,
+    competitors: row.competitors ?? null,
+    competitorMeasures: row.competitor_measures ?? null,
+    salesTarget: row.sales_target ?? null,
+    businessSummary: row.business_summary ?? null,
+    externalItems: row.external_items ?? null,
+    internalItems: row.internal_items ?? null,
+    quotationPoints: row.quotation_points ?? null,
+    orderProcess: row.order_process ?? null,
+    mainProducts: row.main_products ?? null,
+    totalOrderAmount: row.total_order_amount ?? null,
+    needsAndIssues: row.needs_and_issues ?? null,
+    competitorInfo: row.competitor_info ?? null,
+    employeeCount: row.employee_count ?? null,
+    businessStartYear: row.business_start_year ?? null,
+    creditLimit: row.credit_limit ?? null,
+    personInCharge: row.person_in_charge ?? null,
+    closingDate: row.closing_date ?? null,
+    paymentDate: row.payment_date ?? null,
+    paymentTerms: row.payment_terms ?? null,
+    companyName: row.company_name ?? null,
+    address: row.address ?? null,
+    representativeName: row.representative_name ?? null,
+    establishmentYear: row.establishment_year ?? null,
+    capital: row.capital ?? null,
+    annualSales: row.annual_sales ?? null,
+    keyPersonInfo: row.key_person_info ?? null,
+    customerContactInfo: row.customer_contact_info ?? null,
+    orgChart: row.org_chart ?? null,
+    pq: row.pq ?? null,
+    vq: row.vq ?? null,
+    mq: row.mq ?? null,
+    mRate: row.m_rate ?? null,
+    accidentHistory: row.accident_history ?? null,
+    customerVoice: row.customer_voice ?? null,
+    annualActionPlan: row.annual_action_plan ?? null,
+    lostOrders: row.lost_orders ?? null,
+    growthPotential: row.growth_potential ?? null,
+    requirements: row.requirements ?? null,
+    other: row.other ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+});
+
+const customerInfoToDbCustomerInfo = (info: Partial<CustomerInfo>): Record<string, any> => {
+    const dbData: Record<string, any> = {};
+    for (const key in info) {
+        const camelKey = key as keyof CustomerInfo;
+        if (camelKey === 'id' || camelKey === 'createdAt' || camelKey === 'updatedAt') continue;
+        const value = info[camelKey];
+        if (value === undefined) continue;
+        const snakeKey = camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        dbData[snakeKey] = value === '' ? null : value;
+    }
+    return dbData;
+};
+
+const ensureCustomerInfoRecord = async (supabase: SupabaseClient, customerId: string): Promise<CustomerInfo> => {
+    if (!customerId) {
+        throw new Error('Customer ID is required to load customer info');
+    }
+    const { data, error } = await supabase
+        .from('customers_info')
+        .select('*')
+        .eq('id', customerId)
+        .limit(1);
+    ensureSupabaseSuccess(error, 'Failed to fetch customer info');
+    const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
+    if (row) {
+        return dbCustomerInfoToCustomerInfo(row);
+    }
+    const timestamp = new Date().toISOString();
+    const { data: inserted, error: insertError } = await supabase
+        .from('customers_info')
+        .insert({ id: customerId, created_at: timestamp, updated_at: timestamp })
+        .select()
+        .single();
+    ensureSupabaseSuccess(insertError, 'Failed to initialize customer info');
+    return dbCustomerInfoToCustomerInfo(inserted);
 };
 
 const parseJsonColumn = (value: any) => {
@@ -765,6 +871,29 @@ export const updateCustomer = async (id: string, updates: Partial<Customer>): Pr
     const { data, error } = await supabase.from('customers').update(customerToDbCustomer(updates)).eq('id', id).select().single();
     ensureSupabaseSuccess(error, 'Failed to update customer');
     return dbCustomerToCustomer(data);
+};
+
+export const getCustomerInfo = async (customerId: string): Promise<CustomerInfo> => {
+    const supabase = getSupabase();
+    return ensureCustomerInfoRecord(supabase, customerId);
+};
+
+export const saveCustomerInfo = async (customerId: string, updates: Partial<CustomerInfo>): Promise<CustomerInfo> => {
+    if (!customerId) {
+        throw new Error('Customer ID is required to save customer info');
+    }
+    const supabase = getSupabase();
+    await ensureCustomerInfoRecord(supabase, customerId);
+    const payload = customerInfoToDbCustomerInfo(updates);
+    payload.updated_at = new Date().toISOString();
+    const { data, error } = await supabase
+        .from('customers_info')
+        .update(payload)
+        .eq('id', customerId)
+        .select()
+        .single();
+    ensureSupabaseSuccess(error, 'Failed to update customer info');
+    return dbCustomerInfoToCustomerInfo(data);
 };
 
 

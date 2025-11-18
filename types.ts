@@ -210,6 +210,74 @@ export interface Customer {
   isActive?: boolean;
 }
 
+export interface CustomerInfo {
+  id: string;
+  rank: string | null;
+  phoneNumber: string | null;
+  faxNumber: string | null;
+  introducer: string | null;
+  introductionDetail: string | null;
+  previousPerson: string | null;
+  salesTrends: string | null;
+  grossProfit: string | null;
+  grossProfitByProduct: string | null;
+  companyContent: string | null;
+  keyPerson: string | null;
+  orderRate: string | null;
+  generalNewspaperCoverage: string | null;
+  specialtyMagazineCoverage: string | null;
+  industryNewspaperCoverage: string | null;
+  chamberOfCommerce: string | null;
+  correspondenceEducation: string | null;
+  otherMedia: string | null;
+  codeNo: string | null;
+  businessResult: string | null;
+  companyFeatures: string | null;
+  customerTrends: string | null;
+  incidents: string | null;
+  competitors: string | null;
+  competitorMeasures: string | null;
+  salesTarget: string | null;
+  businessSummary: string | null;
+  externalItems: string | null;
+  internalItems: string | null;
+  quotationPoints: string | null;
+  orderProcess: string | null;
+  mainProducts: string | null;
+  totalOrderAmount: string | null;
+  needsAndIssues: string | null;
+  competitorInfo: string | null;
+  employeeCount: string | null;
+  businessStartYear: string | null;
+  creditLimit: string | null;
+  personInCharge: string | null;
+  closingDate: string | null;
+  paymentDate: string | null;
+  paymentTerms: string | null;
+  companyName: string | null;
+  address: string | null;
+  representativeName: string | null;
+  establishmentYear: string | null;
+  capital: string | null;
+  annualSales: string | null;
+  keyPersonInfo: string | null;
+  customerContactInfo: string | null;
+  orgChart: string | null;
+  pq: string | null;
+  vq: string | null;
+  mq: string | null;
+  mRate: string | null;
+  accidentHistory: string | null;
+  customerVoice: string | null;
+  annualActionPlan: string | null;
+  lostOrders: string | null;
+  growthPotential: string | null;
+  requirements: string | null;
+  other: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface SortConfig {
   key: string;
   direction: 'ascending' | 'descending';

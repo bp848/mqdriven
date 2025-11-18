@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Customer } from '../types';
 import { X, Pencil, Loader, Lightbulb, AlertTriangle, Save } from './Icons';
+import CustomerInfoForm from './forms/CustomerInfoForm';
 
 interface CustomerDetailModalProps {
     customer: Customer | null;
@@ -17,6 +18,7 @@ const TABS = [
     { id: 'financial', label: '取引・財務情報' },
     { id: 'sales', label: '営業情報' },
     { id: 'notes', label: '備考・履歴' },
+    { id: 'karte', label: 'お客様カルテ' },
 ];
 
 const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff }) => {
@@ -242,6 +244,10 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                     {renderField('情報履歴', customer?.infoHistory, 'infoHistory', 'textarea', {rows: 5, className: 'md:col-span-2'})}
                 </div>
             );
+            case 'karte':
+                return (
+                    <CustomerInfoForm customerId={customer?.id ?? null} />
+                );
             default: return null;
         }
     };
