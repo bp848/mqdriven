@@ -329,6 +329,18 @@ const mqLevelStyles: Record<MQAlertLevel, string> = {
     ERROR: 'bg-rose-50 text-rose-800 border border-rose-200',
 };
 
+const requiredFieldCardClass =
+    'space-y-2 rounded-xl border border-rose-100 bg-rose-50/80 dark:border-rose-500/30 dark:bg-rose-500/10 p-3';
+const requiredLabelClass = 'text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2 flex-wrap';
+const requiredInputClass =
+    'w-full rounded-md border border-rose-300 bg-rose-50/80 px-3 py-2 text-sm text-slate-900 focus:ring-rose-500 focus:border-rose-500 dark:border-rose-500/60 dark:bg-rose-500/10 dark:text-white';
+
+const RequiredBadge: React.FC = () => (
+    <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-500/20 dark:text-rose-200">
+        必須
+    </span>
+);
+
 const severityIcon = (severity: 'ok' | 'warn' | 'error') => {
     if (severity === 'ok') {
         return <CheckCircle className="w-5 h-5 text-emerald-500" aria-hidden />;
@@ -1190,11 +1202,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     <div className="lg:col-span-7 space-y-6">
                         <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
-                                <div className="md:col-span-2 space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                                            サプライヤー / 支払先 *
-                                        </label>
+                                <div className={`md:col-span-2 ${requiredFieldCardClass}`}>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <label className={requiredLabelClass}>サプライヤー / 支払先</label>
+                                        <RequiredBadge />
                                         {paymentRecipientWarning && (
                                             <span className="text-xs text-amber-600 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-full">
                                                 支払先を選択してください
@@ -1216,6 +1227,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         }
                                         disabled={isDisabled}
                                         required
+                                        highlightRequired
                                     />
                                     {!paymentRecipients.length && (
                                         <p className="mt-1 text-xs text-amber-600">
@@ -1236,16 +1248,18 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         disabled={isDisabled}
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
-                                        請求書発行日 *
+                                <div className={requiredFieldCardClass}>
+                                    <label className={requiredLabelClass}>
+                                        請求書発行日
+                                        <RequiredBadge />
                                     </label>
                                     <input
                                         type="date"
                                         value={selectedInvoice.invoiceDate}
                                         onChange={e => handleInvoiceFieldChange('invoiceDate', e.target.value)}
-                                        className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
+                                        className={requiredInputClass}
                                         disabled={isDisabled}
+                                        required
                                     />
                                 </div>
                                 <div>
@@ -1258,6 +1272,27 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         onChange={e => handleInvoiceFieldChange('dueDate', e.target.value)}
                                         className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
                                         disabled={isDisabled}
+                                    />
+                                </div>
+                                <div className={requiredFieldCardClass}>
+                                    <label className={requiredLabelClass}>
+                                        部門
+                                        <RequiredBadge />
+                                    </label>
+                                    <DepartmentSelect
+                                        value={departmentId}
+                                        onChange={setDepartmentId}
+                                        required
+                                        highlightRequired
+                                    />
+                                </div>
+                                <div className={`md:col-span-2 ${requiredFieldCardClass}`}>
+                                    <ApprovalRouteSelector
+                                        onChange={setApprovalRouteId}
+                                        isSubmitting={isDisabled}
+                                        variant="inline"
+                                        highlightRequired
+                                        labelAdornment={<RequiredBadge />}
                                     />
                                 </div>
                                 <div>
@@ -1377,13 +1412,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">部門 *</label>
-                                <DepartmentSelect value={departmentId} onChange={setDepartmentId} required />
-                            </div>
-
-                            <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} />
-
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">振込先・銀行名</label>
@@ -1434,7 +1462,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
 
                         <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
                             <div className="flex items-center justify-between">
-                                <p className="text-base font-semibold text-slate-800 dark:text-slate-100">経費明細 *</p>
+                                <div className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+                                    <span>経費明細</span>
+                                    <RequiredBadge />
+                                </div>
                                 <button
                                     type="button"
                                     onClick={addLine}

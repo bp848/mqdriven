@@ -11,6 +11,7 @@ type SupplierSearchSelectProps = {
     onCreateSupplier?: (name: string) => Promise<PaymentRecipient>;
     disabled?: boolean;
     required?: boolean;
+    highlightRequired?: boolean;
     name?: string;
     id?: string;
     placeholder?: string;
@@ -29,6 +30,7 @@ const SupplierSearchSelect: React.FC<SupplierSearchSelectProps> = ({
     onCreateSupplier,
     disabled,
     required,
+    highlightRequired = false,
     name = 'paymentRecipientId',
     id = 'paymentRecipientId',
     placeholder = 'サプライヤー名 / コードで検索',
@@ -90,10 +92,22 @@ const SupplierSearchSelect: React.FC<SupplierSearchSelectProps> = ({
         };
     }, [suppliers, normalizedQuery, limit]);
 
-    const selectClass =
-        'w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500';
-    const inputClass =
-        'w-full text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500';
+    const selectClass = [
+        'w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500',
+        highlightRequired
+            ? 'border-rose-300 bg-rose-50/70 focus:ring-rose-500 focus:border-rose-500 dark:bg-rose-500/10 dark:border-rose-400'
+            : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+    const inputClass = [
+        'w-full text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-md p-2 focus:ring-blue-500 focus:border-blue-500',
+        highlightRequired
+            ? 'border-rose-300 bg-rose-50/70 focus:ring-rose-500 focus:border-rose-500 dark:bg-rose-500/10 dark:border-rose-400'
+            : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
 
     const handleCreateSupplier = async () => {
         if (!onCreateSupplier || !query.trim()) return;
