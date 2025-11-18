@@ -645,6 +645,8 @@ export interface PaymentRecipient {
   accountNumber?: string | null;
   bankBranch?: string | null;
   bankAccountNumber?: string | null;
+  bankAccountType?: string | null;
+  invoiceRegistrationNumber?: string | null;
 }
 
 export interface Department {

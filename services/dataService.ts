@@ -89,6 +89,55 @@ const normalizeLookupKey = (value: unknown): string | null => {
     return key.length > 0 ? key : null;
 };
 
+const PAYMENT_RECIPIENT_SELECT = `
+    id,
+    recipient_code,
+    company_name,
+    recipient_name,
+    phone_number,
+    bank_name,
+    bank_branch,
+    bank_account_type,
+    bank_account_number,
+    invoice_registration_number
+`;
+const PAYMENT_RECIPIENT_LEGACY_SELECT = 'id, recipient_code, company_name, recipient_name';
+
+const isMissingColumnError = (error?: PostgrestError | null) =>
+    Boolean(error?.message && /column.+does not exist/i.test(error.message));
+
+const mapDbPaymentRecipient = (record: any): PaymentRecipient => {
+    const branch = record?.bank_branch ?? record?.branch_name ?? null;
+    const accountNumber = record?.bank_account_number ?? record?.account_number ?? null;
+    const accountType = record?.bank_account_type ?? record?.bankAccountType ?? null;
+    return {
+        id: record.id,
+        recipientCode: record.recipient_code,
+        companyName: record.company_name,
+        recipientName: record.recipient_name,
+        phoneNumber: record.phone_number ?? null,
+        bankName: record.bank_name ?? null,
+        branchName: branch,
+        bankBranch: branch,
+        accountNumber,
+        bankAccountNumber: accountNumber,
+        bankAccountType: accountType,
+        invoiceRegistrationNumber: record.invoice_registration_number ?? null,
+    };
+};
+
+const buildPaymentRecipientPayload = (item: Partial<PaymentRecipient>) => ({
+    recipient_code: item.recipientCode,
+    company_name: item.companyName,
+    recipient_name: item.recipientName,
+    phone_number: item.phoneNumber ?? null,
+    bank_name: item.bankName ?? null,
+    bank_branch: item.bankBranch ?? item.branchName ?? null,
+    bank_account_type: item.bankAccountType ?? null,
+    bank_account_number: item.bankAccountNumber ?? item.accountNumber ?? null,
+    invoice_registration_number: item.invoiceRegistrationNumber ?? null,
+});
+
 // Mappers from snake_case (DB) to camelCase (JS)
 const dbJobToJob = (project: any): Job => ({
     id: project.id,
@@ -1168,20 +1217,44 @@ export const deactivateAccountItem = async (id: string): Promise<void> => {
 
 export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
     const supabase = getSupabase();
-    let query = supabase.from('payment_recipients').select('id, recipient_code, company_name, recipient_name').order('company_name', { nullsFirst: false }).order('recipient_name', { nullsFirst: false });
+    const buildQuery = (columns: string) => {
+        let query = supabase
+            .from('payment_recipients')
+            .select(columns)
+            .order('company_name', { nullsFirst: false })
+            .order('recipient_name', { nullsFirst: false });
+        if (q && q.trim()) {
+            query = query.ilike('company_name', `%${q}%`);
+        }
+        return query.limit(1000);
+    };
 
-    if (q && q.trim()) {
-        query = query.ilike('company_name', `%${q}%`);
+    let { data, error } = await buildQuery(PAYMENT_RECIPIENT_SELECT);
+    if (error && isMissingColumnError(error)) {
+        console.warn('payment_recipients table missing extended columns; falling back to legacy schema');
+        ({ data, error } = await buildQuery(PAYMENT_RECIPIENT_LEGACY_SELECT));
     }
-    const { data, error } = await query.limit(1000);
     ensureSupabaseSuccess(error, 'Failed to fetch payment recipients');
-    return (data || []).map(d => ({ id: d.id, recipientCode: d.recipient_code, companyName: d.company_name, recipientName: d.recipient_name }));
+    return (data || []).map(mapDbPaymentRecipient);
 };
 
 export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<void> => {
     const supabase = getSupabase();
-    const dbItem = { recipient_code: item.recipientCode, company_name: item.companyName, recipient_name: item.recipientName };
-    const { error } = await supabase.from('payment_recipients').upsert({ id: item.id, ...dbItem });
+    const payload = buildPaymentRecipientPayload(item);
+    const { error } = await supabase.from('payment_recipients').upsert({ id: item.id, ...payload });
+    if (error && isMissingColumnError(error)) {
+        console.warn('payment_recipients table missing extended columns; retrying save with legacy payload');
+        const legacyPayload = {
+            recipient_code: payload.recipient_code,
+            company_name: payload.company_name,
+            recipient_name: payload.recipient_name,
+        };
+        const { error: fallbackError } = await supabase
+            .from('payment_recipients')
+            .upsert({ id: item.id, ...legacyPayload });
+        ensureSupabaseSuccess(fallbackError, '支払先の保存に失敗しました');
+        return;
+    }
     ensureSupabaseSuccess(error, '支払先の保存に失敗しました');
 };
 
@@ -1190,23 +1263,36 @@ export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): P
         throw new Error('支払先の名称を入力してください。');
     }
     const supabase = getSupabase();
-    const payload = {
-        recipient_code: item.recipientCode || `PR-${Date.now()}`,
-        company_name: item.companyName ?? item.recipientName ?? '',
-        recipient_name: item.recipientName ?? item.companyName ?? '',
+    const hydratedItem: Partial<PaymentRecipient> = {
+        ...item,
+        recipientCode: item.recipientCode || `PR-${Date.now()}`,
+        companyName: item.companyName ?? item.recipientName ?? '',
+        recipientName: item.recipientName ?? item.companyName ?? '',
     };
-    const { data, error } = await supabase
+    const payload = buildPaymentRecipientPayload(hydratedItem);
+    const selectClause = PAYMENT_RECIPIENT_SELECT;
+    let { data, error } = await supabase
         .from('payment_recipients')
         .insert(payload)
-        .select('id, recipient_code, company_name, recipient_name')
+        .select(selectClause)
         .single();
+
+    if (error && isMissingColumnError(error)) {
+        console.warn('payment_recipients table missing extended columns; retrying insert with legacy payload');
+        const legacyPayload = {
+            recipient_code: payload.recipient_code,
+            company_name: payload.company_name,
+            recipient_name: payload.recipient_name,
+        };
+        ({ data, error } = await supabase
+            .from('payment_recipients')
+            .insert(legacyPayload)
+            .select(PAYMENT_RECIPIENT_LEGACY_SELECT)
+            .single());
+    }
+
     ensureSupabaseSuccess(error, '支払先の登録に失敗しました');
-    return {
-        id: data.id,
-        recipientCode: data.recipient_code,
-        companyName: data.company_name,
-        recipientName: data.recipient_name,
-    };
+    return mapDbPaymentRecipient(data);
 };
 
 export const deletePaymentRecipient = async (id: string): Promise<void> => {

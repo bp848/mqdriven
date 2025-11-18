@@ -567,7 +567,9 @@ export const createDemoDataState = (): DemoDataState => {
       recipientName: '経理部',
       bankName: '三菱UFJ銀行',
       bankBranch: '新橋支店',
-      bankAccountNumber: '普通 1234567',
+      bankAccountType: '普通',
+      bankAccountNumber: '1234567',
+      invoiceRegistrationNumber: 'T1234567890123',
       isActive: true,
       allocationTargets: [
         { id: 'pay-001-hq', name: '本社 経理課' },
@@ -581,7 +583,9 @@ export const createDemoDataState = (): DemoDataState => {
       recipientName: '請求担当 佐藤',
       bankName: '三井住友銀行',
       bankBranch: '銀座支店',
-      bankAccountNumber: '当座 7654321',
+      bankAccountType: '当座',
+      bankAccountNumber: '7654321',
+      invoiceRegistrationNumber: 'T2222333344448',
       isActive: true,
       allocationTargets: [
         { id: 'pay-002-logi', name: '物流センター' },
@@ -595,7 +599,9 @@ export const createDemoDataState = (): DemoDataState => {
       recipientName: '代表取締役 渡辺',
       bankName: 'みずほ銀行',
       bankBranch: '丸の内支店',
-      bankAccountNumber: '普通 9876543',
+      bankAccountType: '普通',
+      bankAccountNumber: '9876543',
+      invoiceRegistrationNumber: 'T9876543210123',
       isActive: true,
       allocationTargets: [
         { id: 'pay-003-cre', name: 'クリエイティブ事業部' },
