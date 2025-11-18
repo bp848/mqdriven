@@ -6,9 +6,19 @@ interface ApprovalRouteSelectorProps {
     onChange: (routeId: string) => void;
     isSubmitting: boolean;
     requiredRouteName?: string;
+    variant?: 'default' | 'inline';
+    highlightRequired?: boolean;
+    labelAdornment?: React.ReactNode;
 }
 
-const ApprovalRouteSelector: React.FC<ApprovalRouteSelectorProps> = ({ onChange, isSubmitting, requiredRouteName }) => {
+const ApprovalRouteSelector: React.FC<ApprovalRouteSelectorProps> = ({
+    onChange,
+    isSubmitting,
+    requiredRouteName,
+    variant = 'default',
+    highlightRequired = false,
+    labelAdornment,
+}) => {
     const [routes, setRoutes] = useState<ApprovalRoute[]>([]);
     const [selectedRoute, setSelectedRoute] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -62,11 +72,33 @@ const ApprovalRouteSelector: React.FC<ApprovalRouteSelectorProps> = ({ onChange,
         onChange(routeId);
     };
 
-    const selectClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-70 disabled:bg-slate-200 dark:disabled:bg-slate-600";
+    const selectClass = [
+        'w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-70 disabled:bg-slate-200 dark:disabled:bg-slate-600',
+        highlightRequired
+            ? 'border-rose-300 bg-rose-50/70 focus:ring-rose-500 focus:border-rose-500 dark:bg-rose-500/10 dark:border-rose-400'
+            : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
+    const wrapperClass =
+        variant === 'inline'
+            ? 'space-y-2'
+            : 'mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 space-y-2';
+    const labelClass =
+        variant === 'inline'
+            ? 'text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2'
+            : 'block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2';
 
     return (
-        <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-            <label htmlFor="approval-route-selector" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">承認ルート *</label>
+        <div className={wrapperClass}>
+            <label htmlFor="approval-route-selector" className={labelClass}>
+                <span>
+                    承認ルート
+                    {!labelAdornment && ' *'}
+                </span>
+                {labelAdornment}
+            </label>
             <select
                 id="approval-route-selector"
                 value={selectedRoute}
