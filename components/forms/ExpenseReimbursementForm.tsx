@@ -88,6 +88,13 @@ interface ComputedTotals {
     gross: number;
 }
 
+interface AutopilotChecklistItem {
+    id: string;
+    label: string;
+    description: string;
+    ready: boolean;
+}
+
 const numberFromInput = (value: string) => {
     if (value === '') return 0;
     const parsed = Number(value);
@@ -400,6 +407,75 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
     );
     const isManualTotals = selectedInvoice ? manualTotalsInvoices[selectedInvoice.id] ?? false : false;
     const paymentRecipientWarning = Boolean(selectedInvoice?.supplierName && !selectedInvoice?.paymentRecipientId);
+    const selectedDepartment = useMemo(
+        () => departments.find(department => department.id === departmentId),
+        [departments, departmentId]
+    );
+
+    const focusFieldById = useCallback((elementId: string) => {
+        if (typeof document === 'undefined') return;
+        const target = document.getElementById(elementId);
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const interactive = target as HTMLElement;
+        interactive?.focus?.();
+    }, []);
+
+    const autopilotChecklist = useMemo<AutopilotChecklistItem[]>(() => {
+        if (!selectedInvoice) return [];
+        const linesReady =
+            selectedInvoice.lines.length > 0 &&
+            selectedInvoice.lines.every(line => line.description.trim() && Number(line.amountExclTax) > 0);
+        return [
+            {
+                id: 'paymentRecipientId',
+                label: '支払先',
+                ready: Boolean(selectedInvoice.paymentRecipientId),
+                description: selectedInvoice.paymentRecipientId
+                    ? '支払先マスタとリンク済みです。'
+                    : selectedInvoice.supplierName
+                        ? `OCR候補：${selectedInvoice.supplierName}`
+                        : 'アップロードまたは検索で候補を選択してください。',
+            },
+            {
+                id: 'invoiceDate',
+                label: '請求書発行日',
+                ready: Boolean(selectedInvoice.invoiceDate),
+                description: selectedInvoice.invoiceDate
+                    ? `${selectedInvoice.invoiceDate} を取得済み`
+                    : '日付を確認してください。',
+            },
+            {
+                id: 'departmentId',
+                label: '部門',
+                ready: Boolean(departmentId),
+                description: departmentId
+                    ? `${selectedDepartment?.name ?? '部門を選択済みです。'}`
+                    : '所属部門を選択してください。',
+            },
+            {
+                id: 'approval-route-selector',
+                label: '承認ルート',
+                ready: Boolean(approvalRouteId),
+                description: approvalRouteId ? '承認ルート選択済みです。' : '承認フローを選択してください。',
+            },
+            {
+                id: 'expense-lines-table',
+                label: '経費明細',
+                ready: linesReady,
+                description: linesReady
+                    ? `${selectedInvoice.lines.length} 行が入力済みです。`
+                    : '明細を確認し、未入力がないかチェックしてください。',
+            },
+        ];
+    }, [selectedInvoice, departmentId, approvalRouteId, selectedDepartment?.name]);
+
+    const autopilotProgress = useMemo(() => {
+        const total = autopilotChecklist.length;
+        const ready = autopilotChecklist.filter(item => item.ready).length;
+        const percent = total === 0 ? 0 : Math.round((ready / total) * 100);
+        return { ready, total, percent };
+    }, [autopilotChecklist]);
 
     const updateSelectedInvoice = useCallback(
         (updater: (invoice: ExpenseInvoiceDraft) => ExpenseInvoiceDraft) => {
@@ -1010,8 +1086,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     </div>
                 )}
 
-                <div className="grid lg:grid-cols-12 gap-6">
-                    <div className="lg:col-span-5 space-y-6">
+                <div className="grid gap-6 lg:grid-cols-[minmax(320px,_420px)_minmax(0,_1fr)]">
+                    <div className="space-y-6 self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
                         <section className="bg-slate-950/70 dark:bg-slate-950/80 rounded-xl p-4 shadow-sm min-h-[360px] flex flex-col">
                             <p className="text-sm font-semibold text-slate-200 mb-2">請求書プレビュー</p>
                             {previewFiles.length === 0 ? (
@@ -1199,7 +1275,51 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                         </section>
                     </div>
 
-                    <div className="lg:col-span-7 space-y-6">
+                    <div className="space-y-6">
+                        {autopilotChecklist.length > 0 && (
+                            <section className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm space-y-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">AIアシストの進捗</p>
+                                        <p className="text-base font-semibold text-slate-800 dark:text-white">
+                                            {autopilotProgress.ready}/{autopilotProgress.total} 項目がドラフトから自動入力済み
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-300">
+                                            残りのカードをクリックすると該当フィールドへジャンプします。
+                                        </p>
+                                    </div>
+                                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-300">
+                                        {autopilotProgress.percent}%
+                                    </div>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    {autopilotChecklist.map(item => (
+                                        <button
+                                            type="button"
+                                            key={item.id}
+                                            onClick={() => focusFieldById(item.id)}
+                                            className={`text-left rounded-xl border px-3 py-2 text-sm transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
+                                                item.ready
+                                                    ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10'
+                                                    : 'border-slate-200 bg-white dark:bg-slate-900/40'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="font-semibold text-slate-800 dark:text-slate-50">{item.label}</span>
+                                                <span
+                                                    className={`text-xs font-semibold ${
+                                                        item.ready ? 'text-emerald-600' : 'text-amber-600'
+                                                    }`}
+                                                >
+                                                    {item.ready ? '確認済' : '要確認'}
+                                                </span>
+                                            </div>
+                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{item.description}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
                         <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className={`md:col-span-2 ${requiredFieldCardClass}`}>
@@ -1228,6 +1348,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         disabled={isDisabled}
                                         required
                                         highlightRequired
+                                        id="paymentRecipientId"
                                     />
                                     {!paymentRecipients.length && (
                                         <p className="mt-1 text-xs text-amber-600">
@@ -1249,7 +1370,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                     />
                                 </div>
                                 <div className={requiredFieldCardClass}>
-                                    <label className={requiredLabelClass}>
+                                    <label htmlFor="invoiceDate" className={requiredLabelClass}>
                                         請求書発行日
                                         <RequiredBadge />
                                     </label>
@@ -1260,6 +1381,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         className={requiredInputClass}
                                         disabled={isDisabled}
                                         required
+                                        id="invoiceDate"
                                     />
                                 </div>
                                 <div>
@@ -1284,6 +1406,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                         onChange={setDepartmentId}
                                         required
                                         highlightRequired
+                                        id="departmentId"
                                     />
                                 </div>
                                 <div className={`md:col-span-2 ${requiredFieldCardClass}`}>
@@ -1478,7 +1601,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                             </div>
                             <div className="overflow-x-auto">
                                 <p className="text-xs text-slate-500 mb-2">行を横スクロールして全ての項目を入力できます。</p>
-                                <table className="w-full min-w-[1200px] text-sm whitespace-nowrap">
+                                <table
+                                    id="expense-lines-table"
+                                    tabIndex={-1}
+                                    className="w-full min-w-[1200px] text-sm whitespace-nowrap"
+                                >
                                     <thead>
                                         <tr className="text-left text-xs text-slate-500 uppercase tracking-wider">
                                             <th className="py-2 px-2 min-w-[40px]">#</th>
