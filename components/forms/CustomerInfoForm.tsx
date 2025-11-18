@@ -101,24 +101,6 @@ const createEmptyCustomerInfo = (customerId = ''): CustomerInfo => ({
     updatedAt: null,
 });
 
-const BASIC_INFO_SECTION: SectionDefinition = {
-    key: 'basic',
-    title: '',
-    description: undefined,
-    fields: [
-        { key: 'companyName', label: '会社名' },
-        { key: 'rank', label: '顧客ランク' },
-        { key: 'codeNo', label: 'コード番号' },
-        { key: 'address', label: '住所', type: 'textarea', rows: 2 },
-        { key: 'phoneNumber', label: '電話番号' },
-        { key: 'faxNumber', label: 'FAX番号' },
-        { key: 'representativeName', label: '代表者名' },
-        { key: 'employeeCount', label: '従業員数' },
-        { key: 'businessStartYear', label: '取引開始年' },
-        { key: 'establishmentYear', label: '設立年' },
-    ],
-};
-
 const FINANCIAL_SECTION: SectionDefinition = {
     key: 'financial',
     title: 'Financial / Terms',
@@ -212,7 +194,6 @@ const KARTE_SECTION: SectionDefinition = {
 };
 
 const SECTIONS: SectionDefinition[] = [
-    BASIC_INFO_SECTION,
     FINANCIAL_SECTION,
     SALES_SECTION,
     MEDIA_SECTION,
@@ -338,9 +319,8 @@ const CustomerInfoForm: React.FC<CustomerInfoFormProps> = ({ customerId }) => {
 
             <div className="grid grid-cols-1 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-3 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
                 <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">顧客ランク</p>
-                    <p className="mt-1 text-base font-medium text-slate-900 dark:text-white">{info.rank || '未設定'}</p>
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-300">顧客ID: {info.id}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">顧客ID</p>
+                    <p className="mt-1 text-base font-medium text-slate-900 dark:text-white">{info.id || '-'}</p>
                 </div>
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">作成日時</p>
@@ -354,7 +334,7 @@ const CustomerInfoForm: React.FC<CustomerInfoFormProps> = ({ customerId }) => {
 
             {SECTIONS.map(section => (
                 <section key={section.key} className="space-y-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                    {section.key !== 'basic' && (
+                    {(section.title || section.description) && (
                         <div>
                             {section.title && <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{section.title}</h3>}
                             {section.description && (
