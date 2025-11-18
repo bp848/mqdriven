@@ -93,26 +93,30 @@ const normalizeLookupKey = (value: unknown): string | null => {
 };
 
 const PAYMENT_RECIPIENT_SELECT = `
-    id,
-    recipient_code,
-    company_name,
-    recipient_name,
-    phone_number,
-    bank_name,
-    bank_branch,
-    bank_account_type,
-    bank_account_number,
-    invoice_registration_number
+id,
+recipient_code,
+company_name,
+recipient_name,
+phone_number,
+bank_name,
+branch_name,
+bank_branch,
+account_type,
+bank_account_type,
+account_number,
+bank_account_number,
+account_holder,
+invoice_registration_number
 `;
-const PAYMENT_RECIPIENT_LEGACY_SELECT = 'id, recipient_code, company_name, recipient_name';
+const PAYMENT_RECIPIENT_LEGACY_SELECT = 'id, recipient_code, company_name, recipient_name, phone_number, bank_name, bank_branch, bank_account_type, bank_account_number, invoice_registration_number';
 
 const isMissingColumnError = (error?: PostgrestError | null) =>
     Boolean(error?.message && /column.+does not exist/i.test(error.message));
 
 const mapDbPaymentRecipient = (record: any): PaymentRecipient => {
-    const branch = record?.bank_branch ?? record?.branch_name ?? null;
-    const accountNumber = record?.bank_account_number ?? record?.account_number ?? null;
-    const accountType = record?.bank_account_type ?? record?.bankAccountType ?? null;
+    const bankBranch = record.bank_branch ?? null;
+    const accountNumber = record.bank_account_number ?? record.account_number ?? null;
+    const accountType = record.bank_account_type ?? record.account_type ?? null;
     return {
         id: record.id,
         recipientCode: record.recipient_code,
@@ -120,9 +124,9 @@ const mapDbPaymentRecipient = (record: any): PaymentRecipient => {
         recipientName: record.recipient_name,
         phoneNumber: record.phone_number ?? null,
         bankName: record.bank_name ?? null,
-        branchName: branch,
-        bankBranch: branch,
+        branchName: record.branch_name ?? record.bank_branch ?? null,
         accountNumber,
+        bankBranch,
         bankAccountNumber: accountNumber,
         bankAccountType: accountType,
         invoiceRegistrationNumber: record.invoice_registration_number ?? null,
@@ -135,9 +139,13 @@ const buildPaymentRecipientPayload = (item: Partial<PaymentRecipient>) => ({
     recipient_name: item.recipientName,
     phone_number: item.phoneNumber ?? null,
     bank_name: item.bankName ?? null,
+    branch_name: item.branchName ?? item.bankBranch ?? null,
     bank_branch: item.bankBranch ?? item.branchName ?? null,
+    account_type: item.bankAccountType ?? null,
     bank_account_type: item.bankAccountType ?? null,
+    account_number: item.bankAccountNumber ?? item.accountNumber ?? null,
     bank_account_number: item.bankAccountNumber ?? item.accountNumber ?? null,
+    account_holder: (item as any)?.accountHolder ?? item.recipientName ?? item.companyName ?? null,
     invoice_registration_number: item.invoiceRegistrationNumber ?? null,
 });
 
