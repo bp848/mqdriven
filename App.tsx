@@ -68,6 +68,8 @@ const getEnvValue = (key: string): string | undefined => {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ホーム',
+    my_schedule: 'マイスケジュール（カレンダー）',
+    my_tasks: 'マイタスク（タスク管理）',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
     sales_customers: '取引先管理',
@@ -755,6 +757,9 @@ const App: React.FC = () => {
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
+            case 'my_schedule':
+            case 'my_tasks':
+                return <PlaceholderPage title={PAGE_TITLES[currentPage]} />;
             case 'admin_audit_log':
                 return <AuditLogPage />;
             case 'admin_journal_queue':
