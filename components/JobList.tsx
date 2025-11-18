@@ -26,7 +26,8 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
     if (!searchTerm) return jobs;
     const lowercasedTerm = searchTerm.toLowerCase();
     return jobs.filter(job => 
-      job.clientName.toLowerCase().includes(lowercasedTerm) ||
+      (job.clientName && job.clientName.toLowerCase().includes(lowercasedTerm)) ||
+      (job.customerCode && job.customerCode.toLowerCase().includes(lowercasedTerm)) ||
       job.title.toLowerCase().includes(lowercasedTerm) ||
       String(job.jobNumber).includes(lowercasedTerm)
     );
@@ -97,6 +98,13 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                 const relatedOrders = job.orders ?? [];
                 const projectKey = job.projectCode ? String(job.projectCode) : job.jobNumber ? String(job.jobNumber) : '-';
 
+                const customerLabel = job.clientName?.trim() || job.customerCode || '顧客名未設定';
+                const customerSubLabel = job.customerCode
+                    ? `コード: ${job.customerCode}`
+                    : job.customerId
+                        ? `ID: ${job.customerId.slice(0, 8)}...`
+                        : '';
+
                 return (
                     <React.Fragment key={job.id}>
                       <tr onClick={() => onSelectJob(job)} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50">
@@ -104,8 +112,11 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                           {job.jobNumber}
                         </td>
                         <td className="px-6 py-5">
-                          <div className="font-medium text-base text-slate-800 dark:text-slate-200">{job.clientName}</div>
-                          <div className="text-slate-500 dark:text-slate-400">{job.title}</div>
+                          <div className="font-medium text-base text-slate-800 dark:text-slate-200">{customerLabel}</div>
+                          <div className="text-slate-500 dark:text-slate-400 text-sm">
+                            {job.title || '案件名未設定'}
+                            {customerSubLabel && <span className="ml-2 text-xs text-slate-400">{customerSubLabel}</span>}
+                          </div>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
                         <td className="px-6 py-5 whitespace-nowrap">{displayedQuantity.toLocaleString()}</td>
