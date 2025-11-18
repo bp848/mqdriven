@@ -50,7 +50,7 @@ import * as geminiService from './services/geminiService';
 import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title } from './types';
+import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
 
 const getEnvValue = (key: string): string | undefined => {
@@ -161,7 +161,7 @@ const App: React.FC = () => {
     const [allUsers, setAllUsers] = useState<EmployeeUser[]>([]);
     
     // Data State
-    const [jobs, setJobs] = useState<Job[]>([]);
+    const [jobs, setJobs] = useState<ProjectBudgetSummary[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
     const [accountItems, setAccountItems] = useState<AccountItem[]>([]);
@@ -400,7 +400,7 @@ const App: React.FC = () => {
             }));
             
             const results = await Promise.allSettled([
-                dataService.getJobsWithAggregation(),
+                dataService.getProjectBudgetSummaries(),
                 dataService.getCustomers(),
                 dataService.getJournalEntries(),
                 dataService.getAccountItems(),
@@ -675,7 +675,7 @@ const App: React.FC = () => {
             case 'sales_orders':
                 return (
                     <SalesOrdersPage
-                        jobs={jobs}
+                        projectSummaries={jobs}
                         orders={purchaseOrders}
                         searchTerm={searchTerm}
                         onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }}
@@ -740,7 +740,7 @@ const App: React.FC = () => {
             case 'sales_estimates':
                 return <EstimateManagementPage estimates={estimates} customers={customers} allUsers={allUsers} onAddEstimate={handleAddEstimate} addToast={addToast} currentUser={currentUser} searchTerm={searchTerm} isAIOff={isAIOff} />;
             case 'analysis_ranking':
-                return <SalesRanking jobs={jobs} />;
+                return <SalesRanking initialSummaries={jobs} />;
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
             case 'approval_list':

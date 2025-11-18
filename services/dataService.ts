@@ -39,6 +39,8 @@ import {
     AllocationDivision,
     Title,
     FaxIntake,
+    ProjectBudgetSummary,
+    ProjectBudgetFilter,
 } from '../types';
 
 type SupabaseClient = ReturnType<typeof getSupabase>;
@@ -741,83 +743,92 @@ export const getJobs = async (): Promise<Job[]> => {
     });
 };
 
-type JobSalesSummary = { amount: number; quantity: number };
-type JobCostSummary = { cost: number; quantity: number; amount: number };
-
-const fetchJobSalesSummaries = async (): Promise<Map<string, JobSalesSummary>> => {
+const fetchPurchaseOrdersWithFilters = async (filters: ProjectBudgetFilter = {}): Promise<PurchaseOrder[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase
-        .from('invoice_items')
-        .select('job_id, quantity, line_total');
-
-    ensureSupabaseSuccess(error, 'Failed to fetch invoice items for aggregation');
-
-    const summaries = new Map<string, JobSalesSummary>();
-    (data || []).forEach(item => {
-        const jobId = item?.job_id;
-        if (!jobId) return;
-        const summary = summaries.get(jobId) || { amount: 0, quantity: 0 };
-        summary.amount += Number(item.line_total ?? 0) || 0;
-        summary.quantity += Number(item.quantity ?? 0) || 0;
-        summaries.set(jobId, summary);
-    });
-    return summaries;
-};
-
-const fetchJobCostSummaries = async (): Promise<Map<string, JobCostSummary>> => {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    let query = supabase
         .from('orders')
-        .select('project_code, quantity, total_cost, subamount, amount');
+        .select('*')
+        .order('order_date', { ascending: false });
 
-    ensureSupabaseSuccess(error, 'Failed to fetch purchase orders for aggregation');
-
-    const summaries = new Map<string, JobCostSummary>();
-    (data || []).forEach(order => {
-        const projectCode = order?.project_code ? String(order.project_code) : null;
-        if (!projectCode) return;
-        const summary = summaries.get(projectCode) || { cost: 0, quantity: 0, amount: 0 };
-        summary.amount += Number(order.amount ?? order.subamount ?? order.total_cost ?? 0) || 0;
-        summary.cost += Number(order.total_cost ?? order.subamount ?? order.amount ?? 0) || 0;
-        summary.quantity += Number(order.quantity ?? 0) || 0;
-        summaries.set(projectCode, summary);
-    });
-    return summaries;
-};
-
-export const getJobsWithAggregation = async (): Promise<Job[]> => {
-    const jobs = await getJobs();
-
-    let salesSummaries: Map<string, JobSalesSummary> | null = null;
-    let costSummaries: Map<string, JobCostSummary> | null = null;
-
-    try {
-        [salesSummaries, costSummaries] = await Promise.all([
-            fetchJobSalesSummaries(),
-            fetchJobCostSummaries(),
-        ]);
-    } catch (error) {
-        console.error('Failed to aggregate job totals. Falling back to raw jobs.', error);
-        return jobs;
+    if (filters.startDate) {
+        query = query.gte('order_date', filters.startDate);
+    }
+    if (filters.endDate) {
+        query = query.lte('order_date', filters.endDate);
     }
 
-    return jobs.map(job => {
-        const sales = salesSummaries?.get(job.id);
-        const costKey = job.projectCode ? String(job.projectCode) : job.jobNumber ? String(job.jobNumber) : '';
-        const cost = costKey ? costSummaries?.get(costKey) : undefined;
+    const { data, error } = await query;
+    ensureSupabaseSuccess(error, 'Failed to fetch purchase orders');
+    return (data || []).map(dbOrderToPurchaseOrder);
+};
 
-        const totalQuantity = sales?.quantity ?? cost?.quantity ?? job.totalQuantity ?? job.quantity ?? 0;
-        const totalAmount = sales?.amount ?? cost?.amount ?? job.totalAmount ?? job.price ?? 0;
-        const totalCost = cost?.cost ?? job.totalCost ?? job.variableCost ?? 0;
+const normalizeProjectKey = (job: Job): string | null => {
+    if (job.projectCode) return String(job.projectCode);
+    if (job.jobNumber) return String(job.jobNumber);
+    return null;
+};
+
+const toNumberOrZero = (value: unknown): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {}): Promise<ProjectBudgetSummary[]> => {
+    const [jobs, purchaseOrders] = await Promise.all([
+        getJobs(),
+        fetchPurchaseOrdersWithFilters(filters),
+    ]);
+
+    const ordersByProject = purchaseOrders.reduce<Map<string, PurchaseOrder[]>>((acc, order) => {
+        if (order.status === PurchaseOrderStatus.Cancelled) return acc;
+        const key = normalizeLookupKey(order.projectCode) || normalizeLookupKey(order.itemName);
+        if (!key) return acc;
+        if (!acc.has(key)) {
+            acc.set(key, []);
+        }
+        acc.get(key)!.push(order);
+        return acc;
+    }, new Map());
+
+    return jobs.map(job => {
+        const projectKey = normalizeProjectKey(job);
+        const relatedOrders = projectKey ? ordersByProject.get(projectKey) ?? [] : [];
+        const totals = relatedOrders.reduce(
+            (agg, order) => {
+                const quantity = toNumberOrZero(order.quantity);
+                const unitPrice = toNumberOrZero(order.unitPrice);
+                const revenueSource = order.amount ?? order.subamount ?? unitPrice * quantity;
+                const costSource = order.totalCost ?? order.subamount ?? order.amount;
+                agg.quantity += quantity;
+                agg.revenue += toNumberOrZero(revenueSource);
+                agg.cost += toNumberOrZero(costSource);
+                return agg;
+            },
+            { quantity: 0, revenue: 0, cost: 0 }
+        );
+
+        const totalQuantity = totals.quantity || job.totalQuantity || job.quantity || 0;
+        const totalAmount = totals.revenue || job.totalAmount || job.price || 0;
+        const totalCost = totals.cost || job.totalCost || job.variableCost || 0;
+        const grossMargin = totalAmount - totalCost;
 
         return {
             ...job,
             totalQuantity,
             totalAmount,
             totalCost,
-            grossMargin: totalAmount - totalCost,
+            grossMargin,
+            orderCount: relatedOrders.length,
+            orderTotalQuantity: totals.quantity,
+            orderTotalAmount: totals.revenue,
+            orderTotalCost: totals.cost,
+            orders: relatedOrders,
         };
     });
+};
+
+export const getJobsWithAggregation = async (): Promise<Job[]> => {
+    return getProjectBudgetSummaries();
 };
 
 export const addJob = async (jobData: JobCreationPayload): Promise<Job> => {
@@ -1489,13 +1500,7 @@ export const deleteTitle = async (id: string): Promise<void> => {
 
 
 export const getPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('order_date', { ascending: false });
-    ensureSupabaseSuccess(error, 'Failed to fetch purchase orders');
-    return (data || []).map(dbOrderToPurchaseOrder);
+    return fetchPurchaseOrdersWithFilters();
 };
 
 export const addPurchaseOrder = async (order: Omit<PurchaseOrder, 'id'>): Promise<PurchaseOrder> => {
