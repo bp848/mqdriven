@@ -98,12 +98,11 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                 const relatedOrders = job.orders ?? [];
                 const projectKey = job.projectCode ? String(job.projectCode) : job.jobNumber ? String(job.jobNumber) : '-';
 
-                const customerLabel = job.clientName?.trim() || job.customerCode || '顧客名未設定';
-                const customerSubLabel = job.customerCode
-                    ? `コード: ${job.customerCode}`
-                    : job.customerId
-                        ? `ID: ${job.customerId.slice(0, 8)}...`
-                        : '';
+                const customerLabel = job.clientName?.trim() || '顧客名未設定';
+                const customerSubLabelParts = [] as string[];
+                if (job.customerCode) customerSubLabelParts.push(`コード: ${job.customerCode}`);
+                if (job.customerId) customerSubLabelParts.push(`ID: ${job.customerId}`);
+                const customerSubLabel = customerSubLabelParts.join(' / ');
 
                 return (
                     <React.Fragment key={job.id}>
@@ -115,8 +114,12 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                           <div className="font-medium text-base text-slate-800 dark:text-slate-200">{customerLabel}</div>
                           <div className="text-slate-500 dark:text-slate-400 text-sm">
                             {job.title || '案件名未設定'}
-                            {customerSubLabel && <span className="ml-2 text-xs text-slate-400">{customerSubLabel}</span>}
                           </div>
+                          {customerSubLabel && (
+                            <div className="text-xs text-slate-400 mt-1">
+                              {customerSubLabel}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
                         <td className="px-6 py-5 whitespace-nowrap">{displayedQuantity.toLocaleString()}</td>
