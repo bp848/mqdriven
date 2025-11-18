@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Job, JobStatus, InvoiceStatus, ConfirmationDialogProps, Page, Toast, ManufacturingStatus } from '../types';
+import { Job, JobStatus, InvoiceStatus, ConfirmationDialogProps, Page, Toast, ManufacturingStatus, ProjectBudgetSummary, PurchaseOrderStatus } from '../types';
 import { PAPER_TYPES, FINISHING_OPTIONS } from '../constants';
 import { X, Pencil, Save, Loader, Trash2, HardHat, FileText } from './Icons';
 import JobStatusBadge from './JobStatusBadge';
-import { generateMultipagePdf } from '../utils';
+import { generateMultipagePdf, formatDate, formatJPY } from '../utils';
 import ManufacturingOrderPdfContent from './manufacturing/ManufacturingOrderPdfContent';
 
 interface JobDetailModalProps {
@@ -16,6 +16,12 @@ interface JobDetailModalProps {
   onNavigate: (page: Page) => void;
   addToast: (message: string, type: Toast['type']) => void;
 }
+
+const orderStatusStyles: Record<PurchaseOrderStatus, string> = {
+  [PurchaseOrderStatus.Ordered]: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  [PurchaseOrderStatus.Received]: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  [PurchaseOrderStatus.Cancelled]: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300',
+};
 
 const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJob, onDeleteJob, requestConfirmation, onNavigate, addToast, ...props }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -102,6 +108,13 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
 
   const inputClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500";
   const margin = (formData.price || 0) - (formData.variableCost || 0);
+  const summaryJob = job as ProjectBudgetSummary;
+  const relatedOrders = summaryJob?.orders ?? [];
+  const aggregatedOrderCount = summaryJob?.orderCount ?? relatedOrders.length;
+  const aggregatedQuantity = summaryJob?.orderTotalQuantity ?? summaryJob?.totalQuantity ?? job.quantity ?? 0;
+  const aggregatedSales = summaryJob?.orderTotalAmount ?? summaryJob?.totalAmount ?? job.price ?? 0;
+  const aggregatedCost = summaryJob?.orderTotalCost ?? summaryJob?.totalCost ?? job.variableCost ?? 0;
+  const aggregatedMargin = summaryJob?.grossMargin ?? (aggregatedSales - aggregatedCost);
 
   return (
     <>
@@ -162,6 +175,75 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
               {renderField('加工', job.finishing, 'finishing', 'select', FINISHING_OPTIONS)}
             </div>
             {renderField('詳細', job.details, 'details', 'textarea')}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">受注サマリー（orders連携）</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">キャンセル済みの受注は集計から除外しています。</p>
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  受注件数: <span className="font-semibold text-slate-900 dark:text-slate-100">{aggregatedOrderCount.toLocaleString()}</span>件 / 合計部数: {aggregatedQuantity.toLocaleString()}
+                </div>
+              </div>
+              {relatedOrders.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-4 text-sm text-slate-500 dark:text-slate-400">
+                  この案件に紐づく orders レコードがまだありません。
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-4">
+                      <p className="text-xs uppercase text-slate-500 dark:text-slate-400">売上高 (P)</p>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{formatJPY(aggregatedSales)}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-4">
+                      <p className="text-xs uppercase text-slate-500 dark:text-slate-400">原価</p>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{formatJPY(aggregatedCost)}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 dark:bg-emerald-600/10 p-4">
+                      <p className="text-xs uppercase text-slate-500 dark:text-emerald-200">限界利益 (M)</p>
+                      <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-200 mt-1">{formatJPY(aggregatedMargin)}</p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl">
+                      <thead className="bg-slate-100 dark:bg-slate-700/40 text-xs uppercase text-slate-500 dark:text-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-left">受注ID</th>
+                          <th className="px-3 py-2 text-left">受注日</th>
+                          <th className="px-3 py-2 text-left">顧客</th>
+                          <th className="px-3 py-2 text-right">数量</th>
+                          <th className="px-3 py-2 text-right">単価</th>
+                          <th className="px-3 py-2 text-right">売上高</th>
+                          <th className="px-3 py-2 text-right">ステータス</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {relatedOrders.map(order => {
+                          const quantity = Number(order.quantity ?? 0);
+                          const total = quantity * Number(order.unitPrice ?? 0);
+                          return (
+                            <tr key={order.id} className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-800 dark:even:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/70">
+                              <td className="px-3 py-2 font-mono text-xs">{order.id?.slice(0, 8)}...</td>
+                              <td className="px-3 py-2">{formatDate(order.orderDate)}</td>
+                              <td className="px-3 py-2">{order.supplierName || job.clientName}</td>
+                              <td className="px-3 py-2 text-right">{quantity.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right">{formatJPY(order.unitPrice ?? 0)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{formatJPY(total)}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${orderStatusStyles[order.status] || 'bg-slate-200 text-slate-700'}`}>
+                                  {order.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-slate-700">

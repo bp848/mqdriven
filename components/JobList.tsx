@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Job, PurchaseOrder, PurchaseOrderStatus, SortConfig } from '../types';
+import { ProjectBudgetSummary, PurchaseOrderStatus, SortConfig } from '../types';
 import JobStatusBadge from './JobStatusBadge';
 import { formatJPY, formatDate } from '../utils';
 import EmptyState from './ui/EmptyState';
@@ -7,11 +7,10 @@ import { Briefcase, PlusCircle } from './Icons';
 import SortableHeader from './ui/SortableHeader';
 
 interface JobListProps {
-  jobs: Job[];
+  jobs: ProjectBudgetSummary[];
   searchTerm: string;
-  onSelectJob: (job: Job) => void;
+  onSelectJob: (job: ProjectBudgetSummary) => void;
   onNewJob: () => void;
-  ordersByProject?: Record<string, PurchaseOrder[]>;
 }
 
 const orderStatusStyles: Record<PurchaseOrderStatus, string> = {
@@ -20,7 +19,7 @@ const orderStatusStyles: Record<PurchaseOrderStatus, string> = {
   [PurchaseOrderStatus.Cancelled]: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300',
 };
 
-const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJob, ordersByProject }) => {
+const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJob }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'jobNumber', direction: 'descending' });
 
   const filteredJobs = useMemo(() => {
@@ -45,8 +44,8 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
     let sortableItems = [...filteredJobs];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
-        const aValue = a[sortConfig.key as keyof Job] as any;
-        const bValue = b[sortConfig.key as keyof Job] as any;
+        const aValue = a[sortConfig.key as keyof ProjectBudgetSummary] as any;
+        const bValue = b[sortConfig.key as keyof ProjectBudgetSummary] as any;
 
         if (aValue < bValue) {
           return sortConfig.direction === 'ascending' ? -1 : 1;
@@ -84,50 +83,53 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
               <SortableHeader sortKey="totalAmount" label="売上高" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="totalCost" label="原価" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="grossMargin" label="限界利益" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader sortKey="orderCount" label="受注件数" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
             </tr>
           </thead>
           <tbody>
-            {sortedJobs.map((job) => (
-                <React.Fragment key={job.id}>
-                  <tr onClick={() => onSelectJob(job)} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50">
-                    <td className="px-6 py-5 font-mono text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                      {job.jobNumber}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="font-medium text-base text-slate-800 dark:text-slate-200">{job.clientName}</div>
-                      <div className="text-slate-500 dark:text-slate-400">{job.title}</div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
-                    <td className="px-6 py-5 whitespace-nowrap">{(job.totalQuantity ?? job.quantity ?? 0).toLocaleString()}</td>
-                    <td className="px-6 py-5 whitespace-nowrap font-semibold">{formatJPY(job.totalAmount ?? job.price ?? 0)}</td>
-                    <td className="px-6 py-5 whitespace-nowrap">{formatJPY(job.totalCost ?? job.variableCost ?? 0)}</td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              (job.grossMargin ?? 0) >= 0
-                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
-                          }`}
-                      >
-                          {formatJPY(job.grossMargin ?? (job.totalAmount ?? 0) - (job.totalCost ?? 0))}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5">
-                      <JobStatusBadge status={job.status} />
-                    </td>
-                  </tr>
-                  {(() => {
-                    const projectKey = job.projectCode
-                        ? String(job.projectCode)
-                        : job.jobNumber
-                            ? String(job.jobNumber)
-                            : '';
-                    const relatedOrders = projectKey && ordersByProject ? ordersByProject[projectKey] : undefined;
-                    if (!relatedOrders || relatedOrders.length === 0) return null;
-                    return (
+            {sortedJobs.map((job) => {
+                const displayedQuantity = job.orderTotalQuantity ?? job.totalQuantity ?? job.quantity ?? 0;
+                const totalAmount = job.orderTotalAmount ?? job.totalAmount ?? job.price ?? 0;
+                const totalCost = job.orderTotalCost ?? job.totalCost ?? job.variableCost ?? 0;
+                const grossMargin = job.grossMargin ?? (totalAmount - totalCost);
+                const orderCount = job.orderCount ?? (job.orders?.length ?? 0);
+                const relatedOrders = job.orders ?? [];
+                const projectKey = job.projectCode ? String(job.projectCode) : job.jobNumber ? String(job.jobNumber) : '-';
+
+                return (
+                    <React.Fragment key={job.id}>
+                      <tr onClick={() => onSelectJob(job)} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50">
+                        <td className="px-6 py-5 font-mono text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {job.jobNumber}
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="font-medium text-base text-slate-800 dark:text-slate-200">{job.clientName}</div>
+                          <div className="text-slate-500 dark:text-slate-400">{job.title}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">{formatDate(job.dueDate)}</td>
+                        <td className="px-6 py-5 whitespace-nowrap">{displayedQuantity.toLocaleString()}</td>
+                        <td className="px-6 py-5 whitespace-nowrap font-semibold">{formatJPY(totalAmount)}</td>
+                        <td className="px-6 py-5 whitespace-nowrap">{formatJPY(totalCost)}</td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                  grossMargin >= 0
+                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                      : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                              }`}
+                          >
+                              {formatJPY(grossMargin)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap text-right font-mono">{orderCount.toLocaleString()}</td>
+                        <td className="px-6 py-5">
+                          <JobStatusBadge status={job.status} />
+                        </td>
+                      </tr>
+                      {relatedOrders.length > 0 && (
                         <tr className="bg-slate-50/60 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-slate-700/40">
-                          <td colSpan={8} className="px-6 py-4">
+                          <td colSpan={9} className="px-6 py-4">
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">関連受注（orders）</p>
@@ -151,7 +153,7 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                                 </thead>
                                 <tbody>
                                   {relatedOrders.map(order => {
-                                    const total = (order.quantity ?? 0) * (order.unitPrice ?? 0);
+                                    const total = Number(order.quantity ?? 0) * Number(order.unitPrice ?? 0);
                                     return (
                                       <tr key={order.id} className="odd:bg-slate-50/60 dark:odd:bg-slate-900/30">
                                         <td className="px-3 py-2 font-mono text-xs">{order.id?.slice(0, 8)}...</td>
@@ -172,13 +174,13 @@ const JobList: React.FC<JobListProps> = ({ jobs, searchTerm, onSelectJob, onNewJ
                             </div>
                           </td>
                         </tr>
-                    );
-                  })()}
-                </React.Fragment>
-              ))}
+                      )}
+                    </React.Fragment>
+                );
+              })}
              {sortedJobs.length === 0 && (
                 <tr>
-                    <td colSpan={7}>
+                    <td colSpan={9}>
                         <EmptyState 
                             icon={Briefcase}
                             title="検索結果がありません"
