@@ -72,7 +72,7 @@ const PAGE_TITLES: Record<Page, string> = {
     my_tasks: 'マイタスク（タスク管理）',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
-    sales_customers: '取引先管理',
+    sales_customers: '取引先/お客様カルテ',
     sales_pipeline: 'パイプライン（進捗）',
     sales_estimates: '見積管理',
     sales_orders: '案件予算管理',

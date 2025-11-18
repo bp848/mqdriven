@@ -34,7 +34,7 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         items: [
             { page: 'sales_dashboard', name: '販売ダッシュボード' },
             { page: 'sales_leads', name: 'リード' },
-            { page: 'sales_customers', name: '取引先' },
+            { page: 'sales_customers', name: '取引先/お客様カルテ' },
             { page: 'sales_pipeline', name: 'パイプライン（進捗）' },
             { page: 'sales_estimates', name: '見積' },
             { page: 'sales_orders', name: '案件予算管理' },
@@ -239,7 +239,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     }`}
                 >
                     <FileText className="w-5 h-5" />
-                    <span className="ml-4 font-medium">FAXからのデータ自動入力</span>
+                    <span className="ml-4 font-medium">FAX自動入力</span>
                 </a>
             </li>
             <li>
@@ -253,7 +253,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     }`}
                 >
                     <Calendar className="w-5 h-5" />
-                    <span className="ml-4 font-medium">マイスケジュール（カレンダー）</span>
+                    <span className="ml-4 font-medium">マイスケジュール</span>
                 </a>
             </li>
             <li>
@@ -267,7 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     }`}
                 >
                     <ClipboardList className="w-5 h-5" />
-                    <span className="ml-4 font-medium">マイタスク（タスク管理）</span>
+                    <span className="ml-4 font-medium">マイタスク</span>
                 </a>
             </li>
           {visibleCategories.map(category => (
