@@ -12,6 +12,7 @@ import LeadManagementPage from './components/sales/LeadManagementPage';
 import CreateLeadModal from './components/sales/CreateLeadModal';
 import FaxOcrIntakePage from './components/sales/FaxOcrIntakePage';
 import PlaceholderPage from './components/PlaceholderPage';
+import MySchedulePage from './components/MySchedulePage';
 import UserManagementPage from './components/admin/UserManagementPage';
 import ApprovalRouteManagementPage from './components/admin/ApprovalRouteManagementPage';
 import BugReportChatModal from './components/BugReportChatModal';
@@ -670,6 +671,7 @@ const App: React.FC = () => {
                             isSuggestionLoading={isSuggestionLoading}
                             pendingApprovalCount={pendingApprovalCount}
                             onNavigateToApprovals={() => handleNavigate('approval_list')}
+                            onNavigateToBulletinBoard={() => handleNavigate('bulletin_board')}
                             isAIOff={isAIOff}
                         />;
             case 'sales_dashboard':
@@ -742,11 +744,11 @@ const App: React.FC = () => {
             case 'sales_estimates':
                 return <EstimateManagementPage estimates={estimates} customers={customers} allUsers={allUsers} onAddEstimate={handleAddEstimate} addToast={addToast} currentUser={currentUser} searchTerm={searchTerm} isAIOff={isAIOff} />;
             case 'analysis_ranking':
-                return <SalesRanking initialSummaries={jobs} />;
+                return <SalesRanking initialSummaries={jobs} customers={customers} />;
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
             case 'bulletin_board':
-                return <BulletinBoardPage currentUser={currentUser} addToast={addToast} />;
+                return <BulletinBoardPage currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
             case 'approval_list':
                 return <ApprovalWorkflowPage currentUser={currentUser} view="list" addToast={addToast} searchTerm={searchTerm} onResumeDraft={handleResumeApplicationDraft} />;
             case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} onCreatePaymentRecipient={handleCreatePaymentRecipientInline} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
@@ -762,6 +764,16 @@ const App: React.FC = () => {
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
             case 'my_schedule':
+                return (
+                    <MySchedulePage
+                        jobs={jobs}
+                        purchaseOrders={purchaseOrders}
+                        applications={applications}
+                        currentUser={currentUser}
+                        allUsers={allUsers}
+                        addToast={addToast}
+                    />
+                );
             case 'my_tasks':
                 return <PlaceholderPage title={PAGE_TITLES[currentPage]} />;
             case 'admin_audit_log':

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { JobStatus, ProjectBudgetSummary, ProjectBudgetFilter } from '../../types';
+import { JobStatus, ProjectBudgetSummary, ProjectBudgetFilter, Customer } from '../../types';
 import { Trophy, DollarSign, TrendingUp, Briefcase } from '../Icons';
 import StatCard from '../StatCard';
 import { formatJPY } from '../../utils';
@@ -7,15 +7,23 @@ import * as dataService from '../../services/dataService';
 
 interface SalesRankingProps {
     initialSummaries: ProjectBudgetSummary[];
+    customers: Customer[];
 }
 
 interface CustomerSalesData {
+    key: string;
     clientName: string;
     projectCount: number;
     orderCount: number;
     totalSales: number;
     totalMargin: number;
 }
+
+const normalizeKey = (value?: string | number | null): string | null => {
+    if (value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    return trimmed.length ? trimmed : null;
+};
 
 const defaultRange = (): ProjectBudgetFilter => {
     const end = new Date();
@@ -27,12 +35,75 @@ const defaultRange = (): ProjectBudgetFilter => {
     };
 };
 
-const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries }) => {
+const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers }) => {
     const defaultFilters = useMemo(() => defaultRange(), []);
     const [summaries, setSummaries] = useState<ProjectBudgetSummary[]>(initialSummaries);
     const [filters, setFilters] = useState<ProjectBudgetFilter>(defaultFilters);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const customerLookups = useMemo(() => {
+        const byId = new Map<string, Customer>();
+        const byCode = new Map<string, Customer>();
+        const byName = new Map<string, Customer>();
+
+        customers.forEach(customer => {
+            const idKey = normalizeKey(customer.id);
+            if (idKey) {
+                byId.set(idKey, customer);
+            }
+            const codeKey = normalizeKey(customer.customerCode);
+            if (codeKey) {
+                byCode.set(codeKey, customer);
+            }
+            const nameKey = normalizeKey(customer.customerName)?.toLowerCase();
+            if (nameKey) {
+                byName.set(nameKey, customer);
+            }
+        });
+
+        return { byId, byCode, byName };
+    }, [customers]);
+
+    const resolveCustomerIdentity = useCallback(
+        (summary: ProjectBudgetSummary) => {
+            const idKey = normalizeKey(summary.customerId);
+            if (idKey && customerLookups.byId.has(idKey)) {
+                const customer = customerLookups.byId.get(idKey)!;
+                return { key: `id:${idKey}`, name: customer.customerName };
+            }
+
+            const codeCandidates = [
+                normalizeKey(summary.customerCode),
+                normalizeKey(summary.clientName),
+            ].filter(Boolean) as string[];
+            for (const codeKey of codeCandidates) {
+                if (customerLookups.byCode.has(codeKey)) {
+                    const customer = customerLookups.byCode.get(codeKey)!;
+                    return { key: `code:${codeKey}`, name: customer.customerName };
+                }
+            }
+
+            const directName = summary.clientName?.trim();
+            if (directName) {
+                const lower = directName.toLowerCase();
+                if (customerLookups.byName.has(lower)) {
+                    const customer = customerLookups.byName.get(lower)!;
+                    return { key: `name:${lower}`, name: customer.customerName };
+                }
+                return { key: `name:${lower}`, name: directName };
+            }
+
+            const fallbackKey =
+                normalizeKey(summary.projectCode) ||
+                normalizeKey(summary.jobNumber) ||
+                normalizeKey(summary.id) ||
+                `unknown-${summary.title}`;
+
+            return { key: `unknown:${fallbackKey ?? 'na'}`, name: '顧客未設定' };
+        },
+        [customerLookups],
+    );
 
     useEffect(() => {
         setSummaries(initialSummaries);
@@ -60,12 +131,12 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries }) => {
         fetchSummaries(filters);
     }, [fetchSummaries, filters]);
 
-    const customerData = useMemo(() => {
+    const groupedCustomerData = useMemo(() => {
         const data = summaries.reduce((acc: Record<string, CustomerSalesData>, summary) => {
             if (summary.status === JobStatus.Cancelled) return acc;
-            const key = summary.clientName || '顧客未設定';
+            const { key, name } = resolveCustomerIdentity(summary);
             if (!acc[key]) {
-                acc[key] = { clientName: key, projectCount: 0, orderCount: 0, totalSales: 0, totalMargin: 0 };
+                acc[key] = { key, clientName: name, projectCount: 0, orderCount: 0, totalSales: 0, totalMargin: 0 };
             }
             const sales = summary.orderTotalAmount ?? summary.totalAmount ?? summary.price ?? 0;
             const cost = summary.orderTotalCost ?? summary.totalCost ?? summary.variableCost ?? 0;
@@ -78,7 +149,18 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries }) => {
         }, {});
 
         return Object.values(data).sort((a, b) => b.totalSales - a.totalSales);
-    }, [summaries]);
+    }, [summaries, resolveCustomerIdentity]);
+
+    const customerData = useMemo(
+        () =>
+            groupedCustomerData.filter(
+                customer =>
+                    customer.totalSales !== 0 ||
+                    customer.totalMargin !== 0 ||
+                    customer.orderCount !== 0,
+            ),
+        [groupedCustomerData],
+    );
 
     const totals = useMemo(() => {
         return customerData.reduce(
@@ -166,20 +248,41 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {customerData.map((customer, index) => (
-                                <tr key={customer.clientName} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600">
-                                    <td className="px-6 py-4 text-center">
-                                        <div className="w-8 h-8 flex items-center justify-center mx-auto">{getRankIcon(index)}</div>
+                            {customerData.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-300">
+                                        選択した期間に一致する売上データがありません。
                                     </td>
-                                    <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
-                                        <div>{customer.clientName}</div>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">案件数: {customer.projectCount}</p>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">{customer.orderCount.toLocaleString()}</td>
-                                    <td className="px-6 py-4 text-right font-semibold">{formatJPY(customer.totalSales)}</td>
-                                    <td className="px-6 py-4 text-right font-semibold text-blue-600 dark:text-blue-400">{formatJPY(customer.totalMargin)}</td>
                                 </tr>
-                            ))}
+                            ) : (
+                                customerData.map((customer, index) => (
+                                    <tr
+                                        key={customer.key}
+                                        className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
+                                    >
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="w-8 h-8 flex items-center justify-center mx-auto">
+                                                {getRankIcon(index)}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
+                                            <div>{customer.clientName}</div>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                案件数: {customer.projectCount}
+                                            </p>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            {customer.orderCount.toLocaleString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-semibold">
+                                            {formatJPY(customer.totalSales)}
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-semibold text-blue-600 dark:text-blue-400">
+                                            {formatJPY(customer.totalMargin)}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
                 </div>

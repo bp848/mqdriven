@@ -1,54 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BulletinComment, BulletinPost, EmployeeUser, Toast } from '../types';
-import { PlusCircle } from './Icons';
+import { BulletinComment, EmployeeUser, Toast } from '../types';
+import { PlusCircle, Pencil, Trash2 } from './Icons';
+import { BulletinThread, loadStoredThreads, persistThreads } from './bulletinBoardUtils';
 
 interface BulletinBoardPageProps {
     currentUser: EmployeeUser | null;
     addToast: (message: string, type: Toast['type']) => void;
+    allUsers: EmployeeUser[];
 }
-
-type BulletinThread = BulletinPost & { comments: BulletinComment[] };
-
-const STORAGE_KEY = 'mq.bulletin.threads';
-
-const seedThreads: BulletinThread[] = [
-    {
-        id: 'seed-001',
-        title: '週次アップデート：工場見学の受け入れと来週のイベント',
-        body: '来週8日(火)に主要顧客2社の工場見学があります。フロア整備と安全動画の更新を5日(金)までに完了してください。併せて、木曜日に実施する新ERP機能の昼休みデモへ参加希望者はコメント欄で表明をお願いします。',
-        authorId: 'user-admin-demo',
-        authorName: '管理本部・情シスチーム',
-        authorDepartment: '管理本部',
-        tags: ['お知らせ', 'イベント'],
-        pinned: true,
-        createdAt: '2025-05-15T02:30:00.000Z',
-        updatedAt: '2025-05-15T02:30:00.000Z',
-        comments: [
-            {
-                id: 'seed-comment-001',
-                postId: 'seed-001',
-                authorId: 'user-ops-01',
-                authorName: '製造部 山本',
-                authorDepartment: '製造部',
-                body: '安全動画の字幕修正を進めています。完了予定は4日夕方です。',
-                createdAt: '2025-05-15T05:10:00.000Z',
-            },
-        ],
-    },
-    {
-        id: 'seed-002',
-        title: 'Slack障害時の連絡手段を再確認してください',
-        body: '本日午前にSlackへのアクセス遅延が発生しました。BCPルールに従い、チャット障害時はメールと掲示板コメントを併用します。各部で代替連絡網の最新化と周知をお願いします。',
-        authorId: 'user-admin-demo',
-        authorName: '管理本部・情報システム',
-        authorDepartment: '管理本部',
-        tags: ['BCP'],
-        pinned: false,
-        createdAt: '2025-05-13T23:00:00.000Z',
-        updatedAt: '2025-05-13T23:00:00.000Z',
-        comments: [],
-    },
-];
 
 const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -71,40 +30,24 @@ const formatDateLabel = (timestamp: string) => {
     }).format(date);
 };
 
-const loadStoredThreads = (): BulletinThread[] => {
-    if (typeof window === 'undefined') {
-        return seedThreads;
-    }
-    try {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (!raw) return seedThreads;
-        const parsed = JSON.parse(raw) as BulletinThread[];
-        if (!Array.isArray(parsed)) return seedThreads;
-        return parsed.map(thread => ({
-            ...thread,
-            comments: Array.isArray(thread.comments) ? thread.comments : [],
-        }));
-    } catch (error) {
-        console.warn('Failed to load bulletin board state from localStorage', error);
-        return seedThreads;
-    }
-};
-
-const persistThreads = (threads: BulletinThread[]) => {
-    if (typeof window === 'undefined') return;
-    try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
-    } catch (error) {
-        console.warn('Failed to persist bulletin board state', error);
-    }
-};
-
-const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addToast }) => {
+const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addToast, allUsers }) => {
     const [threads, setThreads] = useState<BulletinThread[]>(() => loadStoredThreads());
     const [searchTerm, setSearchTerm] = useState('');
     const [showPinnedOnly, setShowPinnedOnly] = useState(false);
+    const [showAssignedOnly, setShowAssignedOnly] = useState(false);
     const [newPost, setNewPost] = useState({ title: '', body: '', tags: '' });
+    const [newPostAssignees, setNewPostAssignees] = useState<string[]>([]);
     const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+    const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+    const [editingDraft, setEditingDraft] = useState({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] as string[] });
+
+    const userLookup = useMemo(() => {
+        const map = new Map<string, EmployeeUser>();
+        allUsers.forEach(user => {
+            map.set(user.id, user);
+        });
+        return map;
+    }, [allUsers]);
 
     useEffect(() => {
         persistThreads(threads);
@@ -115,6 +58,12 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
         return threads
             .filter(thread => {
                 if (showPinnedOnly && !thread.pinned) {
+                    return false;
+                }
+                if (showAssignedOnly && currentUser) {
+                    return thread.assigneeIds?.includes(currentUser.id) ?? false;
+                }
+                if (showAssignedOnly && !currentUser) {
                     return false;
                 }
                 if (!term) return true;
@@ -167,12 +116,14 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
             authorName,
             authorDepartment,
             pinned: false,
+            assigneeIds: newPostAssignees,
             createdAt: now,
             updatedAt: now,
             comments: [],
         };
         setThreads(prev => [thread, ...prev]);
         setNewPost({ title: '', body: '', tags: '' });
+        setNewPostAssignees([]);
         addToast('掲示板に投稿しました。', 'success');
     };
 
@@ -203,6 +154,79 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
         addToast('コメントを追加しました。', 'success');
     };
 
+    const canManageThread = (thread: BulletinThread) => {
+        if (!currentUser) return false;
+        if (currentUser.role === 'admin') return true;
+        return thread.authorId === currentUser.id;
+    };
+
+    const handleStartEdit = (thread: BulletinThread) => {
+        if (!canManageThread(thread)) {
+            addToast('編集権限がありません。', 'error');
+            return;
+        }
+        setEditingThreadId(thread.id);
+        setEditingDraft({
+            title: thread.title,
+            body: thread.body,
+            tags: (thread.tags || []).join(', '),
+            pinned: Boolean(thread.pinned),
+            assigneeIds: Array.isArray(thread.assigneeIds) ? thread.assigneeIds : [],
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingThreadId(null);
+        setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
+    };
+
+    const handleUpdateThread = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!editingThreadId) return;
+        const title = editingDraft.title.trim();
+        const body = editingDraft.body.trim();
+        if (!title || !body) {
+            addToast('タイトルと本文は必須です。', 'error');
+            return;
+        }
+        const tags = editingDraft.tags
+            .split(',')
+            .map(tag => tag.trim())
+            .filter(Boolean);
+        const now = new Date().toISOString();
+        setThreads(prev =>
+            prev.map(thread =>
+                thread.id === editingThreadId
+                    ? { ...thread, title, body, tags, pinned: editingDraft.pinned, assigneeIds: editingDraft.assigneeIds, updatedAt: now }
+                    : thread,
+            ),
+        );
+        setEditingThreadId(null);
+        setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
+        addToast('投稿を更新しました。', 'success');
+    };
+
+    const handleDeleteThread = (thread: BulletinThread) => {
+        if (!canManageThread(thread)) {
+            addToast('削除権限がありません。', 'error');
+            return;
+        }
+        const confirmed = typeof window === 'undefined' ? true : window.confirm('この投稿を削除しますか？');
+        if (!confirmed) {
+            return;
+        }
+        setThreads(prev => prev.filter(item => item.id !== thread.id));
+        setCommentDrafts(prev => {
+            const next = { ...prev };
+            delete next[thread.id];
+            return next;
+        });
+        if (editingThreadId === thread.id) {
+            handleCancelEdit();
+        }
+        addToast('投稿を削除しました。', 'info');
+    };
+
     return (
         <div className="space-y-6">
             <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 space-y-4">
@@ -220,6 +244,17 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                         />
                         ピン留めのみ
                     </label>
+                    {currentUser && (
+                        <label className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+                            <input
+                                type="checkbox"
+                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                checked={showAssignedOnly}
+                                onChange={(e) => setShowAssignedOnly(e.target.checked)}
+                            />
+                            自分宛の依頼のみ
+                        </label>
+                    )}
                 </div>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <input
@@ -269,6 +304,25 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                             placeholder="例）生産計画, 連絡"
                         />
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">タスク依頼先（複数選択可）</label>
+                        <select
+                            multiple
+                            value={newPostAssignees}
+                            onChange={(e) => {
+                                const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                                setNewPostAssignees(selected);
+                            }}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[120px]"
+                        >
+                            {allUsers.map(user => (
+                                <option key={user.id} value={user.id}>
+                                    {user.name}{user.department ? `（${user.department}）` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">依頼対象を指定すると、相手の「自分宛のみ」フィルターに表示されます。</p>
+                    </div>
                     <div className="flex justify-end">
                         <button
                             type="submit"
@@ -287,32 +341,163 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                         条件に一致する投稿がありません。新規投稿してみましょう。
                     </div>
                 )}
-                {filteredThreads.map(thread => (
-                    <article key={thread.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700/60">
-                        <div className="p-6 space-y-4">
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        {thread.pinned && (
-                                            <span className="inline-flex items-center text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">PIN</span>
-                                        )}
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateLabel(thread.createdAt)}</p>
-                                    </div>
-                                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-1">{thread.title}</h3>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">{thread.authorName}{thread.authorDepartment ? `（${thread.authorDepartment}）` : ''}</p>
-                                </div>
-                                {thread.tags && thread.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 justify-end">
-                                        {thread.tags.map(tag => (
-                                            <span key={tag} className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-full">
-                                                #{tag}
-                                            </span>
-                                        ))}
-                                    </div>
+                {filteredThreads.map(thread => {
+                    const isEditing = editingThreadId === thread.id;
+                    const manageAccess = canManageThread(thread);
+                    const assigneeUsers = (thread.assigneeIds || [])
+                        .map(userId => userLookup.get(userId))
+                        .filter((user): user is EmployeeUser => Boolean(user));
+                    const isMyTask = currentUser ? thread.assigneeIds?.includes(currentUser.id) : false;
+                    return (
+                        <article
+                            key={thread.id}
+                            className={`bg-white dark:bg-slate-800 rounded-2xl shadow-md border ${
+                                isMyTask ? 'border-emerald-400 dark:border-emerald-500' : 'border-slate-100 dark:border-slate-700/60'
+                            }`}
+                        >
+                            <div className="p-6 space-y-4">
+                                {isEditing ? (
+                                    <form className="space-y-4" onSubmit={handleUpdateThread}>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-wide text-blue-600 font-semibold">編集中</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                    {thread.authorName}
+                                                    {thread.authorDepartment ? `（${thread.authorDepartment}）` : ''}
+                                                </p>
+                                            </div>
+                                            <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-200">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editingDraft.pinned}
+                                                    onChange={(e) => setEditingDraft(prev => ({ ...prev, pinned: e.target.checked }))}
+                                                    className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                                />
+                                                ピン留め
+                                            </label>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-300">タイトル</label>
+                                            <input
+                                                value={editingDraft.title}
+                                                onChange={(e) => setEditingDraft(prev => ({ ...prev, title: e.target.value }))}
+                                                className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-300">本文</label>
+                                            <textarea
+                                                value={editingDraft.body}
+                                                onChange={(e) => setEditingDraft(prev => ({ ...prev, body: e.target.value }))}
+                                                className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm min-h-[140px]"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-300">タグ（カンマ区切り）</label>
+                                            <input
+                                                value={editingDraft.tags}
+                                                onChange={(e) => setEditingDraft(prev => ({ ...prev, tags: e.target.value }))}
+                                                className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-300">タスク依頼先</label>
+                                            <select
+                                                multiple
+                                                value={editingDraft.assigneeIds}
+                                                onChange={(e) => {
+                                                    const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                                                    setEditingDraft(prev => ({ ...prev, assigneeIds: selected }));
+                                                }}
+                                                className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm min-h-[120px]"
+                                            >
+                                                {allUsers.map(user => (
+                                                    <option key={user.id} value={user.id}>
+                                                        {user.name}{user.department ? `（${user.department}）` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={handleCancelEdit}
+                                                className="rounded-xl border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-200"
+                                            >
+                                                キャンセル
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-blue-700"
+                                            >
+                                                保存する
+                                            </button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {thread.pinned && (
+                                                        <span className="inline-flex items-center text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">PIN</span>
+                                                    )}
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400">{formatDateLabel(thread.createdAt)}</p>
+                                                </div>
+                                                <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-1">{thread.title}</h3>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                                    {thread.authorName}
+                                                    {thread.authorDepartment ? `（${thread.authorDepartment}）` : ''}
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                {thread.tags && thread.tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 justify-end">
+                                                        {thread.tags.map(tag => (
+                                                            <span key={tag} className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-full">
+                                                                #{tag}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {assigneeUsers.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 justify-end">
+                                                        {assigneeUsers.map(user => (
+                                                            <span key={user.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200 rounded-full">
+                                                                <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                                                {user.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {manageAccess && (
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleStartEdit(thread)}
+                                                            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-200 hover:text-blue-600"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                            編集
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteThread(thread)}
+                                                            className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                            削除
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="text-base leading-relaxed whitespace-pre-wrap text-slate-800 dark:text-slate-100">{thread.body}</p>
+                                    </>
                                 )}
                             </div>
-                            <p className="text-base leading-relaxed whitespace-pre-wrap text-slate-800 dark:text-slate-100">{thread.body}</p>
-                        </div>
                         <div className="border-t border-slate-100 dark:border-slate-700 px-6 py-4 space-y-4 bg-slate-50/70 dark:bg-slate-900/40 rounded-b-2xl">
                             <div className="space-y-3">
                                 {thread.comments.length === 0 && (
@@ -346,8 +531,9 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                                 </div>
                             </div>
                         </div>
-                    </article>
-                ))}
+                        </article>
+                    );
+                })}
             </section>
         </div>
     );

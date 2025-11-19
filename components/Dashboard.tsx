@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line,
 } from 'recharts';
 import { Job, JournalEntry, AccountItem, JobStatus } from '../types';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
-import { Lightbulb, Loader, AlertTriangle } from './Icons';
+import { Lightbulb, Loader, AlertTriangle, Inbox } from './Icons';
+import { BulletinThread, loadStoredThreads } from './bulletinBoardUtils';
 
 const AISuggestionCard: React.FC<{ suggestion: string; isLoading: boolean; isAIOff: boolean }> = ({ suggestion, isLoading, isAIOff }) => (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-800 dark:to-slate-900/70 p-6 rounded-2xl shadow-sm flex items-start gap-4 col-span-1 lg:col-span-2">
@@ -140,10 +141,69 @@ interface DashboardProps {
   isSuggestionLoading: boolean;
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
+  onNavigateToBulletinBoard: () => void;
   isAIOff: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, suggestion, isSuggestionLoading, pendingApprovalCount, onNavigateToApprovals, isAIOff }) => {
+const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: () => void; }> = ({ threads, onNavigate }) => {
+    const visibleThreads = useMemo(() => {
+        if (!threads.length) {
+            return [];
+        }
+        const pinned = threads.filter(thread => thread.pinned);
+        const latest = threads
+            .filter(thread => !thread.pinned)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        return [...pinned, ...latest].slice(0, 3);
+    }, [threads]);
+
+    return (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm col-span-1 lg:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <div className="bg-blue-100 dark:bg-blue-900/40 p-2 rounded-full">
+                        <Inbox className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">社内掲示板</h3>
+                </div>
+                <button
+                    type="button"
+                    onClick={onNavigate}
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                >
+                    すべて表示
+                </button>
+            </div>
+            {visibleThreads.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">まだ投稿がありません。最初の投稿を作成しましょう。</p>
+            ) : (
+                <div className="mt-4 space-y-4">
+                    {visibleThreads.map(thread => (
+                        <div key={thread.id} className="p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                {thread.pinned && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">PIN</span>
+                                )}
+                                <span>{new Date(thread.updatedAt).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                            <p className="mt-1 text-base font-semibold text-slate-800 dark:text-white line-clamp-2">{thread.title}</p>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300 line-clamp-3">{thread.body}</p>
+                            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{thread.authorName}{thread.authorDepartment ? `（${thread.authorDepartment}）` : ''}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, suggestion, isSuggestionLoading, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard, isAIOff }) => {
+    const [bulletinThreads, setBulletinThreads] = useState<BulletinThread[]>([]);
+
+    useEffect(() => {
+        setBulletinThreads(loadStoredThreads());
+    }, []);
+
     
     const mqData = useMemo(() => {
         const today = new Date();
@@ -244,6 +304,7 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
                 {/* AI提案カードは一時的に非表示 */}
                 {/* <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} /> */}
                 <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
+                <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
