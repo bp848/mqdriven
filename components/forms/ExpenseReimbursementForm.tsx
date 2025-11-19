@@ -5,7 +5,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
 import DepartmentSelect from './DepartmentSelect';
 import SupplierSearchSelect from './SupplierSearchSelect';
-import { Loader, Upload, PlusCircle, Trash2, AlertTriangle, CheckCircle, FileText, RefreshCw } from '../Icons';
+import { Loader, Upload, PlusCircle, Trash2, AlertTriangle, CheckCircle, FileText, RefreshCw, List, KanbanSquare } from '../Icons';
 import {
     User,
     InvoiceData,
@@ -20,6 +20,7 @@ import {
     InvoiceStatus,
     PaymentRecipient,
     BankAccountInfo,
+    ApplicationWithDetails,
 } from '../../types';
 import { findMatchingPaymentRecipientId, findMatchingCustomerId } from '../../utils/matching';
 

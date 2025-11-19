@@ -195,6 +195,7 @@ export interface BulletinPost {
   authorDepartment?: string | null;
   tags?: string[];
   pinned?: boolean;
+  assigneeIds?: string[];
   createdAt: string;
   updatedAt: string;
   comments?: BulletinComment[];
