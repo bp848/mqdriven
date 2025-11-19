@@ -89,12 +89,7 @@ interface ComputedTotals {
     gross: number;
 }
 
-interface AutopilotChecklistItem {
-    id: string;
-    label: string;
-    description: string;
-    ready: boolean;
-}
+
 
 const numberFromInput = (value: string) => {
     if (value === '') return 0;
@@ -413,70 +408,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
         [departments, departmentId]
     );
 
-    const focusFieldById = useCallback((elementId: string) => {
-        if (typeof document === 'undefined') return;
-        const target = document.getElementById(elementId);
-        if (!target) return;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const interactive = target as HTMLElement;
-        interactive?.focus?.();
-    }, []);
 
-    const autopilotChecklist = useMemo<AutopilotChecklistItem[]>(() => {
-        if (!selectedInvoice) return [];
-        const linesReady =
-            selectedInvoice.lines.length > 0 &&
-            selectedInvoice.lines.every(line => line.description.trim() && Number(line.amountExclTax) > 0);
-        return [
-            {
-                id: 'paymentRecipientId',
-                label: '支払先',
-                ready: Boolean(selectedInvoice.paymentRecipientId),
-                description: selectedInvoice.paymentRecipientId
-                    ? '支払先マスタとリンク済みです。'
-                    : selectedInvoice.supplierName
-                        ? `OCR候補：${selectedInvoice.supplierName}`
-                        : 'アップロードまたは検索で候補を選択してください。',
-            },
-            {
-                id: 'invoiceDate',
-                label: '請求書発行日',
-                ready: Boolean(selectedInvoice.invoiceDate),
-                description: selectedInvoice.invoiceDate
-                    ? `${selectedInvoice.invoiceDate} を取得済み`
-                    : '日付を確認してください。',
-            },
-            {
-                id: 'departmentId',
-                label: '部門',
-                ready: Boolean(departmentId),
-                description: departmentId
-                    ? `${selectedDepartment?.name ?? '部門を選択済みです。'}`
-                    : '所属部門を選択してください。',
-            },
-            {
-                id: 'approval-route-selector',
-                label: '承認ルート',
-                ready: Boolean(approvalRouteId),
-                description: approvalRouteId ? '承認ルート選択済みです。' : '承認フローを選択してください。',
-            },
-            {
-                id: 'expense-lines-table',
-                label: '経費明細',
-                ready: linesReady,
-                description: linesReady
-                    ? `${selectedInvoice.lines.length} 行が入力済みです。`
-                    : '明細を確認し、未入力がないかチェックしてください。',
-            },
-        ];
-    }, [selectedInvoice, departmentId, approvalRouteId, selectedDepartment?.name]);
 
-    const autopilotProgress = useMemo(() => {
-        const total = autopilotChecklist.length;
-        const ready = autopilotChecklist.filter(item => item.ready).length;
-        const percent = total === 0 ? 0 : Math.round((ready / total) * 100);
-        return { ready, total, percent };
-    }, [autopilotChecklist]);
+
 
     const updateSelectedInvoice = useCallback(
         (updater: (invoice: ExpenseInvoiceDraft) => ExpenseInvoiceDraft) => {
@@ -1277,50 +1211,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                     </div>
 
                     <div className="space-y-6">
-                        {autopilotChecklist.length > 0 && (
-                            <section className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm space-y-4">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">AIアシストの進捗</p>
-                                        <p className="text-base font-semibold text-slate-800 dark:text-white">
-                                            {autopilotProgress.ready}/{autopilotProgress.total} 項目がドラフトから自動入力済み
-                                        </p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-300">
-                                            残りのカードをクリックすると該当フィールドへジャンプします。
-                                        </p>
-                                    </div>
-                                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-300">
-                                        {autopilotProgress.percent}%
-                                    </div>
-                                </div>
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    {autopilotChecklist.map(item => (
-                                        <button
-                                            type="button"
-                                            key={item.id}
-                                            onClick={() => focusFieldById(item.id)}
-                                            className={`text-left rounded-xl border px-3 py-2 text-sm transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
-                                                item.ready
-                                                    ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10'
-                                                    : 'border-slate-200 bg-white dark:bg-slate-900/40'
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="font-semibold text-slate-800 dark:text-slate-50">{item.label}</span>
-                                                <span
-                                                    className={`text-xs font-semibold ${
-                                                        item.ready ? 'text-emerald-600' : 'text-amber-600'
-                                                    }`}
-                                                >
-                                                    {item.ready ? '確認済' : '要確認'}
-                                                </span>
-                                            </div>
-                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{item.description}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
+
                         <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-5 space-y-4">
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className={`md:col-span-2 ${requiredFieldCardClass}`}>
@@ -1336,6 +1227,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                     <SupplierSearchSelect
                                         suppliers={paymentRecipients}
                                         value={selectedInvoice.paymentRecipientId}
+                                        searchHint={selectedInvoice.supplierName}
                                         onChange={handleSupplierSelectChange}
                                         onCreateSupplier={
                                             onCreatePaymentRecipient

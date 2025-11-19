@@ -9,6 +9,7 @@ import {
 } from '../types';
 
 type CalendarEventType = 'job' | 'purchaseOrder' | 'application' | 'custom';
+type CalendarViewMode = 'week' | 'month';
 
 interface CalendarEvent {
     id: string;
@@ -66,6 +67,160 @@ const badgeStyles: Record<CalendarEventType, string> = {
 
 const isSameDay = (isoDate: string, other: string) => isoDate === other;
 
+const addDays = (iso: string, days: number) => {
+    const base = new Date(iso);
+    base.setDate(base.getDate() + days);
+    return formatDate(base);
+};
+
+const getWeekStart = (date: Date) => {
+    const day = (date.getDay() + 6) % 7; // Monday start
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - day);
+    return monday;
+};
+
+const MonthView: React.FC<{
+    calendarDays: {
+        date: Date;
+        iso: string;
+        isCurrentMonth: boolean;
+        isToday: boolean;
+    }[];
+    eventsByDate: Record<string, CalendarEvent[]>;
+    selectedDate: string;
+    onSelectDate: (iso: string) => void;
+}> = ({ calendarDays, eventsByDate, selectedDate, onSelectDate }) => (
+    <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-7 bg-slate-50 dark:bg-slate-700/40 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
+            {weekdayLabels.map((weekday) => (
+                <div key={weekday} className="px-3 py-2 text-center">
+                    {weekday}
+                </div>
+            ))}
+        </div>
+        <div className="grid grid-cols-7">
+            {calendarDays.map((day) => {
+                const dayEvents = eventsByDate[day.iso] ?? [];
+                const isSelected = selectedDate === day.iso;
+                return (
+                    <button
+                        type="button"
+                        key={day.iso}
+                        onClick={() => onSelectDate(day.iso)}
+                        className={`min-h-[110px] border border-slate-200 dark:border-slate-700 p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                            day.isCurrentMonth
+                                ? 'bg-white dark:bg-slate-900/40'
+                                : 'bg-slate-50 dark:bg-slate-900/10 text-slate-400'
+                        } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span
+                                className={`text-sm font-semibold ${
+                                    day.isToday ? 'text-blue-600 dark:text-blue-300' : ''
+                                }`}
+                            >
+                                {day.date.getDate()}
+                            </span>
+                            {day.isToday && (
+                                <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-300">
+                                    今日
+                                </span>
+                            )}
+                        </div>
+                        <div className="mt-2 space-y-1">
+                            {dayEvents.slice(0, 2).map((event) => (
+                                <span
+                                    key={event.id}
+                                    className={`block truncate rounded-full px-2 py-0.5 text-[11px] font-semibold ${badgeStyles[event.type]}`}
+                                >
+                                    {event.title}
+                                </span>
+                            ))}
+                            {dayEvents.length > 2 && (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">+{dayEvents.length - 2} 件</span>
+                            )}
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+    </div>
+);
+
+const WeekView: React.FC<{
+    selectedDate: string;
+    eventsByDate: Record<string, CalendarEvent[]>;
+    onSelectDate: (iso: string) => void;
+}> = ({ selectedDate, eventsByDate, onSelectDate }) => {
+    const selected = new Date(selectedDate);
+    const start = getWeekStart(selected);
+    const todayIso = formatDate(new Date());
+    const days = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(start);
+        date.setDate(start.getDate() + index);
+        const iso = formatDate(date);
+        return {
+            label: weekdayLabels[index],
+            iso,
+            date,
+            isToday: isSameDay(iso, todayIso),
+            events: eventsByDate[iso] ?? [],
+        };
+    });
+
+    return (
+        <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+            <div className="grid grid-cols-7 bg-slate-50 dark:bg-slate-700/40 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
+                {days.map((day) => (
+                    <div key={day.iso} className="px-3 py-2 text-center">
+                        {day.label}
+                    </div>
+                ))}
+            </div>
+            <div className="grid grid-cols-7">
+                {days.map((day) => {
+                    const isSelected = selectedDate === day.iso;
+                    return (
+                        <button
+                            type="button"
+                            key={day.iso}
+                            onClick={() => onSelectDate(day.iso)}
+                            className={`min-h-[140px] border border-slate-200 dark:border-slate-700 p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                                isSelected ? 'ring-2 ring-blue-500 relative z-10' : ''
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                        {day.date.getMonth() + 1}/{day.date.getDate()}
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{day.label}</p>
+                                </div>
+                                {day.isToday && (
+                                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-300">今日</span>
+                                )}
+                            </div>
+                            <div className="mt-2 space-y-1 max-h-28 overflow-y-auto pr-1">
+                                {day.events.length === 0 && <p className="text-[11px] text-slate-400">予定なし</p>}
+                                {day.events.map((event) => (
+                                    <div
+                                        key={event.id}
+                                        className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${badgeStyles[event.type]}`}
+                                    >
+                                        <p className="truncate">{event.title}</p>
+                                        {event.time && <p className="text-[10px] opacity-80">{event.time}</p>}
+                                    </div>
+                                ))}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 const MySchedulePage: React.FC<MySchedulePageProps> = ({
     jobs,
     purchaseOrders,
@@ -80,6 +235,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const [customEvents, setCustomEvents] = useState<CalendarEvent[]>([]);
     const [newEvent, setNewEvent] = useState({ title: '', date: todayIso, time: '', description: '' });
     const [viewingUserId, setViewingUserId] = useState<string>(() => currentUser?.id ?? allUsers[0]?.id ?? 'guest');
+    const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
 
     const selectableUsers = useMemo(() => {
         const map = new Map<string, EmployeeUser>();
@@ -149,6 +305,13 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             date: prev.date || selectedDate,
         }));
     }, [selectedDate]);
+
+    useEffect(() => {
+        if (viewMode === 'month') {
+            const target = new Date(selectedDate);
+            setVisibleMonth(new Date(target.getFullYear(), target.getMonth(), 1));
+        }
+    }, [viewMode, selectedDate]);
 
     const derivedEvents = useMemo<CalendarEvent[]>(() => {
         const jobEvents = jobs.flatMap((job) => {
@@ -255,12 +418,25 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         });
     }, [visibleMonth, todayIso]);
 
-    const goToPreviousMonth = () => {
-        setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    const goToPreviousSpan = () => {
+        if (viewMode === 'month') {
+            setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+        } else {
+            setSelectedDate((prev) => addDays(prev, -7));
+        }
     };
 
-    const goToNextMonth = () => {
-        setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    const goToNextSpan = () => {
+        if (viewMode === 'month') {
+            setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+        } else {
+            setSelectedDate((prev) => addDays(prev, 7));
+        }
+    };
+
+    const handleToday = () => {
+        setSelectedDate(todayIso);
+        setVisibleMonth(new Date());
     };
 
     const handleAddEvent = (event: React.FormEvent) => {
@@ -318,7 +494,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                         </div>
                     </div>
                     <div className="flex flex-col gap-3 items-stretch lg:items-end">
-                        <div className="flex items-center gap-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
                             <label className="text-slate-500 dark:text-slate-300">表示ユーザー</label>
                             <select
                                 value={viewingUserId}
@@ -333,32 +509,45 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     </option>
                                 ))}
                             </select>
+                            <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 p-1">
+                                {(['week', 'month'] as CalendarViewMode[]).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => setViewMode(mode)}
+                                        className={`px-3 py-1 text-sm font-semibold rounded-lg transition ${
+                                            viewMode === mode
+                                                ? 'bg-blue-600 text-white'
+                                                : 'text-slate-600 dark:text-slate-300'
+                                        }`}
+                                    >
+                                        {mode === 'week' ? '週表示' : '月表示'}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
-                                onClick={goToPreviousMonth}
+                                onClick={goToPreviousSpan}
                                 className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700"
                             >
                                 <ArrowLeft className="w-4 h-4" />
-                                前の月
+                                前の{viewMode === 'week' ? '週' : '月'}
                             </button>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setVisibleMonth(new Date());
-                                    setSelectedDate(todayIso);
-                                }}
+                                onClick={handleToday}
                                 className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700"
                             >
                                 今日
                             </button>
                             <button
                                 type="button"
-                                onClick={goToNextMonth}
+                                onClick={goToNextSpan}
                                 className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700"
                             >
-                                次の月
+                                次の{viewMode === 'week' ? '週' : '月'}
                                 <ArrowRight className="w-4 h-4" />
                             </button>
                         </div>
@@ -369,63 +558,16 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     選択中：<span className="font-semibold text-slate-900 dark:text-white">{selectedDateLabel}</span>
                 </p>
 
-                <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-                    <div className="grid grid-cols-7 bg-slate-50 dark:bg-slate-700/40 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
-                        {weekdayLabels.map((weekday) => (
-                            <div key={weekday} className="px-3 py-2 text-center">
-                                {weekday}
-                            </div>
-                        ))}
-                    </div>
-                    <div className="grid grid-cols-7">
-                        {calendarDays.map((day) => {
-                            const dayEvents = eventsByDate[day.iso] ?? [];
-                            const isSelected = selectedDate === day.iso;
-                            return (
-                                <button
-                                    type="button"
-                                    key={day.iso}
-                                    onClick={() => setSelectedDate(day.iso)}
-                                    className={`min-h-[110px] border border-slate-200 dark:border-slate-700 p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                                        day.isCurrentMonth
-                                            ? 'bg-white dark:bg-slate-900/40'
-                                            : 'bg-slate-50 dark:bg-slate-900/10 text-slate-400'
-                                    } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span
-                                            className={`text-sm font-semibold ${
-                                                day.isToday ? 'text-blue-600 dark:text-blue-300' : ''
-                                            }`}
-                                        >
-                                            {day.date.getDate()}
-                                        </span>
-                                        {day.isToday && (
-                                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-300">
-                                                今日
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="mt-2 space-y-1">
-                                        {dayEvents.slice(0, 2).map((event) => (
-                                            <span
-                                                key={event.id}
-                                                className={`block truncate rounded-full px-2 py-0.5 text-[11px] font-semibold ${badgeStyles[event.type]}`}
-                                            >
-                                                {event.title}
-                                            </span>
-                                        ))}
-                                        {dayEvents.length > 2 && (
-                                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                                +{dayEvents.length - 2} 件
-                                            </span>
-                                        )}
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+                {viewMode === 'week' ? (
+                    <WeekView selectedDate={selectedDate} eventsByDate={eventsByDate} onSelectDate={setSelectedDate} />
+                ) : (
+                    <MonthView
+                        calendarDays={calendarDays}
+                        eventsByDate={eventsByDate}
+                        selectedDate={selectedDate}
+                        onSelectDate={setSelectedDate}
+                    />
+                )}
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

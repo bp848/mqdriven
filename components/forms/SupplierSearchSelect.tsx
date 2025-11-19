@@ -7,6 +7,7 @@ const DEFAULT_LIMIT = 20;
 type SupplierSearchSelectProps = {
     suppliers: PaymentRecipient[];
     value?: string;
+    searchHint?: string;
     onChange: (id: string, supplier?: PaymentRecipient | null) => void;
     onCreateSupplier?: (name: string) => Promise<PaymentRecipient>;
     disabled?: boolean;
@@ -34,6 +35,7 @@ const SupplierSearchSelect: React.FC<SupplierSearchSelectProps> = ({
     name = 'paymentRecipientId',
     id = 'paymentRecipientId',
     placeholder = 'サプライヤー名 / コードで検索',
+    searchHint,
 }) => {
     const [query, setQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -58,9 +60,9 @@ const SupplierSearchSelect: React.FC<SupplierSearchSelectProps> = ({
         if (selectedSupplier) {
             setQuery(formatSupplierLabel(selectedSupplier));
         } else if (!value) {
-            setQuery('');
+            setQuery(searchHint || '');
         }
-    }, [selectedSupplier, value]);
+    }, [selectedSupplier, value, searchHint]);
 
     const normalizedQuery = normalizeSearchText(debouncedQuery);
 
