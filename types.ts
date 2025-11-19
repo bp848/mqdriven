@@ -10,6 +10,7 @@ export type Page =
   | 'accounting_journal' | 'accounting_general_ledger' | 'accounting_trial_balance'
   | 'accounting_tax_summary' | 'accounting_period_closing' | 'accounting_business_plan'
   | 'business_support_proposal'
+  | 'bulletin_board'
   | 'ai_business_consultant'
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
@@ -173,6 +174,30 @@ export interface EmployeeUser {
   email: string;
   role: 'admin' | 'user';
   createdAt: string;
+}
+
+export interface BulletinComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  authorDepartment?: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface BulletinPost {
+  id: string;
+  title: string;
+  body: string;
+  authorId: string;
+  authorName: string;
+  authorDepartment?: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  comments?: BulletinComment[];
 }
 
 export interface Customer {
