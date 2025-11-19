@@ -93,6 +93,14 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         ]
     },
     {
+        id: 'internal_portal',
+        name: '社内ポータル',
+        icon: FileText,
+        items: [
+            { page: 'bulletin_board', name: '社内掲示板' },
+        ],
+    },
+    {
         id: 'approvals',
         name: '申請・承認',
         icon: CheckCircle,
@@ -251,6 +259,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                 >
                     <LayoutDashboard className="w-5 h-5" />
                     <span className="ml-4 font-medium">ホーム</span>
+                </a>
+            </li>
+            <li>
+                <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onNavigate('bulletin_board'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage === 'bulletin_board'
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <Inbox className="w-5 h-5" />
+                    <span className="ml-4 font-medium">社内掲示板</span>
                 </a>
             </li>
             <li>
