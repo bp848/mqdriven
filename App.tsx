@@ -29,6 +29,7 @@ import SalesRanking from './components/accounting/SalesRanking';
 import BusinessPlanPage from './components/accounting/BusinessPlanPage';
 import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
 import BusinessSupportPage from './components/BusinessSupportPage';
+import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
 import { ToastContainer } from './components/Toast';
@@ -110,6 +111,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_user_management: 'ユーザー管理',
     admin_route_management: '承認ルート管理',
     admin_master_management: 'マスタ管理',
+    bulletin_board: '社内掲示板',
     settings: '設定',
 };
 
@@ -743,6 +745,8 @@ const App: React.FC = () => {
                 return <SalesRanking initialSummaries={jobs} />;
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
+            case 'bulletin_board':
+                return <BulletinBoardPage currentUser={currentUser} addToast={addToast} />;
             case 'approval_list':
                 return <ApprovalWorkflowPage currentUser={currentUser} view="list" addToast={addToast} searchTerm={searchTerm} onResumeDraft={handleResumeApplicationDraft} />;
             case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} onCreatePaymentRecipient={handleCreatePaymentRecipientInline} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
