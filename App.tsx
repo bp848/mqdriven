@@ -52,7 +52,7 @@ import * as geminiService from './services/geminiService';
 import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary } from './types';
+import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
 
 const getEnvValue = (key: string): string | undefined => {
@@ -177,6 +177,7 @@ const App: React.FC = () => {
     const [estimates, setEstimates] = useState<Estimate[]>([]);
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
     const [resumedApplication, setResumedApplication] = useState<ApplicationWithDetails | null>(null);
+    const [dailyReportPrefill, setDailyReportPrefill] = useState<DailyReportPrefill | null>(null);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [allocationDivisions, setAllocationDivisions] = useState<AllocationDivision[]>([]);
     const [titles, setTitles] = useState<Title[]>([]);
@@ -215,6 +216,15 @@ const App: React.FC = () => {
     const handleNavigate = (page: Page) => {
         setCurrentPage(page);
         setSearchTerm('');
+    };
+
+    const handleDailyReportPrefillApplied = () => {
+        setDailyReportPrefill(null);
+    };
+
+    const handleCreateDailyReport = (prefill: DailyReportPrefill) => {
+        setDailyReportPrefill(prefill);
+        handleNavigate('approval_form_daily');
     };
 
     const addToast = useCallback((message: string, type: Toast['type']) => {
@@ -755,7 +765,20 @@ const App: React.FC = () => {
             case 'approval_form_transport': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="TRP" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
             case 'approval_form_leave': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="LEV" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
             case 'approval_form_approval': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="APL" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
-            case 'approval_form_daily': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="DLY" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'approval_form_daily':
+                return (
+                    <ApprovalWorkflowPage
+                        currentUser={currentUser}
+                        view="form"
+                        formCode="DLY"
+                        addToast={addToast}
+                        isAIOff={isAIOff}
+                        resumedApplication={resumedApplication}
+                        onResumeDraftClear={clearResumedApplication}
+                        dailyReportPrefill={dailyReportPrefill}
+                        onDailyReportPrefillApplied={handleDailyReportPrefillApplied}
+                    />
+                );
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
             case 'business_support_proposal':
                 return <BusinessSupportPage customers={customers} jobs={jobs} estimates={estimates} currentUser={currentUser} addToast={addToast} isAIOff={isAIOff} />;
@@ -772,6 +795,7 @@ const App: React.FC = () => {
                         currentUser={currentUser}
                         allUsers={allUsers}
                         addToast={addToast}
+                        onCreateDailyReport={handleCreateDailyReport}
                     />
                 );
             case 'my_tasks':

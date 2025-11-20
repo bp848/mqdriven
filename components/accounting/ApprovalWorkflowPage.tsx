@@ -3,7 +3,7 @@ import ApplicationList from '../ApplicationList';
 import ApplicationDetailModal from '../ApplicationDetailModal';
 import { getApplications, getApplicationCodes, approveApplication, rejectApplication } from '../../services/dataService';
 // FIX: Import AllocationDivision type.
-import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient } from '../../types';
+import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
 import { Loader, AlertTriangle } from '../Icons';
 
 // Form components
@@ -32,6 +32,8 @@ interface ApprovalWorkflowPageProps {
     onResumeDraft?: (application: ApplicationWithDetails) => void;
     resumedApplication?: ApplicationWithDetails | null;
     onResumeDraftClear?: () => void;
+    dailyReportPrefill?: DailyReportPrefill;
+    onDailyReportPrefillApplied?: () => void;
 }
 
 const TABS_CONFIG = {
@@ -232,7 +234,15 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             case 'TRP': return <TransportExpenseForm {...formProps} draftApplication={activeResumedApplication} />;
             case 'LEV': return <LeaveApplicationForm {...formProps} draftApplication={activeResumedApplication} />;
             case 'APL': return <ApprovalForm {...formProps} draftApplication={activeResumedApplication} />;
-            case 'DLY': return <DailyReportForm {...formProps} draftApplication={activeResumedApplication} />;
+        case 'DLY':
+            return (
+                <DailyReportForm
+                    {...formProps}
+                    draftApplication={activeResumedApplication}
+                    prefill={dailyReportPrefill}
+                    onPrefillApplied={onDailyReportPrefillApplied}
+                />
+            );
             case 'WKR': return <WeeklyReportForm {...formProps} draftApplication={activeResumedApplication} />;
             default: return (
                 <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm text-center">

@@ -800,3 +800,32 @@ export interface MarketResearchReport {
   threats: string[];
   sources?: { uri: string; title: string; }[];
 }
+
+export interface ScheduleItem {
+    id: string;
+    start: string;
+    end: string;
+    description: string;
+}
+
+export interface DailyReportData {
+    reportDate: string;
+    startTime: string;
+    endTime: string;
+    customerName: string;
+    activityContent: string;
+    nextDayPlan: string;
+    pqGoal: string;
+    pqCurrent: string;
+    pqLastYear: string;
+    mqGoal: string;
+    mqCurrent: string;
+    mqLastYear: string;
+    planItems: ScheduleItem[];
+    actualItems: ScheduleItem[];
+    comments: string[];
+}
+
+export interface DailyReportPrefill extends Partial<DailyReportData> {
+    id: string;
+}
