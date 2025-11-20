@@ -45,6 +45,7 @@ import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructio
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
+import MeetingAssistant from './components/MeetingAssistant';
 
 
 import * as dataService from './services/dataService';
@@ -114,6 +115,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_master_management: 'マスタ管理',
     bulletin_board: '社内掲示板',
     settings: '設定',
+    meeting_assistant: '議事録支援',
 };
 
 const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
@@ -786,6 +788,8 @@ const App: React.FC = () => {
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
+            case 'meeting_assistant':
+                return <MeetingAssistant currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
             case 'my_schedule':
                 return (
                     <MySchedulePage

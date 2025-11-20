@@ -11,7 +11,6 @@ import {
 } from '../types';
 
 type CalendarEventType = 'job' | 'purchaseOrder' | 'application' | 'custom';
-type CalendarViewMode = 'week' | 'month';
 
 interface CalendarEvent {
     id: string;
@@ -76,149 +75,101 @@ const addDays = (iso: string, days: number) => {
     return formatDate(base);
 };
 
-const getWeekStart = (date: Date) => {
-    const day = (date.getDay() + 6) % 7; // Monday start
-    const monday = new Date(date);
-    monday.setDate(date.getDate() - day);
-    return monday;
-};
-
-const MonthView: React.FC<{
-    calendarDays: {
-        date: Date;
-        iso: string;
-        isCurrentMonth: boolean;
-        isToday: boolean;
-    }[];
-    eventsByDate: Record<string, CalendarEvent[]>;
+const DayView: React.FC<{
     selectedDate: string;
-    onSelectDate: (iso: string) => void;
-}> = ({ calendarDays, eventsByDate, selectedDate, onSelectDate }) => (
-    <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-7 bg-slate-50 dark:bg-slate-700/40 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
-            {weekdayLabels.map((weekday) => (
-                <div key={weekday} className="px-3 py-2 text-center">
-                    {weekday}
-                </div>
-            ))}
-        </div>
-        <div className="grid grid-cols-7">
-            {calendarDays.map((day) => {
-                const dayEvents = eventsByDate[day.iso] ?? [];
-                const isSelected = selectedDate === day.iso;
-                return (
-                    <button
-                        type="button"
-                        key={day.iso}
-                        onClick={() => onSelectDate(day.iso)}
-                        className={`min-h-[110px] border border-slate-200 dark:border-slate-700 p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                            day.isCurrentMonth
-                                ? 'bg-white dark:bg-slate-900/40'
-                                : 'bg-slate-50 dark:bg-slate-900/10 text-slate-400'
-                        } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <span
-                                className={`text-sm font-semibold ${
-                                    day.isToday ? 'text-blue-600 dark:text-blue-300' : ''
-                                }`}
-                            >
-                                {day.date.getDate()}
-                            </span>
-                            {day.isToday && (
-                                <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-300">
-                                    今日
-                                </span>
-                            )}
-                        </div>
-                        <div className="mt-2 space-y-1">
-                            {dayEvents.slice(0, 2).map((event) => (
-                                <span
-                                    key={event.id}
-                                    className={`block truncate rounded-full px-2 py-0.5 text-[11px] font-semibold ${badgeStyles[event.type]}`}
-                                >
-                                    {event.title}
-                                </span>
-                            ))}
-                            {dayEvents.length > 2 && (
-                                <span className="text-[11px] text-slate-500 dark:text-slate-400">+{dayEvents.length - 2} 件</span>
-                            )}
-                        </div>
-                    </button>
-                );
-            })}
-        </div>
-    </div>
-);
+    planEvents: CalendarEvent[];
+    actualItems: ScheduleItem[];
+    onUpdateActualItems: (items: ScheduleItem[]) => void;
+    onDeleteEvent: (id: string) => void;
+    canEdit: boolean;
+}> = ({ selectedDate, planEvents, actualItems, onUpdateActualItems, onDeleteEvent, canEdit }) => {
+    const [newActualItem, setNewActualItem] = useState({ start: '', end: '', description: '' });
 
-const WeekView: React.FC<{
-    selectedDate: string;
-    eventsByDate: Record<string, CalendarEvent[]>;
-    onSelectDate: (iso: string) => void;
-}> = ({ selectedDate, eventsByDate, onSelectDate }) => {
-    const selected = new Date(selectedDate);
-    const start = getWeekStart(selected);
-    const todayIso = formatDate(new Date());
-    const days = Array.from({ length: 7 }, (_, index) => {
-        const date = new Date(start);
-        date.setDate(start.getDate() + index);
-        const iso = formatDate(date);
-        return {
-            label: weekdayLabels[index],
-            iso,
-            date,
-            isToday: isSameDay(iso, todayIso),
-            events: eventsByDate[iso] ?? [],
+    const handleAddActualItem = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newActualItem.description.trim()) return;
+        const newItem: ScheduleItem = {
+            id: `actual-${Date.now()}`,
+            ...newActualItem,
         };
-    });
+        onUpdateActualItems([...actualItems, newItem]);
+        setNewActualItem({ start: '', end: '', description: '' });
+    };
+
+    const handleUpdateActualItem = (id: string, updatedField: Partial<Omit<ScheduleItem, 'id'>>) => {
+        onUpdateActualItems(
+            actualItems.map(item => (item.id === id ? { ...item, ...updatedField } : item)),
+        );
+    };
+
+    const handleDeleteActualItem = (id: string) => {
+        onUpdateActualItems(actualItems.filter(item => item.id !== id));
+    };
+    
+    const inputClass = `w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed`;
 
     return (
-        <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-7 bg-slate-50 dark:bg-slate-700/40 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
-                {days.map((day) => (
-                    <div key={day.iso} className="px-3 py-2 text-center">
-                        {day.label}
-                    </div>
-                ))}
-            </div>
-            <div className="grid grid-cols-7">
-                {days.map((day) => {
-                    const isSelected = selectedDate === day.iso;
-                    return (
-                        <button
-                            type="button"
-                            key={day.iso}
-                            onClick={() => onSelectDate(day.iso)}
-                            className={`min-h-[140px] border border-slate-200 dark:border-slate-700 p-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                                isSelected ? 'ring-2 ring-blue-500 relative z-10' : ''
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Plan Column */}
+            <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">計画</h3>
+                <div className="mt-4 space-y-3">
+                    {planEvents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">この日の予定はありません。</p>}
+                    {planEvents.map((event) => (
+                        <div key={event.id} className="rounded-xl bg-white dark:bg-slate-800/50 p-3 shadow-sm border border-slate-200 dark:border-slate-700">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
                                 <div>
-                                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                                        {day.date.getMonth() + 1}/{day.date.getDate()}
-                                    </p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{day.label}</p>
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{typeLabels[event.type]}</p>
                                 </div>
-                                {day.isToday && (
-                                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-300">今日</span>
+                                {event.time && (
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-full">{event.time}</span>
                                 )}
                             </div>
-                            <div className="mt-2 space-y-1 max-h-28 overflow-y-auto pr-1">
-                                {day.events.length === 0 && <p className="text-[11px] text-slate-400">予定なし</p>}
-                                {day.events.map((event) => (
-                                    <div
-                                        key={event.id}
-                                        className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${badgeStyles[event.type]}`}
-                                    >
-                                        <p className="truncate">{event.title}</p>
-                                        {event.time && <p className="text-[10px] opacity-80">{event.time}</p>}
-                                    </div>
-                                ))}
-                            </div>
-                        </button>
-                    );
-                })}
+                            {event.description && (
+                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{event.description}</p>
+                            )}
+                            {event.type === 'custom' && canEdit && (
+                                <button
+                                    type="button"
+                                    onClick={() => onDeleteEvent(event.id)}
+                                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
+                                >
+                                    <Trash2 className="w-3 h-3" />
+                                    削除
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Actual Column */}
+            <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">実績</h3>
+                <div className="mt-4 space-y-2">
+                    {actualItems.map(item => (
+                        <div key={item.id} className="flex items-center gap-2 group bg-white dark:bg-slate-800/50 p-2 rounded-lg">
+                            <input type="time" value={item.start} onChange={e => handleUpdateActualItem(item.id, { start: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                            <span className="text-slate-400">～</span>
+                            <input type="time" value={item.end} onChange={e => handleUpdateActualItem(item.id, { end: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                            <input type="text" value={item.description} onChange={e => handleUpdateActualItem(item.id, { description: e.target.value })} className={`${inputClass} flex-grow`} disabled={!canEdit} />
+                            {canEdit && <button type="button" onClick={() => handleDeleteActualItem(item.id)} className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4" /></button>}
+                        </div>
+                    ))}
+                </div>
+                {canEdit && (
+                    <form onSubmit={handleAddActualItem} className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3 flex items-center gap-2">
+                        <input type="time" value={newActualItem.start} onChange={e => setNewActualItem({...newActualItem, start: e.target.value})} className={`${inputClass} w-24`} />
+                        <span className="text-slate-400">～</span>
+                        <input type="time" value={newActualItem.end} onChange={e => setNewActualItem({...newActualItem, end: e.target.value})} className={`${inputClass} w-24`} />
+                        <input type="text" value={newActualItem.description} onChange={e => setNewActualItem({...newActualItem, description: e.target.value})} placeholder="実績を入力" className={`${inputClass} flex-grow`} required />
+                        <button type="submit" className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><PlusCircle className="w-4 h-4" /></button>
+                    </form>
+                )}
+                 {actualItems.length === 0 && !canEdit && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">この日の実績はありません。</p>
+                )}
             </div>
         </div>
     );
@@ -234,14 +185,13 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     onCreateDailyReport,
 }) => {
     const todayIso = useMemo(() => formatDate(new Date()), []);
-    const [visibleMonth, setVisibleMonth] = useState<Date>(() => new Date());
     const [selectedDate, setSelectedDate] = useState<string>(todayIso);
     const [customEvents, setCustomEvents] = useState<CalendarEvent[]>([]);
+    const [actualItems, setActualItems] = useState<ScheduleItem[]>([]);
     const [newEvent, setNewEvent] = useState({ title: '', date: todayIso, time: '', description: '' });
     const newEventTitleRef = useRef<HTMLInputElement | null>(null);
     const [hasManualNewEventDate, setHasManualNewEventDate] = useState(false);
     const [viewingUserId, setViewingUserId] = useState<string>(() => currentUser?.id ?? allUsers[0]?.id ?? 'guest');
-    const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
 
     const selectableUsers = useMemo(() => {
         const map = new Map<string, EmployeeUser>();
@@ -272,27 +222,20 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
 
     const canEditCurrentCalendar = (currentUser?.id ?? 'guest') === viewingUserId;
 
-    const handleSelectDate = useCallback(
-        (iso: string) => {
-            setSelectedDate(iso);
-            setHasManualNewEventDate(false);
-            setNewEvent((prev) => ({ ...prev, date: iso }));
-            if (canEditCurrentCalendar) {
-                newEventTitleRef.current?.focus();
-            }
-        },
-        [canEditCurrentCalendar],
-    );
-
-    const storageKey = useMemo(
+    const customEventsStorageKey = useMemo(
         () => `mqdriven_my_schedule_${viewingUserId ?? 'guest'}`,
         [viewingUserId],
+    );
+    
+    const actualsStorageKey = useMemo(
+        () => `mqdriven_my_schedule_actuals_${viewingUserId ?? 'guest'}_${selectedDate}`,
+        [viewingUserId, selectedDate],
     );
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
         try {
-            const raw = window.localStorage.getItem(storageKey);
+            const raw = window.localStorage.getItem(customEventsStorageKey);
             if (!raw) {
                 setCustomEvents([]);
                 return;
@@ -310,12 +253,35 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         } catch {
             setCustomEvents([]);
         }
-    }, [storageKey]);
+    }, [customEventsStorageKey]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        window.localStorage.setItem(storageKey, JSON.stringify(customEvents));
-    }, [storageKey, customEvents]);
+        window.localStorage.setItem(customEventsStorageKey, JSON.stringify(customEvents));
+    }, [customEventsStorageKey, customEvents]);
+    
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            setActualItems([]);
+            return;
+        };
+        try {
+            const raw = window.localStorage.getItem(actualsStorageKey);
+            const parsed = raw ? JSON.parse(raw) as ScheduleItem[] : [];
+            if (Array.isArray(parsed)) {
+                setActualItems(parsed.filter(item => item && typeof item.description === 'string'));
+            } else {
+                setActualItems([]);
+            }
+        } catch {
+            setActualItems([]);
+        }
+    }, [actualsStorageKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(actualsStorageKey, JSON.stringify(actualItems));
+    }, [actualsStorageKey, actualItems]);
 
     useEffect(() => {
         if (hasManualNewEventDate) return;
@@ -325,201 +291,28 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         }));
     }, [selectedDate, hasManualNewEventDate]);
 
-    useEffect(() => {
-        if (viewMode === 'month') {
-            const target = new Date(selectedDate);
-            setVisibleMonth(new Date(target.getFullYear(), target.getMonth(), 1));
-        }
-    }, [viewMode, selectedDate]);
-
-    const derivedEvents = useMemo<CalendarEvent[]>(() => {
-        const jobEvents = jobs.flatMap((job) => {
-            const date = extractDatePart(job.dueDate);
-            if (!date) return [];
-            const event: CalendarEvent = {
-                id: `job-${job.id}`,
-                date,
-                title: job.title || job.projectCode || `案件#${job.jobNumber}`,
-                type: 'job',
-                description: job.clientName ? `${job.clientName} / Q${job.quantity}` : undefined,
-            };
-            return [event];
-        });
-
-        const purchaseEvents = purchaseOrders.flatMap((order) => {
-            const date = extractDatePart(order.orderDate);
-            if (!date) return [];
-            const event: CalendarEvent = {
-                id: `po-${order.id}`,
-                date,
-                title: `発注：${order.itemName}`,
-                type: 'purchaseOrder',
-                description: order.supplierName ?? undefined,
-            };
-            return [event];
-        });
-
-        const applicationEvents = applications.flatMap((application) => {
-            const date =
-                extractDatePart(application.submittedAt || application.updatedAt || application.createdAt) ?? null;
-            if (!date) return [];
-            const label = application.applicationCode?.name ?? application.applicationCodeId;
-            const statusLabel =
-                application.status === 'pending_approval'
-                    ? '承認待ち'
-                    : application.status === 'approved'
-                    ? '承認済み'
-                    : application.status === 'rejected'
-                    ? '差戻し'
-                    : '下書き';
-            const event: CalendarEvent = {
-                id: `application-${application.id}`,
-                date,
-                title: `${label}申請`,
-                type: 'application',
-                description: `ステータス：${statusLabel}`,
-            };
-            return [event];
-        });
-
-        return [...jobEvents, ...purchaseEvents, ...applicationEvents];
-    }, [jobs, purchaseOrders, applications]);
-
-    const sortedEvents = useMemo(() => {
-        const complete = [...derivedEvents, ...customEvents];
-        return complete.sort((a, b) => {
-            if (a.date === b.date) {
-                const timeA = a.time ?? '99:99';
-                const timeB = b.time ?? '99:99';
-                return timeA.localeCompare(timeB);
-            }
-            return a.date.localeCompare(b.date);
-        });
-    }, [derivedEvents, customEvents]);
-
-    const eventsByDate = useMemo(() => {
-        return sortedEvents.reduce<Record<string, CalendarEvent[]>>((acc, event) => {
-            acc[event.date] = acc[event.date] ? [...acc[event.date], event] : [event];
-            return acc;
-        }, {});
-    }, [sortedEvents]);
-
-    const selectedEvents = eventsByDate[selectedDate] ?? [];
-
-    const formatScheduleLine = (item: ScheduleItem) => {
-        const start = item.start || '--:--';
-        const end = item.end || '--:--';
-        const description = item.description ? `　${item.description}` : '';
-        return `${start}～${end}${description}`.trim();
-    };
-
-    const buildScheduleItems = (events: CalendarEvent[], mode: 'plan' | 'actual'): ScheduleItem[] =>
-        events.map(event => ({
-            id: `${mode}-${event.id}`,
-            start: event.time || '',
-            end: '',
-            description: [
-                event.title,
-                event.description,
-                typeLabels[event.type],
-            ]
-                .filter(Boolean)
-                .join(' / '),
-        }));
-
-    const handleCreateDailyReport = () => {
-        if (!onCreateDailyReport) return;
-        if (!selectedEvents.length) {
-            addToast?.('この日は予定がありません。', 'info');
-            return;
-        }
-        const planItems = buildScheduleItems(selectedEvents, 'plan');
-        const actualItems = buildScheduleItems(selectedEvents, 'actual');
-        const planLines = planItems.map(formatScheduleLine).join('\n') || '（予定なし）';
-        const actualLines = actualItems.map(formatScheduleLine).join('\n') || '（実績なし）';
-        const activityContent = [
-            `${selectedDateLabel} の業務のご報告です。`,
-            '',
-            'PQ目標__　今期現在__　前年__',
-            'MQ目標__　今期現在__　前年__',
-            '',
-            '【本日の計画】',
-            planLines,
-            '',
-            '【本日の実績】',
-            actualLines,
-        ].join('\n');
-        const prefill: DailyReportPrefill = {
-            id: `calendar-${selectedDate}-${Date.now()}`,
-            reportDate: selectedDate,
-            planItems,
-            actualItems,
-            activityContent,
-            comments: [`カレンダーの予定（${selectedEvents.length}件）を反映しました。`],
-        };
-        onCreateDailyReport(prefill);
-    };
-
-    const dailyReportButtonDisabled = !canEditCurrentCalendar || selectedEvents.length === 0;
-    const dailyReportButtonTitle = !canEditCurrentCalendar
-        ? '他のユーザーのカレンダーは閲覧のみです。'
-        : selectedEvents.length === 0
-            ? '予定がありません。'
-            : 'この日の予定を日報化します。';
-
-    const upcomingEvents = useMemo(() => {
-        return sortedEvents.filter((event) => event.date >= todayIso).slice(0, 5);
-    }, [sortedEvents, todayIso]);
-
     const monthLabel = useMemo(() => {
-        return new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(visibleMonth);
-    }, [visibleMonth]);
+        const d = new Date(selectedDate);
+        return new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(d);
+    }, [selectedDate]);
 
     const selectedDateLabel = useMemo(() => {
         return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'full' }).format(new Date(selectedDate));
     }, [selectedDate]);
 
-    const calendarDays = useMemo(() => {
-        const firstDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
-        const offset = (firstDay.getDay() + 6) % 7; // Monday start
-        const start = new Date(firstDay);
-        start.setDate(firstDay.getDate() - offset);
-
-        return Array.from({ length: 42 }, (_, index) => {
-            const current = new Date(start);
-            current.setDate(start.getDate() + index);
-            const iso = formatDate(current);
-            return {
-                date: current,
-                iso,
-                isCurrentMonth: current.getMonth() === visibleMonth.getMonth(),
-                isToday: isSameDay(iso, todayIso),
-            };
-        });
-    }, [visibleMonth, todayIso]);
-
     const goToPreviousSpan = () => {
-        if (viewMode === 'month') {
-            setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
-        } else {
-            setSelectedDate((prev) => addDays(prev, -7));
-            setHasManualNewEventDate(false);
-        }
+        setSelectedDate((prev) => addDays(prev, -1));
+        setHasManualNewEventDate(false);
     };
 
     const goToNextSpan = () => {
-        if (viewMode === 'month') {
-            setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
-        } else {
-            setSelectedDate((prev) => addDays(prev, 7));
-            setHasManualNewEventDate(false);
-        }
+        setSelectedDate((prev) => addDays(prev, 1));
+        setHasManualNewEventDate(false);
     };
 
     const handleToday = () => {
         setSelectedDate(todayIso);
         setHasManualNewEventDate(false);
-        setVisibleMonth(new Date());
     };
 
     const handleAddEvent = (event: React.FormEvent) => {
@@ -593,22 +386,6 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     </option>
                                 ))}
                             </select>
-                            <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 p-1">
-                                {(['week', 'month'] as CalendarViewMode[]).map((mode) => (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        onClick={() => setViewMode(mode)}
-                                        className={`px-3 py-1 text-sm font-semibold rounded-lg transition ${
-                                            viewMode === mode
-                                                ? 'bg-blue-600 text-white'
-                                                : 'text-slate-600 dark:text-slate-300'
-                                        }`}
-                                    >
-                                        {mode === 'week' ? '週表示' : '月表示'}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <button
@@ -617,7 +394,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700"
                             >
                                 <ArrowLeft className="w-4 h-4" />
-                                前の{viewMode === 'week' ? '週' : '月'}
+                                前の日
                             </button>
                             <button
                                 type="button"
@@ -631,103 +408,46 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onClick={goToNextSpan}
                                 className="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700"
                             >
-                                次の{viewMode === 'week' ? '週' : '月'}
+                                次の日
                                 <ArrowRight className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-                    選択中：<span className="font-semibold text-slate-900 dark:text-white">{selectedDateLabel}</span>
-                </p>
+                <div className="mt-6 flex items-center justify-between">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        選択中：<span className="font-semibold text-slate-900 dark:text-white">{selectedDateLabel}</span>
+                    </p>
+                    <button
+                        type="button"
+                        onClick={handleCreateDailyReport}
+                        disabled={dailyReportButtonDisabled}
+                        title={dailyReportButtonTitle}
+                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                            dailyReportButtonDisabled
+                                ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                        }`}
+                    >
+                        <PlusCircle className="w-4 h-4" />
+                        日報作成
+                    </button>
+                </div>
 
-                {viewMode === 'week' ? (
-                    <WeekView selectedDate={selectedDate} eventsByDate={eventsByDate} onSelectDate={handleSelectDate} />
-                ) : (
-                    <MonthView
-                        calendarDays={calendarDays}
-                        eventsByDate={eventsByDate}
-                        selectedDate={selectedDate}
-                        onSelectDate={handleSelectDate}
-                    />
-                )}
+
+                <DayView
+                    selectedDate={selectedDate}
+                    planEvents={selectedEvents}
+                    actualItems={actualItems}
+                    onUpdateActualItems={setActualItems}
+                    onDeleteEvent={handleDeleteEvent}
+                    canEdit={canEditCurrentCalendar}
+                />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-2 space-y-6">
-                    <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700/70">
-                                    <CalendarIcon className="w-5 h-5 text-slate-600 dark:text-slate-200" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-200">
-                                        {selectedDateLabel}
-                                    </p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">この日の予定</p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleCreateDailyReport}
-                                disabled={dailyReportButtonDisabled}
-                                title={dailyReportButtonTitle}
-                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                    dailyReportButtonDisabled
-                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-                                }`}
-                            >
-                                <PlusCircle className="w-4 h-4" />
-                                日報作成
-                            </button>
-                        </div>
-                        <div className="mt-4 space-y-3">
-                            {selectedEvents.length === 0 && (
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    この日の予定はまだありません。
-                                </p>
-                            )}
-                            {selectedEvents.map((event) => (
-                                <div
-                                    key={event.id}
-                                    className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm"
-                                >
-                                    <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <div>
-                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                                {event.title}
-                                            </p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                {typeLabels[event.type]}
-                                            </p>
-                                        </div>
-                                        {event.time && (
-                                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                                {event.time}
-                                            </span>
-                                        )}
-                                    </div>
-                                    {event.description && (
-                                        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{event.description}</p>
-                                    )}
-                                    {event.type === 'custom' && canEditCurrentCalendar && (
-                                        <button
-                                            type="button"
-                                            onClick={() => handleDeleteEvent(event.id)}
-                                            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                            削除
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
                     <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6">
                         <div className="flex items-center gap-3">
                             <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
