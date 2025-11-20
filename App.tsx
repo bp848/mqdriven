@@ -789,7 +789,7 @@ const App: React.FC = () => {
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
             case 'meeting_assistant':
-                return <MeetingAssistant currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
+                return <MeetingAssistant />;
             case 'my_schedule':
                 return (
                     <MySchedulePage
