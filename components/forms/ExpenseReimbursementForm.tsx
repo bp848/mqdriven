@@ -1722,107 +1722,113 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = ({
                                                             disabled={isDisabled}
                                                         />
                                                     </td>
-                                                    <td className="py-3 px-2 min-w-[220px]">
+                                                    <td className="py-3 px-2 min-w-[220px] align-top whitespace-normal">
                                                         <label className="sr-only" htmlFor={`customer-${line.id}`}>
                                                             顧客
                                                         </label>
-                                                        <input
-                                                            type="text"
-                                                            placeholder="顧客検索"
-                                                            value={customerSearchTerms[line.id] || ''}
-                                                            onChange={e => handleCustomerFilterChange(line.id, e.target.value)}
-                                                            className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-2 py-1 text-xs mb-1"
-                                                            disabled={isDisabled}
-                                                        />
-                                                        {customerFilter && (
-                                                            <div className="flex flex-wrap gap-1 mb-1">
-                                                                {filteredCustomers.slice(0, 3).map(customer => (
-                                                                    <button
-                                                                        type="button"
-                                                                        key={customer.id}
-                                                                        onClick={() => handleLineChange(line.id, 'customerId', customer.id)}
-                                                                        className={`px-2 py-0.5 text-[11px] rounded-full border ${
-                                                                            line.customerId === customer.id
-                                                                                ? 'bg-blue-100 border-blue-400 text-blue-700'
-                                                                                : 'bg-white border-slate-200 text-slate-600'
-                                                                        }`}
-                                                                        disabled={isDisabled}
-                                                                    >
+                                                        <div className="space-y-1">
+                                                            <input
+                                                                type="text"
+                                                                placeholder="顧客検索"
+                                                                value={customerSearchTerms[line.id] || ''}
+                                                                onChange={e => handleCustomerFilterChange(line.id, e.target.value)}
+                                                                className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-2 py-1 text-xs"
+                                                                disabled={isDisabled}
+                                                            />
+                                                            {customerFilter && (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {filteredCustomers.slice(0, 3).map(customer => (
+                                                                        <button
+                                                                            type="button"
+                                                                            key={customer.id}
+                                                                            onClick={() => handleLineChange(line.id, 'customerId', customer.id)}
+                                                                            className={`px-2 py-0.5 text-[11px] rounded-full border ${
+                                                                                line.customerId === customer.id
+                                                                                    ? 'bg-blue-100 border-blue-400 text-blue-700'
+                                                                                    : 'bg-white border-slate-200 text-slate-600'
+                                                                            }`}
+                                                                            disabled={isDisabled}
+                                                                        >
+                                                                            {customer.customerName}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            <select
+                                                                id={`customer-${line.id}`}
+                                                                aria-label="顧客"
+                                                                value={line.customerId}
+                                                                onChange={e => handleLineChange(line.id, 'customerId', e.target.value)}
+                                                                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                                disabled={isDisabled}
+                                                            >
+                                                                <option value="">顧客を選択</option>
+                                                                {filteredCustomers.map(customer => (
+                                                                    <option key={customer.id} value={customer.id}>
                                                                         {customer.customerName}
-                                                                    </button>
+                                                                    </option>
                                                                 ))}
-                                                            </div>
-                                                        )}
-                                                        <select
-                                                            id={`customer-${line.id}`}
-                                                            aria-label="顧客"
-                                                            value={line.customerId}
-                                                            onChange={e => handleLineChange(line.id, 'customerId', e.target.value)}
-                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
-                                                            disabled={isDisabled}
-                                                        >
-                                                            <option value="">顧客を選択</option>
-                                                            {filteredCustomers.map(customer => (
-                                                                <option key={customer.id} value={customer.id}>
-                                                                    {customer.customerName}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        {lineAlerts
-                                                            .filter(alert => alert.level === 'ERROR' && alert.message.includes('顧客'))
-                                                            .map(alert => (
-                                                                <p key={alert.id} className="mt-1 text-xs text-rose-600 dark:text-rose-400">
-                                                                    {alert.message}
-                                                                </p>
-                                                            ))}
+                                                            </select>
+                                                            {lineAlerts
+                                                                .filter(alert => alert.level === 'ERROR' && alert.message.includes('顧客'))
+                                                                .map(alert => (
+                                                                    <p key={alert.id} className="text-xs text-rose-600 dark:text-rose-400">
+                                                                        {alert.message}
+                                                                    </p>
+                                                                ))}
+                                                        </div>
                                                     </td>
-                                                    <td className="py-3 px-2 min-w-[220px]">
+                                                    <td className="py-3 px-2 min-w-[220px] align-top whitespace-normal">
                                                         <label className="sr-only" htmlFor={`project-${line.id}`}>
                                                             プロジェクト
                                                         </label>
-                                                        <select
-                                                            id={`project-${line.id}`}
-                                                            aria-label='プロジェクト'
-                                                            value={line.projectId}
-                                                            onChange={e => handleLineChange(line.id, 'projectId', e.target.value)}
-                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
-                                                            disabled={isDisabled || !line.customerId}
-                                                        >
-                                                            <option value="">
-                                                                {line.customerId ? 'プロジェクトを選択' : '顧客を先に選択'}
-                                                            </option>
-                                                            {availableProjects.map(project => (
-                                                                <option
-                                                                    key={project.id}
-                                                                    value={project.id}
-                                                                    disabled={project.status === JobStatus.Completed}
-                                                                >
-                                                                    {project.title}（{project.status}）
+                                                        <div className="space-y-1">
+                                                            <select
+                                                                id={`project-${line.id}`}
+                                                                aria-label='プロジェクト'
+                                                                value={line.projectId}
+                                                                onChange={e => handleLineChange(line.id, 'projectId', e.target.value)}
+                                                                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                                disabled={isDisabled || !line.customerId}
+                                                            >
+                                                                <option value="">
+                                                                    {line.customerId ? 'プロジェクトを選択' : '顧客を先に選択'}
                                                                 </option>
-                                                            ))}
-                                                        </select>
+                                                                {availableProjects.map(project => (
+                                                                    <option
+                                                                        key={project.id}
+                                                                        value={project.id}
+                                                                        disabled={project.status === JobStatus.Completed}
+                                                                    >
+                                                                        {project.title}（{project.status}）
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
                                                     </td>
-                                                    <td className="py-3 px-2 min-w-[200px]">
+                                                    <td className="py-3 px-2 min-w-[200px] align-top whitespace-normal">
                                                         <label className="sr-only" htmlFor={`revenue-${line.id}`}>
                                                             売上/見積
                                                         </label>
-                                                        <select
-                                                            id={`revenue-${line.id}`}
-                                                            aria-label="売上/見積"
-                                                            value={line.linkedRevenueId}
-                                                            onChange={e => handleLineChange(line.id, 'linkedRevenueId', e.target.value)}
-                                                            className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
-                                                            disabled={isDisabled || revenueOptions.length === 0}
-                                                        >
-                                                            <option value="">
-                                                                {revenueOptions.length ? '売上/見積を紐付け' : '候補なし'}
-                                                            </option>
-                                                            {revenueOptions.map(option => (
-                                                                <option key={option.id} value={option.id}>
-                                                                    {option.label}
+                                                        <div className="space-y-1">
+                                                            <select
+                                                                id={`revenue-${line.id}`}
+                                                                aria-label="売上/見積"
+                                                                value={line.linkedRevenueId}
+                                                                onChange={e => handleLineChange(line.id, 'linkedRevenueId', e.target.value)}
+                                                                className="w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 text-sm"
+                                                                disabled={isDisabled || revenueOptions.length === 0}
+                                                            >
+                                                                <option value="">
+                                                                    {revenueOptions.length ? '売上/見積を紐付け' : '候補なし'}
                                                                 </option>
-                                                            ))}
-                                                        </select>
+                                                                {revenueOptions.map(option => (
+                                                                    <option key={option.id} value={option.id}>
+                                                                        {option.label}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
                                                     </td>
                                                     <td className="py-3 px-2 align-middle text-right">
                                                         <button

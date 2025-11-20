@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar as CalendarIcon, PlusCircle, Trash2, ArrowLeft, ArrowRight } from './Icons';
 import {
     ProjectBudgetSummary,
@@ -6,6 +6,8 @@ import {
     ApplicationWithDetails,
     EmployeeUser,
     Toast,
+    DailyReportPrefill,
+    ScheduleItem,
 } from '../types';
 
 type CalendarEventType = 'job' | 'purchaseOrder' | 'application' | 'custom';
@@ -27,6 +29,7 @@ interface MySchedulePageProps {
     currentUser: EmployeeUser | null;
     allUsers: EmployeeUser[];
     addToast?: (message: string, type: Toast['type']) => void;
+    onCreateDailyReport?: (prefill: DailyReportPrefill) => void;
 }
 
 const weekdayLabels = ['月', '火', '水', '木', '金', '土', '日'];
@@ -228,12 +231,15 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     currentUser,
     allUsers,
     addToast,
+    onCreateDailyReport,
 }) => {
     const todayIso = useMemo(() => formatDate(new Date()), []);
     const [visibleMonth, setVisibleMonth] = useState<Date>(() => new Date());
     const [selectedDate, setSelectedDate] = useState<string>(todayIso);
     const [customEvents, setCustomEvents] = useState<CalendarEvent[]>([]);
     const [newEvent, setNewEvent] = useState({ title: '', date: todayIso, time: '', description: '' });
+    const newEventTitleRef = useRef<HTMLInputElement | null>(null);
+    const [hasManualNewEventDate, setHasManualNewEventDate] = useState(false);
     const [viewingUserId, setViewingUserId] = useState<string>(() => currentUser?.id ?? allUsers[0]?.id ?? 'guest');
     const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
 
@@ -265,6 +271,18 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     );
 
     const canEditCurrentCalendar = (currentUser?.id ?? 'guest') === viewingUserId;
+
+    const handleSelectDate = useCallback(
+        (iso: string) => {
+            setSelectedDate(iso);
+            setHasManualNewEventDate(false);
+            setNewEvent((prev) => ({ ...prev, date: iso }));
+            if (canEditCurrentCalendar) {
+                newEventTitleRef.current?.focus();
+            }
+        },
+        [canEditCurrentCalendar],
+    );
 
     const storageKey = useMemo(
         () => `mqdriven_my_schedule_${viewingUserId ?? 'guest'}`,
@@ -300,11 +318,12 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     }, [storageKey, customEvents]);
 
     useEffect(() => {
+        if (hasManualNewEventDate) return;
         setNewEvent((prev) => ({
             ...prev,
-            date: prev.date || selectedDate,
+            date: selectedDate,
         }));
-    }, [selectedDate]);
+    }, [selectedDate, hasManualNewEventDate]);
 
     useEffect(() => {
         if (viewMode === 'month') {
@@ -387,6 +406,67 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
 
     const selectedEvents = eventsByDate[selectedDate] ?? [];
 
+    const formatScheduleLine = (item: ScheduleItem) => {
+        const start = item.start || '--:--';
+        const end = item.end || '--:--';
+        const description = item.description ? `　${item.description}` : '';
+        return `${start}～${end}${description}`.trim();
+    };
+
+    const buildScheduleItems = (events: CalendarEvent[], mode: 'plan' | 'actual'): ScheduleItem[] =>
+        events.map(event => ({
+            id: `${mode}-${event.id}`,
+            start: event.time || '',
+            end: '',
+            description: [
+                event.title,
+                event.description,
+                typeLabels[event.type],
+            ]
+                .filter(Boolean)
+                .join(' / '),
+        }));
+
+    const handleCreateDailyReport = () => {
+        if (!onCreateDailyReport) return;
+        if (!selectedEvents.length) {
+            addToast?.('この日は予定がありません。', 'info');
+            return;
+        }
+        const planItems = buildScheduleItems(selectedEvents, 'plan');
+        const actualItems = buildScheduleItems(selectedEvents, 'actual');
+        const planLines = planItems.map(formatScheduleLine).join('\n') || '（予定なし）';
+        const actualLines = actualItems.map(formatScheduleLine).join('\n') || '（実績なし）';
+        const activityContent = [
+            `${selectedDateLabel} の業務のご報告です。`,
+            '',
+            'PQ目標__　今期現在__　前年__',
+            'MQ目標__　今期現在__　前年__',
+            '',
+            '【本日の計画】',
+            planLines,
+            '',
+            '【本日の実績】',
+            actualLines,
+        ].join('\n');
+        const prefill: DailyReportPrefill = {
+            id: `calendar-${selectedDate}-${Date.now()}`,
+            reportDate: selectedDate,
+            planItems,
+            actualItems,
+            activityContent,
+            comments: [`カレンダーの予定（${selectedEvents.length}件）を反映しました。`],
+        };
+        onCreateDailyReport(prefill);
+    };
+
+    const dailyReportButtonDisabled = !canEditCurrentCalendar || selectedEvents.length === 0;
+    const dailyReportButtonTitle = !canEditCurrentCalendar
+        ? '他のユーザーのカレンダーは閲覧のみです。'
+        : selectedEvents.length === 0
+            ? '予定がありません。'
+            : 'この日の予定を日報化します。';
+
     const upcomingEvents = useMemo(() => {
         return sortedEvents.filter((event) => event.date >= todayIso).slice(0, 5);
     }, [sortedEvents, todayIso]);
@@ -423,6 +503,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
         } else {
             setSelectedDate((prev) => addDays(prev, -7));
+            setHasManualNewEventDate(false);
         }
     };
 
@@ -431,11 +512,13 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
         } else {
             setSelectedDate((prev) => addDays(prev, 7));
+            setHasManualNewEventDate(false);
         }
     };
 
     const handleToday = () => {
         setSelectedDate(todayIso);
+        setHasManualNewEventDate(false);
         setVisibleMonth(new Date());
     };
 
@@ -459,6 +542,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         };
         setCustomEvents((prev) => [...prev, nextEvent]);
         setNewEvent({ title: '', date: selectedDate, time: '', description: '' });
+        setHasManualNewEventDate(false);
         addToast?.('予定を追加しました。', 'success');
     };
 
@@ -559,13 +643,13 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 </p>
 
                 {viewMode === 'week' ? (
-                    <WeekView selectedDate={selectedDate} eventsByDate={eventsByDate} onSelectDate={setSelectedDate} />
+                    <WeekView selectedDate={selectedDate} eventsByDate={eventsByDate} onSelectDate={handleSelectDate} />
                 ) : (
                     <MonthView
                         calendarDays={calendarDays}
                         eventsByDate={eventsByDate}
                         selectedDate={selectedDate}
-                        onSelectDate={setSelectedDate}
+                        onSelectDate={handleSelectDate}
                     />
                 )}
             </div>
@@ -573,16 +657,32 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-2 space-y-6">
                     <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700/70">
-                                <CalendarIcon className="w-5 h-5 text-slate-600 dark:text-slate-200" />
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700/70">
+                                    <CalendarIcon className="w-5 h-5 text-slate-600 dark:text-slate-200" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-200">
+                                        {selectedDateLabel}
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">この日の予定</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-sm font-semibold text-slate-600 dark:text-slate-200">
-                                    {selectedDateLabel}
-                                </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">この日の予定</p>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCreateDailyReport}
+                                disabled={dailyReportButtonDisabled}
+                                title={dailyReportButtonTitle}
+                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                    dailyReportButtonDisabled
+                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <PlusCircle className="w-4 h-4" />
+                                日報作成
+                            </button>
                         </div>
                         <div className="mt-4 space-y-3">
                             {selectedEvents.length === 0 && (
@@ -652,6 +752,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     type="text"
                                     value={newEvent.title}
                                     onChange={(e) => setNewEvent((prev) => ({ ...prev, title: e.target.value }))}
+                                    ref={newEventTitleRef}
                                     className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${
                                         !canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
                                     }`}
@@ -666,7 +767,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     <input
                                         type="date"
                                         value={newEvent.date}
-                                        onChange={(e) => setNewEvent((prev) => ({ ...prev, date: e.target.value }))}
+                                        onChange={(e) => {
+                                            setHasManualNewEventDate(true);
+                                            setNewEvent((prev) => ({ ...prev, date: e.target.value }));
+                                        }}
                                         className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${
                                             !canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
                                         }`}

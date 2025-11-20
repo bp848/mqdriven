@@ -3,7 +3,7 @@ import { submitApplication } from '../../services/dataService';
 import { generateDailyReportSummary } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
-import { User, Toast, ApplicationWithDetails } from '../../types';
+import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 
 interface DailyReportFormProps {
@@ -15,34 +15,22 @@ interface DailyReportFormProps {
     isLoading: boolean;
     error: string;
     draftApplication?: ApplicationWithDetails | null;
+    prefill?: DailyReportPrefill;
+    onPrefillApplied?: () => void;
 }
 
-interface ScheduleItem {
-    id: string;
-    start: string;
-    end: string;
-    description: string;
-}
-
-interface DailyReportData {
-    reportDate: string;
-    startTime: string;
-    endTime: string;
-    customerName: string;
-    activityContent: string;
-    nextDayPlan: string;
-    pqGoal: string;
-    pqCurrent: string;
-    pqLastYear: string;
-    mqGoal: string;
-    mqCurrent: string;
-    mqLastYear: string;
-    planItems: ScheduleItem[];
-    actualItems: ScheduleItem[];
-    comments: string[];
-}
-
-const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicationCodeId, currentUser, addToast, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
+const DailyReportForm: React.FC<DailyReportFormProps> = ({
+    onSuccess,
+    applicationCodeId,
+    currentUser,
+    addToast,
+    isAIOff,
+    isLoading,
+    error: formLoadError,
+    draftApplication,
+    prefill,
+    onPrefillApplied,
+}) => {
     const createScheduleItem = (item?: Partial<ScheduleItem>): ScheduleItem => ({
         id: item?.id || `schedule_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         start: item?.start || '',
@@ -73,6 +61,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     const [savedReports, setSavedReports] = useState<Record<string, DailyReportData>>({});
+    const [appliedPrefillId, setAppliedPrefillId] = useState<string | null>(null);
     
     const isDisabled = isSubmitting || isLoading || !!formLoadError;
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
@@ -125,6 +114,25 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({ onSuccess, applicatio
         });
         setApprovalRouteId(draftApplication.approvalRouteId || '');
     }, [draftApplication, applicationCodeId]);
+    
+    useEffect(() => {
+        if (!prefill || appliedPrefillId === prefill.id) return;
+        const { id, ...prefillContent } = prefill;
+        setFormData(prev => {
+            const planItems = prefill.planItems ? prefill.planItems.map(item => ({ ...item })) : prev.planItems;
+            const actualItems = prefill.actualItems ? prefill.actualItems.map(item => ({ ...item })) : prev.actualItems;
+            const comments = prefill.comments ? [...prefill.comments] : prev.comments;
+            return {
+                ...prev,
+                ...prefillContent,
+                planItems,
+                actualItems,
+                comments,
+            };
+        });
+        setAppliedPrefillId(prefill.id);
+        onPrefillApplied?.();
+    }, [prefill, appliedPrefillId, onPrefillApplied]);
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
