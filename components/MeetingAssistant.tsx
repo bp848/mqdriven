@@ -152,18 +152,26 @@ const MeetingAssistant: React.FC = () => {
     <div className="space-y-8">
       {/* Control Buttons */}
       <div className="flex flex-col md:flex-row gap-4 justify-center sticky bottom-0 bg-white p-4 -mx-6 md:-mx-8 border-t border-gray-200 shadow-lg z-10">
-        <Button onClick={startRecording} disabled={isRecording} isLoading={false}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+        <button
+          onClick={startRecording}
+          disabled={isRecording}
+          className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
           </svg>
           Start Meeting
-        </Button>
-        <Button onClick={endRecording} disabled={!isRecording} variant="danger">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+        </button>
+        <button
+          onClick={endRecording}
+          disabled={!isRecording}
+          className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-red-600 rounded-lg shadow-md hover:bg-red-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 9a1 1 0 000 2h4a1 1 0 100-2H8z" clipRule="evenodd" />
           </svg>
           End Meeting
-        </Button>
+        </button>
       </div>
 
       {/* Real-time Transcription Section */}
