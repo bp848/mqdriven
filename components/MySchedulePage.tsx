@@ -348,6 +348,101 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         addToast?.('予定を削除しました。', 'info');
     };
 
+    const aggregatedEvents = useMemo(() => {
+        const entries: CalendarEvent[] = [];
+
+        jobs.forEach((job) => {
+            const plannedDate = extractDatePart(job.dueDate || job.createdAt);
+            if (!plannedDate) return;
+            entries.push({
+                id: `job-${job.id}`,
+                date: plannedDate,
+                title: job.title,
+                type: 'job',
+                description: job.details || job.clientName || undefined,
+            });
+        });
+
+        purchaseOrders.forEach((order) => {
+            const orderDate = extractDatePart(order.orderDate);
+            if (!orderDate) return;
+            entries.push({
+                id: `po-${order.id}`,
+                date: orderDate,
+                title: `発注：${order.itemName}`,
+                type: 'purchaseOrder',
+                description: order.supplierName || undefined,
+            });
+        });
+
+        applications.forEach((application) => {
+            const applicationDate = extractDatePart(application.submittedAt ?? application.createdAt);
+            if (!applicationDate) return;
+            const label =
+                application.applicationCode?.name ||
+                application.applicationCode?.code ||
+                '社内申請';
+            entries.push({
+                id: `application-${application.id}`,
+                date: applicationDate,
+                title: `申請：${label}`,
+                type: 'application',
+                description: application.applicant?.name || undefined,
+            });
+        });
+
+        entries.push(...customEvents);
+        return entries.sort((a, b) => a.date.localeCompare(b.date));
+    }, [applications, customEvents, jobs, purchaseOrders]);
+
+    const selectedEvents = useMemo(
+        () => aggregatedEvents.filter((event) => event.date === selectedDate),
+        [aggregatedEvents, selectedDate],
+    );
+
+    const upcomingEvents = useMemo(
+        () => aggregatedEvents.filter((event) => event.date >= todayIso).slice(0, 5),
+        [aggregatedEvents, todayIso],
+    );
+
+    const dailyReportButtonDisabled = !onCreateDailyReport || !canEditCurrentCalendar;
+    const dailyReportButtonTitle = !onCreateDailyReport
+        ? '日報作成は有効化されていません'
+        : !canEditCurrentCalendar
+            ? '閲覧専用のカレンダーです'
+            : '選択した日の予定を日報に反映します';
+
+    const handleCreateDailyReport = () => {
+        if (!onCreateDailyReport) return;
+        const planItems = selectedEvents.map((event) => ({
+            id: `${event.id}-plan`,
+            start: event.time || '',
+            end: '',
+            description: event.description ? `${event.title} - ${event.description}` : event.title,
+        }));
+        const activityContent =
+            selectedEvents.map((event) => event.description ?? event.title).join('\n') ||
+            '本日の活動内容を記入してください。';
+        const nextDayPlan =
+            upcomingEvents
+                .slice(0, 3)
+                .map((event) => event.title)
+                .join(' / ') || '次回の予定を整理してください。';
+
+        onCreateDailyReport({
+            id: `${viewingUserId}-schedule-${selectedDate}`,
+            reportDate: selectedDate,
+            startTime: planItems[0]?.start || '09:00',
+            endTime: planItems[planItems.length - 1]?.start || '18:00',
+            customerName: selectedEvents[0]?.title || '',
+            activityContent,
+            nextDayPlan,
+            planItems,
+            actualItems,
+            comments: [],
+        });
+    };
+
     return (
         <div className="space-y-6">
             <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
