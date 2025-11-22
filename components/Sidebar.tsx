@@ -271,7 +271,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     }`}
                 >
                     <Inbox className="w-5 h-5" />
-                    <span class="ml-4 font-medium">社内掲示板</span>
+                    <span className="ml-4 font-medium">社内掲示板</span>
                 </a>
             </li>
             <li>
@@ -285,7 +285,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     }`}
                 >
                     <Lightbulb className="w-5 h-5" />
-                    <span className="ml-4 font-medium">Meeting Assistant</span>
+                    <span className="ml-4 font-medium">議事録支援</span>
                 </a>
             </li>
             <li>

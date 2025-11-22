@@ -1,7 +1,0 @@
-{
-  "name": "Meeting Assistant",
-  "description": "A React web application to assist with meeting management, offering real-time transcription, summarization, and action item generation.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}
