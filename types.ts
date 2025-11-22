@@ -17,6 +17,19 @@ export type Page =
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
   | 'admin_master_management' | 'settings';
 
+export interface ActionItem {
+  id: string;
+  description: string;
+  assignee?: string;
+  dueDate?: string;
+}
+
+export interface MeetingSummary {
+  summary: string;
+  keyDecisions: string[];
+  actionItems: ActionItem[];
+}
+
 export enum JobStatus {
   Pending = '保留',
   InProgress = '進行中',
