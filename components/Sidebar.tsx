@@ -142,7 +142,6 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         items: [
             { page: 'ai_business_consultant', name: 'AI経営相談' },
             { page: 'ai_market_research', name: 'AI市場調査' },
-            { page: 'meeting_assistant', name: '議事録支援' },
         ]
     },
     {
@@ -272,20 +271,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                 >
                     <Inbox className="w-5 h-5" />
                     <span className="ml-4 font-medium">社内掲示板</span>
-                </a>
-            </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('meeting_assistant'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'meeting_assistant'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <Lightbulb className="w-5 h-5" />
-                    <span className="ml-4 font-medium">議事録支援</span>
                 </a>
             </li>
             <li>
