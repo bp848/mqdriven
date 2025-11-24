@@ -13,12 +13,10 @@
     "test:all": "npm run typecheck && npm run test && npm run test:e2e && npm run build"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
+    "@google/genai": "^1.15.0",
     "@supabase/supabase-js": "^2.44.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "lucide-react": "^0.554.0",
-    "react-markdown": "^10.1.0",
     "recharts": "^3.1.2"
   },
   "devDependencies": {
