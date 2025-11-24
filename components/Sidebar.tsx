@@ -92,14 +92,6 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         ]
     },
     {
-        id: 'internal_portal',
-        name: '社内ポータル',
-        icon: FileText,
-        items: [
-            { page: 'bulletin_board', name: '社内掲示板' },
-        ],
-    },
-    {
         id: 'approvals',
         name: '申請・承認',
         icon: CheckCircle,
@@ -264,20 +256,22 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     <span className="ml-4 font-medium">社内掲示板</span>
                 </a>
             </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('fax_ocr_intake'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'fax_ocr_intake'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <FileText className="w-5 h-5" />
-                    <span className="ml-4 font-medium">FAX自動入力</span>
-                </a>
-            </li>
+            {currentUser?.role === 'admin' && (
+                <li>
+                    <a
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); onNavigate('fax_ocr_intake'); }}
+                        className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                            currentPage === 'fax_ocr_intake'
+                                ? 'bg-slate-700 text-white'
+                                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                    >
+                        <FileText className="w-5 h-5" />
+                        <span className="ml-4 font-medium">FAX自動入力</span>
+                    </a>
+                </li>
+            )}
             <li>
                 <a
                     href="#"
