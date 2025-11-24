@@ -1,5 +1,5 @@
 export type Page =
-  | 'analysis_dashboard' | 'my_schedule' | 'my_tasks'
+  | 'analysis_dashboard' | 'my_schedule'
   | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
   | 'sales_estimates' | 'sales_orders' | 'sales_billing' | 'fax_ocr_intake' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
