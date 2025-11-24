@@ -45,7 +45,7 @@ import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructio
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
-import MeetingMinutesIframe from './components/MeetingMinutesIframe';
+import MeetingMinutesApp from './components/meetingMinutes/MeetingMinutesApp';
 
 
 import * as dataService from './services/dataService';
@@ -789,7 +789,7 @@ const App: React.FC = () => {
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
             case 'meeting_assistant':
-                return <MeetingMinutesIframe />;
+                return <MeetingMinutesApp />;
             case 'my_schedule':
                 return (
                     <MySchedulePage
