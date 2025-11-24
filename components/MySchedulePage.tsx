@@ -21,6 +21,134 @@ interface CalendarEvent {
     time?: string;
 }
 
+const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+type ViewMode = 'day' | 'week' | 'month';
+
+const calendarWeekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+
+const viewModeOptions: { id: ViewMode; label: string }[] = [
+    { id: 'day', label: '日別' },
+    { id: 'week', label: '週別' },
+    { id: 'month', label: '月別' },
+];
+
+const dateWithYearRegex = /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/;
+const dateWithoutYearRegex = /(\d{1,2})[\/\-](\d{1,2})/g;
+const planSectionRegex = /(月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日).*予定/;
+const timeLineRegex = /(\d{1,2}[:：]\d{2})\s*[～〜~\-]\s*(\d{1,2}[:：]\d{2})\s+(.+)/;
+
+const normalizeTimeString = (value: string) => value.replace('：', ':').trim();
+
+const parseDailyReportText = (rawText: string, fallbackDate: string): { date: string; items: ScheduleItem[] } => {
+    const trimmedText = rawText.trim();
+    if (!trimmedText) {
+        return { date: fallbackDate, items: [] };
+    }
+
+    const detectIsoDate = () => {
+        const withYearMatch = trimmedText.match(dateWithYearRegex);
+        if (withYearMatch) {
+            const [_, year, month, day] = withYearMatch;
+            return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+
+        for (const match of trimmedText.matchAll(dateWithoutYearRegex)) {
+            const index = match.index ?? 0;
+            const precedingChar = index > 0 ? trimmedText[index - 1] : '';
+            if (precedingChar === ':' || precedingChar === '：') {
+                continue;
+            }
+            const [, monthStr, dayStr] = match;
+            const month = Number(monthStr);
+            const day = Number(dayStr);
+            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                const year = new Date(fallbackDate).getFullYear();
+                return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            }
+        }
+        return fallbackDate;
+    };
+
+    const timestamp = Date.now();
+    const items: ScheduleItem[] = [];
+    let isParsingActual = true;
+    const lines = trimmedText.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    lines.forEach((line) => {
+        if (planSectionRegex.test(line)) {
+            isParsingActual = false;
+            return;
+        }
+        if (!isParsingActual) {
+            return;
+        }
+        const match = line.match(timeLineRegex);
+        if (!match) {
+            return;
+        }
+        const [, rawStart, rawEnd, rawDescription] = match;
+        items.push({
+            id: `daily-report-${timestamp}-${items.length}`,
+            start: normalizeTimeString(rawStart),
+            end: normalizeTimeString(rawEnd),
+            description: rawDescription.replace(/\s+/g, ' ').trim(),
+        });
+    });
+
+    return {
+        date: detectIsoDate(),
+        items,
+    };
+};
+
+const getWeekStartIso = (iso: string) => {
+    const date = new Date(iso);
+    const day = date.getDay();
+    const offset = (day + 6) % 7; // Monday start
+    date.setDate(date.getDate() - offset);
+    return formatDate(date);
+};
+
+const addMonthsToDate = (iso: string, offset: number) => {
+    const date = new Date(iso);
+    const targetYear = date.getFullYear();
+    const targetMonth = date.getMonth() + offset;
+    const day = date.getDate();
+    const target = new Date(targetYear, targetMonth, 1);
+    const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    target.setDate(Math.min(day, daysInTargetMonth));
+    return formatDate(target);
+};
+
+const getWeekDates = (anchorDate: string) => {
+    const startOfWeek = getWeekStartIso(anchorDate);
+    return Array.from({ length: 7 }, (_, index) => addDays(startOfWeek, index));
+};
+
+const buildMonthCalendar = (anchorDate: string) => {
+    const baseDate = new Date(anchorDate);
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    const startDay = firstOfMonth.getDay(); // Sunday = 0
+    const startDate = new Date(firstOfMonth);
+    startDate.setDate(firstOfMonth.getDate() - startDay);
+    const totalCells = 42;
+    return Array.from({ length: totalCells }, (_, index) => {
+        const current = new Date(startDate);
+        current.setDate(startDate.getDate() + index);
+        return {
+            date: formatDate(current),
+            inMonth: current.getMonth() === month,
+        };
+    });
+};
+
 interface MySchedulePageProps {
     jobs: ProjectBudgetSummary[];
     purchaseOrders: PurchaseOrder[];
@@ -30,15 +158,6 @@ interface MySchedulePageProps {
     addToast?: (message: string, type: Toast['type']) => void;
     onCreateDailyReport?: (prefill: DailyReportPrefill) => void;
 }
-
-const weekdayLabels = ['月', '火', '水', '木', '金', '土', '日'];
-
-const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, '0');
-    const day = `${date.getDate()}`.padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
 
 const extractDatePart = (value?: string | null) => {
     if (!value) return null;
@@ -175,6 +294,100 @@ const DayView: React.FC<{
     );
 };
 
+const WeekView: React.FC<{
+    weekDates: string[];
+    eventsByDate: Record<string, CalendarEvent[]>;
+    selectedDate: string;
+    onSelectDate: (date: string) => void;
+}> = ({ weekDates, eventsByDate, selectedDate, onSelectDate }) => (
+    <div className="mt-4 space-y-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-7">
+            {weekDates.map((date) => {
+                const events = eventsByDate[date] ?? [];
+                const dayLabel = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(new Date(date));
+                const dayNumber = new Date(date).getDate();
+                const isSelected = date === selectedDate;
+                return (
+                    <button
+                        type="button"
+                        key={date}
+                        onClick={() => onSelectDate(date)}
+                        className={`w-full rounded-2xl border p-3 text-left transition ${
+                            isSelected
+                                ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
+                                : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                        }`}
+                    >
+                        <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-300">{dayLabel}</div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{dayNumber}</div>
+                        <div className="mt-2 space-y-1">
+                            {events.length === 0 && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">予定なし</p>
+                            )}
+                            {events.slice(0, 2).map((event) => (
+                                <div key={event.id} className="rounded-lg bg-slate-50/70 dark:bg-slate-900/60 p-2 text-[11px] text-slate-700 dark:text-slate-200">
+                                    <p className="font-semibold text-[12px] text-slate-900 dark:text-white">{event.title}</p>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{event.time ? `${event.time} ` : ''}{event.description ?? ''}</p>
+                                </div>
+                            ))}
+                            {events.length > 2 && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">{events.length} 件の予定</p>
+                            )}
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">日別モードで詳細と実績を編集できます。</p>
+    </div>
+);
+
+const MonthView: React.FC<{
+    days: { date: string; inMonth: boolean }[];
+    eventsByDate: Record<string, CalendarEvent[]>;
+    selectedDate: string;
+    onSelectDate: (date: string) => void;
+}> = ({ days, eventsByDate, selectedDate, onSelectDate }) => (
+    <div className="mt-4">
+        <div className="grid grid-cols-7 text-[11px] font-semibold uppercase text-slate-400 dark:text-slate-500">
+            {calendarWeekdayLabels.map((label) => (
+                <div key={label} className="text-center">
+                    {label}
+                </div>
+            ))}
+        </div>
+        <div className="mt-2 grid grid-cols-7 gap-1">
+            {days.map(({ date, inMonth }) => {
+                const events = eventsByDate[date] ?? [];
+                const dayNumber = new Date(date).getDate();
+                const isSelected = date === selectedDate;
+                return (
+                    <button
+                        type="button"
+                        key={date}
+                        onClick={() => onSelectDate(date)}
+                        className={`flex h-full flex-col items-start gap-1 rounded-xl border p-2 text-left text-[11px] transition ${
+                            isSelected
+                                ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
+                                : inMonth
+                                    ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                                    : 'border-transparent bg-slate-100/60 dark:bg-slate-900/40'
+                        }`}
+                    >
+                        <span className={`text-sm font-semibold ${inMonth ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+                            {dayNumber}
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {events.length > 0 ? `${events.length}件` : '予定なし'}
+                        </span>
+                    </button>
+                );
+            })}
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">日別モードで詳細な実績を確認できます。</p>
+    </div>
+);
+
 const MySchedulePage: React.FC<MySchedulePageProps> = ({
     jobs,
     purchaseOrders,
@@ -186,6 +399,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
 }) => {
     const todayIso = useMemo(() => formatDate(new Date()), []);
     const [selectedDate, setSelectedDate] = useState<string>(todayIso);
+    const [viewMode, setViewMode] = useState<ViewMode>('day');
+    const [dailyReportText, setDailyReportText] = useState('');
     const [customEvents, setCustomEvents] = useState<CalendarEvent[]>([]);
     const [actualItems, setActualItems] = useState<ScheduleItem[]>([]);
     const [newEvent, setNewEvent] = useState({ title: '', date: todayIso, time: '', description: '' });
@@ -300,15 +515,39 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'full' }).format(new Date(selectedDate));
     }, [selectedDate]);
 
-    const goToPreviousSpan = () => {
-        setSelectedDate((prev) => addDays(prev, -1));
+    const weekRangeLabel = useMemo(() => {
+        const weekStart = getWeekStartIso(selectedDate);
+        const weekEnd = addDays(weekStart, 6);
+        const formatter = new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' });
+        return `${formatter.format(new Date(weekStart))} ～ ${formatter.format(new Date(weekEnd))}`;
+    }, [selectedDate]);
+
+    const viewLabel = useMemo(() => {
+        switch (viewMode) {
+            case 'week':
+                return weekRangeLabel;
+            case 'month':
+                return monthLabel;
+            default:
+                return selectedDateLabel;
+        }
+    }, [viewMode, weekRangeLabel, monthLabel, selectedDateLabel]);
+
+    const shiftSelectedDate = (direction: number) => {
+        setSelectedDate((prev) => {
+            if (viewMode === 'week') {
+                return addDays(prev, direction * 7);
+            }
+            if (viewMode === 'month') {
+                return addMonthsToDate(prev, direction);
+            }
+            return addDays(prev, direction);
+        });
         setHasManualNewEventDate(false);
     };
 
-    const goToNextSpan = () => {
-        setSelectedDate((prev) => addDays(prev, 1));
-        setHasManualNewEventDate(false);
-    };
+    const goToPreviousSpan = () => shiftSelectedDate(-1);
+    const goToNextSpan = () => shiftSelectedDate(1);
 
     const handleToday = () => {
         setSelectedDate(todayIso);
@@ -346,6 +585,34 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         }
         setCustomEvents((prev) => prev.filter((event) => event.id !== id));
         addToast?.('予定を削除しました。', 'info');
+    };
+
+    const handleImportDailyReport = () => {
+        if (!dailyReportText.trim()) {
+            addToast?.('日報テキストを入力してください。', 'info');
+            return;
+        }
+        const { date: parsedDate, items } = parseDailyReportText(dailyReportText, selectedDate);
+        if (items.length === 0) {
+            addToast?.('作業実績の時刻が見つかりませんでした。', 'warning');
+            return;
+        }
+        setSelectedDate(parsedDate);
+        setActualItems(items);
+        setViewMode('day');
+        setHasManualNewEventDate(false);
+        addToast?.('日報から実績を取り込みました。', 'success');
+    };
+
+    const handleDailyReportTextClear = () => {
+        setDailyReportText('');
+    };
+
+    const isDailyReportTextEmpty = !dailyReportText.trim();
+
+    const handleSelectDateFromCalendar = (date: string) => {
+        setSelectedDate(date);
+        setHasManualNewEventDate(false);
     };
 
     const aggregatedEvents = useMemo(() => {
@@ -394,6 +661,20 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         entries.push(...customEvents);
         return entries.sort((a, b) => a.date.localeCompare(b.date));
     }, [applications, customEvents, jobs, purchaseOrders]);
+
+    const eventsByDate = useMemo(() => {
+        const map: Record<string, CalendarEvent[]> = {};
+        aggregatedEvents.forEach((event) => {
+            if (!map[event.date]) {
+                map[event.date] = [];
+            }
+            map[event.date].push(event);
+        });
+        return map;
+    }, [aggregatedEvents]);
+
+    const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
+    const monthCalendar = useMemo(() => buildMonthCalendar(selectedDate), [selectedDate]);
 
     const selectedEvents = useMemo(
         () => aggregatedEvents.filter((event) => event.date === selectedDate),
@@ -510,10 +791,28 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     </div>
                 </div>
 
-                <div className="mt-6 flex items-center justify-between">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        選択中：<span className="font-semibold text-slate-900 dark:text-white">{selectedDateLabel}</span>
-                    </p>
+                <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-col gap-2">
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            表示期間：<span className="font-semibold text-slate-900 dark:text-white">{viewLabel}</span>
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {viewModeOptions.map((option) => (
+                                <button
+                                    type="button"
+                                    key={option.id}
+                                    onClick={() => setViewMode(option.id)}
+                                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                        viewMode === option.id
+                                            ? 'border-blue-500 bg-blue-100 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-300'
+                                            : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300'
+                                    }`}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <button
                         type="button"
                         onClick={handleCreateDailyReport}
@@ -530,15 +829,73 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     </button>
                 </div>
 
+                {viewMode === 'day' && (
+                    <DayView
+                        selectedDate={selectedDate}
+                        planEvents={selectedEvents}
+                        actualItems={actualItems}
+                        onUpdateActualItems={setActualItems}
+                        onDeleteEvent={handleDeleteEvent}
+                        canEdit={canEditCurrentCalendar}
+                    />
+                )}
+                {viewMode === 'week' && (
+                    <WeekView
+                        weekDates={weekDates}
+                        eventsByDate={eventsByDate}
+                        selectedDate={selectedDate}
+                        onSelectDate={handleSelectDateFromCalendar}
+                    />
+                )}
+                {viewMode === 'month' && (
+                    <MonthView
+                        days={monthCalendar}
+                        eventsByDate={eventsByDate}
+                        selectedDate={selectedDate}
+                        onSelectDate={handleSelectDateFromCalendar}
+                    />
+                )}
 
-                <DayView
-                    selectedDate={selectedDate}
-                    planEvents={selectedEvents}
-                    actualItems={actualItems}
-                    onUpdateActualItems={setActualItems}
-                    onDeleteEvent={handleDeleteEvent}
-                    canEdit={canEditCurrentCalendar}
-                />
+                <div className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/50 p-4 space-y-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">日報テキストを貼り付け</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                時刻と内容を含む日報（例：11/21(金)の作業実績）を貼り付けると実績が自動で反映されます。
+                            </p>
+                        </div>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">「作業実績」項目のみ活用します</span>
+                    </div>
+                    <textarea
+                        value={dailyReportText}
+                        onChange={(e) => setDailyReportText(e.target.value)}
+                        rows={6}
+                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
+                        placeholder="いつもありがとうございます。11/21(金)の業務報告をさせて頂きます。..."
+                    />
+                    <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={handleDailyReportTextClear}
+                            className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-white"
+                        >
+                            クリア
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleImportDailyReport}
+                            disabled={isDailyReportTextEmpty}
+                            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                                isDailyReportTextEmpty
+                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
+                        >
+                            <PlusCircle className="w-4 h-4" />
+                            実績を取り込む
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
