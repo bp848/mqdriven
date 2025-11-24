@@ -136,15 +136,6 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
         ]
     },
     {
-        id: 'ai_consultant',
-        name: 'AI経営相談',
-        icon: Lightbulb,
-        items: [
-            { page: 'ai_business_consultant', name: 'AI経営相談' },
-            { page: 'ai_market_research', name: 'AI市場調査' },
-        ]
-    },
-    {
         id: 'admin',
         name: 'ログ／監査',
         icon: Archive,
