@@ -412,10 +412,12 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
         requestConfirmation({
             label: '申請を送信する',
-            title: '申請を送信しますか？',
-            description: '申請内容が承認ルートへ通知されます。誤りがないか最終確認してください。',
-            confirmLabel: 'はい（申請）',
-            draftLabel: '下書き保存',
+            title: 'フォーム送信時に送信しますか？',
+            description: 'はいを選ぶと申請が送信され、承認者に通知されます。内容の最終確認をお願いします。',
+            confirmLabel: 'はい',
+            cancelLabel: 'いいえ',
+            draftLabel: '下書き',
+            postConfirmMessage: 'はい（1件の申請を送信しました）',
             onConfirm: executeSubmission,
             onDraft: handleSaveDraft,
         });

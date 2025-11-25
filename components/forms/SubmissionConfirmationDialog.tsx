@@ -13,6 +13,7 @@ interface SubmissionConfirmationDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   draftLabel?: string;
+  postConfirmMessage?: string;
 }
 
 const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> = ({
@@ -24,9 +25,10 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
   onSaveDraft,
   isSubmitting = false,
   isSavingDraft = false,
-  confirmLabel = 'はい（実行）',
-  cancelLabel = 'いいえ（キャンセル）',
-  draftLabel = '下書き保存',
+  confirmLabel = 'はい',
+  cancelLabel = 'いいえ',
+  draftLabel = '下書き',
+  postConfirmMessage,
 }) => {
   if (!isOpen) return null;
 
@@ -50,7 +52,7 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{title}</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{description}</p>
         </div>
-        <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700">
+        <div className="flex flex-col gap-3 px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 sm:flex-row sm:items-center">
           <button
             type="button"
             onClick={onClose}
@@ -79,7 +81,7 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
             type="button"
             onClick={handleConfirm}
             disabled={isSubmitting}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold shadow-md hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full px-6 py-4 text-xl font-black tracking-wide rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-2xl hover:from-blue-500 hover:to-blue-400 disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-3 border-4 border-white dark:border-slate-800 sm:flex-1"
           >
             {isSubmitting ? (
               <>
@@ -91,6 +93,11 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
             )}
           </button>
         </div>
+        {isSubmitting && postConfirmMessage && (
+          <div className="px-6 pb-6 text-sm text-green-600 dark:text-green-400 font-semibold">
+            {postConfirmMessage}
+          </div>
+        )}
       </div>
     </div>
   );
