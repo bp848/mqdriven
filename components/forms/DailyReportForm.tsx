@@ -5,6 +5,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
 import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
+import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
 
 interface DailyReportFormProps {
     onSuccess: () => void;
@@ -57,13 +58,16 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isSummaryLoading, setIsSummaryLoading] = useState(false);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
+    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
     const [savedReports, setSavedReports] = useState<Record<string, DailyReportData>>({});
     const [appliedPrefillId, setAppliedPrefillId] = useState<string | null>(null);
     
-    const isDisabled = isSubmitting || isLoading || !!formLoadError;
+    const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
     const templateText = useMemo(() => buildReportTemplate(formData), [formData]);
 
@@ -162,31 +166,49 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    const buildSubmissionPayload = () => ({
+        applicationCodeId,
+        formData,
+        approvalRouteId,
+    });
+
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        
+        setError('');
         if (!approvalRouteId) {
-            setError('承認ルートは必須です。');
-            return;
+            return setError('承認ルートは必須です。');
         }
         if (!currentUser) {
-            setError('ユーザー情報が見つかりません。再度ログインしてください。');
+            return setError('ユーザー情報が見つかりません。再度ログインしてください。');
+        }
+
+        setPendingSubmissionPayload(buildSubmissionPayload());
+        setIsConfirmationDialogOpen(true);
+    };
+
+    const closeConfirmationDialog = () => {
+        setIsConfirmationDialogOpen(false);
+        setPendingSubmissionPayload(null);
+    };
+
+    const confirmSubmission = async () => {
+        if (!pendingSubmissionPayload) return;
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。');
+            closeConfirmationDialog();
             return;
         }
 
         setIsSubmitting(true);
         setError('');
         try {
-            await submitApplication({
-                applicationCodeId: applicationCodeId,
-                formData,
-                approvalRouteId
-            }, currentUser.id);
+            await submitApplication(pendingSubmissionPayload, currentUser.id);
             const nextSaved = {
                 ...savedReports,
                 [formData.reportDate]: formData,
             };
             persistSavedReports(nextSaved);
+            closeConfirmationDialog();
             onSuccess();
         } catch (err: any) {
             setError('日報の提出に失敗しました。');
@@ -196,11 +218,13 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     };
 
     const handleSaveDraft = () => {
+        setIsSavingDraft(true);
         const nextSaved = {
             ...savedReports,
             [formData.reportDate]: formData,
         };
         persistSavedReports(nextSaved);
+        setIsSavingDraft(false);
         addToast('下書きを保存しました。', 'success');
     };
 
@@ -450,6 +474,14 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                         </button>
                     </div>
                 </form>
+                <SubmissionConfirmationDialog
+                    isOpen={isConfirmationDialogOpen}
+                    onClose={closeConfirmationDialog}
+                    onConfirm={confirmSubmission}
+                    onSaveDraft={handleSaveDraft}
+                    isSubmitting={isSubmitting}
+                    isSavingDraft={isSavingDraft}
+                />
             </div>
             {isChatModalOpen && (
                 <ChatApplicationModal

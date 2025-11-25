@@ -5,6 +5,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
 import DepartmentSelect from './DepartmentSelect';
 import SupplierSearchSelect from './SupplierSearchSelect';
+import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
 import { Loader, Upload, PlusCircle, Trash2, AlertTriangle, CheckCircle, FileText, RefreshCw, List, ArrowLeft, ArrowRight, Check, Sparkles, X, Pencil } from '../Icons';
 import {
     User,
@@ -237,6 +238,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [isRestoring, setIsRestoring] = useState(true);
     const [error, setError] = useState('');
+    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
+    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
 
     const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError;
 
@@ -380,7 +383,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         approvalRouteId,
     });
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         if (!currentUser) return setError('ユーザー情報が見つかりません。');
@@ -388,11 +391,30 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         if (!approvalRouteId) return setError('承認ルートを選択してください。');
         if (!invoice.supplierName) return setError('サプライヤー名を入力してください。');
 
+        setPendingSubmissionPayload(buildApplicationPayload());
+        setIsConfirmationDialogOpen(true);
+    };
+
+    const closeConfirmationDialog = () => {
+        setIsConfirmationDialogOpen(false);
+        setPendingSubmissionPayload(null);
+    };
+
+    const confirmSubmission = async () => {
+        if (!pendingSubmissionPayload) return;
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。');
+            closeConfirmationDialog();
+            return;
+        }
+
         setIsSubmitting(true);
+        setError('');
         try {
-            await submitApplication(buildApplicationPayload(), currentUser.id);
+            await submitApplication(pendingSubmissionPayload, currentUser.id);
             await clearApplicationDraft(applicationCodeId, currentUser.id);
             addToast?.('経費精算を送信しました。', 'success');
+            closeConfirmationDialog();
             onSuccess();
         } catch (err: any) {
             setError(err.message || '申請の提出に失敗しました。');
@@ -592,6 +614,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     </div>
                 </footer>
             </form>
+            <SubmissionConfirmationDialog
+                isOpen={isConfirmationDialogOpen}
+                onClose={closeConfirmationDialog}
+                onConfirm={confirmSubmission}
+                onSaveDraft={handleSaveDraft}
+                isSubmitting={isSubmitting}
+                isSavingDraft={isSavingDraft}
+            />
         </div>
     );
 };

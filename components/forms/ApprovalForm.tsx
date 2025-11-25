@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { submitApplication } from '../../services/dataService';
+import { submitApplication, saveApplicationDraft, clearApplicationDraft } from '../../services/dataService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
 import { User, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
+import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
 
 interface ApprovalFormProps {
     onSuccess: () => void;
@@ -19,10 +20,13 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
     const [formData, setFormData] = useState({ title: '', details: '' });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
+    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     
-    const isDisabled = isSubmitting || isLoading || !!formLoadError;
+    const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
 
     useEffect(() => {
         if (!draftApplication || draftApplication.applicationCodeId !== applicationCodeId) return;
@@ -39,31 +43,67 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    const buildSubmissionPayload = () => ({
+        applicationCodeId,
+        formData,
+        approvalRouteId,
+    });
+
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        
+        setError('');
         if (!approvalRouteId) {
-            setError('承認ルートは必須です。');
-            return;
+            return setError('承認ルートは必須です。');
         }
         if (!currentUser) {
-            setError('ユーザー情報が見つかりません。再度ログインしてください。');
+            return setError('ユーザー情報が見つかりません。再度ログインしてください。');
+        }
+
+        setPendingSubmissionPayload(buildSubmissionPayload());
+        setIsConfirmationDialogOpen(true);
+    };
+
+    const closeConfirmationDialog = () => {
+        setIsConfirmationDialogOpen(false);
+        setPendingSubmissionPayload(null);
+    };
+
+    const confirmSubmission = async () => {
+        if (!pendingSubmissionPayload) return;
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。');
+            closeConfirmationDialog();
             return;
         }
 
         setIsSubmitting(true);
         setError('');
         try {
-            await submitApplication({
-                applicationCodeId: applicationCodeId,
-                formData,
-                approvalRouteId
-            }, currentUser.id);
+            await submitApplication(pendingSubmissionPayload, currentUser.id);
+            await clearApplicationDraft(applicationCodeId, currentUser.id);
+            closeConfirmationDialog();
             onSuccess();
         } catch (err: any) {
             setError('申請の提出に失敗しました。');
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleSaveDraft = async () => {
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。');
+            return;
+        }
+
+        setIsSavingDraft(true);
+        setError('');
+        try {
+            await saveApplicationDraft(buildSubmissionPayload(), currentUser.id);
+        } catch (err: any) {
+            setError('下書きの保存に失敗しました。');
+        } finally {
+            setIsSavingDraft(false);
         }
     };
     
@@ -115,12 +155,27 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
                     {error && <p className="text-red-500 text-sm">{error}</p>}
                     
                     <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <button type="button" className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>下書き保存</button>
+                        <button
+                            type="button"
+                            onClick={handleSaveDraft}
+                            className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+                            disabled={isDisabled}
+                        >
+                            下書き保存
+                        </button>
                         <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
                             {isSubmitting ? <Loader className="w-5 h-5 animate-spin"/> : '申請を送信する'}
                         </button>
                     </div>
                 </form>
+                <SubmissionConfirmationDialog
+                    isOpen={isConfirmationDialogOpen}
+                    onClose={closeConfirmationDialog}
+                    onConfirm={confirmSubmission}
+                    onSaveDraft={handleSaveDraft}
+                    isSubmitting={isSubmitting}
+                    isSavingDraft={isSavingDraft}
+                />
             </div>
             {isChatModalOpen && (
                 <ChatApplicationModal
