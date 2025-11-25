@@ -158,10 +158,12 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
         requestConfirmation({
             label: '申請を送信する',
-            title: '交通費申請を送信しますか？',
-            description: '送信すると承認ルートに通知されます。内容に誤りがないかご確認ください。',
-            confirmLabel: 'はい（申請）',
-            draftLabel: '下書き保存',
+            title: 'フォーム送信時に送信しますか？',
+            description: 'はいを押すと交通費申請が承認ルートに送信されます。入力内容をもう一度ご確認ください。',
+            confirmLabel: 'はい',
+            cancelLabel: 'いいえ',
+            draftLabel: '下書き',
+            postConfirmMessage: 'はい（1件の申請を送信しました）',
             onConfirm: executeSubmission,
             onDraft: handleSaveDraft,
         });

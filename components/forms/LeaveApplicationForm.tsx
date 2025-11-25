@@ -88,10 +88,12 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
 
         requestConfirmation({
             label: '申請を送信する',
-            title: '休暇申請を送信しますか？',
-            description: '送信すると承認者に通知されます。内容をご確認ください。',
-            confirmLabel: 'はい（申請）',
-            draftLabel: '下書き保存',
+            title: 'フォーム送信時に送信しますか？',
+            description: 'はいを押すと休暇申請が送信され、承認者に通知されます。入力内容をご確認ください。',
+            confirmLabel: 'はい',
+            cancelLabel: 'いいえ',
+            draftLabel: '下書き',
+            postConfirmMessage: 'はい（1件の申請を送信しました）',
             onConfirm: executeSubmission,
             onDraft: handleSaveDraft,
         });

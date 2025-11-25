@@ -10,6 +10,7 @@ export interface ConfirmableActionOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   draftLabel?: string;
+  postConfirmMessage?: string;
   /**
    * 実行本体。キーワードに一致しない場合は即座に実行されます。
    */
@@ -95,6 +96,7 @@ export const useSubmitWithConfirmation = () => {
         confirmLabel={dialogState?.confirmLabel}
         cancelLabel={dialogState?.cancelLabel}
         draftLabel={dialogState?.draftLabel}
+        postConfirmMessage={dialogState?.postConfirmMessage}
         isSubmitting={isConfirming}
         isSavingDraft={isDrafting}
       />

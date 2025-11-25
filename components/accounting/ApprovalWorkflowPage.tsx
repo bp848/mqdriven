@@ -201,7 +201,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
 
     // Form View Logic
     const handleFormSuccess = () => {
-        addToast('申請が提出されました。承認一覧で確認できます。', 'success');
+        addToast('はい（1件の申請を送信しました）', 'success');
         setActiveResumedApplication(null);
     };
 
