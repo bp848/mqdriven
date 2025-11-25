@@ -33,6 +33,7 @@ import BusinessSupportPage from './components/BusinessSupportPage';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
+import MeetingMinutesIframe from './components/MeetingMinutesIframe';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SalesDashboard from './components/sales/SalesDashboard';
@@ -105,6 +106,7 @@ const PAGE_TITLES: Record<Page, string> = {
     business_support_proposal: '提案書作成',
     ai_business_consultant: 'AI経営相談',
     ai_market_research: 'AI市場調査',
+    meeting_minutes: '議事録支援',
     admin_audit_log: '監査ログ',
     admin_journal_queue: 'ジャーナル・キュー',
     admin_user_management: 'ユーザー管理',
@@ -784,6 +786,8 @@ const App: React.FC = () => {
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
+            case 'meeting_minutes':
+                return <MeetingMinutesIframe />;
             case 'my_schedule':
                 return (
                     <MySchedulePage
