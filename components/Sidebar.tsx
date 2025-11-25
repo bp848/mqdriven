@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { LayoutDashboard, Calendar, ClipboardList, Users, Settings, Package, FileText, Briefcase, ChevronDown, DollarSign, TrendingUp, Inbox, PieChart, ShoppingCart, BookOpen, CreditCard, HardHat, CheckCircle, Archive, Lightbulb } from './Icons';
+import { Calendar, ClipboardList, Users, Settings, Package, Briefcase, ChevronDown, DollarSign, Inbox, PieChart, ShoppingCart, BookOpen, CheckCircle, Archive } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -25,200 +25,56 @@ type NavCategoryType = {
   adminOnly?: boolean;
 };
 
-const ALL_NAV_CATEGORIES: NavCategoryType[] = [
-    {
-        id: 'sales',
-        name: '販売',
-        icon: Briefcase,
-        adminOnly: true,
-        items: [
-            { page: 'sales_leads', name: 'お問い合わせ' },
-            { page: 'sales_customers', name: '取引先/お客様カルテ' },
-            { page: 'sales_pipeline', name: 'パイプライン（進捗）' },
-            { page: 'sales_estimates', name: '見積管理' },
-            { page: 'sales_billing', name: '売上請求 (AR)' },
-        ]
-    },
-    {
-        id: 'purchasing',
-        name: '購買',
-        icon: ShoppingCart,
-        adminOnly: true,
-        items: [
-            { page: 'purchasing_invoices', name: '仕入計上 (AP)' },
-            { page: 'purchasing_payments', name: '支払' },
-        ]
-    },
-    {
-        id: 'analysis',
-        name: 'データ分析メニュー',
-        icon: PieChart,
-        adminOnly: true,
-        items: [
-            { page: 'analysis_ranking', name: '売上ランキング' },
-        ],
-    },
-    {
-        id: 'project_management',
-        name: '案件管理',
-        icon: DollarSign,
-        adminOnly: true,
-        items: [
-            { page: 'sales_orders', name: '案件予算管理' },
-            { page: 'purchasing_orders', name: '受注一覧' },
-        ],
-    },
-    {
-        id: 'inventory',
-        name: '在庫／製造',
-        icon: Package,
-        adminOnly: true,
-        items: [
-            { page: 'inventory_management', name: '在庫管理' },
-            { page: 'manufacturing_orders', name: '製造指示' },
-            { page: 'manufacturing_progress', name: '製造パイプライン' },
-            { page: 'manufacturing_cost', name: '製造原価' },
-        ]
-    },
-    {
-        id: 'hr',
-        name: '人事労務',
-        icon: Users,
-        adminOnly: true,
-        items: [
-            { page: 'hr_attendance', name: '勤怠' },
-            { page: 'hr_man_hours', name: '工数' },
-            { page: 'hr_labor_cost', name: '人件費配賦' },
-        ]
-    },
-    {
-        id: 'approvals',
-        name: '申請・承認',
-        icon: CheckCircle,
-        items: [
-            { page: 'approval_list', name: '承認一覧' },
-            { page: 'approval_form_expense', name: '経費精算' },
-            { page: 'approval_form_transport', name: '交通費申請' },
-            { page: 'approval_form_leave', name: '休暇申請' },
-            { page: 'approval_form_approval', name: '稟議' },
-        ]
-    },
-    {
-        id: 'reports',
-        name: '報告',
-        icon: ClipboardList,
-        adminOnly: true,
-        items: [
-            { page: 'approval_form_daily', name: '日報' },
-            { page: 'approval_form_weekly', name: '週報' },
-        ],
-    },
-    {
-        id: 'accounting',
-        name: '会計',
-        icon: BookOpen,
-        adminOnly: true,
-        items: [
-            { page: 'accounting_journal', name: '仕訳帳' },
-            { page: 'accounting_general_ledger', name: '総勘定元帳' },
-            { page: 'accounting_trial_balance', name: '試算表' },
-            { page: 'accounting_tax_summary', name: '消費税集計' },
-            { page: 'accounting_period_closing', name: '締処理' },
-            { page: 'accounting_business_plan', name: '経営計画' },
-        ]
-    },
-    {
-        id: 'admin',
-        name: 'ログ／監査',
-        icon: Archive,
-        adminOnly: true,
-        items: [
-            { page: 'admin_audit_log', name: '監査ログ' },
-            { page: 'admin_journal_queue', name: 'ジャーナル・キュー' },
-        ]
-    },
-    {
-        id: 'management',
-        name: '管理',
-        icon: Settings,
-        adminOnly: true,
-        items: [
-            { page: 'admin_user_management', name: 'ユーザー管理' },
-            { page: 'admin_route_management', name: '承認ルート管理' },
-            { page: 'admin_master_management', name: 'マスタ管理' },
-        ]
-    }
+const HIDDEN_CATEGORY_IDS: string[] = [
+  'sales',
+  'purchasing',
+  'analysis',
+  'project_management',
+  'inventory',
+  'hr',
+  'accounting',
+  'admin',
+  'management',
 ];
 
-const CollapsibleNavItem: React.FC<{
-  category: NavCategoryType;
-  currentPage: Page;
-  onNavigate: (page: Page) => void;
-  isOpen: boolean;
-  onToggle: () => void;
-}> = ({ category, currentPage, onNavigate, isOpen, onToggle }) => {
-  const isCategoryActive = category.items.some(item => currentPage === item.page);
-
-  return (
-    <li>
-      <button
-        onClick={onToggle}
-        className={`w-full flex items-center p-3 rounded-lg transition-colors duration-200 ${
-          isCategoryActive
-            ? 'bg-slate-700 text-white'
-            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-        }`}
-      >
-        <category.icon className="w-5 h-5" />
-        <span className="ml-4 font-medium">{category.name}</span>
-        <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && (
-        <ul className="mt-1 space-y-1">
-          {category.items.map(item => (
-            <li key={item.page}>
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); onNavigate(item.page); }}
-                className={`flex items-center p-3 rounded-lg transition-colors duration-200 pl-11 ${
-                  currentPage === item.page
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
-                }`}
-              >
-                <span>{item.name}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
-  );
-};
-
+const ALL_NAV_CATEGORIES: NavCategoryType[] = [
+  {
+    id: 'approvals',
+    name: '申請・承認',
+    icon: CheckCircle,
+    items: [
+      { page: 'approval_list', name: '承認一覧' },
+      { page: 'approval_form_expense', name: '経費精算' },
+      { page: 'approval_form_transport', name: '交通費申請' },
+      { page: 'approval_form_leave', name: '休暇申請' },
+      { page: 'approval_form_approval', name: '稟議' },
+    ],
+  },
+  {
+    id: 'reports',
+    name: '報告',
+    icon: ClipboardList,
+    items: [
+      { page: 'approval_form_daily', name: '日報' },
+      { page: 'approval_form_weekly', name: '週報' },
+    ],
+  },
+];
 
 export const buildNavCategories = (user: EmployeeUser | null): NavCategoryType[] => {
+  const visibleCategories = ALL_NAV_CATEGORIES.filter(
+    (category) => !HIDDEN_CATEGORY_IDS.includes(category.id)
+  );
+
   if (user?.role === 'admin') {
-    return ALL_NAV_CATEGORIES;
+    return visibleCategories;
   }
-  return ALL_NAV_CATEGORIES.filter(category => !category.adminOnly);
+
+  return visibleCategories.filter((category) => !category.adminOnly);
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser, allUsers, onUserChange, supabaseUserEmail, onSignOut }) => {
-  const [openCategories, setOpenCategories] = React.useState<Record<string, boolean>>({});
-
   const visibleCategories = React.useMemo(() => buildNavCategories(currentUser), [currentUser]);
-
-  React.useEffect(() => {
-    const activeCategory = visibleCategories.find(cat => cat.items.some(item => item.page === currentPage));
-    if (activeCategory) {
-      setOpenCategories(prev => ({ ...prev, [activeCategory.id]: true }));
-    }
-  }, [currentPage, visibleCategories]);
-
-  const toggleCategory = (categoryId: string) => {
-    setOpenCategories(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
-  };
 
   return (
     <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen">
@@ -228,20 +84,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
       </div>
       <nav className="flex-1 mt-6 space-y-2">
         <ul>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('analysis_dashboard'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                    currentPage === 'analysis_dashboard'
-                        ? 'bg-slate-700 text-white'
-                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <LayoutDashboard className="w-5 h-5" />
-                    <span className="ml-4 font-medium">ホーム</span>
-                </a>
-            </li>
             <li>
                 <a
                     href="#"
@@ -256,22 +98,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                     <span className="ml-4 font-medium">社内掲示板</span>
                 </a>
             </li>
-            {currentUser?.role === 'admin' && (
-                <li>
-                    <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); onNavigate('fax_ocr_intake'); }}
-                        className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                            currentPage === 'fax_ocr_intake'
-                                ? 'bg-slate-700 text-white'
-                                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                        }`}
-                    >
-                        <FileText className="w-5 h-5" />
-                        <span className="ml-4 font-medium">FAX自動入力</span>
-                    </a>
-                </li>
-            )}
+            <li>
+                <a
+                    href="#"
+                    onClick={e => { e.preventDefault(); onNavigate('meeting_minutes'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage === 'meeting_minutes'
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <ClipboardList className="w-5 h-5" />
+                    <span className="ml-4 font-medium">議事録支援</span>
+                </a>
+            </li>
             <li>
                 <a
                     href="#"
@@ -287,14 +127,26 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                 </a>
             </li>
           {visibleCategories.map(category => (
-            <CollapsibleNavItem
-              key={category.id}
-              category={category}
-              currentPage={currentPage}
-              onNavigate={onNavigate}
-              isOpen={!!openCategories[category.id]}
-              onToggle={() => toggleCategory(category.id)}
-            />
+            <React.Fragment key={category.id}>
+              <li className="mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                {category.name}
+              </li>
+              {category.items.map(item => (
+                <li key={item.page}>
+                  <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onNavigate(item.page); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                      currentPage === item.page
+                        ? 'bg-slate-700 text-white'
+                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <span className="ml-4 font-medium">{item.name}</span>
+                  </a>
+                </li>
+              ))}
+            </React.Fragment>
           ))}
         </ul>
       </nav>
