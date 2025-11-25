@@ -13,7 +13,7 @@ const MeetingMinutesIframe: React.FC = () => {
           会議内容を要約して議事録ドラフトを作成します。決定事項と ToDo を必ず確認してください。
         </p>
 
-        <div className="w-full min-h-[650px] bg-slate-900/80 rounded-3xl overflow-hidden border border-slate-800 shadow-inner">
+        <div className="w-full h-[calc(100vh-200px)] min-h-[650px] bg-slate-900/80 rounded-3xl overflow-hidden border border-slate-800 shadow-inner">
           <iframe
             src={MEETING_MINUTES_APP_URL}
             title="議事録作成アシスタント"
