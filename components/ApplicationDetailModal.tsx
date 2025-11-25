@@ -5,6 +5,222 @@ import ApplicationStatusBadge from './ApplicationStatusBadge';
 import { getUsers } from '../services/dataService';
 import { useSubmitWithConfirmation } from '../hooks/useSubmitWithConfirmation';
 
+type SummaryHighlight = {
+    label: string;
+    value: React.ReactNode;
+};
+
+type SummaryListSection = {
+    title: string;
+    items: { label: string; value: React.ReactNode }[];
+};
+
+type SummaryTableSection = {
+    title: string;
+    columns: string[];
+    rows: React.ReactNode[][];
+};
+
+interface FormSummary {
+    highlights: SummaryHighlight[];
+    listSections: SummaryListSection[];
+    tableSections: SummaryTableSection[];
+}
+
+const isFilled = (value: any): boolean => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    return true;
+};
+
+const formatCurrency = (value: any): string => {
+    if (!isFilled(value)) return '';
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
+        return `¥${Math.round(numeric).toLocaleString('ja-JP')}`;
+    }
+    if (typeof value === 'string') {
+        return value;
+    }
+    return '';
+};
+
+const formatDateValue = (value?: string | null): string => {
+    if (!isFilled(value)) return '';
+    const date = new Date(value as string);
+    if (Number.isNaN(date.getTime())) return value as string;
+    return date.toLocaleDateString('ja-JP');
+};
+
+const calculateDayDiff = (start?: string, end?: string): number | null => {
+    if (!isFilled(start) || !isFilled(end)) return null;
+    const startDate = new Date(start as string);
+    const endDate = new Date(end as string);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+    return Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+};
+
+const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
+    const summary: FormSummary = { highlights: [], listSections: [], tableSections: [] };
+    if (!rawData || typeof rawData !== 'object') return summary;
+    const data = rawData as Record<string, any>;
+    const normalizedCode = code?.toUpperCase();
+
+    const pushHighlight = (label: string, value?: any, opts?: { format?: 'currency' | 'date' }) => {
+        if (!isFilled(value)) return;
+        let display: React.ReactNode = value;
+        if (opts?.format === 'currency') {
+            const formatted = formatCurrency(value);
+            if (!formatted) return;
+            display = formatted;
+        } else if (opts?.format === 'date') {
+            const formatted = formatDateValue(value);
+            if (!formatted) return;
+            display = formatted;
+        }
+        summary.highlights.push({ label, value: display });
+    };
+
+    const pushListSection = (title: string, items: { label: string; value: React.ReactNode }[]) => {
+        const filtered = items.filter(item => isFilled(item.value));
+        if (!filtered.length) return;
+        summary.listSections.push({ title, items: filtered });
+    };
+
+    const pushTableSection = (title: string, columns: string[], rows: React.ReactNode[][]) => {
+        if (!rows.length) return;
+        summary.tableSections.push({ title, columns, rows });
+    };
+
+    switch (normalizedCode) {
+        case 'EXP': {
+            const invoice = data.invoice || {};
+            const total = invoice.totalGross ?? invoice.totalNet ?? data.totalAmount ?? data.amount;
+            pushHighlight('申請金額', total, { format: 'currency' });
+            const payee = invoice.supplierName ?? data.supplierName ?? data.customerName;
+            pushHighlight('支払先', payee);
+            pushHighlight('支払期限', invoice.dueDate, { format: 'date' });
+
+            pushListSection('請求情報', [
+                { label: 'サプライヤー / 支払先', value: invoice.supplierName ?? data.supplierName },
+                { label: '請求書発行日', value: formatDateValue(invoice.invoiceDate) },
+                { label: '支払期限', value: formatDateValue(invoice.dueDate) },
+                { label: '登録番号', value: invoice.registrationNumber },
+                { label: '部署ID', value: data.departmentId },
+                { label: '備考', value: data.notes },
+            ]);
+
+            const bankAccount = invoice.bankAccount || {};
+            pushListSection('振込先口座', [
+                { label: '金融機関', value: bankAccount.bankName },
+                { label: '支店名', value: bankAccount.branchName },
+                { label: '口座種別', value: bankAccount.accountType },
+                { label: '口座番号', value: bankAccount.accountNumber },
+            ]);
+
+            const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
+            if (lines.length) {
+                pushTableSection(
+                    '経費明細',
+                    ['日付', '内容', '数量', '単価', '金額(税抜)', '税率'],
+                    lines.map((line: any, idx: number) => [
+                        line.lineDate || `#${idx + 1}`,
+                        line.description || '-',
+                        line.quantity ?? '-',
+                        formatCurrency(line.unitPrice) || '-',
+                        formatCurrency(line.amountExclTax) || '-',
+                        isFilled(line.taxRate) ? `${line.taxRate}%` : '-',
+                    ])
+                );
+            }
+            break;
+        }
+        case 'TRP': {
+            const details = Array.isArray(data.details) ? data.details : [];
+            const total = data.totalAmount ?? details.reduce((sum: number, detail: any) => sum + (Number(detail.amount) || 0), 0);
+            pushHighlight('申請金額', total, { format: 'currency' });
+            if (details.length) {
+                const first = details[0];
+                const route = `${first?.departure || '未入力'} → ${first?.arrival || '未入力'}`;
+                pushHighlight('代表経路', route);
+            }
+            pushListSection('備考', [{ label: 'メモ', value: data.notes }]);
+            if (details.length) {
+                pushTableSection(
+                    '交通経路明細',
+                    ['日付', '出発', '到着', '手段', '金額'],
+                    details.map((detail: any, idx: number) => [
+                        detail.travelDate || `#${idx + 1}`,
+                        detail.departure || '-',
+                        detail.arrival || '-',
+                        detail.transportMode || '-',
+                        formatCurrency(detail.amount) || '-',
+                    ])
+                );
+            }
+            break;
+        }
+        case 'LEV': {
+            pushHighlight('休暇種別', data.leaveType);
+            const start = formatDateValue(data.startDate);
+            const end = formatDateValue(data.endDate);
+            if (start || end) {
+                pushHighlight('取得期間', `${start || '未入力'} 〜 ${end || '未入力'}`);
+            }
+            const days = data.totalDays ?? calculateDayDiff(data.startDate, data.endDate);
+            if (isFilled(days)) {
+                pushHighlight('取得日数', `${days}日`);
+            }
+            pushListSection('休暇内容', [
+                { label: '理由', value: data.reason },
+                { label: '備考', value: data.notes },
+            ]);
+            break;
+        }
+        case 'APL': {
+            pushHighlight('件名', data.title);
+            pushHighlight('申請金額', data.amount, { format: 'currency' });
+            pushListSection('申請概要', [{ label: '内容', value: data.details }]);
+            break;
+        }
+        case 'DLY': {
+            pushHighlight('報告日', formatDateValue(data.reportDate) || data.reportDate);
+            pushHighlight('訪問先 / 顧客', data.customerName);
+            if (data.startTime || data.endTime) {
+                pushHighlight('稼働時間', `${data.startTime || '--'} 〜 ${data.endTime || '--'}`);
+            }
+            pushListSection('活動概要', [
+                { label: '活動内容', value: data.activityContent },
+                { label: '翌日の予定', value: data.nextDayPlan },
+            ]);
+            break;
+        }
+        case 'WKR': {
+            pushHighlight('件名', data.title);
+            pushListSection('週報内容', [{ label: '詳細', value: data.details }]);
+            break;
+        }
+        default:
+            break;
+    }
+
+    const fallbackAmount = data.invoice?.totalGross ?? data.invoice?.totalNet ?? data.totalAmount ?? data.amount;
+    const fallbackPayee = data.invoice?.supplierName ?? data.supplierName ?? data.customerName ?? data.payee;
+
+    const hasAmountHighlight = summary.highlights.some(item => item.label.includes('金額'));
+    if (!hasAmountHighlight) {
+        pushHighlight('申請金額', fallbackAmount, { format: 'currency' });
+    }
+
+    const hasPayeeHighlight = summary.highlights.some(item => item.label.includes('先') || item.label.includes('相手'));
+    if (!hasPayeeHighlight) {
+        pushHighlight('相手先 / 取引先', fallbackPayee);
+    }
+
+    return summary;
+};
+
 interface ApplicationDetailModalProps {
     application: ApplicationWithDetails | null;
     currentUser: User | null;
@@ -104,6 +320,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const { formData, applicationCode, approvalRoute } = application;
     const code = applicationCode?.code;
     const amount = formData.amount ? `¥${Number(formData.amount).toLocaleString()}` : (formData.totalAmount ? `¥${Number(formData.totalAmount).toLocaleString()}` : null);
+    const formSummary = React.useMemo(() => buildFormSummary(code, formData), [code, formData]);
 
     const usersById = new Map(allUsers.map(u => [u.id, u.name]));
     const routeSteps = approvalRoute?.routeData.steps || [];
@@ -193,6 +410,61 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                 </div>
 
                 <div className="p-6 overflow-y-auto space-y-6">
+                    {(formSummary.highlights.length > 0 || formSummary.listSections.length > 0 || formSummary.tableSections.length > 0) && (
+                        <section className="space-y-4">
+                            {formSummary.highlights.length > 0 && (
+                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    {formSummary.highlights.map((item, index) => (
+                                        <div key={`summary-highlight-${index}`} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+                                            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white break-words">{item.value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {formSummary.listSections.map((section, sectionIndex) => (
+                                <div key={`summary-list-${sectionIndex}`} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-4">
+                                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
+                                    <dl className="mt-4 space-y-2">
+                                        {section.items.map((item, itemIndex) => (
+                                            <div key={`summary-list-item-${sectionIndex}-${itemIndex}`} className="flex items-start justify-between gap-4 text-sm">
+                                                <dt className="text-slate-500 dark:text-slate-400">{item.label}</dt>
+                                                <dd className="text-right font-semibold text-slate-900 dark:text-white break-words max-w-[60%]">{typeof item.value === 'string' ? item.value : item.value}</dd>
+                                            </div>
+                                        ))}
+                                    </dl>
+                                </div>
+                            ))}
+                            {formSummary.tableSections.map((section, sectionIndex) => (
+                                <div key={`summary-table-${sectionIndex}`} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40">
+                                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                                        <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+                                            <thead className="bg-slate-50 dark:bg-slate-900/30">
+                                                <tr>
+                                                    {section.columns.map(column => (
+                                                        <th key={`${section.title}-${column}`} className="px-4 py-2 text-left font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{column}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                                {section.rows.map((row, rowIndex) => (
+                                                    <tr key={`summary-table-row-${rowIndex}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                                                        {row.map((cell, cellIndex) => (
+                                                            <td key={`summary-table-cell-${rowIndex}-${cellIndex}`} className="px-4 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">{cell ?? '-'}</td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                        </section>
+                    )}
+
                     <section className="space-y-3">
                         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">申請メタ情報</h3>
                         <div className="overflow-x-auto">

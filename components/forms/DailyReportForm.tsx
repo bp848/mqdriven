@@ -208,10 +208,13 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
         requestConfirmation({
             label: '報告を提出する',
-            title: '日報を提出しますか？',
-            description: '送信すると承認者に通知されます。内容をご確認ください。',
-            confirmLabel: 'はい（提出）',
-            draftLabel: '下書き保存',
+            title: 'フォーム送信時に送信しますか？',
+            description: 'はいを押すと日報が送信され、承認者に通知されます。内容をご確認ください。',
+            confirmLabel: 'はい',
+            cancelLabel: 'いいえ',
+            draftLabel: '下書き',
+            postConfirmMessage: 'はい（1件の申請を送信しました）',
+            forceConfirmation: true,
             onConfirm: executeSubmission,
             onDraft: handleSaveDraft,
         });
