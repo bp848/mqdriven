@@ -12,10 +12,10 @@
 
 ## 共通 UI コンポーネント
 - すべての申請フォームで承認ルートを選択する UI として `ApprovalRouteSelector` を使用します。初回マウント時に承認ルート一覧をロードし、必要であれば特定のルートを強制選択します。【F:components/forms/ApprovalRouteSelector.tsx†L1-L84】
-- 勘定科目・支払先・部門といったマスター選択 UI も専用コンポーネントとして分離されており、マウント時に `dataService` から一覧をフェッチしてセレクトボックスを描画します。【F:components/forms/AccountItemSelect.tsx†L1-L41】【F:components/forms/PaymentRecipientSelect.tsx†L1-L65】【F:components/forms/DepartmentSelect.tsx†L1-L38】
+- 勘定科目・支払先・部門といったマスター選択 UI も専用コンポーネントとして分離されており、マウント時に `dataService` から一覧をフェッチしてセレクトボックスを描画します。【F:components/forms/AccountItemSelect.tsx†L3-L41】【F:components/forms/PaymentRecipientSelect.tsx†L1-L65】【F:components/forms/DepartmentSelect.tsx†L1-L38】
 
 ## 代表的なフォーム
-- **経費精算 (EXP)**: 明細行の追加・削除、AI-OCR での明細取込、振分先（顧客/案件/発注）選択など最も多くのマスター情報に依存します。送信時は部門・承認ルート・各明細の必須入力を検証した上で `submitApplication` を呼び出します。【F:components/forms/ExpenseReimbursementForm.tsx†L1-L360】
+- **経費精算 (EXP)**: 明細行の追加・削除、AI-OCR での明細取込、振分先（顧客/案件/発注）選択など最も多くのマスター情報に依存します。送信時は部門・承認ルート・各明細の必須入力を検証した上で `submitApplication` を呼び出します。【F:components/forms/ExpenseReimbursementForm.tsx†L2-L360】
 - **交通費精算 (TRP)**: 経費フォームと同様に明細行で構成され、OCR で領収書から出発地/目的地を推測します。【F:components/forms/TransportExpenseForm.tsx†L1-L220】
 - **稟議フォーム (APL)**: PDF/ZIP をドラッグ＆ドロップで受け取り、`parseApprovalDocument` による AI-OCR で件名と本文を下書きします。複数ファイルの展開や AI チャット連携が特徴です。【F:components/forms/ApprovalForm.tsx†L1-L206】
 - **日報・週報・休暇申請**: 入力項目はシンプルですが、AI による文面生成 (`generateDailyReportSummary` など) やチャットモーダルを通じた作成支援が組み込まれています。【F:components/forms/DailyReportForm.tsx†L1-L200】【F:components/forms/LeaveApplicationForm.tsx†L1-L196】

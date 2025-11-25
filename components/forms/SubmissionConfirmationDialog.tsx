@@ -7,9 +7,12 @@ interface SubmissionConfirmationDialogProps {
   description?: string;
   onClose: () => void;
   onConfirm: () => Promise<void> | void;
-  onSaveDraft: () => Promise<void> | void;
+  onSaveDraft?: () => Promise<void> | void;
   isSubmitting?: boolean;
   isSavingDraft?: boolean;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  draftLabel?: string;
 }
 
 const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> = ({
@@ -21,11 +24,14 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
   onSaveDraft,
   isSubmitting = false,
   isSavingDraft = false,
+  confirmLabel = 'はい（実行）',
+  cancelLabel = 'いいえ（キャンセル）',
+  draftLabel = '下書き保存',
 }) => {
   if (!isOpen) return null;
 
-  const confirmLabel = isSubmitting ? '申請中…' : 'はい（申請）';
-  const saveLabel = isSavingDraft ? '下書き保存中…' : '下書き保存';
+  const confirmText = isSubmitting ? '処理中…' : confirmLabel;
+  const saveText = isSavingDraft ? `${draftLabel}中…` : draftLabel;
 
   const handleConfirm = () => {
     if (isSubmitting) return;
@@ -33,7 +39,7 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
   };
 
   const handleSaveDraft = () => {
-    if (isSavingDraft || isSubmitting) return;
+    if (!onSaveDraft || isSavingDraft || isSubmitting) return;
     onSaveDraft();
   };
 
@@ -50,23 +56,25 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
             onClick={onClose}
             className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
           >
-            いいえ（キャンセル）
+            {cancelLabel}
           </button>
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={isSavingDraft || isSubmitting}
-            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
-          >
-            {isSavingDraft ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader className="w-4 h-4 animate-spin" />
-                {saveLabel}
-              </span>
-            ) : (
-              saveLabel
-            )}
-          </button>
+          {onSaveDraft && (
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSavingDraft || isSubmitting}
+              className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+            >
+              {isSavingDraft ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader className="w-4 h-4 animate-spin" />
+                  {saveText}
+                </span>
+              ) : (
+                  saveText
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleConfirm}
@@ -76,10 +84,10 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
             {isSubmitting ? (
               <>
                 <Loader className="w-4 h-4 animate-spin" />
-                申請中…
+                処理中…
               </>
             ) : (
-              confirmLabel
+              confirmText
             )}
           </button>
         </div>

@@ -3,6 +3,7 @@ import { ApplicationWithDetails, User } from '../types';
 import { X, CheckCircle, Send, Loader } from './Icons';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
 import { getUsers } from '../services/dataService';
+import { useSubmitWithConfirmation } from '../hooks/useSubmitWithConfirmation';
 
 interface ApplicationDetailModalProps {
     application: ApplicationWithDetails | null;
@@ -23,6 +24,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const mounted = useRef(true);
+    const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
     useEffect(() => {
         mounted.current = true;
@@ -42,25 +44,55 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         }
     }, [application]);
 
-    const handleApprove = async () => {
+    const executeApprove = async () => {
         if (!application) return;
         setIsProcessing(true);
-        await onApprove(application);
-        if (mounted.current) {
-            setIsProcessing(false);
+        try {
+            await onApprove(application);
+        } finally {
+            if (mounted.current) {
+                setIsProcessing(false);
+            }
         }
     };
 
-    const handleReject = async () => {
-        if (!application || !rejectionReason.trim()) {
+    const executeReject = async (reason: string) => {
+        if (!application) return;
+        setIsProcessing(true);
+        try {
+            await onReject(application, reason);
+        } finally {
+            if (mounted.current) {
+                setIsProcessing(false);
+            }
+        }
+    };
+
+    const handleApprove = () => {
+        if (!application) return;
+        requestConfirmation({
+            label: '承認',
+            title: '申請を承認しますか？',
+            description: '承認すると申請者へ通知されます。',
+            confirmLabel: '承認する',
+            onConfirm: executeApprove,
+        });
+    };
+
+    const handleReject = () => {
+        if (!application) return;
+        const trimmedReason = rejectionReason.trim();
+        if (!trimmedReason) {
             alert('差し戻し理由を入力してください。');
             return;
         }
-        setIsProcessing(true);
-        await onReject(application, rejectionReason);
-        if (mounted.current) {
-            setIsProcessing(false);
-        }
+        requestConfirmation({
+            label: '差し戻し送信',
+            title: '申請を差し戻しますか？',
+            description: `差し戻し理由: ${trimmedReason}`,
+            confirmLabel: '差し戻す',
+            onConfirm: () => executeReject(trimmedReason),
+        });
     };
 
     if (!application) {
@@ -150,6 +182,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     });
 
     return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 font-sans">
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
                 <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700">
@@ -291,14 +324,16 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                         </div>
                         <div className="flex justify-end gap-3">
                             <button
+                                type="button"
                                 onClick={handleReject}
                                 disabled={isProcessing || !rejectionReason.trim()}
                                 className="flex items-center gap-2 bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 disabled:bg-slate-400"
                             >
                                 {isProcessing ? <Loader className="w-5 h-5 animate-spin"/> : <Send className="w-5 h-5" />}
-                                <span>差し戻し</span>
+                                <span>差し戻し送信</span>
                             </button>
                             <button
+                                type="button"
                                 onClick={handleApprove}
                                 disabled={isProcessing}
                                 className="flex items-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-slate-400"
@@ -311,6 +346,8 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                 )}
             </div>
         </div>
+        {ConfirmationDialog}
+        </>
     );
 };
 
