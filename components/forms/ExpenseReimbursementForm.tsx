@@ -418,6 +418,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             cancelLabel: 'いいえ',
             draftLabel: '下書き',
             postConfirmMessage: 'はい（1件の申請を送信しました）',
+            forceConfirmation: true,
             onConfirm: executeSubmission,
             onDraft: handleSaveDraft,
         });
