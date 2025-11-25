@@ -5,7 +5,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
 import { User, Toast, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
-import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
+import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 
 interface WeeklyReportFormProps {
     onSuccess: () => void;
@@ -26,8 +26,7 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
     const [isSummaryLoading, setIsSummaryLoading] = useState(false);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
-    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
+    const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
 
@@ -85,29 +84,28 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
             return setError('ユーザー情報が見つかりません。再度ログインしてください。');
         }
 
-        setPendingSubmissionPayload(buildSubmissionPayload());
-        setIsConfirmationDialogOpen(true);
+        requestConfirmation({
+            label: '報告を提出する',
+            title: '週報を提出しますか？',
+            description: '送信すると承認者に通知されます。内容をご確認ください。',
+            confirmLabel: 'はい（提出）',
+            draftLabel: '下書き保存',
+            onConfirm: executeSubmission,
+            onDraft: handleSaveDraft,
+        });
     };
 
-    const closeConfirmationDialog = () => {
-        setIsConfirmationDialogOpen(false);
-        setPendingSubmissionPayload(null);
-    };
-
-    const confirmSubmission = async () => {
-        if (!pendingSubmissionPayload) return;
+    const executeSubmission = async () => {
         if (!currentUser) {
             setError('ユーザー情報が見つかりません。');
-            closeConfirmationDialog();
             return;
         }
-
+        const payload = buildSubmissionPayload();
         setIsSubmitting(true);
         setError('');
         try {
-            await submitApplication(pendingSubmissionPayload, currentUser.id);
+            await submitApplication(payload, currentUser.id);
             await clearApplicationDraft(applicationCodeId, currentUser.id);
-            closeConfirmationDialog();
             onSuccess();
         } catch (err: any) {
             setError('週報の提出に失敗しました。');
@@ -207,14 +205,7 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
                         </button>
                     </div>
                 </form>
-                <SubmissionConfirmationDialog
-                    isOpen={isConfirmationDialogOpen}
-                    onClose={closeConfirmationDialog}
-                    onConfirm={confirmSubmission}
-                    onSaveDraft={handleSaveDraft}
-                    isSubmitting={isSubmitting}
-                    isSavingDraft={isSavingDraft}
-                />
+                {ConfirmationDialog}
             </div>
              {isChatModalOpen && (
                 <ChatApplicationModal

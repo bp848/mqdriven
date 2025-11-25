@@ -4,7 +4,7 @@ import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
 import { User, InvoiceData, ApplicationWithDetails } from '../../types';
-import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
+import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 
 interface TransportExpenseFormProps {
     onSuccess: () => void;
@@ -53,8 +53,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
-    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
-    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
+    const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
@@ -129,6 +128,25 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         };
     };
 
+    const executeSubmission = async () => {
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。');
+            return;
+        }
+        const payload = buildSubmissionPayload();
+        setIsSubmitting(true);
+        setError('');
+        try {
+            await submitApplication(payload, currentUser.id);
+            await clearApplicationDraft(applicationCodeId, currentUser.id);
+            onSuccess();
+        } catch (err: any) {
+            setError('申請の提出に失敗しました。');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setError('');
@@ -138,35 +156,15 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
             return setError('少なくとも1つの明細を入力してください。');
         }
 
-        setPendingSubmissionPayload(buildSubmissionPayload());
-        setIsConfirmationDialogOpen(true);
-    };
-
-    const closeConfirmationDialog = () => {
-        setIsConfirmationDialogOpen(false);
-        setPendingSubmissionPayload(null);
-    };
-
-    const confirmSubmission = async () => {
-        if (!pendingSubmissionPayload) return;
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            closeConfirmationDialog();
-            return;
-        }
-
-        setIsSubmitting(true);
-        setError('');
-        try {
-            await submitApplication(pendingSubmissionPayload, currentUser.id);
-            await clearApplicationDraft(applicationCodeId, currentUser.id);
-            closeConfirmationDialog();
-            onSuccess();
-        } catch (err: any) {
-            setError('申請の提出に失敗しました。');
-        } finally {
-            setIsSubmitting(false);
-        }
+        requestConfirmation({
+            label: '申請を送信する',
+            title: '交通費申請を送信しますか？',
+            description: '送信すると承認ルートに通知されます。内容に誤りがないかご確認ください。',
+            confirmLabel: 'はい（申請）',
+            draftLabel: '下書き保存',
+            onConfirm: executeSubmission,
+            onDraft: handleSaveDraft,
+        });
     };
 
     const handleSaveDraft = async () => {
@@ -306,14 +304,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     </button>
                 </div>
             </form>
-            <SubmissionConfirmationDialog
-                isOpen={isConfirmationDialogOpen}
-                onClose={closeConfirmationDialog}
-                onConfirm={confirmSubmission}
-                onSaveDraft={handleSaveDraft}
-                isSubmitting={isSubmitting}
-                isSavingDraft={isSavingDraft}
-            />
+            {ConfirmationDialog}
         </div>
     );
 };

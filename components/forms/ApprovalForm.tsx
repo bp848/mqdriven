@@ -4,7 +4,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
 import { User, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
-import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
+import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 
 interface ApprovalFormProps {
     onSuccess: () => void;
@@ -21,9 +21,8 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
-    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
-    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
     const [error, setError] = useState('');
+    const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
@@ -49,45 +48,46 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
         approvalRouteId,
     });
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setError('');
-        if (!approvalRouteId) {
-            return setError('承認ルートは必須です。');
-        }
+    const executeSubmission = async () => {
         if (!currentUser) {
-            return setError('ユーザー情報が見つかりません。再度ログインしてください。');
-        }
-
-        setPendingSubmissionPayload(buildSubmissionPayload());
-        setIsConfirmationDialogOpen(true);
-    };
-
-    const closeConfirmationDialog = () => {
-        setIsConfirmationDialogOpen(false);
-        setPendingSubmissionPayload(null);
-    };
-
-    const confirmSubmission = async () => {
-        if (!pendingSubmissionPayload) return;
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            closeConfirmationDialog();
+            setError('ユーザー情報が見つかりません。再度ログインしてください。');
             return;
         }
-
+        const payload = buildSubmissionPayload();
         setIsSubmitting(true);
         setError('');
         try {
-            await submitApplication(pendingSubmissionPayload, currentUser.id);
+            await submitApplication(payload, currentUser.id);
             await clearApplicationDraft(applicationCodeId, currentUser.id);
-            closeConfirmationDialog();
             onSuccess();
         } catch (err: any) {
             setError('申請の提出に失敗しました。');
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setError('');
+        if (!approvalRouteId) {
+            setError('承認ルートは必須です。');
+            return;
+        }
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。再度ログインしてください。');
+            return;
+        }
+
+        requestConfirmation({
+            label: '申請を送信する',
+            title: '稟議を送信しますか？',
+            description: '送信すると承認者に通知されます。内容をご確認ください。',
+            confirmLabel: 'はい（申請）',
+            draftLabel: '下書き保存',
+            onConfirm: executeSubmission,
+            onDraft: handleSaveDraft,
+        });
     };
 
     const handleSaveDraft = async () => {
@@ -168,14 +168,7 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
                         </button>
                     </div>
                 </form>
-                <SubmissionConfirmationDialog
-                    isOpen={isConfirmationDialogOpen}
-                    onClose={closeConfirmationDialog}
-                    onConfirm={confirmSubmission}
-                    onSaveDraft={handleSaveDraft}
-                    isSubmitting={isSubmitting}
-                    isSavingDraft={isSavingDraft}
-                />
+                {ConfirmationDialog}
             </div>
             {isChatModalOpen && (
                 <ChatApplicationModal

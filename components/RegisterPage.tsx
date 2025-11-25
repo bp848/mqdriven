@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { getSupabase, hasSupabaseCredentials } from '../services/supabaseClient';
 import { Package, GoogleIcon, User, Mail, Building, Phone } from './Icons';
+import { useSubmitWithConfirmation } from '../hooks/useSubmitWithConfirmation';
 
 interface RegisterPageProps {
   onBackToLogin?: () => void;
@@ -23,6 +24,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -53,14 +55,23 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
       return;
     }
 
+    requestConfirmation({
+      label: '登録申請を送信',
+      title: '登録申請を送信しますか？',
+      description: '入力内容で管理者に承認依頼を送信します。',
+      confirmLabel: '送信する',
+      onConfirm: submitEmailRegistration,
+    });
+  };
+
+  const submitEmailRegistration = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
 
     try {
       const supabaseClient = getSupabase();
-      
-      // 管理者に詳細な登録申請通知を送信
+
       const registrationRequest = {
         type: 'user_registration_request',
         timestamp: new Date().toISOString(),
@@ -85,7 +96,6 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
         throw new Error(`登録申請の送信に失敗しました: ${error.message}`);
       }
 
-      // 管理者通知テーブルにも記録
       try {
         await supabaseClient.from('admin_notifications').insert([{
           type: 'new_registration_request',
@@ -100,8 +110,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
       }
 
       setSuccessMessage(`✅ 登録申請を送信しました。\n\n${formData.name} 様\n\n管理者による承認後、ログイン可能になります。\n承認完了時にメールでお知らせいたします。\n\n申請内容:\n・メールアドレス: ${formData.email}\n・会社名: ${formData.company}\n・部署: ${formData.department || '未入力'}\n・役職: ${formData.position || '未入力'}`);
-      
-      // フォームをリセット
+
       setFormData({
         name: '',
         email: '',
@@ -125,13 +134,22 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
       return;
     }
 
+    requestConfirmation({
+      label: 'Googleアカウントで登録申請',
+      title: 'Googleアカウントで登録を開始しますか？',
+      description: 'Google OAuth画面に遷移します。続行してよろしいですか？',
+      confirmLabel: '開始する',
+      onConfirm: submitGoogleRegistration,
+    });
+  };
+
+  const submitGoogleRegistration = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
       const supabaseClient = getSupabase();
-      
-      // Google OAuth前の通知
+
       const preAuthNotification = {
         type: 'google_registration_initiated',
         timestamp: new Date().toISOString(),
@@ -139,13 +157,13 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
         source: 'registration_page_google_button',
         user_agent: navigator.userAgent
       };
-      
+
       try {
         await supabaseClient.from('admin_notifications').insert([preAuthNotification]);
       } catch (notifyError) {
         console.warn('管理者通知の送信に失敗:', notifyError);
       }
-      
+
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -156,7 +174,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
           },
         },
       });
-      
+
       if (error) {
         setErrorMessage(`Google登録エラー: ${error.message}`);
       } else {
@@ -170,6 +188,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
   };
 
   return (
+    <>
     <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 font-sans">
       <div className="w-full max-w-2xl p-8 space-y-8 bg-white rounded-2xl shadow-xl dark:bg-slate-800">
         <div className="flex flex-col items-center">
@@ -394,6 +413,8 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
         )}
       </div>
     </div>
+    {ConfirmationDialog}
+    </>
   );
 };
 

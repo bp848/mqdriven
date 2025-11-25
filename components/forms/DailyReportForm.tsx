@@ -5,7 +5,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
 import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
-import SubmissionConfirmationDialog from './SubmissionConfirmationDialog';
+import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 
 interface DailyReportFormProps {
     onSuccess: () => void;
@@ -62,10 +62,9 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     const [isSummaryLoading, setIsSummaryLoading] = useState(false);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-    const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] = useState(false);
-    const [pendingSubmissionPayload, setPendingSubmissionPayload] = useState<any>(null);
     const [savedReports, setSavedReports] = useState<Record<string, DailyReportData>>({});
     const [appliedPrefillId, setAppliedPrefillId] = useState<string | null>(null);
+    const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
@@ -172,43 +171,21 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
         approvalRouteId,
     });
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setError('');
-        if (!approvalRouteId) {
-            return setError('承認ルートは必須です。');
-        }
+    const executeSubmission = async () => {
         if (!currentUser) {
-            return setError('ユーザー情報が見つかりません。再度ログインしてください。');
-        }
-
-        setPendingSubmissionPayload(buildSubmissionPayload());
-        setIsConfirmationDialogOpen(true);
-    };
-
-    const closeConfirmationDialog = () => {
-        setIsConfirmationDialogOpen(false);
-        setPendingSubmissionPayload(null);
-    };
-
-    const confirmSubmission = async () => {
-        if (!pendingSubmissionPayload) return;
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            closeConfirmationDialog();
+            setError('ユーザー情報が見つかりません。再度ログインしてください。');
             return;
         }
-
+        const payload = buildSubmissionPayload();
         setIsSubmitting(true);
         setError('');
         try {
-            await submitApplication(pendingSubmissionPayload, currentUser.id);
+            await submitApplication(payload, currentUser.id);
             const nextSaved = {
                 ...savedReports,
                 [formData.reportDate]: formData,
             };
             persistSavedReports(nextSaved);
-            closeConfirmationDialog();
             onSuccess();
         } catch (err: any) {
             setError('日報の提出に失敗しました。');
@@ -217,7 +194,30 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
         }
     };
 
-    const handleSaveDraft = () => {
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setError('');
+        if (!approvalRouteId) {
+            setError('承認ルートは必須です。');
+            return;
+        }
+        if (!currentUser) {
+            setError('ユーザー情報が見つかりません。再度ログインしてください。');
+            return;
+        }
+
+        requestConfirmation({
+            label: '報告を提出する',
+            title: '日報を提出しますか？',
+            description: '送信すると承認者に通知されます。内容をご確認ください。',
+            confirmLabel: 'はい（提出）',
+            draftLabel: '下書き保存',
+            onConfirm: executeSubmission,
+            onDraft: handleSaveDraft,
+        });
+    };
+
+    const handleSaveDraft = async () => {
         setIsSavingDraft(true);
         const nextSaved = {
             ...savedReports,
@@ -474,14 +474,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                         </button>
                     </div>
                 </form>
-                <SubmissionConfirmationDialog
-                    isOpen={isConfirmationDialogOpen}
-                    onClose={closeConfirmationDialog}
-                    onConfirm={confirmSubmission}
-                    onSaveDraft={handleSaveDraft}
-                    isSubmitting={isSubmitting}
-                    isSavingDraft={isSavingDraft}
-                />
+                {ConfirmationDialog}
             </div>
             {isChatModalOpen && (
                 <ChatApplicationModal
