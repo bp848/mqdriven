@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { submitApplication } from '../../services/dataService';
-import { generateDailyReportSummary } from '../../services/geminiService';
+import { generateDailyReportSummary, extractDailyReportFromImage } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
 import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill } from '../../types';
@@ -60,6 +60,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+    const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     const [savedReports, setSavedReports] = useState<Record<string, DailyReportData>>({});
@@ -163,6 +164,45 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
         } finally {
             setIsSummaryLoading(false);
         }
+    };
+
+    const handleOcrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (isAIOff) {
+            addToast('AI機能は現在無効です。', 'error');
+            e.target.value = '';
+            return;
+        }
+        if (isDisabled) {
+            e.target.value = '';
+            return;
+        }
+
+        setIsOcrLoading(true);
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            try {
+                const result = reader.result as string | null;
+                if (!result) return;
+                const base64 = result.split(',')[1] || '';
+                const text = await extractDailyReportFromImage(base64, file.type);
+                setFormData(prev => ({
+                    ...prev,
+                    activityContent: prev.activityContent
+                        ? `${prev.activityContent}\n\n${text}`
+                        : text,
+                }));
+                addToast('画像から日報テキストを読み取りました。', 'success');
+            } catch (err: any) {
+                const msg = err instanceof Error ? err.message : '日報画像の読み取りに失敗しました。';
+                addToast(msg, 'error');
+            } finally {
+                setIsOcrLoading(false);
+                e.target.value = '';
+            }
+        };
+        reader.readAsDataURL(file);
     };
 
     const buildSubmissionPayload = () => ({
@@ -410,15 +450,31 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                     <div>
                         <div className="flex justify-between items-center mb-1">
                             <label htmlFor="activityContent" className={labelClass}>活動内容 *</label>
-                            <button
-                                type="button"
-                                onClick={handleGenerateSummary}
-                                disabled={isSummaryLoading || isDisabled || isAIOff}
-                                className="flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isSummaryLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                AIで下書きを作成
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleOcrUpload}
+                                        disabled={isOcrLoading || isDisabled || isAIOff}
+                                    />
+                                    {isOcrLoading ? (
+                                        <Loader className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <span className="text-xs border border-blue-500 rounded px-2 py-0.5">画像から読み取り</span>
+                                    )}
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleGenerateSummary}
+                                    disabled={isSummaryLoading || isDisabled || isAIOff}
+                                    className="flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSummaryLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                                    AIで下書きを作成
+                                </button>
+                            </div>
                         </div>
                         <textarea id="activityContent" name="activityContent" rows={8} value={formData.activityContent} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="本日の業務内容、進捗、課題などを具体的に記述してください。または、キーワードを入力してAIに下書き作成を依頼してください。" autoComplete="on" />
                         {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 mt-1">AI機能無効のため、AI下書き作成は利用できません。</p>}

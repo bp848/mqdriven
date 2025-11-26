@@ -8,7 +8,7 @@ const MeetingMinutesIframe: React.FC = () => {
   return (
     <div className="w-full flex justify-center">
       <div className="w-full max-w-5xl">
-        <div className="w-full min-h-[65vh] bg-slate-900/80 rounded-3xl overflow-hidden border border-slate-800 shadow-inner mx-auto">
+        <div className="w-full h-[90vh] bg-slate-900/80 rounded-3xl overflow-hidden border border-slate-800 shadow-inner mx-auto">
           <iframe
             src={MEETING_MINUTES_APP_URL}
             title="議事録作成アシスタント"
