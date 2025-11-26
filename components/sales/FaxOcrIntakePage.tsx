@@ -228,6 +228,11 @@ interface EditFaxIntakeModalProps {
   paymentRecipients: PaymentRecipient[];
 }
 
+interface PreviewFaxIntakeModalProps {
+  intake: FaxIntake | null;
+  onClose: () => void;
+}
+
 const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
   currentUser,
   addToast,
@@ -246,6 +251,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [editingIntake, setEditingIntake] = useState<FaxIntake | null>(null);
+  const [previewIntake, setPreviewIntake] = useState<FaxIntake | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [ocrBusyId, setOcrBusyId] = useState<string | null>(null);
@@ -612,8 +618,8 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
       <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-950/5 dark:bg-slate-900/70 dark:ring-white/10">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">取り込みキュー</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">OCR結果の確認や案件・見積へのリンク付けを行います。</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">取り込みライブラリ</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">アップロード済みのFAX資料とOCR結果を一覧で管理し、詳細画面から共有・参照できます。</p>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {faxIntakes.length} 件
@@ -635,7 +641,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                 <tr>
                   <th className="px-4 py-3">ファイル</th>
                   <th className="px-4 py-3">種別 / ステータス</th>
-                  <th className="px-4 py-3">OCRサマリー</th>
+                  <th className="px-4 py-3">OCR</th>
                   <th className="px-4 py-3">メモ / リンク</th>
                   <th className="px-4 py-3">操作</th>
                 </tr>
@@ -698,68 +704,17 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
                       </td>
                       <td className="px-4 py-4 text-sm text-slate-700 dark:text-slate-300">
                         {intake.ocrStatus === 'done' && invoiceData ? (
-                          <div className="space-y-2">
-                            <div>
-                              <span className="text-xs text-slate-500 dark:text-slate-400">発行元</span>
-                              <div className="font-semibold text-slate-900 dark:text-slate-100">{supplierName}</div>
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              請求日: {invoiceData.invoiceDate || '-'} / 支払期日: {invoiceData.dueDate || invoiceData.expenseDraft?.dueDate || '-'}
-                            </div>
-                            {(totalGross !== null || totalNet !== null) && (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-slate-900 dark:text-slate-100">
-                                  税込 {totalGross !== null ? formatJPY(totalGross) : '-'}
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                  税抜 {totalNet !== null ? formatJPY(totalNet) : '-'} / 税額 {taxAmount !== null ? formatJPY(taxAmount) : '-'}
-                                </div>
-                              </div>
-                            )}
-                            {referenceNo && (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">参照番号: {referenceNo}</div>
-                            )}
-                            {bankAccountText && (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">振込先: {bankAccountText}</div>
-                            )}
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              支払先候補:{' '}
-                              {paymentRecipientLabel ? (
-                                <span className="font-semibold text-slate-800 dark:text-slate-200">{paymentRecipientLabel}（自動突合）</span>
-                              ) : (
-                                fallbackRecipientName || '未検出'
-                              )}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              顧客候補:{' '}
-                              {customerMatch ? (
-                                <span className="font-semibold text-slate-800 dark:text-slate-200">{customerMatch.customerName}（自動突合）</span>
-                              ) : (
-                                fallbackCustomerName || customerName || '未記載'
-                              )}
-                            </div>
-                            {limitedLines.length > 0 && (
-                              <div className="rounded-md bg-slate-50 p-2 text-xs dark:bg-slate-800/50">
-                                <div className="font-semibold text-slate-700 dark:text-slate-200">明細</div>
-                                <ul className="mt-1 space-y-1">
-                                  {limitedLines.map((line, idx) => (
-                                    <li key={`${intake.id}-line-${idx}`} className="flex items-center justify-between gap-3">
-                                      <span className="truncate text-slate-600 dark:text-slate-300">{line.description || '内容未検出'}</span>
-                                      <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                        {line.amountExclTax !== undefined ? formatJPY(Number(line.amountExclTax)) : '-'}
-                                      </span>
-                                    </li>
-                                  ))}
-                                </ul>
-                                {remainingLines > 0 && (
-                                  <div className="mt-1 text-right text-[11px] text-slate-500 dark:text-slate-400">+{remainingLines} 行</div>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewIntake(intake)}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            詳細を開く
+                          </button>
                         ) : (
                           <div className="text-xs text-slate-400 dark:text-slate-500">
-                            {intake.ocrStatus === 'processing' ? 'OCR解析中' : '表示可能なサマリーがまだありません'}
+                            {intake.ocrStatus === 'processing' ? 'OCR解析中' : '表示可能なOCR結果がまだありません'}
                           </div>
                         )}
                       </td>
@@ -829,6 +784,10 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
         onNavigateToEstimates={onNavigateToEstimates}
         customers={customers}
         paymentRecipients={paymentRecipients}
+      />
+      <PreviewFaxIntakeModal
+        intake={previewIntake}
+        onClose={() => setPreviewIntake(null)}
       />
     </div>
   );
@@ -1157,6 +1116,143 @@ const EditFaxIntakeModal: React.FC<EditFaxIntakeModalProps> = ({
             {isSaving && <Loader className="h-4 w-4 animate-spin" />}
             保存
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PreviewFaxIntakeModal: React.FC<PreviewFaxIntakeModalProps> = ({ intake, onClose }) => {
+  if (!intake) return null;
+
+  const invoiceData = parseInvoiceData(intake.ocrJson);
+  const lineItems = getInvoiceLineItems(invoiceData);
+  const limitedLines = lineItems.slice(0, 5);
+  const remainingLines = lineItems.length - limitedLines.length;
+  const totalGross = invoiceData?.expenseDraft?.totalGross ?? invoiceData?.totalAmount ?? null;
+  const totalNet = invoiceData?.expenseDraft?.totalNet ?? invoiceData?.subtotalAmount ?? null;
+  const taxAmount =
+    invoiceData?.expenseDraft?.taxAmount ??
+    invoiceData?.taxAmount ??
+    (totalGross && totalNet ? totalGross - totalNet : null);
+  const supplierName = invoiceData?.expenseDraft?.supplierName || invoiceData?.vendorName || intake.fileName;
+
+  const isImage = intake.fileMimeType.startsWith('image/');
+  const isPdf = intake.fileMimeType === 'application/pdf';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="mt-6 w-full max-w-6xl rounded-2xl bg-white shadow-xl dark:bg-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white">OCRプレビュー</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {intake.fileName} / アップロード日時: {formatDateTime(intake.uploadedAt)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 px-6 py-4 lg:grid-cols-2">
+          <div className="space-y-3 overflow-y-auto pr-1">
+            {intake.ocrStatus !== 'done' && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">OCR結果がまだ完了していません。</p>
+            )}
+            {intake.ocrStatus === 'done' && invoiceData && (
+              <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
+                <div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">発行元</span>
+                  <div className="font-semibold text-slate-900 dark:text-slate-100">{supplierName}</div>
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  請求日: {invoiceData.invoiceDate || '-'} / 支払期日: {invoiceData.dueDate || invoiceData.expenseDraft?.dueDate || '-'}
+                </div>
+                {(totalGross !== null || totalNet !== null) && (
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-900 dark:text-slate-100">
+                      税込 {totalGross !== null ? formatJPY(totalGross) : '-'}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      税抜 {totalNet !== null ? formatJPY(totalNet) : '-'} / 税額 {taxAmount !== null ? formatJPY(taxAmount) : '-'}
+                    </div>
+                  </div>
+                )}
+                {limitedLines.length > 0 && (
+                  <div className="rounded-md bg-slate-50 p-2 text-xs dark:bg-slate-800/50">
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">明細</div>
+                    <ul className="mt-1 space-y-1">
+                      {limitedLines.map((line, idx) => (
+                        <li key={`${intake.id}-preview-line-${idx}`} className="flex items-center justify-between gap-3">
+                          <span className="truncate text-slate-600 dark:text-slate-300">{line.description || '内容未検出'}</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">
+                            {line.amountExclTax !== undefined ? formatJPY(Number(line.amountExclTax)) : '-'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {remainingLines > 0 && (
+                      <div className="mt-1 text-right text-[11px] text-slate-500 dark:text-slate-400">+{remainingLines} 行</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {intake.ocrRawText && (
+              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                <div className="mb-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">OCRテキスト全文</div>
+                <pre className="max-h-60 overflow-auto whitespace-pre-wrap">
+                  {intake.ocrRawText}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          <div className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-900/40">
+            {!intake.fileUrl && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">原本ファイルのURLが登録されていません。</p>
+            )}
+            {intake.fileUrl && (
+              <>
+                {isImage && (
+                  <img
+                    src={intake.fileUrl}
+                    alt={intake.fileName}
+                    className="max-h-[480px] w-auto max-w-full rounded-md object-contain"
+                  />
+                )}
+                {isPdf && (
+                  <iframe
+                    src={intake.fileUrl}
+                    title={intake.fileName}
+                    className="h-[480px] w-full rounded-md bg-white"
+                  />
+                )}
+                {!isImage && !isPdf && (
+                  <a
+                    href={intake.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    <FileText className="h-4 w-4" />
+                    ファイルを開く
+                  </a>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
