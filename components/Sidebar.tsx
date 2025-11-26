@@ -15,6 +15,8 @@ interface SidebarProps {
 type NavItemType = {
   page: Page;
   name: string;
+  badge?: number;
+  badgeColor?: 'blue' | 'green' | 'red';
 };
 
 type NavCategoryType = {
@@ -59,6 +61,27 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_weekly', name: '週報' },
     ],
   },
+  {
+    id: 'automation',
+    name: '自動入力',
+    icon: Archive,
+    items: [
+      { page: 'fax_ocr_intake', name: 'FAX自動入力' },
+    ],
+  },
+  {
+    id: 'admin_tools',
+    name: '管理メニュー',
+    icon: Settings,
+    adminOnly: true,
+    items: [
+      { page: 'admin_user_management', name: 'ユーザー管理' },
+      { page: 'admin_route_management', name: '承認ルート管理' },
+      { page: 'admin_master_management', name: 'マスタ管理' },
+      { page: 'admin_audit_log', name: '監査ログ' },
+      { page: 'admin_journal_queue', name: 'ジャーナル・キュー' },
+    ],
+  },
 ];
 
 export const buildNavCategories = (user: EmployeeUser | null): NavCategoryType[] => {
@@ -73,7 +96,20 @@ export const buildNavCategories = (user: EmployeeUser | null): NavCategoryType[]
   return visibleCategories.filter((category) => !category.adminOnly);
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser, allUsers, onUserChange, supabaseUserEmail, onSignOut }) => {
+interface SidebarWithCountsProps extends SidebarProps {
+  approvalsCount?: number;
+}
+
+const Sidebar: React.FC<SidebarWithCountsProps> = ({
+  currentPage,
+  onNavigate,
+  currentUser,
+  allUsers,
+  onUserChange,
+  supabaseUserEmail,
+  onSignOut,
+  approvalsCount,
+}) => {
   const visibleCategories = React.useMemo(() => buildNavCategories(currentUser), [currentUser]);
 
   return (
@@ -136,13 +172,26 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, currentUser,
                   <a
                     href="#"
                     onClick={(e) => { e.preventDefault(); onNavigate(item.page); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                    className={`flex items-center justify-between p-3 rounded-lg transition-colors duration-200 ${
                       currentPage === item.page
                         ? 'bg-slate-700 text-white'
                         : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                     }`}
                   >
                     <span className="ml-4 font-medium">{item.name}</span>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span
+                        className={`ml-3 inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          item.badgeColor === 'green'
+                            ? 'bg-emerald-500 text-white'
+                            : item.badgeColor === 'red'
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-blue-500 text-white'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
                   </a>
                 </li>
               ))}

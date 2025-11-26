@@ -36,10 +36,52 @@ interface ApprovalWorkflowPageProps {
     onDailyReportPrefillApplied?: () => void;
 }
 
-const TABS_CONFIG = {
-    pending: { title: "要承認", description: "あなたが承認する必要がある申請の一覧です。" },
-    submitted: { title: "自分の申請", description: "あなたが過去に提出したすべての申請履歴です。" },
-    completed: { title: "完了済", description: "承認または却下されたすべての申請の履歴です。" },
+const TAB_ORDER = ['approvals', 'drafts', 'submitted', 'completed'] as const;
+type TabId = typeof TAB_ORDER[number];
+
+const TABS_CONFIG: Record<
+    TabId,
+    {
+        label: string;
+        title: string;
+        description: string;
+        emptyMessage: string;
+        accent: string;
+        shadow: string;
+    }
+> = {
+    approvals: {
+        label: '自分の承認',
+        title: '自分の承認待ち',
+        description: 'あなたが最終判断を下す必要がある申請一覧です。',
+        emptyMessage: '現在、承認待ちの申請はありません。',
+        accent: 'from-blue-500 via-blue-500 to-indigo-500',
+        shadow: 'shadow-blue-500/30',
+    },
+    drafts: {
+        label: '下書き',
+        title: '保存している下書き',
+        description: '途中保存した申請をここから再開できます。',
+        emptyMessage: '保存されている下書きはまだありません。',
+        accent: 'from-amber-500 via-orange-500 to-rose-500',
+        shadow: 'shadow-amber-500/30',
+    },
+    submitted: {
+        label: '提出履歴',
+        title: '提出済みの申請',
+        description: '提出済みの申請と現在のステータスを確認できます。',
+        emptyMessage: 'まだ提出済みの申請はありません。',
+        accent: 'from-emerald-500 via-green-500 to-teal-500',
+        shadow: 'shadow-emerald-500/30',
+    },
+    completed: {
+        label: '完了済',
+        title: '完了した申請',
+        description: '承認または却下が確定した申請の履歴です。',
+        emptyMessage: '完了済みの申請はまだありません。',
+        accent: 'from-slate-600 via-slate-700 to-slate-800',
+        shadow: 'shadow-slate-600/30',
+    },
 };
 
 const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
@@ -67,7 +109,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     const [error, setError] = useState('');
     const [selectedApplication, setSelectedApplication] = useState<ApplicationWithDetails | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'pending' | 'submitted' | 'completed'>('pending');
+    const [activeTab, setActiveTab] = useState<TabId>('approvals');
     const [activeResumedApplication, setActiveResumedApplication] = useState<ApplicationWithDetails | null>(null);
 
     // State for form view
@@ -162,31 +204,30 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     };
     
     const { displayedApplications, tabCounts } = useMemo(() => {
-        const pendingApps = applications.filter(app => app.approverId === currentUser?.id && app.status === 'pending_approval');
-        const submittedApps = applications.filter(app => app.applicantId === currentUser?.id);
-        const completedApps = applications.filter(app => app.status === 'approved' || app.status === 'rejected');
+        const approvalQueue = applications.filter(
+            app => app.approverId === currentUser?.id && app.status === 'pending_approval'
+        );
+        const myApplications = applications.filter(app => app.applicantId === currentUser?.id);
+        const draftQueue = myApplications.filter(app => app.status === 'draft');
+        const submittedQueue = myApplications.filter(app => app.status !== 'draft');
+        const completedQueue = myApplications.filter(app => app.status === 'approved' || app.status === 'rejected');
 
-        const counts = {
-            pending: pendingApps.length,
-            submitted: submittedApps.length,
-            completed: completedApps.length
+        const datasetMap: Record<TabId, ApplicationWithDetails[]> = {
+            approvals: approvalQueue,
+            drafts: draftQueue,
+            submitted: submittedQueue,
+            completed: completedQueue,
         };
 
-        let filteredByTab: ApplicationWithDetails[];
-        switch(activeTab) {
-            case 'pending':
-                filteredByTab = pendingApps;
-                break;
-            case 'submitted':
-                filteredByTab = submittedApps;
-                break;
-            case 'completed':
-                filteredByTab = completedApps;
-                break;
-            default:
-                filteredByTab = [];
-        }
-        
+        const counts: Record<TabId, number> = {
+            approvals: approvalQueue.length,
+            drafts: draftQueue.length,
+            submitted: submittedQueue.length,
+            completed: completedQueue.length,
+        };
+
+        let filteredByTab = datasetMap[activeTab] || [];
+
         if (searchTerm) {
             const lowercasedTerm = searchTerm.toLowerCase();
             filteredByTab = filteredByTab.filter(app =>
@@ -254,54 +295,56 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         }
     };
     
-    const EmptyState = () => {
-        const messages = {
-            pending: "承認待ちの申請はありません。",
-            submitted: "あなたが申請した案件はありません。",
-            completed: "完了した申請はまだありません。"
-        };
-        return (
-            <div className="text-center py-16 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
-                <p className="font-semibold">{messages[activeTab]}</p>
-                <p className="mt-1 text-base">新しい活動があると、ここに表示されます。</p>
-            </div>
-        );
-    };
+    const EmptyState = () => (
+        <div className="text-center py-16 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
+            <p className="font-semibold">{TABS_CONFIG[activeTab].emptyMessage}</p>
+            <p className="mt-1 text-base">新しい活動があると、ここに表示されます。</p>
+        </div>
+    );
 
 
     if (view === 'list') {
-        const TabButton = ({ id, label, count }: { id: 'pending' | 'submitted' | 'completed', label: string, count: number }) => (
-            <button
-                onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-2 whitespace-nowrap py-3 px-4 rounded-t-lg border-b-2 font-semibold text-base transition-colors ${
-                    activeTab === id
-                        ? 'border-blue-500 text-blue-600 bg-white dark:bg-slate-800'
-                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}
-            >
-                {label}
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                    activeTab === id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                }`}>
-                    {count}
-                </span>
-            </button>
-        );
+        const TabCard = ({ id }: { id: TabId }) => {
+            const config = TABS_CONFIG[id];
+            const isActive = activeTab === id;
+            return (
+                <button
+                    onClick={() => setActiveTab(id)}
+                    className={`relative overflow-hidden rounded-2xl border-2 p-4 text-left transition-all duration-200 ${
+                        isActive
+                            ? `border-transparent bg-gradient-to-r ${config.accent} text-white shadow-lg ${config.shadow}`
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-blue-400'
+                    }`}
+                >
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-100'}`}>{config.label}</p>
+                            <p className={`mt-1 text-xs ${isActive ? 'text-white/80' : 'text-slate-500 dark:text-slate-400'}`}>{config.description}</p>
+                        </div>
+                        <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                                isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                            }`}
+                        >
+                            {tabCounts[id]}
+                        </span>
+                    </div>
+                </button>
+            );
+        };
 
         return (
             <div className="flex flex-col gap-6">
-                <div className="border-b border-slate-200 dark:border-slate-700">
-                    <nav className="flex space-x-2">
-                        <TabButton id="pending" label="要承認" count={tabCounts.pending} />
-                        <TabButton id="submitted" label="自分の申請" count={tabCounts.submitted} />
-                        <TabButton id="completed" label="完了済" count={tabCounts.completed} />
-                    </nav>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {TAB_ORDER.map(tabId => (
+                        <TabCard key={tabId} id={tabId} />
+                    ))}
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl">
-                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">{TABS_CONFIG[activeTab].title}</h3>
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <span>{TABS_CONFIG[activeTab].title}</span>
+                    </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{TABS_CONFIG[activeTab].description}</p>
                 </div>
 
