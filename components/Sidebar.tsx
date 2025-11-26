@@ -53,13 +53,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     ],
   },
   {
-    id: 'reports',
-    name: '予定と各種報告',
-    icon: ClipboardList,
-    items: [
-    ],
-  },
-  {
     id: 'admin_tools',
     name: '管理メニュー',
     icon: Settings,
@@ -128,7 +121,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       <div className="px-3 py-4 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <Package className="w-8 h-8 text-blue-400" />
-          <h1 className="text-xl font-bold tracking-tight">業務管理</h1>
+          <h1 className="text-xl font-bold tracking-tight">業務</h1>
         </div>
         <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80">
           <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">業務</a>
@@ -151,7 +144,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     }`}
                 >
                     <PieChart className="w-5 h-5" />
-                    <span className="ml-4 font-medium">ダッシュボードトップ</span>
+                    <span className="ml-4 font-medium">ダッシュボード</span>
                 </a>
             </li>
             <li>
@@ -165,7 +158,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     }`}
                 >
                     <Inbox className="w-5 h-5" />
-                    <span className="ml-4 font-medium">社内掲示板</span>
+                    <span className="ml-4 font-medium">掲示板</span>
                 </a>
             </li>
             <li>
