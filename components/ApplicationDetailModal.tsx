@@ -321,6 +321,10 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const code = applicationCode?.code;
     const amount = formData.amount ? `¥${Number(formData.amount).toLocaleString()}` : (formData.totalAmount ? `¥${Number(formData.totalAmount).toLocaleString()}` : null);
     const formSummary = React.useMemo(() => buildFormSummary(code, formData), [code, formData]);
+    const hasSummarySections =
+        formSummary.highlights.length > 0 || formSummary.listSections.length > 0 || formSummary.tableSections.length > 0;
+    const hasAttachments = Boolean(formData.receiptUrl);
+    const showRejectionReason = application.status === 'rejected' && application.rejectionReason;
 
     const usersById = new Map(allUsers.map(u => [u.id, u.name]));
     const routeSteps = approvalRoute?.routeData.steps || [];
@@ -400,225 +404,221 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
 
     return (
         <>
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 font-sans">
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-                <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700">
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">申請詳細</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
+            <div className="fixed inset-0 z-50 bg-slate-950/70 p-4 md:p-8 font-sans">
+                <div className="flex h-full w-full flex-col rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/80 dark:border-slate-700/60 overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-700 px-6 py-5 md:px-8 md:py-6">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">MQ会計ドリブン</p>
+                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">申請詳細</h2>
+                        </div>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
 
-                <div className="p-6 overflow-y-auto space-y-6">
-                    {(formSummary.highlights.length > 0 || formSummary.listSections.length > 0 || formSummary.tableSections.length > 0) && (
-                        <section className="space-y-4">
-                            {formSummary.highlights.length > 0 && (
-                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                    {formSummary.highlights.map((item, index) => (
-                                        <div key={`summary-highlight-${index}`} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-                                            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white break-words">{item.value}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            {formSummary.listSections.map((section, sectionIndex) => (
-                                <div key={`summary-list-${sectionIndex}`} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-4">
-                                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
-                                    <dl className="mt-4 space-y-2">
-                                        {section.items.map((item, itemIndex) => (
-                                            <div key={`summary-list-item-${sectionIndex}-${itemIndex}`} className="flex items-start justify-between gap-4 text-sm">
-                                                <dt className="text-slate-500 dark:text-slate-400">{item.label}</dt>
-                                                <dd className="text-right font-semibold text-slate-900 dark:text-white break-words max-w-[60%]">{typeof item.value === 'string' ? item.value : item.value}</dd>
+                    <div className="flex-1 overflow-hidden px-4 py-4 md:px-8 md:py-6">
+                        <div className="grid h-full min-h-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] 2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
+                            <div className="min-h-0 overflow-y-auto space-y-6 pr-1">
+                                {hasSummarySections && (
+                                    <section className="space-y-4 rounded-3xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 p-6 shadow-inner">
+                                        {formSummary.highlights.length > 0 && (
+                                            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                                {formSummary.highlights.map((item, index) => (
+                                                    <div key={`summary-highlight-${index}`} className="rounded-2xl border border-white/40 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/70 p-4">
+                                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+                                                        <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white break-words">{item.value}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {formSummary.listSections.map((section, sectionIndex) => (
+                                            <div key={`summary-list-${sectionIndex}`} className="rounded-2xl border border-white/40 dark:border-slate-700/60 bg-white/90 dark:bg-slate-900/60 p-4">
+                                                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
+                                                <dl className="mt-4 space-y-2">
+                                                    {section.items.map((item, itemIndex) => (
+                                                        <div key={`summary-list-item-${sectionIndex}-${itemIndex}`} className="flex items-start justify-between gap-4 text-sm">
+                                                            <dt className="text-slate-500 dark:text-slate-400">{item.label}</dt>
+                                                            <dd className="text-right font-semibold text-slate-900 dark:text-white break-words max-w-[60%]">{typeof item.value === 'string' ? item.value : item.value}</dd>
+                                                        </div>
+                                                    ))}
+                                                </dl>
                                             </div>
                                         ))}
-                                    </dl>
-                                </div>
-                            ))}
-                            {formSummary.tableSections.map((section, sectionIndex) => (
-                                <div key={`summary-table-${sectionIndex}`} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40">
-                                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-                                        <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
+                                        {formSummary.tableSections.map((section, sectionIndex) => (
+                                            <div key={`summary-table-${sectionIndex}`} className="rounded-2xl border border-white/40 dark:border-slate-700/60 bg-white/90 dark:bg-slate-900/60 overflow-hidden">
+                                                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                                                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+                                                        <thead className="bg-slate-50 dark:bg-slate-900/30">
+                                                            <tr>
+                                                                {section.columns.map(column => (
+                                                                    <th key={`${section.title}-${column}`} className="px-4 py-2 text-left font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{column}</th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                                            {section.rows.map((row, rowIndex) => (
+                                                                <tr key={`summary-table-row-${rowIndex}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                                                                    {row.map((cell, cellIndex) => (
+                                                                        <td key={`summary-table-cell-${rowIndex}-${cellIndex}`} className="px-4 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">{cell ?? '-'}</td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </section>
+                                )}
+
+                                <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">フォーム詳細 (formData)</h3>
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">RAW DATA</span>
                                     </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
-                                            <thead className="bg-slate-50 dark:bg-slate-900/30">
+                                    <div className="mt-4 overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                                            <thead className="bg-slate-50 dark:bg-slate-800">
                                                 <tr>
-                                                    {section.columns.map(column => (
-                                                        <th key={`${section.title}-${column}`} className="px-4 py-2 text-left font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{column}</th>
-                                                    ))}
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">値</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                                {section.rows.map((row, rowIndex) => (
-                                                    <tr key={`summary-table-row-${rowIndex}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                                                        {row.map((cell, cellIndex) => (
-                                                            <td key={`summary-table-cell-${rowIndex}-${cellIndex}`} className="px-4 py-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">{cell ?? '-'}</td>
-                                                        ))}
+                                                {formDataRows.map((row, index) => (
+                                                    <tr key={`form-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
+                                                        <td className="px-4 py-3 font-medium text-sm text-slate-700 dark:text-slate-200">{row.label}</td>
+                                                        <td className="px-4 py-3 text-sm">{renderValue(row.value)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-                                </div>
-                            ))}
-                        </section>
-                    )}
+                                </section>
 
-                    <section className="space-y-3">
-                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">申請メタ情報</h3>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                                <thead className="bg-slate-50 dark:bg-slate-700">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">内容</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    {applicationMetaRows.map((row, index) => (
-                                        <tr key={`meta-${index}`} className="hover:bg-slate-100 dark:hover:bg-slate-800">
-                                            <td className="px-4 py-3 font-medium text-sm text-slate-700 dark:text-slate-200">{row.label}</td>
-                                            <td className="px-4 py-3 text-sm">{renderValue(row.value)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <section className="space-y-3">
-                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">関連情報</h3>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                                <thead className="bg-slate-50 dark:bg-slate-700">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">内容</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    {relatedRows.map((row, index) => (
-                                        <tr key={`related-${index}`} className="hover:bg-slate-100 dark:hover:bg-slate-800">
-                                            <td className="px-4 py-3 font-medium text-sm text-slate-700 dark:text-slate-200">{row.label}</td>
-                                            <td className="px-4 py-3 text-sm">{renderValue(row.value)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <section className="space-y-3">
-                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">フォーム詳細 (formData)</h3>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                                <thead className="bg-slate-50 dark:bg-slate-700">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">値</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    {formDataRows.map((row, index) => (
-                                        <tr key={`form-${index}`} className="hover:bg-slate-100 dark:hover:bg-slate-800">
-                                            <td className="px-4 py-3 font-medium text-sm text-slate-700 dark:text-slate-200">{row.label}</td>
-                                            <td className="px-4 py-3 text-sm">{renderValue(row.value)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    {formData.receiptUrl && (
-                         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">添付ファイル</h3>
-                            <a href={formData.receiptUrl} target="_blank" rel="noopener noreferrer">
-                                <img src={formData.receiptUrl} alt="添付ファイル" className="max-w-xs rounded-lg border border-slate-200 dark:border-slate-600" />
-                            </a>
-                        </div>
-                    )}
-                    
-                    <section className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">承認ステップ</h3>
-                        {routeStepRows.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                                    <thead className="bg-slate-50 dark:bg-slate-700">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ステップ</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">承認者</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">承認者ID</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ステータス</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                        {routeStepRows.map((row) => (
-                                            <tr key={`step-${row.level}`} className="hover:bg-slate-100 dark:hover:bg-slate-800">
-                                                <td className="px-4 py-3 font-medium text-sm text-slate-700 dark:text-slate-200">{row.level}</td>
-                                                <td className="px-4 py-3 text-sm">{row.approverName}</td>
-                                                <td className="px-4 py-3 text-sm">{row.approverId}</td>
-                                                <td className="px-4 py-3 text-sm">{row.status}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                {hasAttachments && (
+                                    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
+                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">添付ファイル</h3>
+                                        <a href={formData.receiptUrl} target="_blank" rel="noopener noreferrer" className="inline-flex">
+                                            <img
+                                                src={formData.receiptUrl}
+                                                alt="添付ファイル"
+                                                className="max-h-[280px] w-auto rounded-xl border border-slate-200 dark:border-slate-700 object-contain"
+                                            />
+                                        </a>
+                                    </section>
+                                )}
                             </div>
-                        ) : (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">承認ルートのステップ情報がありません。</p>
-                        )}
-                    </section>
 
-                    {application.status === 'rejected' && application.rejectionReason && (
-                         <section className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
-                            <h3 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-4">差し戻し理由</h3>
-                            <p className="p-3 bg-red-50 dark:bg-red-900/30 rounded-md text-red-800 dark:text-red-200">{application.rejectionReason}</p>
-                        </section>
-                    )}
-                </div>
-                
-                {isCurrentUserApprover && (
-                    <div className="flex-shrink-0 p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 space-y-3">
-                         <div>
-                            <label htmlFor="rejection_reason" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                                コメント・差し戻し理由
-                            </label>
-                            <textarea
-                                id="rejection_reason"
-                                rows={2}
-                                value={rejectionReason}
-                                onChange={(e) => setRejectionReason(e.target.value)}
-                                placeholder="承認時のコメント、または差し戻し理由を入力"
-                                className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 sm:text-sm"
-                                disabled={isProcessing}
-                            />
-                        </div>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={handleReject}
-                                disabled={isProcessing || !rejectionReason.trim()}
-                                className="flex items-center gap-2 bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 disabled:bg-slate-400"
-                            >
-                                {isProcessing ? <Loader className="w-5 h-5 animate-spin"/> : <Send className="w-5 h-5" />}
-                                <span>差し戻し送信</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleApprove}
-                                disabled={isProcessing}
-                                className="flex items-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-slate-400"
-                            >
-                                {isProcessing ? <Loader className="w-5 h-5 animate-spin"/> : <CheckCircle className="w-5 h-5" />}
-                                <span>承認</span>
-                            </button>
+                            <div className="min-h-0 overflow-y-auto space-y-6 pl-1">
+                                <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
+                                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">関連情報</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+                                            <thead className="bg-slate-50 dark:bg-slate-800">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">内容</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                                {relatedRows.map((row, index) => (
+                                                    <tr key={`related-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
+                                                        <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{row.label}</td>
+                                                        <td className="px-4 py-3">{renderValue(row.value)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </section>
+
+                                <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
+                                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">承認ステップ</h3>
+                                    {routeStepRows.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+                                                <thead className="bg-slate-50 dark:bg-slate-800">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ステップ</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">承認者</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">承認者ID</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ステータス</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                                    {routeStepRows.map((row) => (
+                                                        <tr key={`step-${row.level}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
+                                                            <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{row.level}</td>
+                                                            <td className="px-4 py-3">{row.approverName}</td>
+                                                            <td className="px-4 py-3">{row.approverId}</td>
+                                                            <td className="px-4 py-3">{row.status}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">承認ルートのステップ情報がありません。</p>
+                                    )}
+                                </section>
+
+                                {showRejectionReason && (
+                                    <section className="rounded-3xl border border-red-200 dark:border-red-500/50 bg-red-50 dark:bg-red-900/30 p-6">
+                                        <h3 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-3">差し戻し理由</h3>
+                                        <p className="text-sm leading-relaxed text-red-800 dark:text-red-100 whitespace-pre-wrap">{application.rejectionReason}</p>
+                                    </section>
+                                )}
+                            </div>
                         </div>
                     </div>
-                )}
+
+                    {isCurrentUserApprover && (
+                        <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/70 px-4 py-4 md:px-8 md:py-5 space-y-3">
+                            <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+                                <div className="md:col-span-1">
+                                    <label htmlFor="rejection_reason" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        コメント・差し戻し理由
+                                    </label>
+                                    <textarea
+                                        id="rejection_reason"
+                                        rows={2}
+                                        value={rejectionReason}
+                                        onChange={(e) => setRejectionReason(e.target.value)}
+                                        placeholder="承認コメント、または差し戻し理由を入力"
+                                        className="mt-1 block w-full rounded-xl border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        disabled={isProcessing}
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3 md:col-span-2 md:justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={handleReject}
+                                        disabled={isProcessing || !rejectionReason.trim()}
+                                        className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:bg-slate-400"
+                                    >
+                                        {isProcessing ? <Loader className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                        <span>差し戻し送信</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleApprove}
+                                        disabled={isProcessing}
+                                        className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:bg-slate-400"
+                                    >
+                                        {isProcessing ? <Loader className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                                        <span>承認</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
-        {ConfirmationDialog}
+            {ConfirmationDialog}
         </>
     );
 };

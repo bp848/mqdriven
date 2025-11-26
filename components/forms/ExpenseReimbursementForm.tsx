@@ -232,6 +232,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [departmentId, setDepartmentId] = useState<string>('');
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [notes, setNotes] = useState('');
+    const [hasSubmitted, setHasSubmitted] = useState(false);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -240,12 +241,21 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [error, setError] = useState('');
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
-    const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError;
+    const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError || hasSubmitted;
+
+    const resetFormFields = useCallback(() => {
+        setInvoice(createEmptyInvoiceDraft());
+        setDepartmentId('');
+        setApprovalRouteId('');
+        setNotes('');
+        setCurrentStep(1);
+    }, []);
 
     // Restore draft logic
     useEffect(() => {
         const restoreDraft = async () => {
             if (!currentUser?.id || !applicationCodeId) {
+                setHasSubmitted(false);
                 setIsRestoring(false);
                 return;
             }
@@ -267,6 +277,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             } catch (err) {
                 console.error("Failed to restore draft", err);
             } finally {
+                setHasSubmitted(false);
                 setIsRestoring(false);
             }
         };
@@ -393,6 +404,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         try {
             await submitApplication(payload, currentUser.id);
             await clearApplicationDraft(applicationCodeId, currentUser.id);
+            resetFormFields();
+            setHasSubmitted(true);
             addToast?.('経費精算を送信しました。', 'success');
             onSuccess();
         } catch (err: any) {
@@ -405,6 +418,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        if (hasSubmitted) {
+            addToast?.('すでに送信済みの申請です。新しい申請を開始してください。', 'info');
+            return;
+        }
         if (!currentUser) return setError('ユーザー情報が見つかりません。');
         if (!departmentId) return setError('部門を選択してください。');
         if (!approvalRouteId) return setError('承認ルートを選択してください。');
@@ -425,6 +442,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     };
 
     const handleSaveDraft = async () => {
+        if (hasSubmitted) {
+            addToast?.('送信済みの申請は下書き保存できません。新しい申請を開始してください。', 'info');
+            return;
+        }
         if (!currentUser) return setError('ユーザー情報が見つかりません。');
         setIsSavingDraft(true);
         try {
@@ -435,6 +456,12 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         } finally {
             setIsSavingDraft(false);
         }
+    };
+
+    const handleStartNewApplication = () => {
+        resetFormFields();
+        setHasSubmitted(false);
+        setError('');
     };
 
     const computedTotals = useMemo(() => computeLineTotals(invoice), [invoice]);
@@ -453,6 +480,22 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">経費精算フォーム</h2>
                 <p className="mt-2 text-slate-600 dark:text-slate-400">請求書の情報を入力し、経費精算を申請します。</p>
             </header>
+
+            {hasSubmitted && (
+                <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/40 dark:bg-emerald-900/20 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">この申請は送信済みです。</p>
+                        <p className="text-sm text-emerald-900/80 dark:text-emerald-200/80">承認一覧 &gt; 自分の申請タブで内容を確認できます。新しい申請を作成する場合は下のボタンを押してください。</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleStartNewApplication}
+                        className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                    >
+                        新しい申請を作成
+                    </button>
+                </div>
+            )}
 
             {/* Stepper */}
             <div className="mb-8">
@@ -572,7 +615,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                     <DepartmentSelect value={departmentId} onChange={setDepartmentId} required highlightRequired id="departmentId" />
                                 </FormField>
                                 <FormField label="承認ルート" required>
-                                    <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} variant="block" highlightRequired />
+                                    <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} highlightRequired />
                                 </FormField>
                                 <FormField label="備考" htmlFor="notes">
                                     <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full rounded-md border-slate-300 dark:border-slate-600" placeholder="補足事項や承認者へのコメントがあれば入力してください。" disabled={isDisabled} />
