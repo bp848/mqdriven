@@ -307,29 +307,7 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
                 <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <MQCard title="PQ (売上高)" value={pq} colorClass="bg-sky-700 dark:bg-sky-800" meterGoal={MONTHLY_GOALS.pq} />
-                <MQCard title="MQ (限界利益)" value={mq} subLabel="m率" subValue={`${mRate}%`} colorClass="bg-indigo-700 dark:bg-indigo-800" meterGoal={MONTHLY_GOALS.mq} />
-                <MQCard title="VQ (変動費)" value={vq} colorClass="bg-amber-700 dark:bg-amber-800" meterGoal={MONTHLY_GOALS.vq} />
-                <MQCard title="F (固定費)" value={f} subLabel="f/m比率" subValue={`${fmRatio}% [${getFmRatioRank(Number(fmRatio))}]`} colorClass="bg-rose-800 dark:bg-rose-900" meterGoal={MONTHLY_GOALS.f}>
-                    <div className={g >= 0 ? 'text-green-300' : 'text-red-300'}>
-                        <p className="text-lg font-semibold">G (利益)</p>
-                        <p className="text-4xl font-bold">{formatJPY(g)}</p>
-                        {g > 0 && <Meter value={g} goal={MONTHLY_GOALS.g} />}
-                    </div>
-                </MQCard>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {(Object.keys(fBreakdown) as (keyof typeof fBreakdown)[]).map((key, index) => (
-                    <div key={key} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm text-center">
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">F{index+1} {['人件費', '経費', '営業外', '戦略費', '償却費'][index]}</p>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{formatJPY(fBreakdown[key])}</p>
-                    </div>
-                ))}
-            </div>
-
-            <MonthlyTrendChart data={chartData} />
+            {/* KPIカードとグラフは非表示 */}
         </div>
     );
 };
