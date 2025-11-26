@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line,
 } from 'recharts';
-import { Job, JournalEntry, AccountItem, JobStatus } from '../types';
+import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread } from '../types';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
 import { Lightbulb, Loader, AlertTriangle, Inbox } from './Icons';
-import { BulletinThread, loadStoredThreads } from './bulletinBoardUtils';
+import { getBulletinThreads } from '../services/dataService';
 
 const AISuggestionCard: React.FC<{ suggestion: string; isLoading: boolean; isAIOff: boolean }> = ({ suggestion, isLoading, isAIOff }) => (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-800 dark:to-slate-900/70 p-6 rounded-2xl shadow-sm flex items-start gap-4 col-span-1 lg:col-span-2">
@@ -145,7 +145,7 @@ interface DashboardProps {
   isAIOff: boolean;
 }
 
-const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: () => void; }> = ({ threads, onNavigate }) => {
+const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: () => void; isLoading: boolean; }> = ({ threads, onNavigate, isLoading }) => {
     const visibleThreads = useMemo(() => {
         if (!threads.length) {
             return [];
@@ -174,7 +174,9 @@ const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: 
                     すべて表示
                 </button>
             </div>
-            {visibleThreads.length === 0 ? (
+            {isLoading ? (
+                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">掲示板を読み込み中です...</p>
+            ) : visibleThreads.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">まだ投稿がありません。最初の投稿を作成しましょう。</p>
             ) : (
                 <div className="mt-4 space-y-4">
@@ -199,9 +201,28 @@ const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: 
 
 const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, suggestion, isSuggestionLoading, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard, isAIOff }) => {
     const [bulletinThreads, setBulletinThreads] = useState<BulletinThread[]>([]);
+    const [isBulletinLoading, setIsBulletinLoading] = useState(true);
 
     useEffect(() => {
-        setBulletinThreads(loadStoredThreads());
+        let isMounted = true;
+        setIsBulletinLoading(true);
+        getBulletinThreads({ limit: 5 })
+            .then(data => {
+                if (isMounted) {
+                    setBulletinThreads(data);
+                }
+            })
+            .catch(error => {
+                console.error('Failed to load bulletin highlights', error);
+            })
+            .finally(() => {
+                if (isMounted) {
+                    setIsBulletinLoading(false);
+                }
+            });
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     
@@ -304,7 +325,7 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
                 {/* AI提案カードは一時的に非表示 */}
                 {/* <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} /> */}
                 <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
-                <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} />
+                <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} isLoading={isBulletinLoading} />
             </div>
 
             {/* KPIカードとグラフは非表示 */}

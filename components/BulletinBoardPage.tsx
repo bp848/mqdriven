@@ -15,13 +15,6 @@ interface BulletinBoardPageProps {
     allUsers: EmployeeUser[];
 }
 
-const generateId = () => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    return `bb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-};
-
 const formatDateLabel = (timestamp: string) => {
     const date = new Date(timestamp);
     if (Number.isNaN(date.getTime())) {
@@ -37,7 +30,7 @@ const formatDateLabel = (timestamp: string) => {
 };
 
 const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addToast, allUsers }) => {
-    const [threads, setThreads] = useState<BulletinThread[]>(() => loadStoredThreads());
+    const [threads, setThreads] = useState<BulletinThread[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [showPinnedOnly, setShowPinnedOnly] = useState(false);
     const [showAssignedOnly, setShowAssignedOnly] = useState(false);
@@ -46,6 +39,8 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
     const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
     const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
     const [editingDraft, setEditingDraft] = useState({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] as string[] });
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
     const userLookup = useMemo(() => {
         const map = new Map<string, EmployeeUser>();
@@ -55,9 +50,37 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
         return map;
     }, [allUsers]);
 
+    const sortThreads = useCallback((items: BulletinThread[]) => {
+        return [...items].sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        });
+    }, []);
+
+    const refreshThreads = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await getBulletinThreads();
+            setThreads(sortThreads(data));
+        } catch (error) {
+            console.error('Failed to load bulletin threads', error);
+            addToast('掲示板の読み込みに失敗しました。', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [addToast, sortThreads]);
+
     useEffect(() => {
-        persistThreads(threads);
-    }, [threads]);
+        refreshThreads();
+    }, [refreshThreads]);
+
+    const upsertThreadInState = useCallback((next: BulletinThread) => {
+        setThreads(prev => {
+            const without = prev.filter(thread => thread.id !== next.id);
+            return sortThreads([next, ...without]);
+        });
+    }, [sortThreads]);
 
     const filteredThreads = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -66,17 +89,16 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                 if (showPinnedOnly && !thread.pinned) {
                     return false;
                 }
-                if (showAssignedOnly && currentUser) {
+                if (showAssignedOnly) {
+                    if (!currentUser) return false;
                     return thread.assigneeIds?.includes(currentUser.id) ?? false;
                 }
-                if (showAssignedOnly && !currentUser) {
-                    return false;
-                }
                 if (!term) return true;
+                const tags = thread.tags || [];
                 return (
                     thread.title.toLowerCase().includes(term) ||
                     thread.body.toLowerCase().includes(term) ||
-                    (thread.tags || []).some(tag => tag.toLowerCase().includes(term))
+                    tags.some(tag => tag.toLowerCase().includes(term))
                 );
             })
             .sort((a, b) => {
@@ -84,80 +106,74 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                 if (!a.pinned && b.pinned) return 1;
                 return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             });
-    }, [threads, searchTerm, showPinnedOnly]);
+    }, [threads, searchTerm, showPinnedOnly, showAssignedOnly, currentUser]);
 
-    const resolveAuthor = () => {
-        if (!currentUser) {
-            return {
-                authorId: 'guest-user',
-                authorName: 'ゲストユーザー',
-                authorDepartment: null,
-            };
-        }
-        return {
-            authorId: currentUser.id,
-            authorName: currentUser.name,
-            authorDepartment: currentUser.department,
-        };
-    };
-
-    const handleCreatePost = (event: React.FormEvent<HTMLFormElement>) => {
+    const handleCreatePost = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (!currentUser) {
+            addToast('投稿にはログインが必要です。', 'error');
+            return;
+        }
         if (!newPost.title.trim() || !newPost.body.trim()) {
             addToast('タイトルと本文は必須です。', 'error');
             return;
         }
-        const { authorId, authorName, authorDepartment } = resolveAuthor();
-        const now = new Date().toISOString();
+
         const tags = newPost.tags
             .split(',')
             .map(tag => tag.trim())
             .filter(Boolean);
-        const thread: BulletinThread = {
-            id: generateId(),
-            title: newPost.title.trim(),
-            body: newPost.body.trim(),
-            tags,
-            authorId,
-            authorName,
-            authorDepartment,
-            pinned: false,
-            assigneeIds: newPostAssignees,
-            createdAt: now,
-            updatedAt: now,
-            comments: [],
-        };
-        setThreads(prev => [thread, ...prev]);
-        setNewPost({ title: '', body: '', tags: '' });
-        setNewPostAssignees([]);
-        addToast('掲示板に投稿しました。', 'success');
+
+        try {
+            setIsSubmittingPost(true);
+            const created = await createBulletinThread(
+                {
+                    title: newPost.title.trim(),
+                    body: newPost.body.trim(),
+                    tags,
+                    assigneeIds: newPostAssignees,
+                },
+                currentUser
+            );
+            upsertThreadInState(created);
+            setNewPost({ title: '', body: '', tags: '' });
+            setNewPostAssignees([]);
+            addToast('掲示板に投稿しました。', 'success');
+        } catch (error) {
+            console.error('Failed to create bulletin thread', error);
+            addToast('投稿に失敗しました。', 'error');
+        } finally {
+            setIsSubmittingPost(false);
+        }
     };
 
-    const handleAddComment = (postId: string) => {
+    const handleAddComment = async (postId: string) => {
         const draft = commentDrafts[postId];
+        if (!currentUser) {
+            addToast('コメントにはログインが必要です。', 'error');
+            return;
+        }
         if (!draft || !draft.trim()) {
             addToast('コメントを入力してください。', 'error');
             return;
         }
-        const { authorId, authorName, authorDepartment } = resolveAuthor();
-        const comment: BulletinComment = {
-            id: generateId(),
-            postId,
-            authorId,
-            authorName,
-            authorDepartment,
-            body: draft.trim(),
-            createdAt: new Date().toISOString(),
-        };
-        setThreads(prev =>
-            prev.map(thread =>
-                thread.id === postId
-                    ? { ...thread, comments: [...thread.comments, comment], updatedAt: comment.createdAt }
-                    : thread,
-            ),
-        );
-        setCommentDrafts(prev => ({ ...prev, [postId]: '' }));
-        addToast('コメントを追加しました。', 'success');
+
+        try {
+            const comment = await addBulletinComment(postId, draft.trim(), currentUser);
+            setCommentDrafts(prev => ({ ...prev, [postId]: '' }));
+            setThreads(prev => {
+                const updated = prev.map(thread =>
+                    thread.id === postId
+                        ? { ...thread, comments: [...thread.comments, comment], updatedAt: comment.createdAt }
+                        : thread
+                );
+                return sortThreads(updated);
+            });
+            addToast('コメントを追加しました。', 'success');
+        } catch (error) {
+            console.error('Failed to add bulletin comment', error);
+            addToast('コメントの追加に失敗しました。', 'error');
+        }
     };
 
     const canManageThread = (thread: BulletinThread) => {
@@ -186,9 +202,14 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
         setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
     };
 
-    const handleUpdateThread = (event: React.FormEvent<HTMLFormElement>) => {
+    const handleUpdateThread = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!editingThreadId) return;
+        const targetThread = threads.find(thread => thread.id === editingThreadId);
+        if (!targetThread || !canManageThread(targetThread)) {
+            addToast('編集権限がありません。', 'error');
+            return;
+        }
         const title = editingDraft.title.trim();
         const body = editingDraft.body.trim();
         if (!title || !body) {
@@ -199,20 +220,25 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
             .split(',')
             .map(tag => tag.trim())
             .filter(Boolean);
-        const now = new Date().toISOString();
-        setThreads(prev =>
-            prev.map(thread =>
-                thread.id === editingThreadId
-                    ? { ...thread, title, body, tags, pinned: editingDraft.pinned, assigneeIds: editingDraft.assigneeIds, updatedAt: now }
-                    : thread,
-            ),
-        );
-        setEditingThreadId(null);
-        setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
-        addToast('投稿を更新しました。', 'success');
+        try {
+            const updated = await updateBulletinThread(editingThreadId, {
+                title,
+                body,
+                tags,
+                pinned: editingDraft.pinned,
+                assigneeIds: editingDraft.assigneeIds,
+            });
+            upsertThreadInState(updated);
+            setEditingThreadId(null);
+            setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
+            addToast('投稿を更新しました。', 'success');
+        } catch (error) {
+            console.error('Failed to update bulletin thread', error);
+            addToast('投稿の更新に失敗しました。', 'error');
+        }
     };
 
-    const handleDeleteThread = (thread: BulletinThread) => {
+    const handleDeleteThread = async (thread: BulletinThread) => {
         if (!canManageThread(thread)) {
             addToast('削除権限がありません。', 'error');
             return;
@@ -221,16 +247,22 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
         if (!confirmed) {
             return;
         }
-        setThreads(prev => prev.filter(item => item.id !== thread.id));
-        setCommentDrafts(prev => {
-            const next = { ...prev };
-            delete next[thread.id];
-            return next;
-        });
-        if (editingThreadId === thread.id) {
-            handleCancelEdit();
+        try {
+            await deleteBulletinThread(thread.id);
+            setThreads(prev => prev.filter(item => item.id !== thread.id));
+            setCommentDrafts(prev => {
+                const next = { ...prev };
+                delete next[thread.id];
+                return next;
+            });
+            if (editingThreadId === thread.id) {
+                handleCancelEdit();
+            }
+            addToast('投稿を削除しました。', 'info');
+        } catch (error) {
+            console.error('Failed to delete bulletin thread', error);
+            addToast('投稿の削除に失敗しました。', 'error');
         }
-        addToast('投稿を削除しました。', 'info');
     };
 
     return (
@@ -275,6 +307,11 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
 
             <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6">
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">新規投稿</h2>
+                {!currentUser && (
+                    <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200">
+                        投稿やコメントを行うには管理画面左下からユーザーを選択してください。
+                    </p>
+                )}
                 <form className="space-y-4" onSubmit={handleCreatePost}>
                     <div>
                         <label htmlFor="bb-title" className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">タイトル *</label>
@@ -332,22 +369,31 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                     <div className="flex justify-end">
                         <button
                             type="submit"
-                            className="inline-flex items-center gap-2 bg-blue-600 text-white font-semibold px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors"
+                            disabled={!currentUser || isSubmittingPost}
+                            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-colors ${
+                                !currentUser || isSubmittingPost
+                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
                         >
                             <PlusCircle className="w-5 h-5" />
-                            投稿する
+                            {isSubmittingPost ? '送信中...' : '投稿する'}
                         </button>
                     </div>
                 </form>
             </section>
 
             <section className="space-y-4">
-                {filteredThreads.length === 0 && (
+                {isLoading ? (
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-8 text-center text-slate-500 dark:text-slate-400">
+                        読み込み中です...
+                    </div>
+                ) : filteredThreads.length === 0 ? (
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-8 text-center text-slate-500 dark:text-slate-400">
                         条件に一致する投稿がありません。新規投稿してみましょう。
                     </div>
-                )}
-                {filteredThreads.map(thread => {
+                ) : (
+                filteredThreads.map(thread => {
                     const isEditing = editingThreadId === thread.id;
                     const manageAccess = canManageThread(thread);
                     const assigneeUsers = (thread.assigneeIds || [])
@@ -524,13 +570,19 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                                     value={commentDrafts[thread.id] || ''}
                                     onChange={(e) => setCommentDrafts(prev => ({ ...prev, [thread.id]: e.target.value }))}
                                     placeholder="コメントを入力（全従業員が閲覧できます）"
-                                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    disabled={!currentUser}
+                                    className={`w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                        !currentUser ? 'opacity-60 cursor-not-allowed' : ''
+                                    }`}
                                 />
                                 <div className="flex justify-end">
                                     <button
                                         type="button"
                                         onClick={() => handleAddComment(thread.id)}
-                                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                        disabled={!currentUser}
+                                        className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold ${
+                                            currentUser ? 'text-blue-600 hover:text-blue-700' : 'text-slate-400 cursor-not-allowed'
+                                        }`}
                                     >
                                         コメントを投稿
                                     </button>
@@ -539,7 +591,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                         </div>
                         </article>
                     );
-                })}
+                }))}
             </section>
         </div>
     );
