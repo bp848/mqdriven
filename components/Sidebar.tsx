@@ -61,14 +61,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     ],
   },
   {
-    id: 'automation',
-    name: '自動入力',
-    icon: Archive,
-    items: [
-      { page: 'fax_ocr_intake', name: 'FAX自動入力' },
-    ],
-  },
-  {
     id: 'admin_tools',
     name: '管理メニュー',
     icon: Settings,
@@ -154,6 +146,20 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                 >
                     <Inbox className="w-5 h-5" />
                     <span className="ml-4 font-medium">社内掲示板</span>
+                </a>
+            </li>
+            <li>
+                <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onNavigate('fax_ocr_intake'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage === 'fax_ocr_intake'
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <Archive className="w-5 h-5" />
+                    <span className="ml-4 font-medium">FAXや郵便でもデータ自動入力</span>
                 </a>
             </li>
             <li>

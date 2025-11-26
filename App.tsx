@@ -78,7 +78,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_estimates: '見積管理',
     sales_orders: '案件予算管理',
     sales_billing: '売上請求 (AR)',
-    fax_ocr_intake: 'FAXからのデータ自動入力',
+    fax_ocr_intake: 'FAXや郵便でもデータ自動入力',
     analysis_ranking: '売上ランキング',
     purchasing_orders: '受注一覧',
     purchasing_invoices: '仕入計上 (AP)',
