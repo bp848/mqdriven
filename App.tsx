@@ -42,6 +42,7 @@ import ManufacturingCostManagement from './components/accounting/ManufacturingCo
 import AuditLogPage from './components/admin/AuditLogPage';
 import JournalQueuePage from './components/admin/JournalQueuePage';
 import MasterManagementPage from './components/admin/MasterManagementPage';
+import ActionConsolePage from './components/admin/ActionConsolePage';
 import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructionsModal';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
@@ -112,6 +113,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_user_management: 'ユーザー管理',
     admin_route_management: '承認ルート管理',
     admin_master_management: 'マスタ管理',
+    admin_action_console: 'アクションコンソール',
     bulletin_board: '掲示板',
     settings: '設定',
 };
@@ -800,6 +802,8 @@ const App: React.FC = () => {
                 return <AuditLogPage />;
             case 'admin_journal_queue':
                 return <JournalQueuePage />;
+            case 'admin_action_console':
+                return <ActionConsolePage />;
             default:
                 return <PlaceholderPage title={PAGE_TITLES[currentPage] || currentPage} />;
         }
