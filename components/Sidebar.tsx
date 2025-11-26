@@ -49,7 +49,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_expense', name: '経費精算' },
       { page: 'approval_form_transport', name: '交通費申請' },
       { page: 'approval_form_leave', name: '休暇申請' },
-      { page: 'approval_form_approval', name: '稟議' },
+      { page: 'approval_form_approval', name: '稟議申請' },
     ],
   },
   {
@@ -69,8 +69,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'admin_user_management', name: 'ユーザー管理' },
       { page: 'admin_route_management', name: '承認ルート管理' },
       { page: 'admin_master_management', name: 'マスタ管理' },
-      { page: 'admin_audit_log', name: '監査ログ' },
-      { page: 'admin_journal_queue', name: 'ジャーナル・キュー' },
     ],
   },
 ];
@@ -182,7 +180,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     }`}
                 >
                     <Archive className="w-5 h-5" />
-                    <span className="ml-4 font-medium">FAXや郵便でもデータ自動入力</span>
+                    <span className="ml-4 font-medium">データ自動入力</span>
                 </a>
             </li>
             <li>
@@ -210,7 +208,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     }`}
                 >
                     <Calendar className="w-5 h-5" />
-                    <span className="ml-4 font-medium">マイスケジュール</span>
+                    <span className="ml-4 font-medium">スケジュール/日報</span>
                 </a>
             </li>
           {visibleCategories.map(category => (
