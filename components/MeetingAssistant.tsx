@@ -141,8 +141,8 @@ const MeetingAssistant: React.FC = () => {
   }, [stopMeetingResources]);
 
   return (
-    <div className="w-full flex flex-col items-center">
-      <div className="w-full max-w-5xl bg-slate-900/90 text-slate-100 rounded-3xl border border-slate-800 shadow-2xl p-6 space-y-8">
+    <div className="w-full">
+      <div className="w-full bg-slate-900/90 text-slate-100 rounded-3xl border border-slate-800 shadow-2xl p-6 space-y-8">
         <header className="text-center space-y-2">
           <div className="flex items-center justify-center gap-3 text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-300">
             <IconSparkles className="w-8 h-8" />

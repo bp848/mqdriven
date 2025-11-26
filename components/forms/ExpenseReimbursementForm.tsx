@@ -475,7 +475,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     }
 
     return (
-        <div className="max-w-5xl mx-auto p-2 sm:p-4">
+        <div className="w-full p-2 sm:p-4">
             <header className="mb-6">
                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">経費精算フォーム</h2>
                 <p className="mt-2 text-slate-600 dark:text-slate-400">請求書の情報を入力し、経費精算を申請します。</p>
