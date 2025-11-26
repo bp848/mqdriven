@@ -366,8 +366,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                 )}
                 <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">日報作成</h2>
-                        <div className="flex flex-wrap gap-3">
+                        <div className="flex flex-wrap gap-3 ml-auto">
                             <button
                                 type="button"
                                 onClick={handleDuplicateYesterday}

@@ -886,9 +886,9 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 <div className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/50 p-4 space-y-3">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-white">週報テキストを貼り付け</p>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">日報テキストを貼り付け</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                                1週間分の時刻と内容を含む報告文を貼り付けると、作業実績として自動で反映されます。
+                                日報や週報のテキスト（時刻と内容を含む報告文）を貼り付けると、作業実績として自動で反映されます。
                             </p>
                         </div>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400">「作業実績」項目のみ活用します</span>
@@ -901,7 +901,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                         placeholder="いつもありがとうございます。11/21(金)の業務報告をさせて頂きます。..."
                     />
                     <div className="flex flex-wrap justify-end gap-2">
-                        <label className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer border border-blue-500 rounded-full px-3 py-1">
+                        <label className="text-[11px] font-semibold cursor-pointer rounded-full px-4 py-1 bg-white text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-100 hover:border-slate-300">
                             <input
                                 type="file"
                                 accept="image/*"
@@ -909,7 +909,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onChange={handleDailyReportOcrUpload}
                                 disabled={isDailyOcrLoading}
                             />
-                            {isDailyOcrLoading ? '画像読み取り中…' : '画像から読み取り'}
+                            {isDailyOcrLoading ? '手書き日報から読み取り中…' : '手書き日報から読み取る'}
                         </label>
                         <button
                             type="button"

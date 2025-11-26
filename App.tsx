@@ -70,7 +70,7 @@ const getEnvValue = (key: string): string | undefined => {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ホーム',
-    my_schedule: 'マイスケジュール（カレンダー）',
+    my_schedule: 'スケジュール/報告',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
     sales_customers: '取引先/お客様カルテ',

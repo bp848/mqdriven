@@ -476,11 +476,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
     return (
         <div className="w-full p-2 sm:p-4">
-            <header className="mb-6">
-                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">経費精算フォーム</h2>
-                <p className="mt-2 text-slate-600 dark:text-slate-400">請求書の情報を入力し、経費精算を申請します。</p>
-            </header>
-
             {hasSubmitted && (
                 <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/40 dark:bg-emerald-900/20 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -532,8 +527,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 <CardTitle>ヘッダー情報</CardTitle>
                                 <CardDescription>OCRが読み取った請求書の基本情報です。誤りがあれば修正してください。</CardDescription>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                                <FormField label="サプライヤー / 支払先" htmlFor="supplierName" required isOcr={invoice.ocrExtractedFields.has('supplierName')} className="md:col-span-2">
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
+                                <FormField label="サプライヤー / 支払先" htmlFor="supplierName" required isOcr={invoice.ocrExtractedFields.has('supplierName')} className="md:col-span-2 lg:col-span-3">
                                     <SupplierSearchSelect
                                         suppliers={paymentRecipients}
                                         value={invoice.paymentRecipientId}
@@ -560,7 +555,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 <FormField label="支払期限" htmlFor="dueDate" isOcr={invoice.ocrExtractedFields.has('dueDate')}>
                                     <input id="dueDate" type="date" value={invoice.dueDate} onChange={e => handleFieldChange('dueDate', e.target.value)} className="w-full rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
                                 </FormField>
-                                <div className="md:col-span-2 border-t dark:border-slate-700 pt-6 mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="md:col-span-2 lg:col-span-3 border-t dark:border-slate-700 pt-6 mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <FormField label="税抜合計" htmlFor="totalNet" isOcr={invoice.ocrExtractedFields.has('totalNet')}>
                                         <input id="totalNet" type="number" value={invoice.totalNet} onChange={e => handleFieldChange('totalNet', numberFromInput(e.target.value))} className="w-full text-right rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
                                     </FormField>

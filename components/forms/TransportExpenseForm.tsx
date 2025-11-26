@@ -220,7 +220,6 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 </div>
             )}
             <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white text-center">交通費申請フォーム</h2>
 
                 {formLoadError && (
                     <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
