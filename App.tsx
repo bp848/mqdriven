@@ -69,7 +69,7 @@ const getEnvValue = (key: string): string | undefined => {
 };
 
 const PAGE_TITLES: Record<Page, string> = {
-    analysis_dashboard: 'ホーム',
+    analysis_dashboard: 'ダッシュボード',
     my_schedule: 'スケジュール/報告',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
@@ -78,7 +78,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_estimates: '見積管理',
     sales_orders: '案件予算管理',
     sales_billing: '売上請求 (AR)',
-    fax_ocr_intake: 'FAXや郵便でもデータ自動入力',
+    fax_ocr_intake: 'データ自動入力',
     analysis_ranking: '売上ランキング',
     purchasing_orders: '受注一覧',
     purchasing_invoices: '仕入計上 (AP)',
@@ -94,7 +94,7 @@ const PAGE_TITLES: Record<Page, string> = {
     approval_form_expense: '経費精算',
     approval_form_transport: '交通費申請',
     approval_form_leave: '休暇申請',
-    approval_form_approval: '稟議',
+    approval_form_approval: '稟議申請',
     approval_form_daily: '日報',
     approval_form_weekly: '週報',
     accounting_journal: '仕訳帳',
@@ -112,7 +112,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_user_management: 'ユーザー管理',
     admin_route_management: '承認ルート管理',
     admin_master_management: 'マスタ管理',
-    bulletin_board: '社内掲示板',
+    bulletin_board: '掲示板',
     settings: '設定',
 };
 
