@@ -11,10 +11,11 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
   const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
   
   // フォーム状態
+  const FIXED_COMPANY = '文唱堂印刷株式会社';
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    company: '',
+    company: FIXED_COMPANY,
     phone: '',
     department: '',
     position: '',
@@ -28,7 +29,10 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'company') {
+      return;
+    }
+    setFormData(prev => ({ ...prev, [name]: value, company: FIXED_COMPANY }));
   };
 
   const handleEmailRegister = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -40,7 +44,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
     }
 
     // バリデーション
-    if (!formData.name || !formData.email || !formData.company) {
+    if (!formData.name || !formData.email) {
       setErrorMessage('必須項目を入力してください。');
       return;
     }
@@ -114,7 +118,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
       setFormData({
         name: '',
         email: '',
-        company: '',
+        company: FIXED_COMPANY,
         phone: '',
         department: '',
         position: '',
@@ -278,22 +282,15 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBackToLogin }) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="company" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  会社名 <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  会社名
                 </label>
-                <select
-                  id="company"
-                  name="company"
-                  value={formData.company}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                >
-                  <option value="">選択してください</option>
-                  <option value="株式会社文祥堂">株式会社文祥堂</option>
-                  <option value="株式会社アーク">株式会社アーク</option>
-                  <option value="その他">その他</option>
-                </select>
+                <input
+                  type="text"
+                  value={FIXED_COMPANY}
+                  disabled
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300 cursor-not-allowed"
+                />
               </div>
               
               <div>
