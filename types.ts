@@ -15,7 +15,7 @@ export type Page =
   | 'ai_business_consultant'
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
-  | 'admin_master_management' | 'settings';
+  | 'admin_master_management' | 'admin_action_console' | 'settings';
 
 export interface ActionItem {
   id: string;

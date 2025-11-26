@@ -61,6 +61,8 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'admin_user_management', name: 'ユーザー管理' },
       { page: 'admin_route_management', name: '承認ルート管理' },
       { page: 'admin_master_management', name: 'マスタ管理' },
+      { page: 'admin_action_console', name: 'アクションコンソール' },
+      { page: 'settings', name: '通知メール設定' },
     ],
   },
 ];
