@@ -120,7 +120,6 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen">
       <div className="px-3 py-4 border-b border-slate-700">
         <div className="flex items-center gap-2">
-          <Package className="w-8 h-8 text-blue-400" />
           <h1 className="text-xl font-bold tracking-tight">業務</h1>
         </div>
         <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80">
