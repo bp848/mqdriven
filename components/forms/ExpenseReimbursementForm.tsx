@@ -492,23 +492,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 </div>
             )}
 
-            {/* Stepper */}
-            <div className="mb-8">
-                <ol className="flex items-center w-full">
-                    {STEPS.map((step, index) => (
-                        <li key={step.id} className={`flex w-full items-center ${index !== STEPS.length - 1 ? "after:content-[''] after:w-full after:h-1 after:border-b after:border-4 after:inline-block" : ''} ${currentStep > step.id ? 'after:border-blue-600' : 'after:border-slate-200 dark:after:border-slate-700'}`}>
-                            <button onClick={() => setCurrentStep(step.id)} disabled={isDisabled} className="flex items-center justify-center w-10 h-10 rounded-full shrink-0 transition-colors"
-                                style={{
-                                    backgroundColor: currentStep >= step.id ? '#2563EB' : '#F1F5F9',
-                                    color: currentStep >= step.id ? 'white' : '#475569'
-                                }}>
-                                {currentStep > step.id ? <Check className="w-5 h-5" /> : step.id}
-                            </button>
-                        </li>
-                    ))}
-                </ol>
-            </div>
-
             <form onSubmit={handleSubmit}>
                 {currentStep === 1 && (
                     <div className="space-y-6 animate-fade-in">
@@ -613,7 +596,15 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} highlightRequired />
                                 </FormField>
                                 <FormField label="備考" htmlFor="notes">
-                                    <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full rounded-md border-slate-300 dark:border-slate-600" placeholder="補足事項や承認者へのコメントがあれば入力してください。" disabled={isDisabled} />
+                                    <textarea
+                                        id="notes"
+                                        value={notes}
+                                        onChange={e => setNotes(e.target.value)}
+                                        rows={8}
+                                        className="w-full rounded-md border-slate-300 dark:border-slate-600 min-h-[200px]"
+                                        placeholder="補足事項や承認者へのコメントがあれば入力してください。"
+                                        disabled={isDisabled}
+                                    />
                                 </FormField>
                             </CardContent>
                         </Card>
