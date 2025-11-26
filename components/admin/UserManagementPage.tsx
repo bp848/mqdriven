@@ -136,7 +136,12 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                     addToast('ユーザーが削除されました。', 'success');
                     await loadUsers();
                 } catch (err: any) {
-                    addToast(`削除に失敗しました: ${err.message}`, 'error');
+                    const message = err?.message as string | undefined;
+                    if (message && (message.includes('orders_create_user_id_fkey') || message.includes('is still referenced from table "orders"'))) {
+                        addToast('このユーザーに紐づく注文が残っているため削除できません。担当者変更などの対応が必要です。', 'error');
+                    } else {
+                        addToast(`削除に失敗しました: ${message || '原因不明のエラーが発生しました。'}`, 'error');
+                    }
                 }
             }
         });
