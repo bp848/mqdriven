@@ -54,10 +54,9 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   },
   {
     id: 'reports',
-    name: '報告',
+    name: '予定と各種報告',
     icon: ClipboardList,
     items: [
-      { page: 'approval_form_weekly', name: '週報' },
     ],
   },
   {
