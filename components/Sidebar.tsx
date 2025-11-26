@@ -200,7 +200,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     }`}
                 >
                     <Calendar className="w-5 h-5" />
-                    <span className="ml-4 font-medium">スケジュール/日報</span>
+                    <span className="ml-4 font-medium">スケジュール/報告</span>
                 </a>
             </li>
           {visibleCategories.map(category => (

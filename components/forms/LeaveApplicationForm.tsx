@@ -130,12 +130,12 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
                 )}
                 <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">休暇申請フォーム</h2>
+                        <div className="flex-1" />
                         <button 
                             type="button" 
                             onClick={() => setIsChatModalOpen(true)} 
                             className="flex items-center gap-2 bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={isAIOff || isDisabled}
+                            disabled={isAIOff || isSubmitting}
                         >
                             <Sparkles className="w-5 h-5" />
                             <span>AIチャットで申請</span>

@@ -148,7 +148,7 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
                 )}
                 <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">週報作成</h2>
+                        <div className="flex-1" />
                         <button 
                             type="button" 
                             onClick={() => setIsChatModalOpen(true)} 
