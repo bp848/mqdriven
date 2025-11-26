@@ -9,9 +9,10 @@ interface ApplicationListProps {
   onApplicationSelect: (app: ApplicationWithDetails) => void;
   selectedApplicationId: string | null;
   onResumeDraft?: (app: ApplicationWithDetails) => void;
+  currentUserId?: string | null;
 }
 
-const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onApplicationSelect, selectedApplicationId, onResumeDraft }) => {
+const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onApplicationSelect, selectedApplicationId, onResumeDraft, currentUserId }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
 
   const sortedApplications = useMemo(() => {
@@ -93,12 +94,17 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
             </tr>
           </thead>
           <tbody>
-            {sortedApplications.map((app) => (
-              <tr 
-                key={app.id} 
+            {sortedApplications.map((app) => {
+              const canResumeDraft = Boolean(onResumeDraft) && app.status === 'draft';
+              const canResubmit =
+                Boolean(onResumeDraft) && app.status === 'rejected' && currentUserId && currentUserId === app.applicantId;
+
+              return (
+              <tr
+                key={app.id}
                 className={`border-b dark:border-slate-700 transition-colors duration-150 cursor-pointer ${
-                  selectedApplicationId === app.id 
-                    ? 'bg-blue-50 dark:bg-blue-900/30' 
+                  selectedApplicationId === app.id
+                    ? 'bg-blue-50 dark:bg-blue-900/30'
                     : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
                 onClick={() => onApplicationSelect(app)}
@@ -111,7 +117,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (app.status === 'draft' && onResumeDraft) {
+                      if ((canResumeDraft || canResubmit) && onResumeDraft) {
                         onResumeDraft(app);
                         return;
                       }
@@ -119,10 +125,10 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
                     }}
                     className="flex items-center justify-center gap-1.5 w-full text-blue-600 dark:text-blue-400 font-semibold hover:underline"
                   >
-                    {app.status === 'draft' ? (
+                    {canResumeDraft || canResubmit ? (
                       <>
                         <RefreshCw className="w-4 h-4" />
-                        <span>下書きを再開</span>
+                        <span>{canResumeDraft ? '下書きを再開' : '再申請'}</span>
                       </>
                     ) : (
                       <>
@@ -133,7 +139,8 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
                   </button>
                 </td>
               </tr>
-            ))}
+            );
+            })}
             {sortedApplications.length === 0 && (
               <tr>
                 <td colSpan={5} className="text-center py-16 text-slate-500 dark:text-slate-400">

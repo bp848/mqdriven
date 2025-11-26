@@ -358,6 +358,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         onApplicationSelect={handleSelectApplication}
                         selectedApplicationId={selectedApplication?.id || null}
                         onResumeDraft={onResumeDraft}
+                        currentUserId={currentUser?.id}
                     />
                 ) : (
                     <EmptyState />

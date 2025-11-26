@@ -246,13 +246,19 @@ const App: React.FC = () => {
     }, []);
 
     const handleResumeApplicationDraft = useCallback((application: ApplicationWithDetails) => {
-        if (application.status !== 'draft') {
+        if (!currentUser || application.applicantId !== currentUser.id) {
+            addToast('自分が作成した申請のみ再開できます。', 'error');
             return;
         }
-        const applicationCode = application.applicationCode?.code;
 
+        if (application.status !== 'draft' && application.status !== 'rejected') {
+            addToast('下書きまたは差戻し済みの申請のみ再申請できます。', 'error');
+            return;
+        }
+
+        const applicationCode = application.applicationCode?.code;
         if (!applicationCode) {
-            addToast('申請種別を特定できず、下書きを再開できません。', 'error');
+            addToast('申請種別を特定できず、申請を再開できません。', 'error');
             return;
         }
 
@@ -262,10 +268,14 @@ const App: React.FC = () => {
             return;
         }
 
+        if (application.status === 'rejected') {
+            addToast('差し戻し内容をフォームに読み込みました。必要事項を修正して再申請してください。', 'info');
+        }
+
         setResumedApplication(application);
         setSearchTerm('');
         setCurrentPage(targetPage);
-    }, [addToast]);
+    }, [addToast, currentUser]);
 
     const resetAppData = useCallback(() => {
         setJobs([]);
