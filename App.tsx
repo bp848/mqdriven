@@ -667,10 +667,6 @@ const App: React.FC = () => {
 
     // Render Logic
     const renderContent = () => {
-        if (isLoading && !dbError) {
-            return <div className="flex justify-center items-center h-full"><Loader className="w-12 h-12 animate-spin text-blue-500" /></div>;
-        }
-        
         switch (currentPage) {
             case 'analysis_dashboard':
                 return <Dashboard 
@@ -914,9 +910,9 @@ const App: React.FC = () => {
                 />
             </div>
 
-            <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900">
+            <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
-                <div className="flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900">
+                <div className={`flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
                     {/* Mobile menu button */}
                     <button
                         type="button"
@@ -930,6 +926,11 @@ const App: React.FC = () => {
                         {renderContent()}
                     </div>
                 </div>
+                {isLoading && !dbError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 z-20">
+                        <Loader className="w-12 h-12 animate-spin text-blue-500" />
+                    </div>
+                )}
             </main>
             
             {/* Modals */}
