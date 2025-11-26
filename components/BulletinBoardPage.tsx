@@ -1,7 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { BulletinComment, EmployeeUser, Toast } from '../types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BulletinThread, EmployeeUser, Toast } from '../types';
 import { PlusCircle, Pencil, Trash2 } from './Icons';
-import { BulletinThread, loadStoredThreads, persistThreads } from './bulletinBoardUtils';
+import {
+    getBulletinThreads,
+    createBulletinThread,
+    updateBulletinThread,
+    deleteBulletinThread,
+    addBulletinComment,
+} from '../services/dataService';
 
 interface BulletinBoardPageProps {
     currentUser: EmployeeUser | null;

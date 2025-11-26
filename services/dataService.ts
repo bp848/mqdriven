@@ -41,6 +41,8 @@ import {
     FaxIntake,
     ProjectBudgetSummary,
     ProjectBudgetFilter,
+    BulletinThread,
+    BulletinComment,
 } from '../types';
 
 type SupabaseClient = ReturnType<typeof getSupabase>;
@@ -91,6 +93,52 @@ const normalizeLookupKey = (value: unknown): string | null => {
     const key = String(value).trim();
     return key.length > 0 ? key : null;
 };
+
+const mapDbBulletinComment = (row: any): BulletinComment => ({
+    id: row.id,
+    postId: row.thread_id || row.postId || row.post_id || '',
+    authorId: row.author_id,
+    authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
+    authorDepartment: row.author?.department ?? row.author_department ?? null,
+    body: row.body,
+    createdAt: row.created_at,
+});
+
+const mapDbBulletinThread = (row: any): BulletinThread => ({
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    authorId: row.author_id,
+    authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
+    authorDepartment: row.author?.department ?? row.author_department ?? null,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    pinned: Boolean(row.pinned),
+    assigneeIds: Array.isArray(row.assignee_ids) ? row.assignee_ids : [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    comments: Array.isArray(row.comments) ? row.comments.map(mapDbBulletinComment) : [],
+});
+
+const BULLETIN_THREAD_SELECT = `
+    *,
+    author:author_id (
+        id,
+        name,
+        department
+    ),
+    comments:bulletin_comments (
+        id,
+        thread_id,
+        body,
+        author_id,
+        created_at,
+        author:author_id (
+            id,
+            name,
+            department
+        )
+    )
+`;
 
 const PAYMENT_RECIPIENT_SELECT = `
 id,
@@ -1287,6 +1335,112 @@ export const clearApplicationDraft = async (applicationCodeId: string, applicant
     const supabase = getSupabase();
     const { error } = await supabase.from('application_drafts').delete().eq('id', draftId);
     ensureSupabaseSuccess(error, 'Failed to clear application draft');
+};
+
+interface BulletinThreadInput {
+    title: string;
+    body: string;
+    tags?: string[];
+    pinned?: boolean;
+    assigneeIds?: string[];
+}
+
+export const getBulletinThreads = async (options?: { limit?: number }): Promise<BulletinThread[]> => {
+    const supabase = getSupabase();
+    let query = supabase
+        .from('bulletin_threads')
+        .select(BULLETIN_THREAD_SELECT)
+        .order('pinned', { ascending: false })
+        .order('updated_at', { ascending: false });
+
+    if (options?.limit) {
+        query = query.limit(options.limit);
+    }
+
+    const { data, error } = await query;
+    ensureSupabaseSuccess(error, 'Failed to fetch bulletin threads');
+    return (data || []).map(mapDbBulletinThread);
+};
+
+export const createBulletinThread = async (
+    input: BulletinThreadInput,
+    author: EmployeeUser
+): Promise<BulletinThread> => {
+    const supabase = getSupabase();
+    const payload = {
+        title: input.title,
+        body: input.body,
+        tags: input.tags ?? [],
+        pinned: input.pinned ?? false,
+        assignee_ids: input.assigneeIds ?? [],
+        author_id: author.id,
+    };
+    const { data, error } = await supabase
+        .from('bulletin_threads')
+        .insert(payload)
+        .select(BULLETIN_THREAD_SELECT)
+        .single();
+    ensureSupabaseSuccess(error, 'Failed to create bulletin thread');
+    return mapDbBulletinThread(data);
+};
+
+export const updateBulletinThread = async (
+    threadId: string,
+    input: Partial<BulletinThreadInput>
+): Promise<BulletinThread> => {
+    const supabase = getSupabase();
+    const updates: Record<string, any> = {};
+    if (input.title !== undefined) updates.title = input.title;
+    if (input.body !== undefined) updates.body = input.body;
+    if (input.tags !== undefined) updates.tags = input.tags;
+    if (input.pinned !== undefined) updates.pinned = input.pinned;
+    if (input.assigneeIds !== undefined) updates.assignee_ids = input.assigneeIds;
+    updates.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+        .from('bulletin_threads')
+        .update(updates)
+        .eq('id', threadId)
+        .select(BULLETIN_THREAD_SELECT)
+        .single();
+    ensureSupabaseSuccess(error, 'Failed to update bulletin thread');
+    return mapDbBulletinThread(data);
+};
+
+export const deleteBulletinThread = async (threadId: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('bulletin_threads').delete().eq('id', threadId);
+    ensureSupabaseSuccess(error, 'Failed to delete bulletin thread');
+};
+
+export const addBulletinComment = async (
+    threadId: string,
+    body: string,
+    author: EmployeeUser
+): Promise<BulletinComment> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('bulletin_comments')
+        .insert({
+            thread_id: threadId,
+            body,
+            author_id: author.id,
+        })
+        .select(`
+            id,
+            thread_id,
+            body,
+            author_id,
+            created_at,
+            author:author_id (
+                id,
+                name,
+                department
+            )
+        `)
+        .single();
+    ensureSupabaseSuccess(error, 'Failed to add bulletin comment');
+    return mapDbBulletinComment(data);
 };
 export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
     if (app.approverId !== currentUser.id) {
