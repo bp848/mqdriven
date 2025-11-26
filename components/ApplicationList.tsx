@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ApplicationWithDetails, SortConfig } from '../types';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
 import { ArrowUpDown, ChevronDown, Eye, RefreshCw } from './Icons';
-import { formatDateTime } from '../utils';
+import { formatDateTime, formatJPY } from '../utils';
 
 interface ApplicationListProps {
   applications: ApplicationWithDetails[];
@@ -11,6 +11,79 @@ interface ApplicationListProps {
   onResumeDraft?: (app: ApplicationWithDetails) => void;
   currentUserId?: string | null;
 }
+
+const toNumber = (value: any): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/,/g, '').trim();
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const sumNumericArray = (values: any[]): number | null => {
+  if (!Array.isArray(values)) return null;
+  const total = values.reduce((sum, value) => {
+    const amount = toNumber(value?.amount ?? value);
+    return sum + (amount || 0);
+  }, 0);
+  return total > 0 ? total : null;
+};
+
+const pickFirstString = (values: any[]): string | null => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+};
+
+const deriveApplicationSummary = (app: ApplicationWithDetails) => {
+  const data: any = app.formData || {};
+  const invoice = data.invoice || {};
+
+  const amountCandidates = [
+    toNumber(data.amount),
+    toNumber(data.totalAmount),
+    toNumber(data.requestedAmount),
+    toNumber(data.estimatedAmount),
+    toNumber(invoice.totalGross),
+    toNumber(invoice.totalNet),
+    toNumber(invoice.totalAmount),
+    toNumber(invoice.total),
+    sumNumericArray(data.details),
+    sumNumericArray(invoice.lines),
+  ].filter((value): value is number => value !== null);
+
+  const amount = amountCandidates.length > 0 ? amountCandidates[0] : null;
+  const formattedAmount = amount !== null ? formatJPY(amount) : '-';
+
+  const payee = pickFirstString([
+    invoice.supplierName,
+    data.supplierName,
+    data.paymentRecipientName,
+    data.payee,
+    data.payeeName,
+    data.vendorName,
+    data.recipientName,
+  ]) || '-';
+
+  const customer = pickFirstString([
+    data.customerName,
+    data.clientName,
+    data.projectName,
+    invoice.customerName,
+    data.companyName,
+    data.customer?.name,
+    data.client?.name,
+  ]) || '-';
+
+  return { amount: formattedAmount, payee, customer };
+};
 
 const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onApplicationSelect, selectedApplicationId, onResumeDraft, currentUserId }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
@@ -88,6 +161,9 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
             <tr>
               <SortableHeader sortKey="type" label="申請種別" />
               <SortableHeader sortKey="applicant" label="申請者" />
+              <th scope="col" className="px-6 py-3 text-right">金額</th>
+              <th scope="col" className="px-6 py-3">支払先</th>
+              <th scope="col" className="px-6 py-3">顧客 / 案件</th>
               <SortableHeader sortKey="updatedAt" label="更新日時" />
               <SortableHeader sortKey="status" label="ステータス" />
               <th scope="col" className="px-6 py-3 text-center">操作</th>
@@ -99,6 +175,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
               const canResubmit =
                 Boolean(onResumeDraft) && app.status === 'rejected' && currentUserId && currentUserId === app.applicantId;
 
+              const summary = deriveApplicationSummary(app);
               return (
               <tr
                 key={app.id}
@@ -111,6 +188,9 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
               >
                 <td className="px-6 py-4 font-medium text-slate-600 dark:text-slate-300">{app.applicationCode?.name || 'N/A'}</td>
                 <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">{app.applicant?.name || '不明なユーザー'}</td>
+                <td className="px-6 py-4 text-right tabular-nums">{summary.amount}</td>
+                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{summary.payee}</td>
+                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{summary.customer}</td>
                 <td className="px-6 py-4">{formatDateTime(app.updatedAt || app.createdAt)}</td>
                 <td className="px-6 py-4"><ApplicationStatusBadge status={app.status} /></td>
                 <td className="px-6 py-4 text-center">
