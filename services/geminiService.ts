@@ -508,6 +508,26 @@ export const generateDailyReportSummary = async (
   });
 };
 
+// 手書き日報画像からテキストを抽出して活動内容用のテキストを返す
+export const extractDailyReportFromImage = async (
+  imageBase64: string,
+  mimeType: string
+): Promise<string> => {
+  checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const imagePart = { inlineData: { data: imageBase64, mimeType } };
+    const textPart = {
+      text:
+        "この画像は日本語の手書き業務日報です。日付、訪問先や対応先、主な活動内容、明日の予定などを読み取り、ビジネス文書としてそのまま日報フォームの『活動内容』に貼り付けられる形のテキストに整形して出力してください。箇条書きではなく、日本語の文章で簡潔にまとめてください。",
+    };
+    const response = await ai.models.generateContent({
+      model,
+      contents: { parts: [imagePart, textPart] },
+    });
+    return response.text;
+  });
+};
+
 export const generateWeeklyReportSummary = async (keywords: string): Promise<string> => {
   checkOnlineAndAIOff();
   return withRetry(async () => {

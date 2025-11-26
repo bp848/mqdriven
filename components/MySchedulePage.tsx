@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar as CalendarIcon, PlusCircle, Trash2, ArrowLeft, ArrowRight } from './Icons';
+import { extractDailyReportFromImage } from '../services/geminiService';
 import {
     ProjectBudgetSummary,
     PurchaseOrder,
@@ -404,6 +405,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const [customEvents, setCustomEvents] = useState<CalendarEvent[]>([]);
     const [actualItems, setActualItems] = useState<ScheduleItem[]>([]);
     const [newEvent, setNewEvent] = useState({ title: '', date: todayIso, time: '', description: '' });
+    const [isDailyOcrLoading, setIsDailyOcrLoading] = useState(false);
     const newEventTitleRef = useRef<HTMLInputElement | null>(null);
     const [hasManualNewEventDate, setHasManualNewEventDate] = useState(false);
     const [viewingUserId, setViewingUserId] = useState<string>(() => currentUser?.id ?? allUsers[0]?.id ?? 'guest');
@@ -609,6 +611,31 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     };
 
     const isDailyReportTextEmpty = !dailyReportText.trim();
+
+    const handleDailyReportOcrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsDailyOcrLoading(true);
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            try {
+                const result = reader.result as string | null;
+                if (!result) return;
+                const base64 = result.split(',')[1] || '';
+                const text = await extractDailyReportFromImage(base64, file.type);
+                setDailyReportText(prev => (prev ? `${prev}\n\n${text}` : text));
+                addToast?.('画像から日報テキストを読み取りました。', 'success');
+            } catch (err: any) {
+                const msg = err instanceof Error ? err.message : '日報画像の読み取りに失敗しました。';
+                addToast?.(msg, 'error');
+            } finally {
+                setIsDailyOcrLoading(false);
+                e.target.value = '';
+            }
+        };
+        reader.readAsDataURL(file);
+    };
 
     const handleSelectDateFromCalendar = (date: string) => {
         setSelectedDate(date);
@@ -859,9 +886,9 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 <div className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/50 p-4 space-y-3">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-white">日報テキストを貼り付け</p>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">週報テキストを貼り付け</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                                時刻と内容を含む日報（例：11/21(金)の作業実績）を貼り付けると実績が自動で反映されます。
+                                1週間分の時刻と内容を含む報告文を貼り付けると、作業実績として自動で反映されます。
                             </p>
                         </div>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400">「作業実績」項目のみ活用します</span>
@@ -874,6 +901,16 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                         placeholder="いつもありがとうございます。11/21(金)の業務報告をさせて頂きます。..."
                     />
                     <div className="flex flex-wrap justify-end gap-2">
+                        <label className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer border border-blue-500 rounded-full px-3 py-1">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleDailyReportOcrUpload}
+                                disabled={isDailyOcrLoading}
+                            />
+                            {isDailyOcrLoading ? '画像読み取り中…' : '画像から読み取り'}
+                        </label>
                         <button
                             type="button"
                             onClick={handleDailyReportTextClear}
