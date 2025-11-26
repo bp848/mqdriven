@@ -39,7 +39,7 @@ const HIDDEN_CATEGORY_IDS: string[] = [
   'management',
 ];
 
-const ALL_NAV_CATEGORIES: NavCategoryType[] = [
+const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   {
     id: 'approvals',
     name: '申請・承認',
@@ -57,7 +57,6 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
     name: '報告',
     icon: ClipboardList,
     items: [
-      { page: 'approval_form_daily', name: '日報' },
       { page: 'approval_form_weekly', name: '週報' },
     ],
   },
@@ -84,8 +83,28 @@ const ALL_NAV_CATEGORIES: NavCategoryType[] = [
   },
 ];
 
-export const buildNavCategories = (user: EmployeeUser | null): NavCategoryType[] => {
-  const visibleCategories = ALL_NAV_CATEGORIES.filter(
+const decorateCategories = (
+  categories: NavCategoryType[],
+  pendingApprovalCount?: number
+): NavCategoryType[] =>
+  categories.map(category => {
+    if (category.id !== 'approvals') return category;
+    return {
+      ...category,
+      items: category.items.map(item =>
+        item.page === 'approval_list'
+          ? { ...item, badge: pendingApprovalCount, badgeColor: 'blue' }
+          : item
+      ),
+    };
+  });
+
+export const buildNavCategories = (
+  user: EmployeeUser | null,
+  pendingApprovalCount?: number
+): NavCategoryType[] => {
+  const baseCategories = decorateCategories(BASE_NAV_CATEGORIES, pendingApprovalCount);
+  const visibleCategories = baseCategories.filter(
     (category) => !HIDDEN_CATEGORY_IDS.includes(category.id)
   );
 
@@ -110,7 +129,10 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   onSignOut,
   approvalsCount,
 }) => {
-  const visibleCategories = React.useMemo(() => buildNavCategories(currentUser), [currentUser]);
+  const visibleCategories = React.useMemo(
+    () => buildNavCategories(currentUser, approvalsCount),
+    [currentUser, approvalsCount]
+  );
 
   return (
     <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen">
