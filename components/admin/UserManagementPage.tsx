@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
 import { getUsers, addUser, updateUser, deleteUser } from '../../services/dataService';
-import { Loader, PlusCircle, X, Save, Trash2, Pencil } from '../Icons';
+import { Loader, PlusCircle, X, Save, Trash2, Pencil, AlertTriangle } from '../Icons';
 
 const UserModal: React.FC<{
     user: EmployeeUser | null;
@@ -60,15 +60,17 @@ const UserModal: React.FC<{
 interface UserManagementPageProps {
     addToast: (message: string, type: Toast['type']) => void;
     requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
+    currentUser: EmployeeUser | null;
 }
 
-const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, requestConfirmation }) => {
+const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, requestConfirmation, currentUser }) => {
     const [users, setUsers] = useState<EmployeeUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<EmployeeUser | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const canManageUsers = currentUser?.role === 'admin';
 
     const loadUsers = useCallback(async () => {
         try {
@@ -87,6 +89,10 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
     }, [loadUsers]);
 
     const handleOpenModal = (user: EmployeeUser | null = null) => {
+        if (!canManageUsers) {
+            addToast('ユーザーの管理は管理者のみ可能です。', 'error');
+            return;
+        }
         setSelectedUser(user);
         setIsModalOpen(true);
     };
@@ -97,6 +103,10 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
     };
 
     const handleSaveUser = async (userData: Partial<EmployeeUser>) => {
+        if (!canManageUsers) {
+            addToast('ユーザーの管理は管理者のみ可能です。', 'error');
+            return;
+        }
         try {
             if (userData.id) {
                 await updateUser(userData.id, userData);
@@ -113,6 +123,10 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
     };
 
     const handleDeleteUser = (user: EmployeeUser) => {
+        if (!canManageUsers) {
+            addToast('ユーザーの管理は管理者のみ可能です。', 'error');
+            return;
+        }
         requestConfirmation({
             title: 'ユーザーを削除',
             message: `本当にユーザー「${user.name}」を削除しますか？この操作は元に戻せません。`,
@@ -159,12 +173,26 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                         className="w-full md:w-72 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 text-sm focus:ring-blue-500 focus:border-blue-500"
                         aria-label="ユーザー検索"
                     />
-                    <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">
+                    <button
+                        onClick={() => handleOpenModal()}
+                        className={`flex items-center justify-center gap-2 font-semibold py-2 px-4 rounded-lg ${
+                            canManageUsers ? 'bg-blue-600 text-white' : 'bg-slate-400 text-slate-200 cursor-not-allowed'
+                        }`}
+                        disabled={!canManageUsers}
+                    >
                         <PlusCircle className="w-5 h-5" />
                         新規ユーザー追加
                     </button>
                 </div>
             </div>
+            {!canManageUsers && (
+                <div className="mx-6 mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                        <p>このページでのユーザー追加・変更・削除は管理者のみが実行できます。管理者アカウントでログインしてください。</p>
+                    </div>
+                </div>
+            )}
             {isLoading ? (
                 <div className="p-16 text-center"><Loader className="w-8 h-8 mx-auto animate-spin" /></div>
             ) : error ? (
@@ -204,8 +232,14 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                 <td className="px-6 py-4">{new Date(user.createdAt).toLocaleDateString()}</td>
                                 <td className="px-6 py-4">
                                     <div className="flex justify-center items-center gap-2">
-                                        <button onClick={() => handleOpenModal(user)} className="p-2 text-slate-500 hover:text-blue-600"><Pencil className="w-5 h-5" /></button>
-                                        <button onClick={() => handleDeleteUser(user)} className="p-2 text-slate-500 hover:text-red-600"><Trash2 className="w-5 h-5" /></button>
+                                        {canManageUsers ? (
+                                            <>
+                                                <button onClick={() => handleOpenModal(user)} className="p-2 text-slate-500 hover:text-blue-600"><Pencil className="w-5 h-5" /></button>
+                                                <button onClick={() => handleDeleteUser(user)} className="p-2 text-slate-500 hover:text-red-600"><Trash2 className="w-5 h-5" /></button>
+                                            </>
+                                        ) : (
+                                            <span className="text-xs text-slate-400">権限がありません</span>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -214,7 +248,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                     </tbody>
                 </table>
             )}
-            {isModalOpen && <UserModal user={selectedUser} onClose={handleCloseModal} onSave={handleSaveUser} />}
+            {isModalOpen && canManageUsers && <UserModal user={selectedUser} onClose={handleCloseModal} onSave={handleSaveUser} />}
         </div>
     );
 };
