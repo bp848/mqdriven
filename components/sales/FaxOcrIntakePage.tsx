@@ -471,7 +471,7 @@ const FaxOcrIntakePage: React.FC<FaxOcrIntakePageProps> = ({
     <div className="space-y-8 text-slate-900 dark:text-slate-100">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">FAXからのデータ自動入力</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">FAXや郵便でもデータ自動入力</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             FAXで届いた受注・見積資料をPDF/画像でアップロードし、OCR結果を確認して案件・受注・見積テーブルに反映します。
           </p>
