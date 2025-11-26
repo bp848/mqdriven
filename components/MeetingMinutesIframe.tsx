@@ -6,14 +6,9 @@ const MEETING_MINUTES_APP_URL =
 
 const MeetingMinutesIframe: React.FC = () => {
   return (
-    <div className="w-full flex flex-col items-center">
-      <div className="w-full max-w-5xl mx-auto">
-        <h2 className="text-xl font-semibold mb-2">議事録作成アシスタント</h2>
-        <p className="text-sm text-slate-500 mb-4">
-          会議内容を要約して議事録ドラフトを作成します。決定事項と ToDo を必ず確認してください。
-        </p>
-
-        <div className="w-full h-[calc(100vh-200px)] min-h-[650px] bg-slate-900/80 rounded-3xl overflow-hidden border border-slate-800 shadow-inner">
+    <div className="w-full flex justify-center">
+      <div className="w-full max-w-5xl">
+        <div className="w-full min-h-[65vh] bg-slate-900/80 rounded-3xl overflow-hidden border border-slate-800 shadow-inner mx-auto">
           <iframe
             src={MEETING_MINUTES_APP_URL}
             title="議事録作成アシスタント"
