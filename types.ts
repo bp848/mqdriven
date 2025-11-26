@@ -215,6 +215,10 @@ export interface BulletinPost {
   comments?: BulletinComment[];
 }
 
+export type BulletinThread = BulletinPost & {
+  comments: BulletinComment[];
+};
+
 export interface Customer {
   id: string;
   customerCode?: string;
