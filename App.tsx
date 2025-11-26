@@ -710,7 +710,7 @@ const App: React.FC = () => {
             case 'sales_pipeline':
                 return <SalesPipelinePage jobs={jobs} onUpdateJob={handleUpdateJob} onCardClick={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
             case 'admin_user_management':
-                return <UserManagementPage addToast={addToast} requestConfirmation={requestConfirmation} />;
+                return <UserManagementPage addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} />;
             case 'admin_route_management':
                 return <ApprovalRouteManagementPage addToast={addToast} requestConfirmation={requestConfirmation} />;
             case 'admin_master_management':
