@@ -2,6 +2,76 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Loader, Save, Mail, CheckCircle } from './Icons';
 import { Toast, EmployeeUser } from '../types';
 
+type NotificationTemplateKey = 'submitted' | 'step_forward' | 'approved' | 'rejected';
+
+interface NotificationTemplate {
+    subject: string;
+    body: string;
+}
+
+const TEMPLATE_STORAGE_KEY = 'notificationTemplates';
+const SIGNATURE_STORAGE_KEY = 'signatureSettings';
+const SMTP_STORAGE_KEY = 'smtpSettings';
+
+const NOTIFICATION_TEMPLATE_CONFIG: Record<NotificationTemplateKey, {
+    label: string;
+    description: string;
+    defaultSubject: string;
+    defaultBody: string;
+}> = {
+    submitted: {
+        label: '申請提出通知（承認者宛）',
+        description: '申請が提出された際に最初の承認者へ送られるメールです。',
+        defaultSubject: '【承認依頼】{{application_code}} の申請が提出されました',
+        defaultBody: `{{intro}}
+
+{{detail_table}}
+
+{{link_hint}}`,
+    },
+    step_forward: {
+        label: '承認バトンタッチ通知',
+        description: '次の承認者へステップが移った際のメールです。',
+        defaultSubject: '【承認依頼】{{application_code}} の承認ステップが割り当てられました',
+        defaultBody: `{{intro}}
+
+{{detail_table}}
+
+次の承認レベル: {{next_level}}
+{{link_hint}}`,
+    },
+    approved: {
+        label: '最終承認完了通知（申請者宛）',
+        description: '申請がすべて承認された際、申請者へ送られます。',
+        defaultSubject: '【承認完了】{{application_code}} の申請が承認されました',
+        defaultBody: `{{intro}}
+
+{{detail_table}}
+
+承認日時: {{approved_at}}
+{{link_hint}}`,
+    },
+    rejected: {
+        label: '差戻し通知（申請者宛）',
+        description: '申請が差し戻された際、申請者へ送られます。',
+        defaultSubject: '【差し戻し】{{application_code}} の申請が差し戻されました',
+        defaultBody: `{{intro}}
+
+{{detail_table}}
+
+差戻し理由: {{rejection_reason}}
+{{link_hint}}`,
+    },
+};
+
+const buildDefaultTemplates = (): Record<NotificationTemplateKey, NotificationTemplate> => {
+    return (Object.keys(NOTIFICATION_TEMPLATE_CONFIG) as NotificationTemplateKey[]).reduce((acc, key) => {
+        const config = NOTIFICATION_TEMPLATE_CONFIG[key];
+        acc[key] = { subject: config.defaultSubject, body: config.defaultBody };
+        return acc;
+    }, {} as Record<NotificationTemplateKey, NotificationTemplate>);
+};
+
 interface SettingsPageProps {
     addToast: (message: string, type: Toast['type']) => void;
     currentUser: EmployeeUser | null;
@@ -25,6 +95,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         email: '',
         website: '',
     });
+    const [notificationTemplates, setNotificationTemplates] = useState<Record<NotificationTemplateKey, NotificationTemplate>>(
+        () => buildDefaultTemplates()
+    );
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const mounted = useRef(true);
@@ -33,9 +106,34 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         mounted.current = true;
         
         try {
-            const savedSignature = localStorage.getItem('signatureSettings');
+            const savedSignature = localStorage.getItem(SIGNATURE_STORAGE_KEY);
             if (savedSignature) {
                 setSignatureSettings(JSON.parse(savedSignature));
+            }
+            const savedSmtp = localStorage.getItem(SMTP_STORAGE_KEY);
+            if (savedSmtp) {
+                const parsed = JSON.parse(savedSmtp);
+                setSmtpSettings(prev => ({
+                    ...prev,
+                    ...parsed,
+                    port: parsed?.port ? Number(parsed.port) : prev.port,
+                }));
+            }
+            const savedTemplates = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+            if (savedTemplates) {
+                const parsed = JSON.parse(savedTemplates);
+                setNotificationTemplates(prev => {
+                    const next = { ...prev };
+                    (Object.keys(NOTIFICATION_TEMPLATE_CONFIG) as NotificationTemplateKey[]).forEach(key => {
+                        if (parsed?.[key]) {
+                            next[key] = {
+                                subject: parsed[key].subject ?? NOTIFICATION_TEMPLATE_CONFIG[key].defaultSubject,
+                                body: parsed[key].body ?? NOTIFICATION_TEMPLATE_CONFIG[key].defaultBody,
+                            };
+                        }
+                    });
+                    return next;
+                });
             }
         } catch (error) {
             console.error("Failed to load signature settings from localStorage", error);
@@ -48,7 +146,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
 
     const handleSmtpChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setSmtpSettings(prev => ({ ...prev, [name]: value }));
+        setSmtpSettings(prev => ({ ...prev, [name]: name === 'port' ? Number(value) : value }));
     };
 
     const handleSignatureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,16 +154,43 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setSignatureSettings(prev => ({...prev, [name]: value}));
     };
 
+    const handleTemplateChange = (
+        key: NotificationTemplateKey,
+        field: keyof NotificationTemplate,
+        value: string
+    ) => {
+        setNotificationTemplates(prev => ({
+            ...prev,
+            [key]: {
+                ...prev[key],
+                [field]: value,
+            },
+        }));
+    };
+
+    const handleTemplateReset = (key: NotificationTemplateKey) => {
+        const config = NOTIFICATION_TEMPLATE_CONFIG[key];
+        setNotificationTemplates(prev => ({
+            ...prev,
+            [key]: {
+                subject: config.defaultSubject,
+                body: config.defaultBody,
+            },
+        }));
+        addToast(`「${config.label}」を初期テンプレートに戻しました。`, 'success');
+    };
+
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
         setTimeout(() => {
             if (mounted.current) {
-                // Save signature settings to localStorage
-                localStorage.setItem('signatureSettings', JSON.stringify(signatureSettings));
+                localStorage.setItem(SIGNATURE_STORAGE_KEY, JSON.stringify(signatureSettings));
+                localStorage.setItem(SMTP_STORAGE_KEY, JSON.stringify(smtpSettings));
+                localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(notificationTemplates));
 
                 setIsSaving(false);
-                console.log('Saved settings:', {smtpSettings, signatureSettings});
+                console.log('Saved settings:', {smtpSettings, signatureSettings, notificationTemplates});
                 addToast('設定が正常に保存されました。', 'success');
             }
         }, 1500);
@@ -88,6 +213,17 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
 
     const inputClass = "w-full text-base bg-slate-50 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500";
     const labelClass = "block text-base font-medium text-slate-700 dark:text-slate-300 mb-1.5";
+    const placeholderChips = [
+        { token: '{{application_code}}', label: '申請種別名' },
+        { token: '{{applicant}}', label: '申請者（氏名 + メール）' },
+        { token: '{{status}}', label: '現在のステータス' },
+        { token: '{{current_level}}', label: '現在の承認レベル' },
+        { token: '{{next_level}}', label: '次の承認レベル' },
+        { token: '{{approved_at}}', label: '承認日時' },
+        { token: '{{rejection_reason}}', label: '差戻し理由' },
+        { token: '{{detail_table}}', label: '申請詳細ブロック' },
+        { token: '{{link_hint}}', label: 'フッターの案内文' },
+    ];
 
     const profileFields = [
         { label: '氏名', value: currentUser?.name || '未設定' },
@@ -211,6 +347,70 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                             <input type="url" id="website" name="website" value={signatureSettings.website} onChange={handleSignatureChange} className={inputClass} placeholder="https://new.b-p.co.jp/" />
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white">通知メールテンプレート</h2>
+                    <p className="mt-1 text-base text-slate-500 dark:text-slate-400">
+                        承認ワークフローで送信される各種メールの件名・本文を自由にカスタマイズできます。<br className="hidden md:block" />
+                        下記の差し込みタグを使うと、申請ごとの情報を自動で挿入できます。
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        {placeholderChips.map(item => (
+                            <span
+                                key={item.token}
+                                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200"
+                            >
+                                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                                {item.token}
+                                <span className="text-[11px] text-slate-400 dark:text-slate-300">({item.label})</span>
+                            </span>
+                        ))}
+                    </div>
+                </div>
+                <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {(Object.keys(NOTIFICATION_TEMPLATE_CONFIG) as NotificationTemplateKey[]).map(key => {
+                        const config = NOTIFICATION_TEMPLATE_CONFIG[key];
+                        const template = notificationTemplates[key];
+                        return (
+                            <section key={key} className="p-6 space-y-4">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-white">{config.label}</h3>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">{config.description}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTemplateReset(key)}
+                                        className="self-start rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700/80"
+                                    >
+                                        初期テンプレに戻す
+                                    </button>
+                                </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className={labelClass}>件名</label>
+                                        <input
+                                            type="text"
+                                            value={template.subject}
+                                            onChange={(e) => handleTemplateChange(key, 'subject', e.target.value)}
+                                            className={inputClass}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>本文</label>
+                                        <textarea
+                                            value={template.body}
+                                            onChange={(e) => handleTemplateChange(key, 'body', e.target.value)}
+                                            className={`${inputClass} min-h-[140px]`}
+                                        />
+                                    </div>
+                                </div>
+                            </section>
+                        );
+                    })}
                 </div>
             </div>
 

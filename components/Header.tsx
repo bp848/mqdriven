@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search } from './Icons';
 
 interface HeaderProps {
@@ -18,10 +18,27 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ title, primaryAction, search }) => {
+  const [now, setNow] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const timeString = now.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   return (
     <header className="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700">
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white capitalize">{title}</h1>
       <div className="flex items-center gap-4">
+        <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
+          {timeString}
+        </div>
         {search && (
             <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

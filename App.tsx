@@ -92,7 +92,7 @@ const PAGE_TITLES: Record<Page, string> = {
     hr_labor_cost: '人件費配賦',
     approval_list: '承認一覧',
     approval_form_expense: '経費精算',
-    approval_form_transport: '交通費申請',
+    approval_form_transport: '交通費精算',
     approval_form_leave: '休暇申請',
     approval_form_approval: '稟議申請',
     approval_form_daily: '日報',

@@ -38,6 +38,46 @@ const BODY_INTRO: Record<ApprovalNotificationType, string> = {
     rejected: '申請が差し戻されました。理由をご確認のうえ再申請をお願いいたします。',
 };
 
+type NotificationTemplateOverrides = Partial<Record<ApprovalNotificationType, { subject?: string; body?: string }>>;
+
+const TEMPLATE_STORAGE_KEY = 'notificationTemplates';
+
+const loadNotificationTemplateOverrides = (): NotificationTemplateOverrides | null => {
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+        return null;
+    }
+    try {
+        const raw = window.localStorage.getItem(TEMPLATE_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        console.warn('[notification] Failed to parse custom templates', error);
+        return null;
+    }
+};
+
+const replaceTokens = (template: string, values: Record<string, string>): string => {
+    return Object.entries(values).reduce((acc, [key, value]) => {
+        const pattern = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+        return acc.replace(pattern, value ?? '');
+    }, template);
+};
+
+const applyTemplateOverrides = (
+    type: ApprovalNotificationType,
+    fallbackSubject: string,
+    fallbackBody: string,
+    tokens: Record<string, string>
+): { subject: string; body: string } => {
+    const overrides = loadNotificationTemplateOverrides();
+    const selectedSubject = overrides?.[type]?.subject?.trim() ? overrides[type]!.subject! : fallbackSubject;
+    const selectedBody = overrides?.[type]?.body?.trim() ? overrides[type]!.body! : fallbackBody;
+
+    return {
+        subject: replaceTokens(selectedSubject, tokens),
+        body: replaceTokens(selectedBody, tokens),
+    };
+};
+
 const resolveUserById = async (supabase: SupabaseClient, userId?: string | null): Promise<UserSummary | null> => {
     if (!userId) return null;
     if (userCache.has(userId)) {
@@ -159,11 +199,34 @@ const buildEmailContent = async (
     const subjectTemplate = SUBJECT_TEMPLATES[payload.type] ?? '申請通知';
     const subject = subjectTemplate.replace('{code}', codeLabel);
 
-    const lines = [intro, '', ...details, '', '詳細は承認一覧画面で確認できます。'];
-    return {
-        subject,
-        body: lines.join('\n'),
+    const detailBlock = details.join('\n');
+    const linkHint = '詳細は承認一覧画面で確認できます。';
+    const defaultBody = [intro, '', detailBlock, '', linkHint].join('\n');
+
+    const placeholderValues: Record<string, string> = {
+        intro,
+        application_id: application.id,
+        application_code: codeLabel,
+        applicant: applicantLabel,
+        applicant_name: application && 'applicant' in application && application.applicant?.name
+            ? application.applicant.name
+            : applicantSummary?.name ?? '',
+        applicant_email: application && 'applicant' in application && application.applicant?.email
+            ? application.applicant.email ?? ''
+            : applicantSummary?.email ?? '',
+        status: application.status,
+        approval_route_id: application.approvalRouteId ?? '-',
+        current_level: application.currentLevel ? String(application.currentLevel) : '-',
+        next_level: payload.metadata?.currentLevel ? String(payload.metadata.currentLevel) : '',
+        submitted_at: application.submittedAt ? formatDateTime(application.submittedAt) : '',
+        approved_at: payload.metadata?.approvedAt ? formatDateTime(payload.metadata.approvedAt) : '',
+        rejection_reason: payload.metadata?.reason ?? application.rejectionReason ?? '',
+        detail_table: detailBlock,
+        link_hint: linkHint,
+        timestamp: new Date().toISOString(),
     };
+
+    return applyTemplateOverrides(payload.type, subject, defaultBody, placeholderValues);
 };
 
 export async function sendApprovalNotification(payload: ApprovalNotificationPayload): Promise<void> {

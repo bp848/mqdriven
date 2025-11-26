@@ -42,12 +42,12 @@ const HIDDEN_CATEGORY_IDS: string[] = [
 const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   {
     id: 'approvals',
-    name: '申請・承認',
+    name: '経費精算や会社への申請',
     icon: CheckCircle,
     items: [
       { page: 'approval_list', name: '承認一覧' },
       { page: 'approval_form_expense', name: '経費精算' },
-      { page: 'approval_form_transport', name: '交通費申請' },
+      { page: 'approval_form_transport', name: '交通費精算' },
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
     ],
