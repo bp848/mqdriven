@@ -70,7 +70,7 @@ const getEnvValue = (key: string): string | undefined => {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ダッシュボード',
-    my_schedule: 'スケジュール/報告',
+    my_schedule: '予定/報告各種',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
     sales_customers: '取引先/お客様カルテ',
@@ -891,6 +891,7 @@ const App: React.FC = () => {
                                 onUserChange={setCurrentUser}
                                 supabaseUserEmail={shouldRequireAuth ? (supabaseUser?.email ?? null) : null}
                                 onSignOut={shouldRequireAuth && isAuthenticated ? handleSignOut : undefined}
+                                approvalsCount={pendingApprovalCount}
                             />
                         </div>
                     </>
@@ -907,6 +908,7 @@ const App: React.FC = () => {
                     onUserChange={setCurrentUser}
                     supabaseUserEmail={shouldRequireAuth ? (supabaseUser?.email ?? null) : null}
                     onSignOut={shouldRequireAuth && isAuthenticated ? handleSignOut : undefined}
+                    approvalsCount={pendingApprovalCount}
                 />
             </div>
 
