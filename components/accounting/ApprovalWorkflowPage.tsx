@@ -210,7 +210,11 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         const myApplications = applications.filter(app => app.applicantId === currentUser?.id);
         const draftQueue = myApplications.filter(app => app.status === 'draft');
         const submittedQueue = myApplications.filter(app => app.status !== 'draft');
-        const completedQueue = myApplications.filter(app => app.status === 'approved' || app.status === 'rejected');
+        const completedQueue = applications.filter(app => {
+            const involved = app.applicantId === currentUser?.id || app.approverId === currentUser?.id;
+            const isDone = app.status === 'approved' || app.status === 'rejected';
+            return involved && isDone;
+        });
 
         const datasetMap: Record<TabId, ApplicationWithDetails[]> = {
             approvals: approvalQueue,
