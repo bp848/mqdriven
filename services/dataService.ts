@@ -1078,7 +1078,7 @@ export async function getUsers(): Promise<EmployeeUser[]> {
     ] = await Promise.all([
         supabase
             .from('users')
-            .select('id, name, email, role, created_at, department_id, position_id')
+            .select('id, name, email, role, created_at, department_id, position_id, is_active')
             .order('name', { ascending: true }),
         supabase.from('departments').select('id, name'),
         supabase.from('employee_titles').select('id, name'),
@@ -1115,22 +1115,48 @@ export async function getUsers(): Promise<EmployeeUser[]> {
             email: user.email || '',
             role,
             createdAt: user.created_at,
+            isActive: user.is_active === null || user.is_active === undefined ? true : Boolean(user.is_active),
         };
     });
 }
 
-export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user' }): Promise<void> => {
+export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean }): Promise<void> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('users').insert({ email: userData.email, name: userData.name, role: userData.role }).select().single();
+    const basePayload: Record<string, any> = {
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+    };
+    const payloadWithIsActive = {
+        ...basePayload,
+        is_active: userData.isActive ?? true,
+    };
+
+    const { error } = await supabase.from('users').insert(payloadWithIsActive);
     if (error) {
+        if (isMissingColumnError(error)) {
+            const { error: retryError } = await supabase.from('users').insert(basePayload);
+            if (retryError) {
+                throw formatSupabaseError('Failed to add user (user must exist in auth.users)', retryError);
+            }
+            return;
+        }
         throw formatSupabaseError('Failed to add user (user must exist in auth.users)', error);
     }
-    return;
 };
 
 export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<void> => {
     const supabase = getSupabase();
-    const { error: userError } = await supabase.from('users').update({ name: updates.name, email: updates.email, role: updates.role }).eq('id', id);
+    const basePayload: Record<string, any> = {
+        name: updates.name,
+        email: updates.email,
+        role: updates.role,
+    };
+    if (updates.isActive !== undefined) {
+        (basePayload as any).is_active = updates.isActive;
+    }
+
+    const { error: userError } = await supabase.from('users').update(basePayload).eq('id', id);
     if (userError) throw formatSupabaseError('Failed to update user', userError);
 };
 
