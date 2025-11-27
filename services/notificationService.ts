@@ -183,6 +183,34 @@ const buildEmailContent = async (
         `現在の承認レベル: ${application.currentLevel ?? '-'}`,
     ];
 
+    const formData: any = (application as any).formData || null;
+    const mq = formData?.mqAccounting || null;
+    if (mq) {
+        const mqLines: string[] = [];
+        const costTypeLabel = mq.costType === 'V' ? '変動費 (V)' : mq.costType === 'F' ? '固定費 (F)' : '-';
+        mqLines.push('--- MQ会計情報 ---');
+        mqLines.push(`経費の種類 (V/F): ${costTypeLabel}`);
+        if (mq.purpose) {
+            mqLines.push(`支出の目的・期待効果: ${mq.purpose}`);
+        }
+        if (mq.expectedSalesPQ != null) {
+            mqLines.push(`期待売上 (PQ): ${mq.expectedSalesPQ}`);
+        }
+        if (mq.expectedMarginMQ != null) {
+            mqLines.push(`期待限界利益 (MQ): ${mq.expectedMarginMQ}`);
+        }
+        if (mq.expectedSalesPQ && mq.expectedMarginMQ &&
+            Number.isFinite(Number(mq.expectedSalesPQ)) &&
+            Number.isFinite(Number(mq.expectedMarginMQ)) &&
+            Number(mq.expectedSalesPQ) !== 0) {
+            const rate = (Number(mq.expectedMarginMQ) / Number(mq.expectedSalesPQ)) * 100;
+            mqLines.push(`m率 (MQ ÷ PQ): ${rate.toFixed(1)}%`);
+        }
+        if (mqLines.length > 1) {
+            details.push('', ...mqLines);
+        }
+    }
+
     if (application.submittedAt) {
         details.push(`申請日時: ${formatDateTime(application.submittedAt)}`);
     }

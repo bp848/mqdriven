@@ -102,6 +102,17 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
             pushHighlight('支払先', payee);
             pushHighlight('支払期限', invoice.dueDate, { format: 'date' });
 
+            const mq = data.mqAccounting || {};
+            const mqCostTypeLabel = mq.costType === 'V' ? '変動費 (V)' : mq.costType === 'F' ? '固定費 (F)' : '';
+            const mqExpectedSales = mq.expectedSalesPQ;
+            const mqExpectedMargin = mq.expectedMarginMQ;
+            let mqRate: string | '' = '';
+            if (mqExpectedSales && Number.isFinite(Number(mqExpectedSales)) && Number(mqExpectedSales) !== 0 &&
+                mqExpectedMargin && Number.isFinite(Number(mqExpectedMargin))) {
+                const rate = (Number(mqExpectedMargin) / Number(mqExpectedSales)) * 100;
+                mqRate = `${rate.toFixed(1)}%`;
+            }
+
             pushListSection('請求情報', [
                 { label: 'サプライヤー / 支払先', value: invoice.supplierName ?? data.supplierName },
                 { label: '請求書発行日', value: formatDateValue(invoice.invoiceDate) },
@@ -109,6 +120,14 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
                 { label: '登録番号', value: invoice.registrationNumber },
                 { label: '部署ID', value: data.departmentId },
                 { label: '備考', value: data.notes },
+            ]);
+
+            pushListSection('MQ会計情報', [
+                { label: '経費の種類 (V/F)', value: mqCostTypeLabel },
+                { label: '支出の目的・期待効果', value: mq.purpose },
+                { label: '期待売上 (PQ)', value: mqExpectedSales },
+                { label: '期待限界利益 (MQ)', value: mqExpectedMargin },
+                { label: 'm率 (MQ ÷ PQ)', value: mqRate },
             ]);
 
             const bankAccount = invoice.bankAccount || {};
@@ -380,7 +399,9 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
 
     const formDataRows = [
         ...(amount ? [{ label: '合計金額', value: amount }] : []),
-        ...Object.entries(formData || {}).map(([key, value]) => ({ label: key, value })),
+        ...Object.entries(formData || {})
+            .filter(([key]) => key !== 'mqAccounting')
+            .map(([key, value]) => ({ label: key, value })),
     ];
 
     const routeStepRows = routeSteps.map((step, index) => {
