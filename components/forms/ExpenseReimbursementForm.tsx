@@ -414,6 +414,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 ...invoice,
                 ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
             },
+            mqAccounting: {
+                expectedSalesPQ: mqExpectedSalesPQ === '' ? undefined : mqExpectedSalesPQ,
+                expectedMarginMQ: mqExpectedMarginMQ === '' ? undefined : mqExpectedMarginMQ,
+            },
         },
         approvalRouteId,
     });
@@ -580,7 +584,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 )}
 
                 {currentStep === 2 && (
-                    <div className="animate-fade-in">
+                    <div className="space-y-6 animate-fade-in">
                         <Card>
                             <CardHeader>
                                 <CardTitle>ステップ2: 明細の編集</CardTitle>
@@ -602,6 +606,49 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 <div className="text-sm">消費税: <span className="font-bold text-lg ml-2">¥{Math.round(computedTotals.tax).toLocaleString()}</span></div>
                                 <div className="text-sm font-bold text-blue-600 dark:text-blue-400">税込合計: <span className="text-xl ml-2">¥{Math.round(computedTotals.gross).toLocaleString()}</span></div>
                             </div>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>PQ / MQ（申請全体）</CardTitle>
+                                <CardDescription>この経費申請全体に対する期待売上(PQ)と期待限界利益(MQ)を入力すると、m率が自動計算されます。</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                    <FormField label="期待売上 (PQ)">
+                                        <input
+                                            type="number"
+                                            value={mqExpectedSalesPQ === '' ? '' : mqExpectedSalesPQ}
+                                            onChange={e => {
+                                                const v = e.target.value;
+                                                setMqExpectedSalesPQ(v === '' ? '' : Number(v));
+                                            }}
+                                            className="w-full rounded-md border-slate-300 dark:border-slate-600 text-right"
+                                            placeholder="例）1000000"
+                                            disabled={isDisabled}
+                                        />
+                                    </FormField>
+                                    <FormField label="期待限界利益 (MQ)">
+                                        <input
+                                            type="number"
+                                            value={mqExpectedMarginMQ === '' ? '' : mqExpectedMarginMQ}
+                                            onChange={e => {
+                                                const v = e.target.value;
+                                                setMqExpectedMarginMQ(v === '' ? '' : Number(v));
+                                            }}
+                                            className="w-full rounded-md border-slate-300 dark:border-slate-600 text-right"
+                                            placeholder="例）400000"
+                                            disabled={isDisabled}
+                                        />
+                                    </FormField>
+                                    <div className="space-y-1 text-sm">
+                                        <div className="text-slate-500 dark:text-slate-400">m率 (MQ ÷ PQ)</div>
+                                        <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                                            {mqMRate === null ? '- %' : `${mqMRate.toFixed(1)}%`}
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
                         </Card>
                     </div>
                 )}
