@@ -232,8 +232,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [departmentId, setDepartmentId] = useState<string>('');
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [notes, setNotes] = useState('');
-    const [mqCostType, setMqCostType] = useState<'V' | 'F' | ''>('');
-    const [mqPurpose, setMqPurpose] = useState('');
     const [mqExpectedSalesPQ, setMqExpectedSalesPQ] = useState<number | ''>('');
     const [mqExpectedMarginMQ, setMqExpectedMarginMQ] = useState<number | ''>('');
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -260,8 +258,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         setDepartmentId('');
         setApprovalRouteId('');
         setNotes('');
-        setMqCostType('');
-        setMqPurpose('');
         setMqExpectedSalesPQ('');
         setMqExpectedMarginMQ('');
         setCurrentStep(1);
@@ -290,8 +286,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     setNotes(data.notes || '');
 
                     const mq = data.mqAccounting || {};
-                    setMqCostType(mq.costType === 'V' || mq.costType === 'F' ? mq.costType : '');
-                    setMqPurpose(mq.purpose || '');
                     setMqExpectedSalesPQ(
                         typeof mq.expectedSalesPQ === 'number' && Number.isFinite(mq.expectedSalesPQ)
                             ? mq.expectedSalesPQ
@@ -410,36 +404,19 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         }
     };
 
-    const buildApplicationPayload = () => {
-        const normalizeOptionalNumber = (value: number | '' ): number | undefined => {
-            if (value === '') return undefined;
-            if (typeof value === 'number' && Number.isFinite(value)) return value;
-            const parsed = Number(value as any);
-            return Number.isFinite(parsed) ? parsed : undefined;
-        };
-
-        const mqAccounting = {
-            costType: mqCostType || undefined,
-            purpose: mqPurpose || undefined,
-            expectedSalesPQ: normalizeOptionalNumber(mqExpectedSalesPQ),
-            expectedMarginMQ: normalizeOptionalNumber(mqExpectedMarginMQ),
-        };
-
-        return {
-            applicationCodeId,
-            formData: {
-                departmentId,
-                approvalRouteId,
-                notes,
-                invoice: {
-                    ...invoice,
-                    ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
-                },
-                mqAccounting,
-            },
+    const buildApplicationPayload = () => ({
+        applicationCodeId,
+        formData: {
+            departmentId,
             approvalRouteId,
-        };
-    };
+            notes,
+            invoice: {
+                ...invoice,
+                ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
+            },
+        },
+        approvalRouteId,
+    });
 
     const executeSubmission = async () => {
         if (!currentUser) {
@@ -654,93 +631,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                         disabled={isDisabled}
                                     />
                                 </FormField>
-                                <div className="pt-4 mt-2 border-t dark:border-slate-700 space-y-4">
-                                    <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">MQ会計情報（任意）</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        この支出が会社のMQ（限界利益）にどう貢献するか、可能な範囲で入力してください。
-                                    </p>
-                                    <FormField label="経費の種類 (V/F)" className="space-y-2">
-                                        <div className="flex flex-wrap gap-4 text-sm">
-                                            <label className="inline-flex items-center gap-2">
-                                                <input
-                                                    type="radio"
-                                                    name="mq_cost_type"
-                                                    value="V"
-                                                    checked={mqCostType === 'V'}
-                                                    onChange={() => setMqCostType('V')}
-                                                    disabled={isDisabled}
-                                                />
-                                                <span>変動費 (V)</span>
-                                            </label>
-                                            <label className="inline-flex items-center gap-2">
-                                                <input
-                                                    type="radio"
-                                                    name="mq_cost_type"
-                                                    value="F"
-                                                    checked={mqCostType === 'F'}
-                                                    onChange={() => setMqCostType('F')}
-                                                    disabled={isDisabled}
-                                                />
-                                                <span>固定費 (F)</span>
-                                            </label>
-                                            <label className="inline-flex items-center gap-2">
-                                                <input
-                                                    type="radio"
-                                                    name="mq_cost_type"
-                                                    value=""
-                                                    checked={mqCostType === ''}
-                                                    onChange={() => setMqCostType('')}
-                                                    disabled={isDisabled}
-                                                />
-                                                <span>未選択</span>
-                                            </label>
-                                        </div>
-                                    </FormField>
-                                    <FormField label="支出の目的・期待効果">
-                                        <textarea
-                                            value={mqPurpose}
-                                            onChange={e => setMqPurpose(e.target.value)}
-                                            rows={4}
-                                            className="w-full rounded-md border-slate-300 dark:border-slate-600 min-h-[120px] text-sm"
-                                            placeholder="例）A社との新規プロジェクト打ち合わせ。来期1,000万円の売上を目指す など"
-                                            disabled={isDisabled}
-                                        />
-                                    </FormField>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                                        <FormField label="期待売上 (PQ)">
-                                            <input
-                                                type="number"
-                                                value={mqExpectedSalesPQ === '' ? '' : mqExpectedSalesPQ}
-                                                onChange={e => {
-                                                    const v = e.target.value;
-                                                    setMqExpectedSalesPQ(v === '' ? '' : Number(v));
-                                                }}
-                                                className="w-full rounded-md border-slate-300 dark:border-slate-600 text-right"
-                                                placeholder="例）1000000"
-                                                disabled={isDisabled}
-                                            />
-                                        </FormField>
-                                        <FormField label="期待限界利益 (MQ)">
-                                            <input
-                                                type="number"
-                                                value={mqExpectedMarginMQ === '' ? '' : mqExpectedMarginMQ}
-                                                onChange={e => {
-                                                    const v = e.target.value;
-                                                    setMqExpectedMarginMQ(v === '' ? '' : Number(v));
-                                                }}
-                                                className="w-full rounded-md border-slate-300 dark:border-slate-600 text-right"
-                                                placeholder="例）400000"
-                                                disabled={isDisabled}
-                                            />
-                                        </FormField>
-                                        <div className="space-y-1 text-sm">
-                                            <div className="text-slate-500 dark:text-slate-400">m率 (MQ ÷ PQ)</div>
-                                            <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                                                {mqMRate === null ? '- %' : `${mqMRate.toFixed(1)}%`}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             </CardContent>
                         </Card>
                         <Card>
