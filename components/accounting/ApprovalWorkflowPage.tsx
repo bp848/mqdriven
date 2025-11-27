@@ -116,6 +116,43 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     const [applicationCodes, setApplicationCodes] = useState<ApplicationCode[]>([]);
     const [isCodesLoading, setIsCodesLoading] = useState(true);
 
+    // --- Helpers: derive numeric amount per application for summaries ---
+    const deriveApplicationAmount = (app: ApplicationWithDetails): number | null => {
+        const data: any = app.formData || {};
+        const invoice = data.invoice || {};
+
+        const toNumber = (value: any): number | null => {
+            if (value === null || value === undefined) return null;
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
+            if (typeof value === 'string') {
+                const normalized = value.replace(/,/g, '').trim();
+                if (!normalized) return null;
+                const parsed = Number(normalized);
+                if (!Number.isNaN(parsed) && Number.isFinite(parsed)) return parsed;
+            }
+            return null;
+        };
+
+        const candidates = [
+            toNumber(data.amount),
+            toNumber(data.totalAmount),
+            toNumber(data.requestedAmount),
+            toNumber(data.estimatedAmount),
+            toNumber(invoice.totalGross),
+            toNumber(invoice.totalNet),
+        ].filter((v): v is number => v !== null);
+
+        if (candidates.length === 0) return null;
+        return candidates[0];
+    };
+
+    const sumApplicationAmounts = (apps: ApplicationWithDetails[]): number => {
+        return apps.reduce((sum, app) => {
+            const amount = deriveApplicationAmount(app);
+            return sum + (amount || 0);
+        }, 0);
+    };
+
     const fetchListData = async () => {
         if (!currentUser) return;
         try {
@@ -203,7 +240,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         }
     };
     
-    const { displayedApplications, tabCounts } = useMemo(() => {
+    const { displayedApplications, tabCounts, tabTotals } = useMemo(() => {
         const approvalQueue = applications.filter(
             app => app.approverId === currentUser?.id && app.status === 'pending_approval'
         );
@@ -230,6 +267,13 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             completed: completedQueue.length,
         };
 
+        const totals: Record<TabId, number> = {
+            approvals: sumApplicationAmounts(approvalQueue),
+            drafts: sumApplicationAmounts(draftQueue),
+            submitted: sumApplicationAmounts(submittedQueue),
+            completed: sumApplicationAmounts(completedQueue),
+        };
+
         let filteredByTab = datasetMap[activeTab] || [];
 
         if (searchTerm) {
@@ -240,7 +284,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                 app.status.toLowerCase().includes(lowercasedTerm)
             );
         }
-        return { displayedApplications: filteredByTab, tabCounts: counts };
+        return { displayedApplications: filteredByTab, tabCounts: counts, tabTotals: totals };
     }, [applications, activeTab, searchTerm, currentUser]);
 
 
@@ -311,6 +355,8 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         const TabCard = ({ id }: { id: TabId }) => {
             const config = TABS_CONFIG[id];
             const isActive = activeTab === id;
+            const count = tabCounts[id];
+            const total = tabTotals[id];
             return (
                 <button
                     onClick={() => setActiveTab(id)}
@@ -324,13 +370,16 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         <div>
                             <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-100'}`}>{config.label}</p>
                             <p className={`mt-1 text-xs ${isActive ? 'text-white/80' : 'text-slate-500 dark:text-slate-400'}`}>{config.description}</p>
+                            <p className={`mt-2 text-xs font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                                合計 {count} 件 / 金額 ¥{total.toLocaleString()}
+                            </p>
                         </div>
                         <span
                             className={`rounded-full px-3 py-1 text-xs font-bold ${
                                 isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                             }`}
                         >
-                            {tabCounts[id]}
+                            {count}
                         </span>
                     </div>
                 </button>
@@ -350,6 +399,10 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         <span>{TABS_CONFIG[activeTab].title}</span>
                     </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{TABS_CONFIG[activeTab].description}</p>
+                    <div className="mt-3 flex flex-wrap items-baseline gap-4 text-sm">
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">件数: {tabCounts[activeTab]} 件</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">合計金額: ¥{tabTotals[activeTab].toLocaleString()}</span>
+                    </div>
                 </div>
 
                 {isLoading ? (
