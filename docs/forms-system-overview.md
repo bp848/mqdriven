@@ -19,6 +19,7 @@
 - **交通費精算 (TRP)**: 経費フォームと同様に明細行で構成され、OCR で領収書から出発地/目的地を推測します。【F:components/forms/TransportExpenseForm.tsx†L1-L220】
 - **稟議フォーム (APL)**: PDF/ZIP をドラッグ＆ドロップで受け取り、`parseApprovalDocument` による AI-OCR で件名と本文を下書きします。複数ファイルの展開や AI チャット連携が特徴です。【F:components/forms/ApprovalForm.tsx†L1-L206】
 - **日報・週報・休暇申請**: 入力項目はシンプルですが、AI による文面生成 (`generateDailyReportSummary` など) やチャットモーダルを通じた作成支援が組み込まれています。【F:components/forms/DailyReportForm.tsx†L1-L200】【F:components/forms/LeaveApplicationForm.tsx†L1-L196】
+- **日報の保存先と可視化**: 日報フォームで送信された内容は `applications` テーブルに `application_code_id = DLY` として格納され、`MySchedulePage` から同テーブルのレコードを集計してサマリ表示や mbox 取り込みと連携します。【F:services/dataService.ts†L1233-L1281】【F:components/MySchedulePage.tsx†L392-L575】
 
 ## AI 連携
 - 各フォームの OCR やサマリ生成は `services/geminiService.ts` のユーティリティを使用します。OCR 用関数 (`extractInvoiceDetails`, `parseApprovalDocument`) やサマリ生成 (`generateDailyReportSummary`) は API キーの有無と AI 停止フラグを検証してから Gemini API を呼び出します。【F:components/forms/ExpenseReimbursementForm.tsx†L137-L177】【F:components/forms/TransportExpenseForm.tsx†L75-L111】【F:components/forms/ApprovalForm.tsx†L99-L123】【F:components/forms/DailyReportForm.tsx†L51-L71】
