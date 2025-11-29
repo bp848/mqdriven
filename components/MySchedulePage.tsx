@@ -9,9 +9,11 @@ import {
     Toast,
     DailyReportPrefill,
     ScheduleItem,
+    Application,
 } from '../types';
 
 type CalendarEventType = 'job' | 'purchaseOrder' | 'application' | 'custom';
+type CalendarEventOrigin = 'manual' | 'daily_report_plan';
 
 interface CalendarEvent {
     id: string;
@@ -20,6 +22,8 @@ interface CalendarEvent {
     type: CalendarEventType;
     description?: string;
     time?: string;
+    origin?: CalendarEventOrigin;
+    metadata?: Record<string, any>;
 }
 
 const formatDate = (date: Date) => {
@@ -30,6 +34,7 @@ const formatDate = (date: Date) => {
 };
 
 type ViewMode = 'day' | 'week' | 'month';
+type ApplicationStatus = Application['status'];
 
 const calendarWeekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -45,11 +50,39 @@ const planSectionRegex = /(月曜日|火曜日|水曜日|木曜日|金曜日|土
 const timeLineRegex = /(\d{1,2}[:：]\d{2})\s*[～〜~\-]\s*(\d{1,2}[:：]\d{2})\s+(.+)/;
 
 const normalizeTimeString = (value: string) => value.replace('：', ':').trim();
+const APPLICATION_STATUS_STYLES: Record<ApplicationStatus, { label: string; className: string }> = {
+    draft: { label: '下書き', className: 'bg-slate-100 text-slate-600 border border-slate-200' },
+    pending_approval: { label: '承認待ち', className: 'bg-amber-100 text-amber-700 border border-amber-200' },
+    approved: { label: '承認済', className: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
+    rejected: { label: '差戻し', className: 'bg-rose-100 text-rose-700 border border-rose-200' },
+};
 
-const parseDailyReportText = (rawText: string, fallbackDate: string): { date: string; items: ScheduleItem[] } => {
+interface ParsedDailyReportTextResult {
+    date: string;
+    actualItems: ScheduleItem[];
+    nextDayPlanItems: ScheduleItem[];
+}
+
+interface DailyReportEntrySummary {
+    id: string;
+    reportDate: string;
+    status: ApplicationStatus;
+    totalMinutes: number;
+    customerName: string;
+    nextDayPlan: string;
+}
+
+interface ParsedMboxMessage {
+    from: string;
+    date: string | null;
+    subject?: string;
+    body: string;
+}
+
+const parseDailyReportText = (rawText: string, fallbackDate: string): ParsedDailyReportTextResult => {
     const trimmedText = rawText.trim();
     if (!trimmedText) {
-        return { date: fallbackDate, items: [] };
+        return { date: fallbackDate, actualItems: [], nextDayPlanItems: [] };
     }
 
     const detectIsoDate = () => {
@@ -77,15 +110,13 @@ const parseDailyReportText = (rawText: string, fallbackDate: string): { date: st
     };
 
     const timestamp = Date.now();
-    const items: ScheduleItem[] = [];
-    let isParsingActual = true;
+    const actualItems: ScheduleItem[] = [];
+    const planItems: ScheduleItem[] = [];
+    let currentSection: 'actual' | 'plan' = 'actual';
     const lines = trimmedText.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
     lines.forEach((line) => {
         if (planSectionRegex.test(line)) {
-            isParsingActual = false;
-            return;
-        }
-        if (!isParsingActual) {
+            currentSection = 'plan';
             return;
         }
         const match = line.match(timeLineRegex);
@@ -93,18 +124,174 @@ const parseDailyReportText = (rawText: string, fallbackDate: string): { date: st
             return;
         }
         const [, rawStart, rawEnd, rawDescription] = match;
-        items.push({
-            id: `daily-report-${timestamp}-${items.length}`,
+        const item: ScheduleItem = {
+            id: `daily-report-${timestamp}-${actualItems.length + planItems.length}`,
             start: normalizeTimeString(rawStart),
             end: normalizeTimeString(rawEnd),
             description: rawDescription.replace(/\s+/g, ' ').trim(),
-        });
+        };
+        if (currentSection === 'plan') {
+            planItems.push(item);
+        } else {
+            actualItems.push(item);
+        }
     });
 
     return {
         date: detectIsoDate(),
-        items,
+        actualItems,
+        nextDayPlanItems: planItems,
     };
+};
+
+const parseTimeToMinutes = (value?: string): number | null => {
+    if (!value || typeof value !== 'string') return null;
+    const [hourPart, minutePart] = value.split(':');
+    if (hourPart === undefined || minutePart === undefined) return null;
+    const hours = Number(hourPart);
+    const minutes = Number(minutePart);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    return hours * 60 + minutes;
+};
+
+const calculateScheduleItemMinutes = (item: ScheduleItem): number => {
+    const start = parseTimeToMinutes(item.start);
+    const end = parseTimeToMinutes(item.end);
+    if (start === null || end === null) return 0;
+    const diff = end - start;
+    return diff > 0 ? diff : 0;
+};
+
+const minutesToHours = (minutes: number): number => {
+    if (!minutes) return 0;
+    return Number((minutes / 60).toFixed(1));
+};
+
+const coerceScheduleItems = (items: any): ScheduleItem[] => {
+    if (!Array.isArray(items)) return [];
+    return items
+        .filter((item) => item && typeof item === 'object')
+        .map((item, index) => ({
+            id: typeof item.id === 'string' ? item.id : `coerced-${index}`,
+            start: typeof item.start === 'string' ? item.start : '',
+            end: typeof item.end === 'string' ? item.end : '',
+            description: typeof item.description === 'string' ? item.description : '',
+        }));
+};
+
+const buildCustomEventsStorageKey = (userId: string) => `mqdriven_my_schedule_${userId}`;
+const buildActualsStorageKey = (userId: string, date: string) => `mqdriven_my_schedule_actuals_${userId}_${date}`;
+
+const normalizeCustomEvents = (events: any): CalendarEvent[] => {
+    if (!Array.isArray(events)) return [];
+    return events
+        .filter((event) => event?.date && event?.title)
+        .map((event) => ({
+            ...event,
+            type: 'custom' as const,
+            origin: event.origin === 'daily_report_plan' ? 'daily_report_plan' : 'manual',
+            metadata: event.metadata ?? undefined,
+        }));
+};
+
+const readCustomEventsFromStorage = (userId: string): CalendarEvent[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+        const raw = window.localStorage.getItem(buildCustomEventsStorageKey(userId));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return normalizeCustomEvents(parsed);
+    } catch {
+        return [];
+    }
+};
+
+const persistCustomEventsForUser = (userId: string, events: CalendarEvent[]) => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(buildCustomEventsStorageKey(userId), JSON.stringify(events));
+};
+
+const persistActualItemsForUser = (userId: string, date: string, items: ScheduleItem[]) => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(buildActualsStorageKey(userId, date), JSON.stringify(items));
+};
+
+const extractEmailAddress = (raw: string): string => {
+    if (!raw) return '';
+    const match = raw.match(/<([^>]+)>/);
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    return raw.trim();
+};
+
+const normalizeMboxDate = (value?: string | null): string | null => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return formatDate(parsed);
+};
+
+const splitMboxEntries = (content: string): string[] => {
+    const normalized = content.replace(/\r\n/g, '\n');
+    const lines = normalized.split('\n');
+    const entries: string[] = [];
+    let current: string[] = [];
+    lines.forEach((line) => {
+        if (line.startsWith('From ') && current.length > 0) {
+            entries.push(current.join('\n'));
+            current = [line];
+        } else {
+            current.push(line);
+        }
+    });
+    if (current.length > 0) {
+        entries.push(current.join('\n'));
+    }
+    return entries;
+};
+
+const parseMboxEntry = (entry: string): ParsedMboxMessage | null => {
+    const lines = entry.split('\n');
+    if (lines.length === 0) return null;
+    if (lines[0].startsWith('From ')) {
+        lines.shift();
+    }
+    const headers: Record<string, string> = {};
+    let lastHeaderKey: string | null = null;
+    let bodyStartIndex = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (line.trim() === '') {
+            bodyStartIndex = i + 1;
+            break;
+        }
+        if ((line.startsWith(' ') || line.startsWith('\t')) && lastHeaderKey) {
+            headers[lastHeaderKey] = `${headers[lastHeaderKey]} ${line.trim()}`;
+            continue;
+        }
+        const separatorIndex = line.indexOf(':');
+        if (separatorIndex === -1) continue;
+        const key = line.slice(0, separatorIndex).trim().toLowerCase();
+        const value = line.slice(separatorIndex + 1).trim();
+        headers[key] = value;
+        lastHeaderKey = key;
+    }
+    const body = lines.slice(bodyStartIndex).join('\n').trim();
+    if (!body) return null;
+    return {
+        from: headers['from'] || '',
+        date: headers['date'] || null,
+        subject: headers['subject'],
+        body,
+    };
+};
+
+const parseMboxContent = (content: string): ParsedMboxMessage[] => {
+    if (!content.trim()) return [];
+    return splitMboxEntries(content)
+        .map(parseMboxEntry)
+        .filter((entry): entry is ParsedMboxMessage => Boolean(entry));
 };
 
 const getWeekStartIso = (iso: string) => {
@@ -241,6 +428,11 @@ const DayView: React.FC<{
                                 <div>
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</p>
                                     <p className="text-xs text-slate-500 dark:text-slate-400">{typeLabels[event.type]}</p>
+                                    {event.origin === 'daily_report_plan' && (
+                                        <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300 mt-1">
+                                            日報から自動追加
+                                        </p>
+                                    )}
                                 </div>
                                 {event.time && (
                                     <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-full">{event.time}</span>
@@ -409,6 +601,94 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const newEventTitleRef = useRef<HTMLInputElement | null>(null);
     const [hasManualNewEventDate, setHasManualNewEventDate] = useState(false);
     const [viewingUserId, setViewingUserId] = useState<string>(() => currentUser?.id ?? allUsers[0]?.id ?? 'guest');
+    const [isMboxImporting, setIsMboxImporting] = useState(false);
+    const [mboxImportSummary, setMboxImportSummary] = useState<{
+        imported: number;
+        skipped: number;
+        unmatched: number;
+        perUser: Record<string, number>;
+    } | null>(null);
+    const currentUserId = currentUser?.id ?? null;
+    const dailyReportEntries = useMemo<DailyReportEntrySummary[]>(() => {
+        if (!currentUserId) return [];
+        return applications
+            .filter(
+                (application) =>
+                    application.applicationCode?.code === 'DLY' &&
+                    application.applicantId === currentUserId,
+            )
+            .map((application) => {
+                const formData = application.formData ?? {};
+                const reportDate =
+                    (typeof formData.reportDate === 'string' && formData.reportDate) ||
+                    extractDatePart(application.submittedAt ?? application.createdAt) ||
+                    '';
+                const actualItems = coerceScheduleItems(formData.actualItems);
+                const totalMinutes = actualItems.reduce(
+                    (sum, item) => sum + calculateScheduleItemMinutes(item),
+                    0,
+                );
+                return {
+                    id: application.id,
+                    reportDate,
+                    status: application.status,
+                    totalMinutes,
+                    customerName: typeof formData.customerName === 'string' ? formData.customerName : '',
+                    nextDayPlan: typeof formData.nextDayPlan === 'string' ? formData.nextDayPlan : '',
+                };
+            })
+            .filter((entry) => !!entry.reportDate)
+            .sort((a, b) => b.reportDate.localeCompare(a.reportDate));
+    }, [applications, currentUserId]);
+    const dailyReportStats = useMemo(() => {
+        if (dailyReportEntries.length === 0) {
+            return {
+                monthlyCount: 0,
+                pendingCount: 0,
+                totalHoursThisMonth: 0,
+                averageHours: 0,
+                topCustomers: [] as { name: string; count: number }[],
+                latestReports: [] as DailyReportEntrySummary[],
+            };
+        }
+        const now = new Date();
+        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const entriesThisMonth = dailyReportEntries.filter((entry) =>
+            entry.reportDate.startsWith(monthKey),
+        );
+        const totalMinutesThisMonth = entriesThisMonth.reduce(
+            (sum, entry) => sum + entry.totalMinutes,
+            0,
+        );
+        const entriesWithMinutes = dailyReportEntries.filter((entry) => entry.totalMinutes > 0);
+        const averageMinutes =
+            entriesWithMinutes.length > 0
+                ? entriesWithMinutes.reduce((sum, entry) => sum + entry.totalMinutes, 0) /
+                  entriesWithMinutes.length
+                : 0;
+        const pendingCount = dailyReportEntries.filter(
+            (entry) => entry.status === 'pending_approval',
+        ).length;
+        const customerCounter: Record<string, number> = {};
+        dailyReportEntries.forEach((entry) => {
+            const name = entry.customerName?.trim();
+            if (!name) return;
+            customerCounter[name] = (customerCounter[name] || 0) + 1;
+        });
+        const topCustomers = Object.entries(customerCounter)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([name, count]) => ({ name, count }));
+
+        return {
+            monthlyCount: entriesThisMonth.length,
+            pendingCount,
+            totalHoursThisMonth: minutesToHours(totalMinutesThisMonth),
+            averageHours: minutesToHours(averageMinutes),
+            topCustomers,
+            latestReports: dailyReportEntries.slice(0, 3),
+        };
+    }, [dailyReportEntries]);
 
     const selectableUsers = useMemo(() => {
         const map = new Map<string, EmployeeUser>();
@@ -440,37 +720,19 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const canEditCurrentCalendar = (currentUser?.id ?? 'guest') === viewingUserId;
 
     const customEventsStorageKey = useMemo(
-        () => `mqdriven_my_schedule_${viewingUserId ?? 'guest'}`,
+        () => buildCustomEventsStorageKey(viewingUserId ?? 'guest'),
         [viewingUserId],
     );
     
     const actualsStorageKey = useMemo(
-        () => `mqdriven_my_schedule_actuals_${viewingUserId ?? 'guest'}_${selectedDate}`,
+        () => buildActualsStorageKey(viewingUserId ?? 'guest', selectedDate),
         [viewingUserId, selectedDate],
     );
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        try {
-            const raw = window.localStorage.getItem(customEventsStorageKey);
-            if (!raw) {
-                setCustomEvents([]);
-                return;
-            }
-            const parsed = JSON.parse(raw) as CalendarEvent[];
-            if (Array.isArray(parsed)) {
-                setCustomEvents(
-                    parsed
-                        .filter((event) => event?.date && event?.title)
-                        .map((event) => ({ ...event, type: 'custom' as const })),
-                );
-            } else {
-                setCustomEvents([]);
-            }
-        } catch {
-            setCustomEvents([]);
-        }
-    }, [customEventsStorageKey]);
+        setCustomEvents(readCustomEventsFromStorage(viewingUserId ?? 'guest'));
+    }, [customEventsStorageKey, viewingUserId]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -573,6 +835,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             type: 'custom',
             time: newEvent.time || undefined,
             description: newEvent.description.trim() || undefined,
+            origin: 'manual',
         };
         setCustomEvents((prev) => [...prev, nextEvent]);
         setNewEvent({ title: '', date: selectedDate, time: '', description: '' });
@@ -589,21 +852,62 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         addToast?.('予定を削除しました。', 'info');
     };
 
+    const syncNextDayPlanFromDailyReport = useCallback(
+        (sourceDate: string, planCandidates: ScheduleItem[], options?: { silent?: boolean }) => {
+            setCustomEvents((prev) => {
+                const filtered = prev.filter(
+                    (event) => !(event.origin === 'daily_report_plan' && event.metadata?.sourceDate === sourceDate),
+                );
+                if (!planCandidates.length) {
+                    return filtered;
+                }
+                const targetDate = addDays(sourceDate, 1);
+                const generated = planCandidates.map((item, index) => ({
+                    id: `daily-plan-${viewingUserId}-${sourceDate}-${item.id ?? index}`,
+                    date: targetDate,
+                    title: item.description || `フォローアップ ${index + 1}`,
+                    type: 'custom' as const,
+                    time: item.start || undefined,
+                    description: item.end
+                        ? `${item.start || '未定'}～${item.end} 実績から自動作成`
+                        : '実績から自動作成',
+                    origin: 'daily_report_plan' as const,
+                    metadata: { sourceDate },
+                }));
+                return [...filtered, ...generated];
+            });
+            if (!options?.silent && planCandidates.length) {
+                addToast?.('実績を翌日の予定に反映しました。', 'success');
+            }
+        },
+        [addToast, viewingUserId],
+    );
+
     const handleImportDailyReport = () => {
         if (!dailyReportText.trim()) {
             addToast?.('日報テキストを入力してください。', 'info');
             return;
         }
-        const { date: parsedDate, items } = parseDailyReportText(dailyReportText, selectedDate);
-        if (items.length === 0) {
+        const { date: parsedDate, actualItems: parsedActuals, nextDayPlanItems } = parseDailyReportText(
+            dailyReportText,
+            selectedDate,
+        );
+        if (parsedActuals.length === 0) {
             addToast?.('作業実績の時刻が見つかりませんでした。', 'warning');
             return;
         }
         setSelectedDate(parsedDate);
-        setActualItems(items);
+        setActualItems(parsedActuals);
+        const planCandidates = nextDayPlanItems.length > 0 ? nextDayPlanItems : parsedActuals;
+        syncNextDayPlanFromDailyReport(parsedDate, planCandidates, { silent: true });
         setViewMode('day');
         setHasManualNewEventDate(false);
-        addToast?.('日報から実績を取り込みました。', 'success');
+        addToast?.(
+            nextDayPlanItems.length > 0
+                ? '日報から実績と翌日の予定を取り込みました。'
+                : '日報から実績を取り込み、翌日の予定に反映しました。',
+            'success',
+        );
     };
 
     const handleDailyReportTextClear = () => {
@@ -635,6 +939,89 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             }
         };
         reader.readAsDataURL(file);
+    };
+
+    const handleMboxUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setIsMboxImporting(true);
+        try {
+            const text = await file.text();
+            const messages = parseMboxContent(text);
+            if (messages.length === 0) {
+                addToast?.('mbox内にメールが見つかりませんでした。', 'warning');
+                return;
+            }
+            const emailMap = new Map<string, EmployeeUser>();
+            selectableUsers.forEach((user) => {
+                if (user.email) {
+                    emailMap.set(user.email.toLowerCase(), user);
+                }
+            });
+            let imported = 0;
+            let skipped = 0;
+            let unmatched = 0;
+            const perUser: Record<string, number> = {};
+
+            for (const message of messages) {
+                const email = extractEmailAddress(message.from).toLowerCase();
+                const targetUser = emailMap.get(email);
+                if (!targetUser) {
+                    unmatched += 1;
+                    continue;
+                }
+                const fallbackDate = normalizeMboxDate(message.date) ?? selectedDate;
+                const { date: reportDate, actualItems: parsedActuals, nextDayPlanItems } = parseDailyReportText(
+                    message.body,
+                    fallbackDate,
+                );
+                if (parsedActuals.length === 0) {
+                    skipped += 1;
+                    continue;
+                }
+                persistActualItemsForUser(targetUser.id, reportDate, parsedActuals);
+
+                const planCandidates = nextDayPlanItems.length > 0 ? nextDayPlanItems : parsedActuals;
+                const existingEvents = readCustomEventsFromStorage(targetUser.id);
+                const withoutSource = existingEvents.filter(
+                    (event) => !(event.origin === 'daily_report_plan' && event.metadata?.sourceDate === reportDate),
+                );
+                const nextDate = addDays(reportDate, 1);
+                const generated = planCandidates.map((item, index) => ({
+                    id: `daily-plan-${targetUser.id}-${reportDate}-${item.id ?? index}-${Date.now()}`,
+                    date: nextDate,
+                    title: item.description || `フォローアップ ${index + 1}`,
+                    type: 'custom' as const,
+                    time: item.start || undefined,
+                    description: item.end
+                        ? `${item.start || '未定'}～${item.end} 実績から自動作成`
+                        : '実績から自動作成',
+                    origin: 'daily_report_plan' as const,
+                    metadata: { sourceDate: reportDate },
+                }));
+                const updatedEvents = [...withoutSource, ...generated];
+                persistCustomEventsForUser(targetUser.id, updatedEvents);
+
+                if (targetUser.id === viewingUserId) {
+                    if (reportDate === selectedDate) {
+                        setActualItems(parsedActuals);
+                    }
+                    setCustomEvents(readCustomEventsFromStorage(targetUser.id));
+                }
+
+                imported += 1;
+                perUser[targetUser.name] = (perUser[targetUser.name] || 0) + 1;
+            }
+
+            setMboxImportSummary({ imported, skipped, unmatched, perUser });
+            addToast?.(`mboxから${imported}件の日報を取り込みました。`, 'success');
+        } catch (err: any) {
+            const message = err instanceof Error ? err.message : 'mboxの読み込みに失敗しました。';
+            addToast?.(message, 'error');
+        } finally {
+            setIsMboxImporting(false);
+            e.target.value = '';
+        }
     };
 
     const handleSelectDateFromCalendar = (date: string) => {
@@ -719,6 +1106,14 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         : !canEditCurrentCalendar
             ? '閲覧専用のカレンダーです'
             : '選択した日の予定を日報に反映します';
+    const {
+        monthlyCount,
+        pendingCount,
+        totalHoursThisMonth,
+        averageHours,
+        topCustomers,
+        latestReports,
+    } = dailyReportStats;
 
     const handleCreateDailyReport = () => {
         if (!onCreateDailyReport) return;
@@ -933,6 +1328,51 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                         </button>
                     </div>
                 </div>
+                <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 bg-white/70 dark:bg-slate-900/40 p-4 space-y-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">過去メール（mbox）から一括取込</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Fromヘッダーのメールアドレスからユーザーを特定し、本文を日報として解析します。
+                            </p>
+                        </div>
+                        {mboxImportSummary && (
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                直近の取込: {mboxImportSummary.imported} 件
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <label className="cursor-pointer rounded-full border border-slate-200 dark:border-slate-600 px-4 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900/60 hover:border-blue-400">
+                            <input
+                                type="file"
+                                accept=".mbox"
+                                className="hidden"
+                                onChange={handleMboxUpload}
+                                disabled={isMboxImporting}
+                            />
+                            {isMboxImporting ? '解析中…' : '.mbox ファイルを選択'}
+                        </label>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            メール本文に含まれる時刻レンジ（09:00～10:00 など）を実績として登録します。
+                        </p>
+                    </div>
+                    {mboxImportSummary && (
+                        <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                            <p>
+                                取り込み {mboxImportSummary.imported} 件 / スキップ {mboxImportSummary.skipped} / 未判別{' '}
+                                {mboxImportSummary.unmatched}
+                            </p>
+                            {Object.keys(mboxImportSummary.perUser).length > 0 && (
+                                <p className="text-slate-500 dark:text-slate-400">
+                                    {Object.entries(mboxImportSummary.perUser)
+                                        .map(([name, count]) => `${name} ${count}件`)
+                                        .join(' / ')}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -1029,6 +1469,91 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     </div>
                 </div>
                 <div className="space-y-6">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-900 dark:text-white">日報サマリ</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Supabase <span className="font-mono">applications</span>（コード: DLY）
+                                </p>
+                            </div>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {dailyReportEntries.length > 0 ? `記録 ${dailyReportEntries.length} 件` : '記録なし'}
+                            </span>
+                        </div>
+                        {dailyReportEntries.length === 0 ? (
+                            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                                まだ日報は取り込まれていません。左側のフォームまたは下の取込ツールから登録するとここで確認できます。
+                            </p>
+                        ) : (
+                            <>
+                                <div className="mt-4 grid grid-cols-2 gap-3">
+                                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">今月の提出</p>
+                                        <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{monthlyCount}</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">承認待ち</p>
+                                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-300 mt-1">{pendingCount}</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">今月の稼働時間</p>
+                                        <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalHoursThisMonth.toFixed(1)}h</p>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">平均稼働</p>
+                                        <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{averageHours.toFixed(1)}h</p>
+                                    </div>
+                                </div>
+                                {topCustomers.length > 0 && (
+                                    <div className="mt-4">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">主要顧客</p>
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {topCustomers.map((customer) => (
+                                                <span
+                                                    key={customer.name}
+                                                    className="inline-flex items-center rounded-full border border-slate-200 dark:border-slate-600 px-3 py-1 text-xs text-slate-600 dark:text-slate-200"
+                                                >
+                                                    {customer.name} <span className="ml-1 text-slate-400 dark:text-slate-500">x{customer.count}</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+                                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">最新の提出状況</p>
+                                    <div className="mt-3 space-y-3">
+                                        {latestReports.map((report) => {
+                                            const statusStyle = APPLICATION_STATUS_STYLES[report.status];
+                                            const workingHours = report.totalMinutes ? minutesToHours(report.totalMinutes).toFixed(1) : '-';
+                                            return (
+                                                <div key={report.id} className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                            {new Intl.DateTimeFormat('ja-JP', {
+                                                                month: 'numeric',
+                                                                day: 'numeric',
+                                                                weekday: 'short',
+                                                            }).format(new Date(report.reportDate))}
+                                                            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                                                                {report.customerName || '顧客未入力'}
+                                                            </span>
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                            稼働 {workingHours}h / 翌日 {report.nextDayPlan ? report.nextDayPlan.slice(0, 28) : '計画未入力'}
+                                                        </p>
+                                                    </div>
+                                                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${statusStyle.className}`}>
+                                                        {statusStyle.label}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
                     <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6">
                         <p className="text-sm font-semibold text-slate-900 dark:text-white">近日の重要な予定</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
