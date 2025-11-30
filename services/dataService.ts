@@ -681,6 +681,7 @@ const dbApplicationToApplication = (app: any): Application => ({
     applicantId: app.applicant_id,
     applicationCodeId: app.application_code_id,
     formData: app.form_data,
+    documentUrl: app.document_url ?? app.form_data?.documentUrl ?? null,
     status: app.status,
     submittedAt: app.submitted_at,
     approvedAt: app.approved_at,
@@ -709,6 +710,7 @@ const dbApplicationDraftToApplication = (draft: any): Application => ({
     applicantId: draft.applicant_id,
     applicationCodeId: draft.application_code_id,
     formData: draft.form_data,
+    documentUrl: draft.form_data?.documentUrl ?? null,
     status: 'draft',
     submittedAt: null,
     approvedAt: null,
@@ -1252,7 +1254,10 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
     const firstApproverId = routeData.route_data.steps[0].approver_id;
 
     const { data, error } = await supabase.from('applications').insert({
-        application_code_id: appData.applicationCodeId, form_data: appData.formData, approval_route_id: appData.approvalRouteId,
+        application_code_id: appData.applicationCodeId,
+        form_data: appData.formData,
+        approval_route_id: appData.approvalRouteId,
+        document_url: appData.documentUrl ?? appData.formData?.documentUrl ?? null,
         applicant_id: applicantId, status: 'pending_approval', submitted_at: new Date().toISOString(), current_level: 1, approver_id: firstApproverId,
     }).select().single();
 

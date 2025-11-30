@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS public.applications (
     applicant_id UUID REFERENCES public.users(id),
     application_code_id UUID REFERENCES public.application_codes(id),
     form_data JSONB,
+    document_url TEXT,
     status TEXT NOT NULL DEFAULT 'draft',
     submitted_at TIMESTAMPTZ,
     approved_at TIMESTAMPTZ,
@@ -244,7 +245,19 @@ BEFORE UPDATE ON public.applications
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_updated_at();
 
--- 3. 'v_departments'ビューを作成 (departmentsテーブルも存在しない場合に作成)
+-- 3. 'applications'テーブルに'document_url'カラムを追加
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS document_url TEXT;
+
+-- 4. Supabase Storageに'ringi'バケットを作成（存在しない場合）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE name = 'ringi') THEN
+        PERFORM storage.create_bucket('ringi', public => true);
+    END IF;
+END;
+$$;
+
+-- 5. 'v_departments'ビューを作成 (departmentsテーブルも存在しない場合に作成)
 CREATE TABLE IF NOT EXISTS public.departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
@@ -260,7 +273,7 @@ CREATE OR REPLACE VIEW public.v_departments AS
 SELECT id, name
 FROM public.departments;
 
--- 4. 必須データを挿入
+-- 6. 必須データを挿入
 -- 社長決裁ルート（重要：ステップが空でないこと）
 -- 注： '00000000-...' の部分は、実際の管理者ユーザーのUUIDに置き換える必要があります。
 --      もし管理者ユーザーがいない場合、Supabase Auth でユーザーを作成し、
@@ -291,7 +304,7 @@ VALUES
 ('WKR', '週報フォーム', '週報提出用のフォーム', '{"fields":[{"name":"title","type":"text","label":"件名","required":true},{"name":"details","type":"textarea","label":"報告内容","required":true}]}', true)
 ON CONFLICT (code) DO UPDATE SET schema = EXCLUDED.schema, is_active = EXCLUDED.is_active;
 
--- 5. RLSポリシーと権限を設定
+-- 7. RLSポリシーと権限を設定
 -- 各テーブルでRLSを有効化
 ALTER TABLE public.forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.application_codes ENABLE ROW LEVEL SECURITY;
@@ -345,7 +358,7 @@ CREATE POLICY "Allow all access for authenticated users" ON public.customers FOR
 
 
 -- =================================================================
--- === ステップ6: スキーマキャッシュの再読み込み ===
+-- === ステップ8: スキーマキャッシュの再読み込み ===
 -- =================================================================
 -- PostgRESTにスキーマの変更を通知し、キャッシュをクリアさせます。これが重要です。
 NOTIFY pgrst, 'reload schema';

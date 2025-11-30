@@ -417,9 +417,42 @@ const DayView: React.FC<{
 
     return (
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Actual Column */}
+            <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">実績</h3>
+                <div className="mt-4 space-y-2">
+                    {actualItems.map(item => (
+                        <div key={item.id} className="flex items-center gap-2 group bg-white dark:bg-slate-800/50 p-2 rounded-lg">
+                            <input type="time" value={item.start} onChange={e => handleUpdateActualItem(item.id, { start: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                            <span className="text-slate-400">～</span>
+                            <input type="time" value={item.end} onChange={e => handleUpdateActualItem(item.id, { end: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                            <input type="text" value={item.description} onChange={e => handleUpdateActualItem(item.id, { description: e.target.value })} className={`${inputClass} flex-grow`} disabled={!canEdit} />
+                            {canEdit && <button type="button" onClick={() => handleDeleteActualItem(item.id)} className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4" /></button>}
+                        </div>
+                    ))}
+                </div>
+                {canEdit && (
+                    <form onSubmit={handleAddActualItem} className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3 flex items-center gap-2">
+                        <input type="time" value={newActualItem.start} onChange={e => setNewActualItem({...newActualItem, start: e.target.value})} className={`${inputClass} w-24`} />
+                        <span className="text-slate-400">～</span>
+                        <input type="time" value={newActualItem.end} onChange={e => setNewActualItem({...newActualItem, end: e.target.value})} className={`${inputClass} w-24`} />
+                        <input type="text" value={newActualItem.description} onChange={e => setNewActualItem({...newActualItem, description: e.target.value})} placeholder="実績を入力" className={`${inputClass} flex-grow`} required />
+                        <button type="submit" className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><PlusCircle className="w-4 h-4" /></button>
+                    </form>
+                )}
+                 {actualItems.length === 0 && !canEdit && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">この日の実績はありません。</p>
+                )}
+            </div>
+
             {/* Plan Column */}
             <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">計画</h3>
+                <div className="flex items-start justify-between gap-2">
+                    <div>
+                        <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">予定</h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">左の実績やカレンダーから自動挿入されます</p>
+                    </div>
+                </div>
                 <div className="mt-4 space-y-3">
                     {planEvents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">この日の予定はありません。</p>}
                     {planEvents.map((event) => (
@@ -454,34 +487,6 @@ const DayView: React.FC<{
                         </div>
                     ))}
                 </div>
-            </div>
-
-            {/* Actual Column */}
-            <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">実績</h3>
-                <div className="mt-4 space-y-2">
-                    {actualItems.map(item => (
-                        <div key={item.id} className="flex items-center gap-2 group bg-white dark:bg-slate-800/50 p-2 rounded-lg">
-                            <input type="time" value={item.start} onChange={e => handleUpdateActualItem(item.id, { start: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
-                            <span className="text-slate-400">～</span>
-                            <input type="time" value={item.end} onChange={e => handleUpdateActualItem(item.id, { end: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
-                            <input type="text" value={item.description} onChange={e => handleUpdateActualItem(item.id, { description: e.target.value })} className={`${inputClass} flex-grow`} disabled={!canEdit} />
-                            {canEdit && <button type="button" onClick={() => handleDeleteActualItem(item.id)} className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4" /></button>}
-                        </div>
-                    ))}
-                </div>
-                {canEdit && (
-                    <form onSubmit={handleAddActualItem} className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3 flex items-center gap-2">
-                        <input type="time" value={newActualItem.start} onChange={e => setNewActualItem({...newActualItem, start: e.target.value})} className={`${inputClass} w-24`} />
-                        <span className="text-slate-400">～</span>
-                        <input type="time" value={newActualItem.end} onChange={e => setNewActualItem({...newActualItem, end: e.target.value})} className={`${inputClass} w-24`} />
-                        <input type="text" value={newActualItem.description} onChange={e => setNewActualItem({...newActualItem, description: e.target.value})} placeholder="実績を入力" className={`${inputClass} flex-grow`} required />
-                        <button type="submit" className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><PlusCircle className="w-4 h-4" /></button>
-                    </form>
-                )}
-                 {actualItems.length === 0 && !canEdit && (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">この日の実績はありません。</p>
-                )}
             </div>
         </div>
     );

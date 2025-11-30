@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS public.applications (
     applicant_id UUID REFERENCES public.users(id),
     application_code_id UUID REFERENCES public.application_codes(id),
     form_data JSONB,
+    document_url TEXT,
     status TEXT NOT NULL DEFAULT 'draft',
     submitted_at TIMESTAMPTZ,
     approved_at TIMESTAMPTZ,
@@ -332,14 +333,26 @@ BEFORE UPDATE ON public.application_drafts
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_updated_at();
 
--- 3. 'v_departments'ビューを作成 (departmentsテーブルも存在しない場合に作成)
+-- 3. 'applications'テーブルに'document_url'カラムを追加
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS document_url TEXT;
+
+-- 4. Supabase Storageに'ringi'バケットを作成（存在しない場合）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE name = 'ringi') THEN
+        PERFORM storage.create_bucket('ringi', public => true);
+    END IF;
+END;
+$$;
+
+-- 5. 'v_departments'ビューを作成 (departmentsテーブルも存在しない場合に作成)
 CREATE TABLE IF NOT EXISTS public.departments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. 必須データを挿入
+-- 6. 必須データを挿入
 -- 社長決裁ルート（重要：ステップが空でないこと）
 -- 注： '00000000-...' の部分は、実際の管理者ユーザーのUUIDに置き換える必要があります。
 --      [手順] 1. Supabaseの 'SQL Editor' -> 'User Management' スクリプトを実行して、自分のユーザーのIDを確認します。
@@ -376,7 +389,7 @@ INSERT INTO public.employee_titles (name) VALUES ('代表取締役'), ('取締�
 INSERT INTO public.allocation_divisions (name) VALUES ('本社経費'), ('営業部経費'), ('製造部経費'), ('共通経費') ON CONFLICT (name) DO NOTHING;
 
 
--- 5. RLSポリシーと権限を設定
+-- 7. RLSポリシーと権限を設定
 -- 各テーブルでRLSを有効化
 ALTER TABLE public.forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.application_codes ENABLE ROW LEVEL SECURITY;
@@ -440,7 +453,7 @@ CREATE POLICY "Allow all access for authenticated users" ON public.employee_titl
 
 
 -- =================================================================
--- === ステップ6: スキーマキャッシュの再読み込み ===
+-- === ステップ8: スキーマキャッシュの再読み込み ===
 -- =================================================================
 -- PostgRESTにスキーマの変更を通知し、キャッシュをクリアさせます。これが重要です。
 NOTIFY pgrst, 'reload schema';

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { submitApplication, saveApplicationDraft, getApplicationDraft, clearApplicationDraft } from '../../services/dataService';
+import { submitApplication, saveApplicationDraft, getApplicationDraft, clearApplicationDraft, uploadFile } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
@@ -70,6 +70,13 @@ interface ExpenseInvoiceDraft {
     sourceFile?: { name: string; type: string; url: string };
 }
 
+interface ExpenseAttachment {
+    name: string;
+    publicUrl: string;
+    path: string;
+    type: string;
+}
+
 interface ExpenseReimbursementFormProps {
     onSuccess: () => void;
     applicationCodeId: string;
@@ -135,6 +142,8 @@ const STEPS = [
     { id: 2, name: '明細の編集' },
     { id: 3, name: '申請内容の最終確認と提出' },
 ];
+
+const RINGI_BUCKET = 'ringi';
 
 
 // --- UTILITY FUNCTIONS ---
@@ -235,15 +244,17 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [mqExpectedSalesPQ, setMqExpectedSalesPQ] = useState<number | ''>('');
     const [mqExpectedMarginMQ, setMqExpectedMarginMQ] = useState<number | ''>('');
     const [hasSubmitted, setHasSubmitted] = useState(false);
+    const [documentAttachment, setDocumentAttachment] = useState<ExpenseAttachment | null>(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
+    const [isDocumentUploading, setIsDocumentUploading] = useState(false);
     const [isRestoring, setIsRestoring] = useState(true);
     const [error, setError] = useState('');
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
-    const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError || hasSubmitted;
+    const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError || hasSubmitted || isDocumentUploading;
 
     const mqMRate = useMemo(() => {
         if (mqExpectedSalesPQ === '' || mqExpectedMarginMQ === '') return null;
@@ -260,6 +271,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         setNotes('');
         setMqExpectedSalesPQ('');
         setMqExpectedMarginMQ('');
+        setDocumentAttachment(null);
         setCurrentStep(1);
     }, []);
 
@@ -276,11 +288,29 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 const draft = draftApplication ? draftApplication : await getApplicationDraft(applicationCodeId, currentUser.id);
                 if (draft?.formData) {
                     const data = draft.formData as any;
-                    setInvoice({
+                    const restoredInvoice: ExpenseInvoiceDraft = {
                         ...createEmptyInvoiceDraft(),
                         ...data.invoice,
                         ocrExtractedFields: new Set(data.invoice?.ocrExtractedFields || []),
-                    });
+                    };
+                    const documentUrl = data.documentUrl;
+                    if (documentUrl) {
+                        const attachment: ExpenseAttachment = {
+                            name: data.documentName || data.invoice?.sourceFile?.name || '添付ファイル',
+                            type: data.documentMimeType || data.invoice?.sourceFile?.type || 'application/pdf',
+                            publicUrl: documentUrl,
+                            path: data.documentStoragePath || '',
+                        };
+                        restoredInvoice.sourceFile = {
+                            name: attachment.name,
+                            type: attachment.type,
+                            url: attachment.publicUrl,
+                        };
+                        setDocumentAttachment(attachment);
+                    } else {
+                        setDocumentAttachment(null);
+                    }
+                    setInvoice(restoredInvoice);
                     setDepartmentId(data.departmentId || '');
                     setApprovalRouteId(data.approvalRouteId || '');
                     setNotes(data.notes || '');
@@ -298,6 +328,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     );
 
                     addToast?.('下書きを復元しました。', 'info');
+                } else {
+                    setDocumentAttachment(null);
                 }
             } catch (err) {
                 console.error("Failed to restore draft", err);
@@ -343,84 +375,150 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         });
     };
 
+    const persistDocumentAttachment = async (file: File): Promise<ExpenseAttachment> => {
+        setIsDocumentUploading(true);
+        try {
+            const { publicUrl, path } = await uploadFile(file, RINGI_BUCKET);
+            if (!publicUrl) {
+                throw new Error('添付ファイルの公開URL取得に失敗しました。');
+            }
+            const attachment: ExpenseAttachment = {
+                name: file.name,
+                publicUrl,
+                path,
+                type: file.type || 'application/octet-stream',
+            };
+            setDocumentAttachment(attachment);
+            return attachment;
+        } catch (err: any) {
+            console.error('[ExpenseReimbursementForm] Failed to upload document', err);
+            throw new Error(err?.message || '添付ファイルの保存に失敗しました。');
+        } finally {
+            setIsDocumentUploading(false);
+        }
+    };
+
     const handleFileUpload = async (files: FileList | null) => {
-        if (!files || files.length === 0 || isAIOff) return;
+        if (!files || files.length === 0) return;
+        if (isOcrLoading || isDocumentUploading) {
+            addToast?.('ファイル処理中です。完了までお待ちください。', 'info');
+            return;
+        }
 
         setIsOcrLoading(true);
         setError('');
         const file = files[0];
+        let uploadedAttachment: ExpenseAttachment | null = null;
 
         try {
-            const base64 = await readFileAsBase64(file);
-            const ocrData: InvoiceData = await extractInvoiceDetails(base64, file.type);
-            const newDraft = createEmptyInvoiceDraft();
-            const ocrFields = new Set<string>();
+            const attachment = await persistDocumentAttachment(file);
+            uploadedAttachment = attachment;
+            let nextInvoiceState: ExpenseInvoiceDraft;
 
-            const updateField = (field: keyof ExpenseInvoiceDraft, value: any) => {
-                if (value) {
-                    (newDraft as any)[field] = value;
-                    ocrFields.add(field);
+            if (!isAIOff) {
+                const base64 = await readFileAsBase64(file);
+                const ocrData: InvoiceData = await extractInvoiceDetails(base64, file.type);
+                const newDraft = createEmptyInvoiceDraft();
+                const ocrFields = new Set<string>();
+
+                const updateField = (field: keyof ExpenseInvoiceDraft, value: any) => {
+                    if (value) {
+                        (newDraft as any)[field] = value;
+                        ocrFields.add(field);
+                    }
+                };
+
+                updateField('supplierName', ocrData.vendorName);
+                updateField('registrationNumber', ocrData.registrationNumber);
+                updateField('invoiceDate', ocrData.invoiceDate);
+                updateField('dueDate', ocrData.dueDate);
+                updateField('totalGross', ocrData.totalAmount);
+                updateField('totalNet', ocrData.subtotalAmount);
+                updateField('taxAmount', ocrData.taxAmount);
+
+                if (ocrData.lineItems && ocrData.lineItems.length > 0) {
+                    newDraft.lines = ocrData.lineItems.map(item => ({
+                        ...createEmptyLine(true),
+                        description: item.description || '',
+                        amountExclTax: item.amountExclTax || 0,
+                        quantity: item.quantity || 1,
+                        unitPrice: item.unitPrice || 0,
+                        taxRate: item.taxRate || 10,
+                    }));
+                    ocrFields.add('lines');
+                } else if (newDraft.totalNet) {
+                    newDraft.lines = [{
+                        ...createEmptyLine(true),
+                        description: ocrData.description || '品名不明',
+                        amountExclTax: newDraft.totalNet,
+                    }];
+                    ocrFields.add('lines');
                 }
-            };
 
-            updateField('supplierName', ocrData.vendorName);
-            updateField('registrationNumber', ocrData.registrationNumber);
-            updateField('invoiceDate', ocrData.invoiceDate);
-            updateField('dueDate', ocrData.dueDate);
-            updateField('totalGross', ocrData.totalAmount);
-            updateField('totalNet', ocrData.subtotalAmount);
-            updateField('taxAmount', ocrData.taxAmount);
-
-            if (ocrData.lineItems && ocrData.lineItems.length > 0) {
-                newDraft.lines = ocrData.lineItems.map(item => ({
-                    ...createEmptyLine(true),
-                    description: item.description || '',
-                    amountExclTax: item.amountExclTax || 0,
-                    quantity: item.quantity || 1,
-                    unitPrice: item.unitPrice || 0,
-                    taxRate: item.taxRate || 10,
-                }));
-                ocrFields.add('lines');
-            } else if (newDraft.totalNet) {
-                newDraft.lines = [{
-                    ...createEmptyLine(true),
-                    description: ocrData.description || '品名不明',
-                    amountExclTax: newDraft.totalNet,
-                }];
-                ocrFields.add('lines');
+                newDraft.ocrExtractedFields = ocrFields;
+                nextInvoiceState = newDraft;
+            } else {
+                nextInvoiceState = {
+                    ...invoice,
+                };
             }
 
-            newDraft.ocrExtractedFields = ocrFields;
-            newDraft.sourceFile = { name: file.name, type: file.type, url: URL.createObjectURL(file) };
+            nextInvoiceState.sourceFile = { name: file.name, type: file.type, url: attachment.publicUrl };
 
-            setInvoice(newDraft);
-            addToast?.('OCRが完了しました。内容を確認してください。', 'success');
-
+            setInvoice(nextInvoiceState);
+            addToast?.(
+                isAIOff ? '請求書ファイルを保存しました。AI-OCRはスキップされました。' : 'OCRが完了しました。内容を確認してください。',
+                'success'
+            );
         } catch (err: any) {
-            setError(err.message || 'OCR処理中にエラーが発生しました。');
-            addToast?.('OCR処理に失敗しました。', 'error');
+            if (uploadedAttachment) {
+                setInvoice(prev => ({
+                    ...prev,
+                    sourceFile: {
+                        name: uploadedAttachment.name,
+                        type: uploadedAttachment.type,
+                        url: uploadedAttachment.publicUrl,
+                    },
+                }));
+            }
+            const message = err?.message || 'ファイル処理中にエラーが発生しました。';
+            setError(message);
+            addToast?.(message, 'error');
         } finally {
             setIsOcrLoading(false);
         }
     };
 
-    const buildApplicationPayload = () => ({
-        applicationCodeId,
-        formData: {
-            departmentId,
+    const buildApplicationPayload = () => {
+        const attachmentPayload = documentAttachment
+            ? {
+                  documentUrl: documentAttachment.publicUrl,
+                  documentName: documentAttachment.name,
+                  documentMimeType: documentAttachment.type,
+                  documentStoragePath: documentAttachment.path,
+              }
+            : {};
+
+        return {
+            applicationCodeId,
+            formData: {
+                departmentId,
+                approvalRouteId,
+                notes,
+                invoice: {
+                    ...invoice,
+                    ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
+                },
+                mqAccounting: {
+                    expectedSalesPQ: mqExpectedSalesPQ === '' ? undefined : mqExpectedSalesPQ,
+                    expectedMarginMQ: mqExpectedMarginMQ === '' ? undefined : mqExpectedMarginMQ,
+                },
+                ...attachmentPayload,
+            },
             approvalRouteId,
-            notes,
-            invoice: {
-                ...invoice,
-                ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
-            },
-            mqAccounting: {
-                expectedSalesPQ: mqExpectedSalesPQ === '' ? undefined : mqExpectedSalesPQ,
-                expectedMarginMQ: mqExpectedMarginMQ === '' ? undefined : mqExpectedMarginMQ,
-            },
-        },
-        approvalRouteId,
-    });
+            documentUrl: documentAttachment?.publicUrl,
+        };
+    };
 
     const executeSubmission = async () => {
         if (!currentUser) {
@@ -455,6 +553,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         if (!departmentId) return setError('部門を選択してください。');
         if (!approvalRouteId) return setError('承認ルートを選択してください。');
         if (!invoice.supplierName) return setError('サプライヤー名を入力してください。');
+        if (!documentAttachment?.publicUrl) return setError('請求書ファイルをアップロードしてください。');
 
         requestConfirmation({
             label: '申請を送信する',
@@ -530,7 +629,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 <CardDescription>請求書のPDFや画像をアップロードすると、AI-OCRが情報を自動で読み取ります。</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <UploadZone onFileUpload={handleFileUpload} isLoading={isOcrLoading} isAIOff={isAIOff} sourceFile={invoice.sourceFile} />
+                                <UploadZone
+                                    onFileUpload={handleFileUpload}
+                                    isLoading={isOcrLoading}
+                                    isAIOff={isAIOff}
+                                    sourceFile={invoice.sourceFile}
+                                    isSavingAttachment={isDocumentUploading}
+                                    attachment={documentAttachment}
+                                />
                             </CardContent>
                         </Card>
 
@@ -728,12 +834,15 @@ const UploadZone: React.FC<{
     isLoading: boolean;
     isAIOff: boolean;
     sourceFile?: { name: string; url: string; type: string };
-}> = ({ onFileUpload, isLoading, isAIOff, sourceFile }) => {
+    isSavingAttachment?: boolean;
+    attachment?: ExpenseAttachment | null;
+}> = ({ onFileUpload, isLoading, isAIOff, sourceFile, isSavingAttachment = false, attachment }) => {
     const [isDragging, setIsDragging] = useState(false);
+    const isBusy = isLoading || isSavingAttachment;
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
-        if (!isLoading && !isAIOff) setIsDragging(true);
+        if (!isBusy) setIsDragging(true);
     };
     const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -742,9 +851,11 @@ const UploadZone: React.FC<{
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         setIsDragging(false);
+        if (isBusy) return;
         onFileUpload(e.dataTransfer.files);
     };
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (isBusy) return;
         onFileUpload(e.target.files);
         e.target.value = ''; // Reset input
     };
@@ -756,27 +867,36 @@ const UploadZone: React.FC<{
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 className={`relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/50' : 'border-slate-300 dark:border-slate-600 hover:border-slate-400'
-                    } ${(isLoading || isAIOff) && 'opacity-50 cursor-not-allowed'}`}
+                    } ${isBusy && 'opacity-50 cursor-not-allowed'}`}
             >
                 <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
                     <Upload className="w-10 h-10 mb-4 text-slate-500 dark:text-slate-400" />
                     <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">クリックしてアップロード、またはドラッグ＆ドロップ</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">PDF, PNG, JPG (MAX. 10MB)</p>
+                    {isAIOff && (
+                        <p className="mt-2 text-xs font-semibold text-amber-600">
+                            AI機能が無効のためOCRはスキップされます（ファイルは保存されます）
+                        </p>
+                    )}
                 </div>
-                <input id="dropzone-file" type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} disabled={isLoading || isAIOff} accept="application/pdf,image/png,image/jpeg" />
-                {isLoading && (
+                <input
+                    id="dropzone-file"
+                    type="file"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    onChange={handleFileChange}
+                    disabled={isBusy}
+                    accept="application/pdf,image/png,image/jpeg"
+                />
+                {isBusy && (
                     <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 flex flex-col items-center justify-center rounded-lg">
                         <Loader className="w-8 h-8 animate-spin text-blue-600" />
-                        <p className="mt-2 text-sm font-semibold text-blue-600">AI-OCRが解析中...</p>
-                    </div>
-                )}
-                {isAIOff && (
-                    <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 flex items-center justify-center rounded-lg">
-                        <p className="text-sm font-semibold text-rose-600">AI機能が無効です</p>
+                        <p className="mt-2 text-sm font-semibold text-blue-600">
+                            {isSavingAttachment ? 'ファイルをSupabaseに保存中です...' : 'AI-OCRが解析中...'}
+                        </p>
                     </div>
                 )}
             </div>
-            <div className="h-64 bg-slate-100 dark:bg-slate-900/50 rounded-lg flex items-center justify-center border dark:border-slate-700">
+            <div className="h-64 bg-slate-100 dark:bg-slate-900/50 rounded-lg flex flex-col items-center justify-center border dark:border-slate-700 p-4 text-center gap-3">
                 {sourceFile ? (
                     sourceFile.type.startsWith('image/') ? (
                         <img src={sourceFile.url} alt={sourceFile.name} className="max-h-full max-w-full object-contain rounded-md" />
@@ -792,6 +912,17 @@ const UploadZone: React.FC<{
                         <FileText className="w-16 h-16 mx-auto" />
                         <p className="mt-2">プレビューエリア</p>
                     </div>
+                )}
+                {attachment?.publicUrl && (
+                    <a
+                        href={attachment.publicUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-green-700 dark:text-green-300 underline"
+                    >
+                        <Check className="w-4 h-4" />
+                        {attachment.name} を開く
+                    </a>
                 )}
             </div>
         </div>
