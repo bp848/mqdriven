@@ -11,13 +11,14 @@ const UserModal: React.FC<{
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
     const [role, setRole] = useState<'admin' | 'user'>(user?.role || 'user');
+    const [isActive, setIsActive] = useState<boolean>(user?.isActive ?? true);
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !email) return;
         setIsSaving(true);
-        await onSave({ ...user, name, email, role });
+        await onSave({ ...user, name, email, role, isActive });
         setIsSaving(false);
     };
 
@@ -43,6 +44,17 @@ const UserModal: React.FC<{
                             <option value="user">一般ユーザー</option>
                             <option value="admin">管理者</option>
                         </select>
+                    </div>
+                    <div>
+                        <label className="inline-flex items-center space-x-2 text-sm font-medium">
+                            <input
+                                type="checkbox"
+                                checked={isActive}
+                                onChange={e => setIsActive(e.target.checked)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>有効ユーザー</span>
+                        </label>
                     </div>
                 </div>
                 <div className="flex justify-end gap-4 p-6 border-t border-slate-200 dark:border-slate-700">
@@ -112,7 +124,12 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                 await updateUser(userData.id, userData);
                 addToast('ユーザー情報が更新されました。', 'success');
             } else {
-                await addUser({ name: userData.name || '', email: userData.email || null, role: userData.role || 'user' });
+                await addUser({
+                    name: userData.name || '',
+                    email: userData.email || null,
+                    role: userData.role || 'user',
+                    isActive: userData.isActive ?? true,
+                });
                 addToast('新規ユーザーが追加されました。', 'success');
             }
             await loadUsers();
@@ -211,6 +228,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                             <th className="px-6 py-3">役職</th>
                             <th className="px-6 py-3">メールアドレス</th>
                             <th className="px-6 py-3">役割</th>
+                            <th className="px-6 py-3">状態</th>
                             <th className="px-6 py-3">登録日</th>
                             <th className="px-6 py-3 text-center">操作</th>
                         </tr>
@@ -225,29 +243,59 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                         ) : (
                             filteredUsers.map(user => (
                                 <tr key={user.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                <td className="px-6 py-4 font-medium">{user.name}</td>
-                                <td className="px-6 py-4 text-slate-500">{user.department || '未設定'}</td>
-                                <td className="px-6 py-4 text-slate-500">{user.title || '未設定'}</td>
-                                <td className="px-6 py-4 text-slate-500">{user.email}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'}`}>
-                                        {user.role === 'admin' ? '管理者' : '一般ユーザー'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4">{new Date(user.createdAt).toLocaleDateString()}</td>
-                                <td className="px-6 py-4">
-                                    <div className="flex justify-center items-center gap-2">
-                                        {canManageUsers ? (
-                                            <>
-                                                <button onClick={() => handleOpenModal(user)} className="p-2 text-slate-500 hover:text-blue-600"><Pencil className="w-5 h-5" /></button>
-                                                <button onClick={() => handleDeleteUser(user)} className="p-2 text-slate-500 hover:text-red-600"><Trash2 className="w-5 h-5" /></button>
-                                            </>
-                                        ) : (
-                                            <span className="text-xs text-slate-400">権限がありません</span>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
+                                    <td className="px-6 py-4 font-medium">{user.name}</td>
+                                    <td className="px-6 py-4 text-slate-500">{user.department || '未設定'}</td>
+                                    <td className="px-6 py-4 text-slate-500">{user.title || '未設定'}</td>
+                                    <td className="px-6 py-4 text-slate-500">{user.email}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'}`}>
+                                            {user.role === 'admin' ? '管理者' : '一般ユーザー'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span
+                                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                user.isActive === false
+                                                    ? 'bg-slate-200 text-slate-600'
+                                                    : 'bg-emerald-100 text-emerald-800'
+                                            }`}
+                                        >
+                                            {user.isActive === false ? '無効' : '有効'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">{new Date(user.createdAt).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex justify-center items-center gap-2">
+                                            {canManageUsers ? (
+                                                <>
+                                                    <button onClick={() => handleOpenModal(user)} className="p-2 text-slate-500 hover:text-blue-600"><Pencil className="w-5 h-5" /></button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                await updateUser(user.id, { isActive: user.isActive === false ? true : false });
+                                                                addToast(
+                                                                    user.isActive === false
+                                                                        ? 'ユーザーを有効にしました。'
+                                                                        : 'ユーザーを無効にしました。',
+                                                                    'success'
+                                                                );
+                                                                await loadUsers();
+                                                            } catch (err: any) {
+                                                                addToast(`更新に失敗しました: ${err.message}`, 'error');
+                                                            }
+                                                        }}
+                                                        className="p-2 text-slate-500 hover:text-amber-600 text-xs"
+                                                    >
+                                                        {user.isActive === false ? '有効化' : '無効化'}
+                                                    </button>
+                                                    <button onClick={() => handleDeleteUser(user)} className="p-2 text-slate-500 hover:text-red-600"><Trash2 className="w-5 h-5" /></button>
+                                                </>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">権限がありません</span>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
                             ))
                         )}
                     </tbody>

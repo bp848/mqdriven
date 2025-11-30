@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ApplicationWithDetails, User } from '../types';
-import { X, CheckCircle, Send, Loader } from './Icons';
+import { X, CheckCircle, Send, Loader, FileText } from './Icons';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
 import { getUsers } from '../services/dataService';
 import { useSubmitWithConfirmation } from '../hooks/useSubmitWithConfirmation';
@@ -342,7 +342,13 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const formSummary = React.useMemo(() => buildFormSummary(code, formData), [code, formData]);
     const hasSummarySections =
         formSummary.highlights.length > 0 || formSummary.listSections.length > 0 || formSummary.tableSections.length > 0;
-    const hasAttachments = Boolean(formData.receiptUrl);
+    const documentUrl: string | null = application.documentUrl || formData.documentUrl || formData.receiptUrl || null;
+    const documentName = formData.documentName || formData.receiptName || formData.invoice?.sourceFile?.name || '添付ファイル';
+    const documentMimeType = formData.documentMimeType || formData.invoice?.sourceFile?.type || '';
+    const isImageAttachment =
+        !!documentUrl &&
+        ((typeof documentMimeType === 'string' && documentMimeType.startsWith('image/')) || /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(documentUrl));
+    const hasAttachments = Boolean(documentUrl);
     const showRejectionReason = application.status === 'rejected' && application.rejectionReason;
 
     const usersById = new Map(allUsers.map(u => [u.id, u.name]));
@@ -520,16 +526,40 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                     </div>
                                 </section>
 
-                                {hasAttachments && (
-                                    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
-                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">添付ファイル</h3>
-                                        <a href={formData.receiptUrl} target="_blank" rel="noopener noreferrer" className="inline-flex">
-                                            <img
-                                                src={formData.receiptUrl}
-                                                alt="添付ファイル"
-                                                className="max-h-[280px] w-auto rounded-xl border border-slate-200 dark:border-slate-700 object-contain"
-                                            />
-                                        </a>
+                                {hasAttachments && documentUrl && (
+                                    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6 space-y-4">
+                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">添付ファイル</h3>
+                                        {isImageAttachment ? (
+                                            <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex">
+                                                <img
+                                                    src={documentUrl}
+                                                    alt={documentName}
+                                                    className="max-h-[280px] w-auto rounded-xl border border-slate-200 dark:border-slate-700 object-contain"
+                                                />
+                                            </a>
+                                        ) : (
+                                            <div className="flex flex-col gap-4 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-800/40">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="rounded-full bg-slate-200/60 dark:bg-slate-700/60 p-3">
+                                                        <FileText className="w-6 h-6 text-slate-600 dark:text-slate-200" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-semibold text-slate-900 dark:text-white break-all">{documentName}</p>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400">{documentMimeType || '添付ファイル'}</p>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <a
+                                                        href={documentUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 dark:text-blue-400"
+                                                    >
+                                                        ファイルを開く
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        )}
                                     </section>
                                 )}
                             </div>
