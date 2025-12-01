@@ -1000,6 +1000,7 @@ const App: React.FC = () => {
                     initialValues={customerInitialValues}
                     addToast={addToast}
                     currentUser={currentUser}
+                    onAutoCreateCustomer={handleCreateCustomerInline}
                 />
             )}
             {isAnalysisModalOpen && <CompanyAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setAnalysisModalOpen(false)} analysis={companyAnalysis} customer={selectedCustomer} isLoading={isAnalysisLoading} error={analysisError} currentUser={currentUser} isAIOff={isAIOff} onReanalyze={handleAnalyzeCustomer}/>}

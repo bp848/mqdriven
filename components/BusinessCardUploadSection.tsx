@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BusinessCardContact, Customer, EmployeeUser, Toast } from '../types';
 import { extractBusinessCardDetails } from '../services/geminiService';
-import { Upload, Loader, CheckCircle, AlertTriangle, Trash2, FileText } from './Icons';
+import { Upload, Loader, CheckCircle, AlertTriangle, Trash2, FileText, RefreshCw } from './Icons';
 import { buildActionActorInfo, logActionEvent } from '../services/actionConsoleService';
 
 interface BusinessCardUploadSectionProps {
@@ -9,9 +9,11 @@ interface BusinessCardUploadSectionProps {
   isAIOff: boolean;
   currentUser?: EmployeeUser | null;
   onApplyToForm: (data: Partial<Customer>) => void;
+  onAutoCreateCustomer?: (data: Partial<Customer>) => Promise<Customer>;
 }
 
-type CardDraftStatus = 'processing' | 'ready' | 'error';
+type OcrStatus = 'processing' | 'ready' | 'error';
+type InsertStatus = 'idle' | 'saving' | 'success' | 'error';
 
 type CardDraft = {
   id: string;
@@ -19,10 +21,13 @@ type CardDraft = {
   fileName: string;
   fileUrl: string;
   mimeType: string;
-  status: CardDraftStatus;
+  ocrStatus: OcrStatus;
+  insertStatus: InsertStatus;
   contact: BusinessCardContact;
-  manualOverride?: boolean;
-  error?: string;
+  customerPayload?: Partial<Customer>;
+  createdCustomer?: Customer | null;
+  ocrError?: string;
+  insertError?: string;
 };
 
 const readFileAsBase64 = (file: File): Promise<string> =>
@@ -67,10 +72,17 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
   note: contact.notes,
 });
 
-const STATUS_STYLES: Record<CardDraftStatus, { label: string; className: string }> = {
-  processing: { label: '解析中', className: 'bg-blue-100 text-blue-700' },
-  ready: { label: '確認待ち', className: 'bg-emerald-100 text-emerald-700' },
-  error: { label: 'エラー', className: 'bg-red-100 text-red-700' },
+const OCR_STATUS_STYLES: Record<OcrStatus, { label: string; className: string }> = {
+  processing: { label: 'OCR解析中', className: 'bg-blue-100 text-blue-700' },
+  ready: { label: '解析済', className: 'bg-emerald-100 text-emerald-700' },
+  error: { label: '解析失敗', className: 'bg-red-100 text-red-700' },
+};
+
+const INSERT_STATUS_STYLES: Record<InsertStatus, { label: string; className: string }> = {
+  idle: { label: '登録待ち', className: 'bg-slate-100 text-slate-600' },
+  saving: { label: '登録中', className: 'bg-blue-100 text-blue-700' },
+  success: { label: '登録済', className: 'bg-green-100 text-green-700' },
+  error: { label: '登録失敗', className: 'bg-red-100 text-red-700' },
 };
 
 const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
@@ -78,6 +90,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   isAIOff,
   currentUser,
   onApplyToForm,
+  onAutoCreateCustomer,
 }) => {
   const [drafts, setDrafts] = useState<CardDraft[]>([]);
   const actorInfo = useMemo(() => buildActionActorInfo(currentUser ?? null), [currentUser]);
@@ -102,20 +115,92 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
       ? crypto.randomUUID()
       : `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+  const autoCreateCustomer = useCallback(
+    async (draftId: string, payload: Partial<Customer>) => {
+      if (!onAutoCreateCustomer) {
+        onApplyToForm(payload);
+        addToast('名刺の内容をフォームに反映しました。保存して登録してください。', 'success');
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'info',
+          status: 'pending',
+          summary: `名刺OCR: ${payload.customerName || '不明'} をフォームに転記`,
+          detail: `担当: ${payload.representative || '不明'}`,
+          ...actorInfo,
+        });
+        handleRemoveDraft(draftId);
+        return;
+      }
+
+      setDrafts(prev =>
+        prev.map(draft =>
+          draft.id === draftId ? { ...draft, insertStatus: 'saving', insertError: undefined } : draft
+        )
+      );
+
+      try {
+        const created = await onAutoCreateCustomer(payload);
+        setDrafts(prev =>
+          prev.map(draft =>
+            draft.id === draftId
+              ? {
+                  ...draft,
+                  insertStatus: 'success',
+                  createdCustomer: created,
+                  customerPayload: { ...payload, id: created.id },
+                }
+              : draft
+          )
+        );
+        addToast(`「${created.customerName || payload.customerName || '名刺'}」を自動登録しました。`, 'success');
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'info',
+          status: 'success',
+          summary: `名刺OCR: ${created.customerName || payload.customerName || '不明'} を顧客登録`,
+          detail: `担当: ${created.representative || payload.representative || '不明'}`,
+          ...actorInfo,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '顧客登録に失敗しました。';
+        setDrafts(prev =>
+          prev.map(draft =>
+            draft.id === draftId ? { ...draft, insertStatus: 'error', insertError: message } : draft
+          )
+        );
+        addToast(message, 'error');
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'critical',
+          status: 'failure',
+          summary: `名刺OCR: ${payload.customerName || '不明'} の自動登録でエラー`,
+          detail: message,
+          ...actorInfo,
+        });
+      }
+    },
+    [onAutoCreateCustomer, onApplyToForm, addToast, actorInfo]
+  );
+
   const runOcr = useCallback(
     async (draftId: string, file: File) => {
       setDrafts(prev =>
         prev.map(draft =>
-          draft.id === draftId ? { ...draft, status: 'processing', error: undefined } : draft
+          draft.id === draftId
+            ? { ...draft, ocrStatus: 'processing', ocrError: undefined }
+            : draft
         )
       );
       try {
         const base64 = await readFileAsBase64(file);
         const parsed = await extractBusinessCardDetails(base64, file.type || 'application/octet-stream');
         const contact = normalizeContact(parsed);
+        const payload = contactToCustomer(contact, file.name);
         setDrafts(prev =>
           prev.map(draft =>
-            draft.id === draftId ? { ...draft, status: 'ready', contact, error: undefined } : draft
+            draft.id === draftId
+              ? { ...draft, ocrStatus: 'ready', contact, customerPayload: payload, ocrError: undefined }
+              : draft
           )
         );
         logActionEvent({
@@ -126,11 +211,12 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           detail: `会社: ${contact.companyName || '不明'} / 担当: ${contact.personName || '不明'}`,
           ...actorInfo,
         });
+        await autoCreateCustomer(draftId, payload);
       } catch (error) {
         const message = error instanceof Error ? error.message : '名刺の解析に失敗しました。';
         setDrafts(prev =>
           prev.map(draft =>
-            draft.id === draftId ? { ...draft, status: 'error', error: message } : draft
+            draft.id === draftId ? { ...draft, ocrStatus: 'error', ocrError: message } : draft
           )
         );
         logActionEvent({
@@ -143,7 +229,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         });
       }
     },
-    [actorInfo]
+    [actorInfo, autoCreateCustomer]
   );
 
   const handleFiles = useCallback(
@@ -170,7 +256,8 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           fileName: file.name,
           fileUrl: previewUrl,
           mimeType: file.type || 'application/octet-stream',
-          status: 'processing',
+          ocrStatus: 'processing',
+          insertStatus: 'idle',
           contact: {},
         };
         setDrafts(prev => [...prev, draft]);
@@ -198,61 +285,20 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
     });
   };
 
-  const markManualReady = (draftId: string) => {
-    setDrafts(prev =>
-      prev.map(draft => {
-        if (draft.id !== draftId) return draft;
-        const updatedContact = {
-          ...draft.contact,
-          companyName: draft.contact.companyName || draft.contact.personName || draft.fileName,
-        };
-        return {
-          ...draft,
-          status: 'ready',
-          manualOverride: true,
-          contact: updatedContact,
-          error: undefined,
-        };
-      })
-    );
-    const target = draftsRef.current.find(d => d.id === draftId);
-    if (target) {
-      logActionEvent({
-        module: '名刺OCR',
-        severity: 'warning',
-        status: 'pending',
-        summary: `名刺OCR: ${target.fileName} を手動入力に切替`,
-        detail: 'AI解析をスキップし、手入力で承認対象に設定しました。',
-        ...actorInfo,
-      });
+  const handleLoadToForm = (draft: CardDraft) => {
+    if (draft.createdCustomer) {
+      onApplyToForm(draft.createdCustomer);
+      addToast('登録済みの顧客をフォームに読み込みました。必要な項目を編集して保存してください。', 'success');
+    } else if (draft.customerPayload) {
+      onApplyToForm(draft.customerPayload);
+      addToast('名刺の内容をフォームに読み込みました。保存して登録してください。', 'success');
     }
   };
 
-  const handleContactChange = (
-    draftId: string,
-    field: keyof BusinessCardContact,
-    value: string
-  ) => {
-    setDrafts(prev =>
-      prev.map(draft =>
-        draft.id === draftId ? { ...draft, contact: { ...draft.contact, [field]: value } } : draft
-      )
-    );
-  };
-
-  const handleApply = (draft: CardDraft) => {
-    const payload = contactToCustomer(draft.contact, draft.fileName);
-    onApplyToForm(payload);
-    addToast('名刺の内容をフォームに反映しました。内容を確認して登録してください。', 'success');
-    logActionEvent({
-      module: '名刺OCR',
-      severity: 'info',
-      status: 'pending',
-      summary: `名刺OCR: ${draft.fileName} を顧客フォームに読み込み`,
-      detail: `会社: ${payload.customerName || '不明'} / 担当: ${payload.representative || '不明'}`,
-      ...actorInfo,
-    });
-    handleRemoveDraft(draft.id);
+  const handleRetryInsert = (draft: CardDraft) => {
+    if (draft.customerPayload) {
+      void autoCreateCustomer(draft.id, draft.customerPayload);
+    }
   };
 
   return (
@@ -303,16 +349,18 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           解析結果は下部に表示され、フォームへワンクリックで取り込めます。
         </p>
       </div>
-      <div className="px-6 py-5 space-y-4 max-h-[320px] overflow-y-auto">
+      <div className="px-6 py-5 space-y-4 max-h-[360px] overflow-y-auto">
         {drafts.length === 0 ? (
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">
-            <p>・1枚だけでも複数枚でもまとめてアップロードできます。</p>
-            <p>・AIが社名や担当者を読み取り、内容を編集してからフォームに反映できます。</p>
+            <p>・名刺をアップロードするとAIが自動で顧客マスタに登録します。</p>
+            <p>・登録済みデータを編集したい場合は右側フォームで読み込み、保存してください。</p>
+            <p>・ステータスに応じて登録状況が表示されます。</p>
           </div>
         ) : (
           drafts.map(draft => {
-            const status = STATUS_STYLES[draft.status];
             const isPdf = draft.mimeType.includes('pdf');
+            const ocrStatus = OCR_STATUS_STYLES[draft.ocrStatus];
+            const insertStatus = INSERT_STATUS_STYLES[draft.insertStatus];
             return (
               <div
                 key={draft.id}
@@ -334,27 +382,35 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                         <p className="font-semibold text-slate-800 dark:text-slate-100">
                           {draft.fileName}
                         </p>
-                        {draft.manualOverride && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                            手動入力
-                          </span>
-                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
                         <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${status.className}`}
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold ${ocrStatus.className}`}
                         >
-                          {status.label}
+                          {ocrStatus.label}
+                        </span>
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold ${insertStatus.className}`}
+                        >
+                          {insertStatus.label}
                         </span>
                       </div>
-                      {draft.status === 'error' && draft.error && (
+                      {draft.ocrStatus === 'error' && draft.ocrError && (
                         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
                           <AlertTriangle className="w-4 h-4" />
-                          {draft.error}
+                          {draft.ocrError}
+                        </div>
+                      )}
+                      {draft.insertStatus === 'error' && draft.insertError && (
+                        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          {draft.insertError}
                         </div>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {draft.status === 'error' && (
+                    {draft.ocrStatus === 'error' && (
                       <button
                         type="button"
                         onClick={() => runOcr(draft.id, draft.file)}
@@ -373,81 +429,60 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                   </div>
                 </div>
 
-                {draft.status !== 'ready' && (
-                  <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-600">
-                    <p>AI解析が完了しない場合は、手入力で登録できます。</p>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <button
-                        type="button"
-                        onClick={() => markManualReady(draft.id)}
-                        className="inline-flex items-center gap-2 rounded-md border border-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:border-amber-500 dark:text-amber-300"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        手動入力で承認対象にする
-                      </button>
-                      {draft.status === 'processing' && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                          <Loader className="w-3 h-3 animate-spin" />
-                          解析結果が届いたら自動で上書きされます
-                        </span>
-                      )}
+                <div className="rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/40 dark:bg-slate-900/30 p-4">
+                  <dl className="grid grid-cols-1 gap-y-3 text-sm text-slate-600 dark:text-slate-300">
+                    <div>
+                      <dt className="text-xs font-semibold text-slate-500">会社名</dt>
+                      <dd className="font-medium text-slate-900 dark:text-white">
+                        {draft.customerPayload?.customerName || '―'}
+                      </dd>
                     </div>
-                  </div>
-                )}
+                    <div>
+                      <dt className="text-xs font-semibold text-slate-500">担当者</dt>
+                      <dd>{draft.customerPayload?.representative || '―'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-slate-500">電話 / メール</dt>
+                      <dd className="space-y-0.5">
+                        <p>{draft.customerPayload?.phoneNumber || '―'}</p>
+                        <p>{draft.customerPayload?.customerContactInfo || '―'}</p>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-slate-500">住所</dt>
+                      <dd>{draft.customerPayload?.address1 || '―'}</dd>
+                    </div>
+                  </dl>
+                </div>
 
-                {draft.status !== 'error' && (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(
-                        [
-                          ['companyName', '会社名'],
-                          ['personName', '担当者名'],
-                          ['department', '部署名'],
-                          ['title', '役職'],
-                          ['phoneNumber', '電話番号'],
-                          ['mobileNumber', '携帯番号'],
-                          ['email', 'メール'],
-                          ['address', '住所'],
-                          ['websiteUrl', 'Webサイト'],
-                          ['notes', 'メモ'],
-                        ] as Array<[keyof BusinessCardContact, string]>
-                      ).map(([field, label]) => (
-                        <div key={field}>
-                          <label className="text-xs font-semibold text-slate-500 block mb-1">
-                            {label}
-                          </label>
-                          {field === 'notes' ? (
-                            <textarea
-                              value={draft.contact[field] || ''}
-                              onChange={e => handleContactChange(draft.id, field, e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm p-2"
-                              rows={2}
-                            />
-                          ) : (
-                            <input
-                              type="text"
-                              value={draft.contact[field] || ''}
-                              onChange={e => handleContactChange(draft.id, field, e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm p-2"
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-end">
-                      {draft.status === 'ready' && (
-                        <button
-                          type="button"
-                          onClick={() => handleApply(draft)}
-                          className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                          フォームに入力
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
+                <div className="flex flex-wrap justify-end gap-2">
+                  {draft.insertStatus === 'error' && draft.customerPayload && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetryInsert(draft)}
+                      className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      再登録
+                    </button>
+                  )}
+                  {(draft.insertStatus === 'success' || (!onAutoCreateCustomer && draft.customerPayload)) && (
+                    <button
+                      type="button"
+                      onClick={() => handleLoadToForm(draft)}
+                      className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      フォームで編集
+                    </button>
+                  )}
+                  {draft.insertStatus === 'saving' && (
+                    <span className="inline-flex items-center gap-2 text-xs font-semibold text-blue-500">
+                      <Loader className="w-4 h-4 animate-spin" />
+                      自動登録中...
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })
@@ -457,10 +492,10 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         <div className="border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
           <div className="flex items-center gap-2">
             <Loader className="w-4 h-4 text-blue-500 animate-spin" />
-            <span>解析中: {drafts.filter(d => d.status === 'processing').length}件</span>
+            <span>解析中: {drafts.filter(d => d.ocrStatus === 'processing').length}件 / 登録中: {drafts.filter(d => d.insertStatus === 'saving').length}件</span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            解析結果はフォームに読み込んだ後、ドラフト一覧から自動で削除されます。
+            右側フォームで修正したい登録済みレコードは「フォームで編集」から読み込めます。
           </p>
         </div>
       )}
