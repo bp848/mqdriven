@@ -11,6 +11,7 @@ interface CustomerDetailModalProps {
     onSetMode: (mode: 'view' | 'edit' | 'new') => void;
     onAnalyzeCustomer: (customer: Customer) => void;
     isAIOff: boolean;
+    initialValues?: Partial<Customer> | null;
 }
 
 const TABS = [
@@ -21,7 +22,7 @@ const TABS = [
     { id: 'karte', label: 'お客様カルテ' },
 ];
 
-const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff }) => {
+const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues }) => {
     const [formData, setFormData] = useState<Partial<Customer>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -53,7 +54,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
 
     useEffect(() => {
         if (mode === 'new') {
-            setFormData({});
+            setFormData(initialValues ? { ...initialValues } : {});
         } else if (customer) {
             const initialData = { ...customer };
             // Format date fields for input[type=date]
@@ -63,7 +64,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
             initialData.drawingDate = formatDateForInput(initialData.drawingDate);
             setFormData(initialData);
         }
-    }, [customer, mode]);
+    }, [customer, mode, initialValues]);
 
     if (mode === 'view' && !customer) return null;
 

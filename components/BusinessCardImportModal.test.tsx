@@ -26,7 +26,7 @@ const mockOcrResult: BusinessCardContact = {
 };
 
 describe('BusinessCardImportModal', () => {
-  const onRegister = vi.fn();
+  const onOpenCustomerForm = vi.fn();
   const onClose = vi.fn();
   const addToast = vi.fn();
 
@@ -39,7 +39,7 @@ describe('BusinessCardImportModal', () => {
       <BusinessCardImportModal
         isOpen={true}
         onClose={onClose}
-        onRegister={onRegister}
+        onOpenCustomerForm={onOpenCustomerForm}
         addToast={addToast}
         isAIOff={isAIOff}
         currentUser={null}
@@ -72,18 +72,17 @@ describe('BusinessCardImportModal', () => {
       expect(screen.getByDisplayValue('john.doe@test.com')).toBeInTheDocument();
     });
 
-    const registerButton = screen.getByText('承認して登録');
-    expect(registerButton).not.toBeDisabled();
-    fireEvent.click(registerButton);
+    const formButton = screen.getByText('フォームで登録');
+    fireEvent.click(formButton);
 
     await waitFor(() => {
-        expect(onRegister).toHaveBeenCalledWith([
-            expect.objectContaining({
-                customerName: 'Test Corp',
-                representative: 'John Doe',
-                customerContactInfo: 'john.doe@test.com',
-            })
-        ]);
+      expect(onOpenCustomerForm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerName: 'Test Corp',
+          representative: 'John Doe',
+          customerContactInfo: 'john.doe@test.com',
+        })
+      );
     });
   });
 
@@ -107,9 +106,7 @@ describe('BusinessCardImportModal', () => {
       expect(screen.getByText('エラー')).toBeInTheDocument();
     });
 
-    // Register button should be disabled as there are no ready drafts
-    const registerButton = screen.getByText('承認して登録');
-    expect(registerButton).toBeDisabled();
+    expect(screen.queryByText('フォームで登録')).not.toBeInTheDocument();
   });
 
   it('disables OCR functionality when AI is off', async () => {

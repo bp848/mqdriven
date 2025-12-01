@@ -198,6 +198,7 @@ const App: React.FC = () => {
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [customerModalMode, setCustomerModalMode] = useState<'view' | 'edit' | 'new'>('view');
     const [isCustomerDetailModalOpen, setCustomerDetailModalOpen] = useState(false);
+    const [customerInitialValues, setCustomerInitialValues] = useState<Partial<Customer> | null>(null);
     const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItem | null>(null);
     const [isAnalysisModalOpen, setAnalysisModalOpen] = useState(false);
     const [companyAnalysis, setCompanyAnalysis] = useState<{ swot: string; painPointsAndNeeds: string; suggestedActions: string; proposalEmail: { subject: string; body: string; }; sources?: { uri: string; title: string; }[] } | null>(null);
@@ -220,6 +221,13 @@ const App: React.FC = () => {
     const handleNavigate = (page: Page) => {
         setCurrentPage(page);
         setSearchTerm('');
+    };
+
+    const handleOpenCustomerFormWithInitialValues = (initialData: Partial<Customer>) => {
+        setCustomerInitialValues(initialData);
+        setSelectedCustomer(null);
+        setCustomerModalMode('new');
+        setCustomerDetailModalOpen(true);
     };
 
     const handleDailyReportPrefillApplied = () => {
@@ -588,11 +596,7 @@ const App: React.FC = () => {
             addToast('新規顧客が登録されました。', 'success');
         }
         setCustomerDetailModalOpen(false);
-        await loadAllData();
-    };
-
-    const handleRegisterBusinessCardCustomers = async (customerDrafts: Partial<Customer>[]) => {
-        await Promise.all(customerDrafts.map(payload => dataService.addCustomer(payload)));
+        setCustomerInitialValues(null);
         await loadAllData();
     };
 
@@ -669,6 +673,7 @@ const App: React.FC = () => {
             case 'sales_customers':
                 setSelectedCustomer(null);
                 setCustomerModalMode('new');
+                setCustomerInitialValues(null);
                 setCustomerDetailModalOpen(true);
                 break;
             case 'purchasing_orders': setCreatePOModalOpen(true); break;
@@ -723,7 +728,27 @@ const App: React.FC = () => {
                     />
                 );
             case 'sales_customers':
-                return <CustomerList customers={customers} searchTerm={searchTerm} onSelectCustomer={(customer) => { setSelectedCustomer(customer); setCustomerModalMode('view'); setCustomerDetailModalOpen(true); }} onUpdateCustomer={handleUpdateCustomer} onAnalyzeCustomer={handleAnalyzeCustomer} addToast={addToast} currentUser={currentUser} onNewCustomer={() => { setSelectedCustomer(null); setCustomerModalMode('new'); setCustomerDetailModalOpen(true); }} isAIOff={isAIOff} />;
+                return <CustomerList
+                    customers={customers}
+                    searchTerm={searchTerm}
+                    onSelectCustomer={(customer) => {
+                        setCustomerInitialValues(null);
+                        setSelectedCustomer(customer);
+                        setCustomerModalMode('view');
+                        setCustomerDetailModalOpen(true);
+                    }}
+                    onUpdateCustomer={handleUpdateCustomer}
+                    onAnalyzeCustomer={handleAnalyzeCustomer}
+                    addToast={addToast}
+                    currentUser={currentUser}
+                    onNewCustomer={() => {
+                        setCustomerInitialValues(null);
+                        setSelectedCustomer(null);
+                        setCustomerModalMode('new');
+                        setCustomerDetailModalOpen(true);
+                    }}
+                    isAIOff={isAIOff}
+                />;
             case 'sales_leads':
                 return <LeadManagementPage leads={leads} searchTerm={searchTerm} onRefresh={loadAllData} onUpdateLead={handleUpdateLead} onDeleteLead={handleDeleteLead} addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} isAIOff={isAIOff} onAddEstimate={handleAddEstimate} />;
             case 'sales_pipeline':
@@ -980,12 +1005,26 @@ const App: React.FC = () => {
             )}
             {isCreateInventoryItemModalOpen && <CreateInventoryItemModal isOpen={isCreateInventoryItemModalOpen} onClose={() => setIsCreateInventoryItemModalOpen(false)} onSave={handleSaveInventoryItem} item={selectedInventoryItem} />}
             {isJobDetailModalOpen && <JobDetailModal isOpen={isJobDetailModalOpen} job={selectedJob} onClose={() => setJobDetailModalOpen(false)} onUpdateJob={handleUpdateJob} onDeleteJob={handleDeleteJob} requestConfirmation={requestConfirmation} onNavigate={handleNavigate} addToast={addToast} />}
-            {isCustomerDetailModalOpen && <CustomerDetailModal customer={selectedCustomer} mode={customerModalMode} onClose={() => setCustomerDetailModalOpen(false)} onSave={handleSaveCustomer} onSetMode={setCustomerModalMode} onAnalyzeCustomer={handleAnalyzeCustomer} isAIOff={isAIOff} />}
+            {isCustomerDetailModalOpen && (
+                <CustomerDetailModal
+                    customer={selectedCustomer}
+                    mode={customerModalMode}
+                    onClose={() => { setCustomerDetailModalOpen(false); setCustomerInitialValues(null); }}
+                    onSave={handleSaveCustomer}
+                    onSetMode={setCustomerModalMode}
+                    onAnalyzeCustomer={handleAnalyzeCustomer}
+                    isAIOff={isAIOff}
+                    initialValues={customerInitialValues}
+                />
+            )}
             {isBusinessCardModalOpen && (
                 <BusinessCardImportModal
                     isOpen={isBusinessCardModalOpen}
                     onClose={() => setBusinessCardModalOpen(false)}
-                    onRegister={handleRegisterBusinessCardCustomers}
+                    onOpenCustomerForm={(initialData) => {
+                        setBusinessCardModalOpen(false);
+                        handleOpenCustomerFormWithInitialValues(initialData);
+                    }}
                     addToast={addToast}
                     isAIOff={isAIOff}
                     currentUser={currentUser}
