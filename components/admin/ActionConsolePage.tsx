@@ -172,7 +172,7 @@ const ActionConsolePage: React.FC = () => {
     const [severityFilter, setSeverityFilter] = useState<'all' | Severity>('all');
     const [statusFilter, setStatusFilter] = useState<'all' | Status>('all');
     const [moduleFilter, setModuleFilter] = useState('all');
-    const [timeFilter, setTimeFilter] = useState<'24h' | '7d' | '30d' | 'all'>('7d');
+    const [timeFilter, setTimeFilter] = useState<'24h' | '7d' | '30d' | 'all'>('all');
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const modules = useMemo(() => Array.from(new Set(ACTION_LOGS.map(log => log.module))), []);
