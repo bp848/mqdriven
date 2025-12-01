@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BusinessCardContact, Customer, Toast } from '../types';
+import { BusinessCardContact, Customer, EmployeeUser, Toast } from '../types';
 import { extractBusinessCardDetails } from '../services/geminiService';
 import { Upload, X, Loader, CheckCircle, AlertTriangle, Trash2, FileText } from './Icons';
+import { buildActionActorInfo, logActionEvent } from '../services/actionConsoleService';
 
 interface BusinessCardImportModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface BusinessCardImportModalProps {
   onRegister: (customers: Partial<Customer>[]) => Promise<void>;
   addToast: (message: string, type: Toast['type']) => void;
   isAIOff: boolean;
+  currentUser?: EmployeeUser | null;
 }
 
 type CardDraftStatus = 'processing' | 'ready' | 'error';
@@ -21,6 +23,7 @@ type CardDraft = {
   mimeType: string;
   status: CardDraftStatus;
   contact: BusinessCardContact;
+  manualOverride?: boolean;
   error?: string;
 };
 
@@ -89,18 +92,23 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
   onRegister,
   addToast,
   isAIOff,
+  currentUser,
 }) => {
   const [drafts, setDrafts] = useState<CardDraft[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
+  const actorInfo = useMemo(() => buildActionActorInfo(currentUser ?? null), [currentUser]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const draftsRef = useRef<CardDraft[]>(drafts);
+  const mounted = useRef(true);
 
   useEffect(() => {
     draftsRef.current = drafts;
   }, [drafts]);
 
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       draftsRef.current.forEach(draft => URL.revokeObjectURL(draft.fileUrl));
     };
   }, []);
@@ -125,6 +133,14 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
           draft.id === draftId ? { ...draft, status: 'ready', contact, error: undefined } : draft
         )
       );
+      logActionEvent({
+        module: '名刺OCR',
+        severity: 'info',
+        status: 'success',
+        summary: `名刺OCR: ${file.name} の解析が完了しました`,
+        detail: `会社: ${contact.companyName || '不明'} / 担当: ${contact.personName || '不明'}`,
+        ...actorInfo,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : '名刺の解析に失敗しました。';
       setDrafts(prev =>
@@ -132,14 +148,30 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
           draft.id === draftId ? { ...draft, status: 'error', error: message } : draft
         )
       );
+      logActionEvent({
+        module: '名刺OCR',
+        severity: 'critical',
+        status: 'failure',
+        summary: `名刺OCR: ${file.name} でエラーが発生しました`,
+        detail: message,
+        ...actorInfo,
+      });
     }
-  }, []);
+  }, [actorInfo]);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
       if (isAIOff) {
         addToast('AI機能が無効のため、名刺OCRを利用できません。', 'error');
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'warning',
+          status: 'failure',
+          summary: '名刺OCR機能が無効化されています',
+          detail: 'AI機能OFFのため、アップロードされた名刺を解析できませんでした。',
+          ...actorInfo,
+        });
         return;
       }
       Array.from(files).forEach(file => {
@@ -161,7 +193,7 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
         inputRef.current.value = '';
       }
     },
-    [addToast, isAIOff, runOcr]
+    [addToast, isAIOff, runOcr, actorInfo]
   );
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -177,6 +209,36 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
       }
       return prev.filter(d => d.id !== draftId);
     });
+  };
+
+  const markManualReady = (draftId: string) => {
+    setDrafts(prev =>
+      prev.map(draft => {
+        if (draft.id !== draftId) return draft;
+        const updatedContact = {
+          ...draft.contact,
+          companyName: draft.contact.companyName || draft.contact.personName || draft.fileName,
+        };
+        return {
+          ...draft,
+          status: 'ready',
+          manualOverride: true,
+          contact: updatedContact,
+          error: undefined,
+        };
+      })
+    );
+    const target = draftsRef.current.find(d => d.id === draftId);
+    if (target) {
+      logActionEvent({
+        module: '名刺OCR',
+        severity: 'warning',
+        status: 'pending',
+        summary: `名刺OCR: ${target.fileName} を手動入力に切替`,
+        detail: 'AI解析をスキップし、手入力で承認対象に設定しました。',
+        ...actorInfo,
+      });
+    }
   };
 
   const handleContactChange = (
@@ -215,12 +277,30 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
     try {
       await onRegister(payload);
       addToast(`${payload.length}件の顧客を登録しました。`, 'success');
-      setIsRegistering(false);
+      logActionEvent({
+        module: '名刺OCR',
+        severity: 'info',
+        status: 'success',
+        summary: `名刺から${payload.length}件の顧客を登録しました`,
+        detail: `例: ${payload[0].customerName || '名称未設定'} 他`,
+        ...actorInfo,
+      });
       handleClose();
     } catch (error) {
       console.error(error);
       addToast('顧客の登録に失敗しました。', 'error');
-      setIsRegistering(false);
+      logActionEvent({
+        module: '名刺OCR',
+        severity: 'critical',
+        status: 'failure',
+        summary: '名刺OCRからの顧客登録に失敗しました',
+        detail: error instanceof Error ? error.message : '不明なエラー',
+        ...actorInfo,
+      });
+    } finally {
+      if (mounted.current) {
+        setIsRegistering(false);
+      }
     }
   };
 
@@ -311,9 +391,16 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                           />
                         )}
                         <div>
-                          <p className="font-semibold text-slate-800 dark:text-slate-100">
-                            {draft.fileName}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">
+                              {draft.fileName}
+                            </p>
+                            {draft.manualOverride && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                手動入力
+                              </span>
+                            )}
+                          </div>
                           <span
                             className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${status.className}`}
                           >
@@ -344,6 +431,27 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                       <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
                         <AlertTriangle className="w-4 h-4" />
                         {draft.error}
+                      </div>
+                    )}
+                    {draft.status !== 'ready' && (
+                      <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-600">
+                        <p>AI解析が完了しない場合は、手入力で登録できます。</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => markManualReady(draft.id)}
+                            className="inline-flex items-center gap-2 rounded-md border border-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:border-amber-500 dark:text-amber-300"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            手動入力で承認対象にする
+                          </button>
+                          {draft.status === 'processing' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                              <Loader className="w-3 h-3 animate-spin" />
+                              解析結果が届いたら自動で上書きされます
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
                     {draft.status !== 'error' && (
