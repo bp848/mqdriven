@@ -402,6 +402,7 @@ const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
 const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
     address1: 'address_1',
     address2: 'address_2',
+    representative: 'representative_name',
 };
 
 const customerToDbCustomer = (customer: Partial<Customer>): any => {
