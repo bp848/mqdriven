@@ -99,7 +99,11 @@ const mapDbBulletinComment = (row: any): BulletinComment => ({
     postId: row.thread_id || row.postId || row.post_id || '',
     authorId: row.author_id,
     authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
-    authorDepartment: row.author?.department ?? row.author_department ?? null,
+    authorDepartment:
+        row.author?.department ??
+        row.author?.department_id ??
+        row.author_department ??
+        null,
     body: row.body,
     createdAt: row.created_at,
 });
@@ -110,7 +114,11 @@ const mapDbBulletinThread = (row: any): BulletinThread => ({
     body: row.body,
     authorId: row.author_id,
     authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
-    authorDepartment: row.author?.department ?? row.author_department ?? null,
+    authorDepartment:
+        row.author?.department ??
+        row.author?.department_id ??
+        row.author_department ??
+        null,
     tags: Array.isArray(row.tags) ? row.tags : [],
     pinned: Boolean(row.pinned),
     assigneeIds: Array.isArray(row.assignee_ids) ? row.assignee_ids : [],
@@ -124,7 +132,7 @@ const BULLETIN_THREAD_SELECT = `
     author:author_id (
         id,
         name,
-        department
+        department:department_id
     ),
     comments:bulletin_comments (
         id,
@@ -135,7 +143,7 @@ const BULLETIN_THREAD_SELECT = `
         author:author_id (
             id,
             name,
-            department
+            department:department_id
         )
     )
 `;

@@ -75,7 +75,6 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
     zipCode: contact.postalCode,
     websiteUrl: contact.websiteUrl,
     customerContactInfo: contact.email,
-    infoSalesActivity: memoLines.length ? memoLines.join('\n') : undefined,
     note: contact.notes,
   };
 };
