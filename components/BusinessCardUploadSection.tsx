@@ -1,0 +1,471 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BusinessCardContact, Customer, EmployeeUser, Toast } from '../types';
+import { extractBusinessCardDetails } from '../services/geminiService';
+import { Upload, Loader, CheckCircle, AlertTriangle, Trash2, FileText } from './Icons';
+import { buildActionActorInfo, logActionEvent } from '../services/actionConsoleService';
+
+interface BusinessCardUploadSectionProps {
+  addToast: (message: string, type: Toast['type']) => void;
+  isAIOff: boolean;
+  currentUser?: EmployeeUser | null;
+  onApplyToForm: (data: Partial<Customer>) => void;
+}
+
+type CardDraftStatus = 'processing' | 'ready' | 'error';
+
+type CardDraft = {
+  id: string;
+  file: File;
+  fileName: string;
+  fileUrl: string;
+  mimeType: string;
+  status: CardDraftStatus;
+  contact: BusinessCardContact;
+  manualOverride?: boolean;
+  error?: string;
+};
+
+const readFileAsBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result.split(',')[1]);
+      } else {
+        reject(new Error('ファイルの読み込みに失敗しました。'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('ファイルの読み込みに失敗しました。'));
+    reader.readAsDataURL(file);
+  });
+
+const normalizeContact = (contact: BusinessCardContact | null | undefined): BusinessCardContact => {
+  const normalized: BusinessCardContact = {};
+  if (!contact) return normalized;
+  Object.entries(contact).forEach(([key, value]) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        (normalized as any)[key] = trimmed;
+      }
+    } else if (value) {
+      (normalized as any)[key] = value;
+    }
+  });
+  return normalized;
+};
+
+const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): Partial<Customer> => ({
+  customerName: contact.companyName || contact.personName || fallbackName,
+  representative: contact.personName,
+  phoneNumber: contact.phoneNumber || contact.mobileNumber,
+  fax: contact.faxNumber,
+  address1: contact.address,
+  zipCode: contact.postalCode,
+  websiteUrl: contact.websiteUrl,
+  customerContactInfo: contact.email,
+  note: contact.notes,
+});
+
+const STATUS_STYLES: Record<CardDraftStatus, { label: string; className: string }> = {
+  processing: { label: '解析中', className: 'bg-blue-100 text-blue-700' },
+  ready: { label: '確認待ち', className: 'bg-emerald-100 text-emerald-700' },
+  error: { label: 'エラー', className: 'bg-red-100 text-red-700' },
+};
+
+const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
+  addToast,
+  isAIOff,
+  currentUser,
+  onApplyToForm,
+}) => {
+  const [drafts, setDrafts] = useState<CardDraft[]>([]);
+  const actorInfo = useMemo(() => buildActionActorInfo(currentUser ?? null), [currentUser]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const draftsRef = useRef<CardDraft[]>(drafts);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      draftsRef.current.forEach(draft => URL.revokeObjectURL(draft.fileUrl));
+    };
+  }, []);
+
+  const generateId = () =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const runOcr = useCallback(
+    async (draftId: string, file: File) => {
+      setDrafts(prev =>
+        prev.map(draft =>
+          draft.id === draftId ? { ...draft, status: 'processing', error: undefined } : draft
+        )
+      );
+      try {
+        const base64 = await readFileAsBase64(file);
+        const parsed = await extractBusinessCardDetails(base64, file.type || 'application/octet-stream');
+        const contact = normalizeContact(parsed);
+        setDrafts(prev =>
+          prev.map(draft =>
+            draft.id === draftId ? { ...draft, status: 'ready', contact, error: undefined } : draft
+          )
+        );
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'info',
+          status: 'success',
+          summary: `名刺OCR: ${file.name} の解析が完了しました`,
+          detail: `会社: ${contact.companyName || '不明'} / 担当: ${contact.personName || '不明'}`,
+          ...actorInfo,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '名刺の解析に失敗しました。';
+        setDrafts(prev =>
+          prev.map(draft =>
+            draft.id === draftId ? { ...draft, status: 'error', error: message } : draft
+          )
+        );
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'critical',
+          status: 'failure',
+          summary: `名刺OCR: ${file.name} でエラーが発生しました`,
+          detail: message,
+          ...actorInfo,
+        });
+      }
+    },
+    [actorInfo]
+  );
+
+  const handleFiles = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      if (isAIOff) {
+        addToast('AI機能が無効のため、名刺OCRを利用できません。', 'error');
+        logActionEvent({
+          module: '名刺OCR',
+          severity: 'warning',
+          status: 'failure',
+          summary: '名刺OCR機能が無効化されています',
+          detail: 'AI機能OFFのため、アップロードされた名刺を解析できませんでした。',
+          ...actorInfo,
+        });
+        return;
+      }
+      Array.from(files).forEach(file => {
+        const id = generateId();
+        const previewUrl = URL.createObjectURL(file);
+        const draft: CardDraft = {
+          id,
+          file,
+          fileName: file.name,
+          fileUrl: previewUrl,
+          mimeType: file.type || 'application/octet-stream',
+          status: 'processing',
+          contact: {},
+        };
+        setDrafts(prev => [...prev, draft]);
+        runOcr(id, file);
+      });
+      if (inputRef.current) {
+        inputRef.current.value = '';
+      }
+    },
+    [addToast, isAIOff, runOcr, actorInfo]
+  );
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    handleFiles(event.dataTransfer.files);
+  };
+
+  const handleRemoveDraft = (draftId: string) => {
+    setDrafts(prev => {
+      const target = prev.find(d => d.id === draftId);
+      if (target) {
+        URL.revokeObjectURL(target.fileUrl);
+      }
+      return prev.filter(d => d.id !== draftId);
+    });
+  };
+
+  const markManualReady = (draftId: string) => {
+    setDrafts(prev =>
+      prev.map(draft => {
+        if (draft.id !== draftId) return draft;
+        const updatedContact = {
+          ...draft.contact,
+          companyName: draft.contact.companyName || draft.contact.personName || draft.fileName,
+        };
+        return {
+          ...draft,
+          status: 'ready',
+          manualOverride: true,
+          contact: updatedContact,
+          error: undefined,
+        };
+      })
+    );
+    const target = draftsRef.current.find(d => d.id === draftId);
+    if (target) {
+      logActionEvent({
+        module: '名刺OCR',
+        severity: 'warning',
+        status: 'pending',
+        summary: `名刺OCR: ${target.fileName} を手動入力に切替`,
+        detail: 'AI解析をスキップし、手入力で承認対象に設定しました。',
+        ...actorInfo,
+      });
+    }
+  };
+
+  const handleContactChange = (
+    draftId: string,
+    field: keyof BusinessCardContact,
+    value: string
+  ) => {
+    setDrafts(prev =>
+      prev.map(draft =>
+        draft.id === draftId ? { ...draft, contact: { ...draft.contact, [field]: value } } : draft
+      )
+    );
+  };
+
+  const handleApply = (draft: CardDraft) => {
+    const payload = contactToCustomer(draft.contact, draft.fileName);
+    onApplyToForm(payload);
+    addToast('名刺の内容をフォームに反映しました。内容を確認して登録してください。', 'success');
+    logActionEvent({
+      module: '名刺OCR',
+      severity: 'info',
+      status: 'pending',
+      summary: `名刺OCR: ${draft.fileName} を顧客フォームに読み込み`,
+      detail: `会社: ${payload.customerName || '不明'} / 担当: ${payload.representative || '不明'}`,
+      ...actorInfo,
+    });
+    handleRemoveDraft(draft.id);
+  };
+
+  return (
+    <section className="mb-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+      <div className="border-b border-slate-200 dark:border-slate-700 px-6 py-5 flex flex-col gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">名刺で自動入力</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              名刺を1枚ずつ、または複数まとめてアップロードして顧客情報を取り込みます。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={isAIOff}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
+          >
+            <Upload className="w-4 h-4" />
+            ファイルを選択
+          </button>
+        </div>
+        {isAIOff && (
+          <p className="text-sm text-red-500 font-semibold">
+            AI機能が無効のため、OCRは利用できません。
+          </p>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*,.pdf"
+          multiple
+          className="sr-only"
+          onChange={e => handleFiles(e.target.files)}
+          disabled={isAIOff}
+        />
+      </div>
+      <div
+        onDragOver={e => e.preventDefault()}
+        onDrop={handleDrop}
+        className="px-6 py-5 border-b border-dashed border-slate-200 dark:border-slate-700/80 text-center hover:border-blue-400 transition-colors"
+      >
+        <Upload className="w-10 h-10 mx-auto text-slate-400" />
+        <p className="mt-3 text-base font-semibold text-slate-800 dark:text-slate-100">
+          ドラッグ＆ドロップでもアップロードできます（JPEG / PNG / PDF）
+        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          解析結果は下部に表示され、フォームへワンクリックで取り込めます。
+        </p>
+      </div>
+      <div className="px-6 py-5 space-y-4 max-h-[320px] overflow-y-auto">
+        {drafts.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">
+            <p>・1枚だけでも複数枚でもまとめてアップロードできます。</p>
+            <p>・AIが社名や担当者を読み取り、内容を編集してからフォームに反映できます。</p>
+          </div>
+        ) : (
+          drafts.map(draft => {
+            const status = STATUS_STYLES[draft.status];
+            const isPdf = draft.mimeType.includes('pdf');
+            return (
+              <div
+                key={draft.id}
+                className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {isPdf ? (
+                      <FileText className="w-10 h-10 text-slate-500" />
+                    ) : (
+                      <img
+                        src={draft.fileUrl}
+                        alt={draft.fileName}
+                        className="w-20 h-14 object-cover rounded border border-slate-200"
+                      />
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">
+                          {draft.fileName}
+                        </p>
+                        {draft.manualOverride && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            手動入力
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${status.className}`}
+                        >
+                          {status.label}
+                        </span>
+                      </div>
+                      {draft.status === 'error' && draft.error && (
+                        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          {draft.error}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {draft.status === 'error' && (
+                      <button
+                        type="button"
+                        onClick={() => runOcr(draft.id, draft.file)}
+                        className="px-3 py-1 text-sm font-semibold text-blue-600 hover:underline"
+                      >
+                        再解析
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDraft(draft.id)}
+                      className="p-2 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {draft.status !== 'ready' && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-600">
+                    <p>AI解析が完了しない場合は、手入力で登録できます。</p>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        type="button"
+                        onClick={() => markManualReady(draft.id)}
+                        className="inline-flex items-center gap-2 rounded-md border border-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:border-amber-500 dark:text-amber-300"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        手動入力で承認対象にする
+                      </button>
+                      {draft.status === 'processing' && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                          <Loader className="w-3 h-3 animate-spin" />
+                          解析結果が届いたら自動で上書きされます
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {draft.status !== 'error' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {(
+                        [
+                          ['companyName', '会社名'],
+                          ['personName', '担当者名'],
+                          ['department', '部署名'],
+                          ['title', '役職'],
+                          ['phoneNumber', '電話番号'],
+                          ['mobileNumber', '携帯番号'],
+                          ['email', 'メール'],
+                          ['address', '住所'],
+                          ['websiteUrl', 'Webサイト'],
+                          ['notes', 'メモ'],
+                        ] as Array<[keyof BusinessCardContact, string]>
+                      ).map(([field, label]) => (
+                        <div key={field}>
+                          <label className="text-xs font-semibold text-slate-500 block mb-1">
+                            {label}
+                          </label>
+                          {field === 'notes' ? (
+                            <textarea
+                              value={draft.contact[field] || ''}
+                              onChange={e => handleContactChange(draft.id, field, e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm p-2"
+                              rows={2}
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={draft.contact[field] || ''}
+                              onChange={e => handleContactChange(draft.id, field, e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm p-2"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-end">
+                      {draft.status === 'ready' && (
+                        <button
+                          type="button"
+                          onClick={() => handleApply(draft)}
+                          className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          フォームに入力
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+      {drafts.length > 0 && (
+        <div className="border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2">
+            <Loader className="w-4 h-4 text-blue-500 animate-spin" />
+            <span>解析中: {drafts.filter(d => d.status === 'processing').length}件</span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            解析結果はフォームに読み込んだ後、ドラフト一覧から自動で削除されます。
+          </p>
+        </div>
+      )}
+    </section>
+  );
+};
+
+export default BusinessCardUploadSection;

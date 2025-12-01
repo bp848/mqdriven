@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Customer } from '../types';
+import { Customer, EmployeeUser, Toast } from '../types';
 import { X, Pencil, Loader, Lightbulb, AlertTriangle, Save } from './Icons';
 import CustomerInfoForm from './forms/CustomerInfoForm';
+import BusinessCardUploadSection from './BusinessCardUploadSection';
 
 interface CustomerDetailModalProps {
     customer: Customer | null;
@@ -12,6 +13,8 @@ interface CustomerDetailModalProps {
     onAnalyzeCustomer: (customer: Customer) => void;
     isAIOff: boolean;
     initialValues?: Partial<Customer> | null;
+    addToast: (message: string, type: Toast['type']) => void;
+    currentUser?: EmployeeUser | null;
 }
 
 const TABS = [
@@ -22,7 +25,7 @@ const TABS = [
     { id: 'karte', label: 'お客様カルテ' },
 ];
 
-const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues }) => {
+const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues, addToast, currentUser }) => {
     const [formData, setFormData] = useState<Partial<Customer>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -71,6 +74,11 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleApplyBusinessCard = (data: Partial<Customer>) => {
+        setFormData(prev => ({ ...prev, ...data }));
+        setActiveTab('basic');
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -270,6 +278,17 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                             {error}
                         </div>
                     )}
+                    {mode === 'new' && (
+                        <div className="mb-8">
+                            <BusinessCardUploadSection
+                                addToast={addToast}
+                                isAIOff={isAIOff}
+                                currentUser={currentUser}
+                                onApplyToForm={handleApplyBusinessCard}
+                            />
+                        </div>
+                    )}
+
                     <div className="border-b border-slate-200 dark:border-slate-700 mb-6">
                         <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                             {TABS.map(tab => (
