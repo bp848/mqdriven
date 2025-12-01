@@ -28,7 +28,6 @@ type NavCategoryType = {
 };
 
 const HIDDEN_CATEGORY_IDS: string[] = [
-  'sales',
   'purchasing',
   'analysis',
   'project_management',
@@ -40,6 +39,21 @@ const HIDDEN_CATEGORY_IDS: string[] = [
 ];
 
 const BASE_NAV_CATEGORIES: NavCategoryType[] = [
+  {
+    id: 'sales',
+    name: '販売・営業',
+    icon: Briefcase,
+    items: [
+      { page: 'sales_dashboard', name: '販売ダッシュボード' },
+      { page: 'sales_leads', name: 'リード管理' },
+      { page: 'sales_customers', name: '取引先/お客様カルテ' },
+      { page: 'sales_pipeline', name: 'パイプライン（進捗）' },
+      { page: 'sales_estimates', name: '見積管理' },
+      { page: 'sales_orders', name: '案件予算管理' },
+      { page: 'sales_billing', name: '売上請求 (AR)' },
+      { page: 'business_support_proposal', name: '提案書作成' },
+    ],
+  },
   {
     id: 'approvals',
     name: '経費精算や会社への申請',
