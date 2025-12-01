@@ -7,6 +7,7 @@ import CreateJobModal from './components/CreateJobModal';
 import JobDetailModal from './components/JobDetailModal';
 import CustomerList from './components/CustomerList';
 import CustomerDetailModal from './components/CustomerDetailModal';
+import BusinessCardImportModal from './components/BusinessCardImportModal';
 import { CompanyAnalysisModal } from './components/CompanyAnalysisModal';
 import LeadManagementPage from './components/sales/LeadManagementPage';
 import CreateLeadModal from './components/sales/CreateLeadModal';
@@ -54,7 +55,7 @@ import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill } from './types';
-import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
+import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings, ScanLine } from './components/Icons';
 
 const getEnvValue = (key: string): string | undefined => {
     if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -191,6 +192,7 @@ const App: React.FC = () => {
     const [isCreateLeadModalOpen, setCreateLeadModalOpen] = useState(false);
     const [isCreatePOModalOpen, setCreatePOModalOpen] = useState(false);
     const [isCreateInventoryItemModalOpen, setIsCreateInventoryItemModalOpen] = useState(false);
+    const [isBusinessCardModalOpen, setBusinessCardModalOpen] = useState(false);
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
     const [isJobDetailModalOpen, setJobDetailModalOpen] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -589,6 +591,11 @@ const App: React.FC = () => {
         await loadAllData();
     };
 
+    const handleRegisterBusinessCardCustomers = async (customerDrafts: Partial<Customer>[]) => {
+        await Promise.all(customerDrafts.map(payload => dataService.addCustomer(payload)));
+        await loadAllData();
+    };
+
     const handleUpdateCustomer = async (customerId: string, customerData: Partial<Customer>) => {
         await dataService.updateCustomer(customerId, customerData);
         addToast('顧客情報が更新されました。', 'success');
@@ -873,10 +880,20 @@ const App: React.FC = () => {
         );
     }
 
+    const primaryActionEnabledPages = ['sales_orders', 'sales_leads', 'sales_customers', 'purchasing_orders', 'inventory_management'];
     const headerConfig = {
       title: PAGE_TITLES[currentPage],
-      primaryAction: ['sales_orders', 'sales_leads', 'sales_customers', 'purchasing_orders', 'inventory_management'].includes(currentPage)
+      primaryAction: primaryActionEnabledPages.includes(currentPage)
         ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
+        : undefined,
+      secondaryActions: currentPage === 'sales_customers'
+        ? [{
+            label: '名刺で登録',
+            onClick: () => setBusinessCardModalOpen(true),
+            icon: ScanLine,
+            disabled: !!dbError || isAIOff,
+            tooltip: isAIOff ? 'AI機能が無効のため利用できません。' : (dbError ? 'データベース接続エラーのため利用できません。' : undefined),
+          }]
         : undefined,
       search: ['sales_orders', 'sales_customers', 'sales_leads', 'purchasing_orders'].includes(currentPage)
         ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...` }
@@ -964,6 +981,15 @@ const App: React.FC = () => {
             {isCreateInventoryItemModalOpen && <CreateInventoryItemModal isOpen={isCreateInventoryItemModalOpen} onClose={() => setIsCreateInventoryItemModalOpen(false)} onSave={handleSaveInventoryItem} item={selectedInventoryItem} />}
             {isJobDetailModalOpen && <JobDetailModal isOpen={isJobDetailModalOpen} job={selectedJob} onClose={() => setJobDetailModalOpen(false)} onUpdateJob={handleUpdateJob} onDeleteJob={handleDeleteJob} requestConfirmation={requestConfirmation} onNavigate={handleNavigate} addToast={addToast} />}
             {isCustomerDetailModalOpen && <CustomerDetailModal customer={selectedCustomer} mode={customerModalMode} onClose={() => setCustomerDetailModalOpen(false)} onSave={handleSaveCustomer} onSetMode={setCustomerModalMode} onAnalyzeCustomer={handleAnalyzeCustomer} isAIOff={isAIOff} />}
+            {isBusinessCardModalOpen && (
+                <BusinessCardImportModal
+                    isOpen={isBusinessCardModalOpen}
+                    onClose={() => setBusinessCardModalOpen(false)}
+                    onRegister={handleRegisterBusinessCardCustomers}
+                    addToast={addToast}
+                    isAIOff={isAIOff}
+                />
+            )}
             {isAnalysisModalOpen && <CompanyAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setAnalysisModalOpen(false)} analysis={companyAnalysis} customer={selectedCustomer} isLoading={isAnalysisLoading} error={analysisError} currentUser={currentUser} isAIOff={isAIOff} onReanalyze={handleAnalyzeCustomer}/>}
             {isBugReportModalOpen && <BugReportChatModal isOpen={isBugReportModalOpen} onClose={() => setIsBugReportModalOpen(false)} onReportSubmit={handleSaveBugReport} isAIOff={isAIOff} />}
             {isSetupModalOpen && <DatabaseSetupInstructionsModal onRetry={() => { setIsSetupModalOpen(false); loadAllData(); }} />}
