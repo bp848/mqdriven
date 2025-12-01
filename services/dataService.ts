@@ -357,7 +357,7 @@ const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
     customerCode: dbCustomer.customer_code,
     customerName: dbCustomer.customer_name,
     customerNameKana: dbCustomer.customer_name_kana,
-    representative: dbCustomer.representative,
+    representative: dbCustomer.representative ?? dbCustomer.representative_name,
     phoneNumber: dbCustomer.phone_number,
     address1: dbCustomer.address_1,
     companyContent: dbCustomer.company_content,
@@ -402,12 +402,14 @@ const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
 const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
     address1: 'address_1',
     address2: 'address_2',
+    representative: 'representative_name',
 };
 
 const customerToDbCustomer = (customer: Partial<Customer>): any => {
     const dbData: { [key: string]: any } = {};
     for (const key in customer) {
         const camelKey = key as keyof Customer;
+        if (camelKey === 'infoSalesActivity') continue;
         const snakeKey = CUSTOMER_FIELD_OVERRIDES[camelKey] ?? camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
         dbData[snakeKey] = customer[camelKey];
     }
