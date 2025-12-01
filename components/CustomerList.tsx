@@ -19,7 +19,7 @@ interface CustomerListProps {
 }
 
 const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSelectCustomer, onUpdateCustomer, onAnalyzeCustomer, addToast, currentUser, onNewCustomer, isAIOff }) => {
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'createdAt', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState<string | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editedData, setEditedData] = useState<Partial<Customer>>({});
