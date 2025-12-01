@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Search } from './Icons';
 
+type HeaderAction = {
+  label: string;
+  onClick: () => void;
+  icon?: React.ElementType;
+  disabled?: boolean;
+  tooltip?: string;
+};
+
 interface HeaderProps {
   title: string;
-  primaryAction?: {
-    label: string;
-    onClick: () => void;
-    icon?: React.ElementType;
-    disabled?: boolean;
-    tooltip?: string;
-  };
+  primaryAction?: HeaderAction;
+  secondaryActions?: HeaderAction[];
   search?: {
     value: string;
     onChange: (value: string) => void;
@@ -17,7 +20,35 @@ interface HeaderProps {
   };
 }
 
-const Header: React.FC<HeaderProps> = ({ title, primaryAction, search }) => {
+const ActionButton: React.FC<{ action: HeaderAction; variant?: 'primary' | 'secondary' }> = ({
+  action,
+  variant = 'primary',
+}) => {
+  const baseClasses =
+    variant === 'primary'
+      ? 'bg-blue-600 text-white hover:bg-blue-700'
+      : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-50';
+  return (
+    <div className="relative group">
+      <button
+        onClick={action.onClick}
+        disabled={action.disabled}
+        className={`flex items-center gap-2 font-semibold py-2 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-transform transform hover:scale-105 disabled:bg-slate-400 disabled:text-white disabled:cursor-not-allowed disabled:transform-none ${baseClasses}`}
+      >
+        {action.icon && <action.icon className="w-5 h-5" />}
+        {action.label}
+      </button>
+      {action.disabled && action.tooltip && (
+        <div className="absolute bottom-full mb-2 w-64 bg-slate-800 text-white text-center text-sm rounded-md p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none left-1/2 -translate-x-1/2 z-10">
+          {action.tooltip}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-slate-800"></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, search }) => {
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -53,22 +84,12 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, search }) => {
                 />
             </div>
         )}
-        {primaryAction && (
-          <div className="relative group">
-              <button
-                onClick={primaryAction.onClick}
-                disabled={primaryAction.disabled}
-                className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-transform transform hover:scale-105 disabled:bg-slate-400 disabled:cursor-not-allowed disabled:transform-none"
-              >
-                {primaryAction.icon && <primaryAction.icon className="w-5 h-5" />}
-                {primaryAction.label}
-              </button>
-              {primaryAction.disabled && primaryAction.tooltip && (
-                  <div className="absolute bottom-full mb-2 w-64 bg-slate-800 text-white text-center text-sm rounded-md p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none left-1/2 -translate-x-1/2 z-10">
-                      {primaryAction.tooltip}
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-slate-800"></div>
-                  </div>
-              )}
+        {(primaryAction || (secondaryActions && secondaryActions.length > 0)) && (
+          <div className="flex items-center gap-2">
+            {primaryAction && <ActionButton action={primaryAction} variant="primary" />}
+            {secondaryActions?.map(action => (
+              <ActionButton key={action.label} action={action} variant="secondary" />
+            ))}
           </div>
         )}
       </div>

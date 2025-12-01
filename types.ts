@@ -267,6 +267,22 @@ export interface Customer {
   isActive?: boolean;
 }
 
+export interface BusinessCardContact {
+  companyName?: string;
+  department?: string;
+  title?: string;
+  personName?: string;
+  personNameKana?: string;
+  email?: string;
+  phoneNumber?: string;
+  mobileNumber?: string;
+  faxNumber?: string;
+  address?: string;
+  postalCode?: string;
+  websiteUrl?: string;
+  notes?: string;
+}
+
 export interface CustomerInfo {
   id: string;
   rank: string | null;

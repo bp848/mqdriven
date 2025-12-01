@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai"
 import {
   AISuggestions,
   Customer,
+  BusinessCardContact,
   CompanyAnalysis,
   InvoiceData,
   AIJournalSuggestion,
@@ -367,6 +368,49 @@ export const extractInvoiceDetails = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: extractInvoiceSchema,
+      },
+    });
+    const jsonStr = response.text.trim();
+    return JSON.parse(jsonStr);
+  });
+};
+
+const businessCardSchema = {
+  type: Type.OBJECT,
+  properties: {
+    companyName: { type: Type.STRING, description: "名刺に記載された会社名。" },
+    department: { type: Type.STRING, description: "部署名や部門名。" },
+    title: { type: Type.STRING, description: "役職名。" },
+    personName: { type: Type.STRING, description: "担当者名。" },
+    personNameKana: { type: Type.STRING, description: "担当者名のカナ読み。" },
+    email: { type: Type.STRING, description: "メールアドレス。" },
+    phoneNumber: { type: Type.STRING, description: "代表電話または固定電話。" },
+    mobileNumber: { type: Type.STRING, description: "携帯電話番号。" },
+    faxNumber: { type: Type.STRING, description: "FAX 番号。" },
+    address: { type: Type.STRING, description: "住所。" },
+    postalCode: { type: Type.STRING, description: "郵便番号。" },
+    websiteUrl: { type: Type.STRING, description: "WebサイトURL。" },
+    notes: { type: Type.STRING, description: "その他、名刺から読み取れる補足事項。" },
+  },
+};
+
+export const extractBusinessCardDetails = async (
+  fileBase64: string,
+  mimeType: string
+): Promise<BusinessCardContact> => {
+  checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const filePart = { inlineData: { data: fileBase64, mimeType } };
+    const instructionPart = {
+      text:
+        "このファイルは日本語の名刺または名刺スキャンPDFです。記載されている企業名、担当者、連絡先をJSON形式で抽出してください。項目が無い場合は空文字ではなくnullにしてください。",
+    };
+    const response = await ai.models.generateContent({
+      model,
+      contents: { parts: [filePart, instructionPart] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: businessCardSchema,
       },
     });
     const jsonStr = response.text.trim();
