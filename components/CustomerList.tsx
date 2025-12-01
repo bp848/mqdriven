@@ -19,7 +19,7 @@ interface CustomerListProps {
 }
 
 const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSelectCustomer, onUpdateCustomer, onAnalyzeCustomer, addToast, currentUser, onNewCustomer, isAIOff }) => {
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'createdAt', direction: 'descending' });
   const [isGeneratingEmail, setIsGeneratingEmail] = useState<string | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editedData, setEditedData] = useState<Partial<Customer>>({});
@@ -129,6 +129,12 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     let sortableItems = [...filteredCustomers];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
+        if (sortConfig.key === 'createdAt') {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return sortConfig.direction === 'ascending' ? aTime - bTime : bTime - aTime;
+        }
+
         const aValue = a[sortConfig.key as keyof Customer];
         const bValue = b[sortConfig.key as keyof Customer];
 

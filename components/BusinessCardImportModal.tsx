@@ -7,7 +7,7 @@ import { buildActionActorInfo, logActionEvent } from '../services/actionConsoleS
 interface BusinessCardImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRegister: (customers: Partial<Customer>[]) => Promise<void>;
+  onOpenCustomerForm: (initialValues: Partial<Customer>) => void;
   addToast: (message: string, type: Toast['type']) => void;
   isAIOff: boolean;
   currentUser?: EmployeeUser | null;
@@ -88,13 +88,12 @@ const STATUS_STYLES: Record<CardDraftStatus, { label: string; className: string 
 const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
   isOpen,
   onClose,
-  onRegister,
+  onOpenCustomerForm,
   addToast,
   isAIOff,
   currentUser,
 }) => {
   const [drafts, setDrafts] = useState<CardDraft[]>([]);
-  const [isRegistering, setIsRegistering] = useState(false);
   const actorInfo = useMemo(() => buildActionActorInfo(currentUser ?? null), [currentUser]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const draftsRef = useRef<CardDraft[]>(drafts);
@@ -259,51 +258,24 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
   };
 
   const handleClose = () => {
-    setIsRegistering(false);
     clearAllDrafts();
     onClose();
   };
 
-  const readyDrafts = useMemo(() => drafts.filter(d => d.status === 'ready'), [drafts]);
-
-  const handleConfirm = async () => {
-    if (!readyDrafts.length) {
-      addToast('確認済みの名刺がありません。', 'error');
-      return;
-    }
-    const payload = readyDrafts.map(draft => contactToCustomer(draft.contact, draft.fileName));
-    setIsRegistering(true);
-    try {
-      await onRegister(payload);
-      addToast(`${payload.length}件の顧客を登録しました。`, 'success');
-      logActionEvent({
-        module: '名刺OCR',
-        severity: 'info',
-        status: 'success',
-        summary: `名刺から${payload.length}件の顧客を登録しました`,
-        detail: `例: ${payload[0].customerName || '名称未設定'} 他`,
-        ...actorInfo,
-      });
-      handleClose();
-    } catch (error) {
-      console.error(error);
-      addToast('顧客の登録に失敗しました。', 'error');
-      logActionEvent({
-        module: '名刺OCR',
-        severity: 'critical',
-        status: 'failure',
-        summary: '名刺OCRからの顧客登録に失敗しました',
-        detail: error instanceof Error ? error.message : '不明なエラー',
-        ...actorInfo,
-      });
-    } finally {
-      if (mounted.current) {
-        setIsRegistering(false);
-      }
-    }
+  const handleSendToCustomerForm = (draft: CardDraft) => {
+    const payload = contactToCustomer(draft.contact, draft.fileName);
+    onOpenCustomerForm(payload);
+    addToast('顧客フォームに自動入力しました。内容を確認して登録してください。', 'success');
+    logActionEvent({
+      module: '名刺OCR',
+      severity: 'info',
+      status: 'pending',
+      summary: `名刺OCR: ${draft.fileName} を顧客フォームに読み込み`,
+      detail: `会社: ${payload.customerName || '不明'} / 担当: ${payload.representative || '不明'}`,
+      ...actorInfo,
+    });
+    handleRemoveDraft(draft.id);
   };
-
-  const disabled = isRegistering || drafts.every(d => d.status !== 'ready');
 
   if (!isOpen) return null;
 
@@ -491,6 +463,18 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                           </div>
                         ))}
                       </div>
+                      <div className="md:col-span-2 flex justify-end">
+                        {draft.status === 'ready' && (
+                          <button
+                            type="button"
+                            onClick={() => handleSendToCustomerForm(draft)}
+                            className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            フォームで登録
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -501,43 +485,22 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
             <div className="flex items-center gap-1">
-              <CheckCircle className="w-4 h-4 text-emerald-500" />
-              <span>確認済み: {readyDrafts.length}件</span>
-            </div>
-            <div className="flex items-center gap-1">
               <Loader className="w-4 h-4 animate-spin text-blue-500" />
               <span>
                 解析中: {drafts.filter(d => d.status === 'processing').length}件
               </span>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              「フォームで登録」ボタンから既存の顧客登録フォームに遷移します。
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-200"
-            >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={disabled}
-              className="px-5 py-2.5 rounded-lg bg-green-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed inline-flex items-center gap-2"
-            >
-              {isRegistering ? (
-                <>
-                  <Loader className="w-5 h-5 animate-spin" />
-                  登録中...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-5 h-5" />
-                  承認して登録
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-200"
+          >
+            閉じる
+          </button>
         </div>
       </div>
     </div>
