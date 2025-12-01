@@ -15,6 +15,7 @@ interface CustomerDetailModalProps {
     initialValues?: Partial<Customer> | null;
     addToast: (message: string, type: Toast['type']) => void;
     currentUser?: EmployeeUser | null;
+    onAutoCreateCustomer?: (data: Partial<Customer>) => Promise<Customer>;
 }
 
 const TABS = [
@@ -25,7 +26,7 @@ const TABS = [
     { id: 'karte', label: 'お客様カルテ' },
 ];
 
-const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues, addToast, currentUser }) => {
+const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues, addToast, currentUser, onAutoCreateCustomer }) => {
     const [formData, setFormData] = useState<Partial<Customer>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -278,37 +279,42 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                             {error}
                         </div>
                     )}
-                    {mode === 'new' && (
-                        <div className="mb-8">
-                            <BusinessCardUploadSection
-                                addToast={addToast}
-                                isAIOff={isAIOff}
-                                currentUser={currentUser}
-                                onApplyToForm={handleApplyBusinessCard}
-                            />
-                        </div>
-                    )}
+                    <div className={`${mode === 'new' ? 'grid gap-6 lg:grid-cols-[minmax(320px,360px)_minmax(0,1fr)] items-start' : ''}`}>
+                        {mode === 'new' && (
+                            <div className="order-2 lg:order-1 lg:sticky lg:top-6">
+                                <BusinessCardUploadSection
+                                    addToast={addToast}
+                                    isAIOff={isAIOff}
+                                    currentUser={currentUser}
+                                    onApplyToForm={handleApplyBusinessCard}
+                                    onAutoCreateCustomer={onAutoCreateCustomer}
+                                />
+                            </div>
+                        )}
 
-                    <div className="border-b border-slate-200 dark:border-slate-700 mb-6">
-                        <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-                            {TABS.map(tab => (
-                                <button
-                                    type="button"
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`${
-                                        activeTab === tab.id
-                                        ? 'border-blue-500 text-blue-600'
-                                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:border-slate-600'
-                                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-base`}
-                                    aria-current={activeTab === tab.id ? 'page' : undefined}
-                                >
-                                    {tab.label}
-                                </button>
-                            ))}
-                        </nav>
+                        <div className={`${mode === 'new' ? 'order-1 lg:order-2' : ''}`}>
+                            <div className="border-b border-slate-200 dark:border-slate-700 mb-6">
+                                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                                    {TABS.map(tab => (
+                                        <button
+                                            type="button"
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`${
+                                                activeTab === tab.id
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:border-slate-600'
+                                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-base`}
+                                            aria-current={activeTab === tab.id ? 'page' : undefined}
+                                        >
+                                            {tab.label}
+                                        </button>
+                                    ))}
+                                </nav>
+                            </div>
+                            {renderTabContent()}
+                        </div>
                     </div>
-                    {renderTabContent()}
                 </div>
 
                 <div className="flex justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
