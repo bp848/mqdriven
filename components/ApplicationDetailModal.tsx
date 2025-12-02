@@ -245,6 +245,7 @@ interface ApplicationDetailModalProps {
     currentUser: User | null;
     onApprove: (app: ApplicationWithDetails) => Promise<void>;
     onReject: (app: ApplicationWithDetails, reason: string) => Promise<void>;
+    onCancel?: (app: ApplicationWithDetails, options?: { skipConfirm?: boolean }) => Promise<void>;
     onClose: () => void;
 }
 
@@ -253,6 +254,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     currentUser,
     onApprove,
     onReject,
+    onCancel,
     onClose
 }) => {
     const [rejectionReason, setRejectionReason] = useState('');
@@ -334,7 +336,21 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         return null;
     }
 
+    const resubmittedFromId: string | undefined = application.formData?.meta?.resubmittedFromId;
     const isCurrentUserApprover = currentUser?.id === application.approverId && application.status === 'pending_approval';
+    const canApplicantCancel = currentUser?.id === application.applicantId && application.status === 'pending_approval';
+    const isCancelled = application.status === 'cancelled';
+
+    const handleCancelRequest = () => {
+        if (!application || !onCancel) return;
+        requestConfirmation({
+            label: '申請を取り消す',
+            title: '申請を取り消しますか？',
+            description: '承認ルートから取り下げられ、再申請する場合は新たに申請してください。',
+            confirmLabel: '取り消す',
+            onConfirm: () => onCancel(application, { skipConfirm: true }),
+        });
+    };
 
     const { formData, applicationCode, approvalRoute } = application;
     const code = applicationCode?.code;
@@ -393,6 +409,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         { label: '差戻し理由', value: application.rejectionReason || '-' },
         { label: '作成日時', value: new Date(application.createdAt).toLocaleString('ja-JP') },
         { label: '更新日時', value: application.updatedAt ? new Date(application.updatedAt).toLocaleString('ja-JP') : '-' },
+        ...(resubmittedFromId ? [{ label: '再申請元ID', value: resubmittedFromId }] : []),
         { label: 'formData', value: formData },
     ];
 
@@ -403,22 +420,26 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         { label: '承認ルート構成', value: approvalRoute?.routeData || '未設定' },
     ];
 
+    const shouldSkipFormField = (key: string) => key === 'mqAccounting' || key === 'meta' || key.startsWith('_');
+
     const formDataRows = [
         ...(amount ? [{ label: '合計金額', value: amount }] : []),
         ...Object.entries(formData || {})
-            .filter(([key]) => key !== 'mqAccounting')
+            .filter(([key]) => !shouldSkipFormField(key))
             .map(([key, value]) => ({ label: key, value })),
     ];
 
     const routeStepRows = routeSteps.map((step, index) => {
         const level = index + 1;
         const approverName = usersById.get(step.approverId) || step.approverId || '未設定';
+        const isRejectedLike = application.status === 'rejected' || application.status === 'cancelled';
         const isCompleted =
-            application.status === 'approved' || (application.status !== 'rejected' && level < application.currentLevel);
+            application.status === 'approved' ||
+            (!isRejectedLike && typeof application.currentLevel === 'number' && level < application.currentLevel);
         const isCurrent = level === application.currentLevel && application.status === 'pending_approval';
-        const isRejectedHere = application.status === 'rejected' && level === application.currentLevel;
+        const isRejectedHere = isRejectedLike && level === application.currentLevel;
         let statusLabel = '未承認';
-        if (isRejectedHere) statusLabel = '差戻し';
+        if (isRejectedHere) statusLabel = isCancelled ? '取下げ' : '差戻し';
         else if (isCurrent) statusLabel = '現在の承認者';
         else if (isCompleted) statusLabel = '承認済';
         return {
@@ -437,6 +458,14 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">MQ会計ドリブン</p>
                             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">申請詳細</h2>
+                            {resubmittedFromId && (
+                                <span className="mt-2 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50/60 px-3 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-900/30 dark:text-indigo-200">
+                                    再申請
+                                    <span className="font-mono text-[11px] text-indigo-500 dark:text-indigo-300">
+                                        元ID: {resubmittedFromId}
+                                    </span>
+                                </span>
+                            )}
                         </div>
                         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                             <X className="w-6 h-6" />
@@ -623,11 +652,19 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                         <p className="text-sm leading-relaxed text-red-800 dark:text-red-100 whitespace-pre-wrap">{application.rejectionReason}</p>
                                     </section>
                                 )}
+                                {isCancelled && (
+                                    <section className="rounded-3xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30 p-6">
+                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">申請を取り消しました</h3>
+                                        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                            {application.rejectionReason || '申請者によって承認ルートから取り消されました。'}
+                                        </p>
+                                    </section>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {isCurrentUserApprover && (
+                    {isCurrentUserApprover ? (
                         <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/70 px-4 py-4 md:px-8 md:py-5 space-y-3">
                             <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
                                 <div className="md:col-span-1">
@@ -666,7 +703,23 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                 </div>
                             </div>
                         </div>
-                    )}
+                    ) : canApplicantCancel ? (
+                        <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/70 px-4 py-4 md:px-8 md:py-5 flex flex-col gap-3">
+                            <div className="text-sm text-slate-600 dark:text-slate-300">
+                                入力ミスや差し戻し前に取り消したい場合は、下記ボタンから承認ルートへ通知せずに撤回できます。
+                            </div>
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={handleCancelRequest}
+                                    className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-900"
+                                >
+                                    <X className="w-4 h-4" />
+                                    <span>申請を取り消す</span>
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </div>
             {ConfirmationDialog}

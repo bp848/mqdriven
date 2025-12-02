@@ -5,6 +5,7 @@ import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
 import { User, InvoiceData, ApplicationWithDetails } from '../../types';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
+import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
 interface TransportExpenseFormProps {
     onSuccess: () => void;
@@ -57,6 +58,8 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
+
+    const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
 
     const addNewRow = () => {
         setDetails(prev => [...prev, createEmptyDetail()]);
@@ -119,11 +122,14 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
         return {
             applicationCodeId,
-            formData: {
-                details: sanitizedDetails,
-                notes,
-                totalAmount,
-            },
+            formData: attachResubmissionMeta(
+                {
+                    details: sanitizedDetails,
+                    notes,
+                    totalAmount,
+                },
+                resubmissionMeta
+            ),
             approvalRouteId,
         };
     };

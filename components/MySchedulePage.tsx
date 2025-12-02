@@ -55,6 +55,7 @@ const APPLICATION_STATUS_STYLES: Record<ApplicationStatus, { label: string; clas
     pending_approval: { label: '承認待ち', className: 'bg-amber-100 text-amber-700 border border-amber-200' },
     approved: { label: '承認済', className: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
     rejected: { label: '差戻し', className: 'bg-rose-100 text-rose-700 border border-rose-200' },
+    cancelled: { label: '取下げ', className: 'bg-slate-200 text-slate-700 border border-slate-300' },
 };
 
 interface ParsedDailyReportTextResult {

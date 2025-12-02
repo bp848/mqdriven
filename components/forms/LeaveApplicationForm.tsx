@@ -5,6 +5,7 @@ import { User, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
+import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
 interface LeaveApplicationFormProps {
     onSuccess: () => void;
@@ -29,6 +30,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
     const [error, setError] = useState('');
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+    const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
 
@@ -51,7 +53,7 @@ const LeaveApplicationForm: React.FC<LeaveApplicationFormProps> = ({ onSuccess, 
 
     const buildSubmissionPayload = () => ({
         applicationCodeId,
-        formData,
+        formData: attachResubmissionMeta(formData, resubmissionMeta),
         approvalRouteId,
     });
 

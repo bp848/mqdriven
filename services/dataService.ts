@@ -1632,6 +1632,31 @@ export const rejectApplication = async (app: ApplicationWithDetails, reason: str
     }
 };
 
+export const cancelApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
+    if (app.applicantId !== currentUser.id) {
+        throw new Error('自分が申請した案件のみ取り消せます。');
+    }
+    if (app.status !== 'pending_approval') {
+        throw new Error('承認待ちの申請のみ取り消せます。');
+    }
+
+    const supabase = getSupabase();
+    const now = new Date().toISOString();
+    const { error } = await supabase
+        .from('applications')
+        .update({
+            status: 'cancelled',
+            approver_id: null,
+            rejection_reason: '申請者による取り消し',
+            rejected_at: now,
+            approved_at: null,
+            updated_at: now,
+        })
+        .eq('id', app.id)
+        .eq('applicant_id', currentUser.id);
+    ensureSupabaseSuccess(error, 'Failed to cancel application');
+};
+
 export const getAccountItems = async (): Promise<AccountItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('account_items').select('*');

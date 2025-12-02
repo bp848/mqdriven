@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { submitApplication, saveApplicationDraft, clearApplicationDraft } from '../../services/dataService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, AlertTriangle } from '../Icons';
 import { User, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
+import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
 interface ApprovalFormProps {
     onSuccess: () => void;
@@ -24,6 +25,7 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
     const [error, setError] = useState('');
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+    const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
 
@@ -44,7 +46,7 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
 
     const buildSubmissionPayload = () => ({
         applicationCodeId,
-        formData,
+        formData: attachResubmissionMeta(formData, resubmissionMeta),
         approvalRouteId,
     });
 
