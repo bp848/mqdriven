@@ -225,6 +225,7 @@ export interface Customer {
   customerName: string;
   customerNameKana?: string;
   representative?: string;
+  representativeTitle?: string;
   phoneNumber?: string;
   address1?: string;
   companyContent?: string;
