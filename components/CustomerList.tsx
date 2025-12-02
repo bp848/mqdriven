@@ -118,10 +118,21 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
 
   const filteredCustomers = useMemo(() => {
     if (!searchTerm) return customers;
-    const lowercasedTerm = searchTerm.toLowerCase();
-    return customers.filter(customer => 
-      customer.customerName.toLowerCase().includes(lowercasedTerm) ||
-      (customer.phoneNumber && customer.phoneNumber.includes(lowercasedTerm))
+    const needle = searchTerm.trim().toLowerCase();
+    if (!needle) return customers;
+
+    const matches = (value?: string | null) =>
+      !!value && value.toLowerCase().includes(needle);
+
+    return customers.filter(customer =>
+      matches(customer.customerName) ||
+      matches(customer.customerNameKana) ||
+      matches(customer.representative) ||
+      matches(customer.customerContactInfo) ||
+      matches(customer.phoneNumber) ||
+      matches(customer.address1) ||
+      matches(customer.websiteUrl) ||
+      matches(customer.note)
     );
   }, [customers, searchTerm]);
 
