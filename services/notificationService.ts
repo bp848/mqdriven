@@ -1,4 +1,4 @@
-import { Application, ApplicationWithDetails } from '../types';
+import { Application, ApplicationWithDetails, ApprovalRoute } from '../types';
 import { getSupabase } from './supabaseClient';
 import { sendEmail } from './emailService';
 import { formatDateTime } from '../utils';
@@ -276,3 +276,60 @@ export async function sendApprovalNotification(payload: ApprovalNotificationPayl
         console.error('[notification] 承認通知メールの送信に失敗しました', error);
     }
 }
+
+export const sendApprovalRouteCreatedNotification = async (route: ApprovalRoute): Promise<void> => {
+    const supabase = getSupabase();
+    const steps = route.routeData?.steps ?? [];
+    const uniqueApproverIds = Array.from(
+        new Set(
+            steps
+                .map(step => step.approverId)
+                .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        )
+    );
+
+    if (uniqueApproverIds.length === 0) {
+        return;
+    }
+
+    const recipients = await Promise.all(
+        uniqueApproverIds.map(async approverId => {
+            const summary = await resolveUserById(supabase, approverId);
+            return summary?.email ?? null;
+        })
+    );
+
+    const filteredRecipients = Array.from(new Set(recipients.filter((email): email is string => Boolean(email))));
+    if (filteredRecipients.length === 0) {
+        console.warn('[notification] 承認ルート通知の宛先が見つかりませんでした', route.id);
+        return;
+    }
+
+    const stepLines = await Promise.all(
+        steps.map(async (step, index) => {
+            if (!step.approverId) {
+                return `ステップ${index + 1}: (承認者未設定)`;
+            }
+            const summary = await resolveUserById(supabase, step.approverId);
+            return `ステップ${index + 1}: ${summary?.name ?? step.approverId}`;
+        })
+    );
+
+    const body = [
+        `新しい承認ルート「${route.name}」が追加され、あなたが承認者として設定されました。`,
+        '',
+        ...stepLines,
+        '',
+        '承認ルート管理ページから詳細を確認し、必要に応じて関係者に共有してください。',
+    ].join('\n');
+
+    try {
+        await sendEmail({
+            to: filteredRecipients,
+            subject: `【承認ルート追加】${route.name}`,
+            body,
+        });
+    } catch (error) {
+        console.error('[notification] 承認ルート追加通知の送信に失敗しました', error);
+    }
+};

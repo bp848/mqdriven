@@ -49,7 +49,10 @@ interface ExpenseLine {
     accountItemId: string;
     allocationDivisionId: string;
     customerId: string;
+    customCustomerName?: string;
     projectId: string;
+    projectName?: string;
+    nonCustomerExpense?: boolean;
     linkedRevenueId: string;
     ocrExtracted: boolean;
 }
@@ -129,6 +132,9 @@ const createEmptyLine = (ocr: boolean = false): ExpenseLine => ({
     allocationDivisionId: '',
     customerId: '',
     projectId: '',
+    customCustomerName: '',
+    projectName: '',
+    nonCustomerExpense: false,
     linkedRevenueId: '',
     ocrExtracted: ocr,
 });
@@ -981,45 +987,165 @@ const LineItemTable: React.FC<{
                     <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead>
                             <tr>
-                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 dark:text-white sm:pl-0">品名</th>
+                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 dark:text-white sm:pl-0">品名 / 用途</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">日付</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">顧客</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">プロジェクト</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">顧客候補（オートコンプリート可）</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">プロジェクト / 案件名</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">金額(税抜)</th>
                                 <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0"><span className="sr-only">削除</span></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                            {lines.map(line => (
-                                <tr key={line.id} className={line.ocrExtracted ? 'bg-yellow-50 dark:bg-yellow-500/10' : ''}>
-                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-0">
-                                        <input type="text" value={line.description} onChange={e => onLineChange(line.id, 'description', e.target.value)} className="w-full rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                        <input type="date" value={line.lineDate} onChange={e => onLineChange(line.id, 'lineDate', e.target.value)} className="w-full rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                        <select value={line.customerId} onChange={e => onLineChange(line.id, 'customerId', e.target.value)} className="w-full rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled}>
-                                            <option value="">顧客を選択</option>
-                                            {customers.map(c => <option key={c.id} value={c.id}>{c.customerName}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                        <select value={line.projectId} onChange={e => onLineChange(line.id, 'projectId', e.target.value)} className="w-full rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled || !line.customerId}>
-                                            <option value="">{line.customerId ? "プロジェクトを選択" : "先に顧客を選択"}</option>
-                                            {jobs.filter(j => j.customerId === line.customerId).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                        <input type="number" value={line.amountExclTax} onChange={e => onLineChange(line.id, 'amountExclTax', numberFromInput(e.target.value))} className="w-full text-right rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
-                                    </td>
-                                    <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
-                                        <button type="button" onClick={() => onRemoveLine(line.id)} className="text-slate-500 hover:text-rose-600 disabled:opacity-50" disabled={isDisabled}>
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                            {lines.map(line => {
+                                const customerDatalistId = `customer-options-${line.id}`;
+                                const projectDatalistId = `project-options-${line.id}`;
+                                const selectedCustomer = customers.find(c => c.id === line.customerId);
+                                const selectedProject = jobs.find(job => job.id === line.projectId);
+                                const customerDisplayName = line.customCustomerName ?? selectedCustomer?.customerName ?? '';
+                                const projectDisplayName = line.projectName || selectedProject?.title || '';
+                                const availableProjects = line.customerId
+                                    ? jobs.filter(job => job.customerId === line.customerId)
+                                    : jobs;
+                                const limitedProjectOptions = availableProjects.slice(0, 30);
+                                const isNonCustomerExpense = Boolean(line.nonCustomerExpense);
+
+                                const handleCustomerInputChange = (value: string) => {
+                                    const trimmed = value.trim();
+                                    const match = customers.find(
+                                        customer => customer.customerName.toLowerCase() === trimmed.toLowerCase()
+                                    );
+                                    if (match) {
+                                        onLineChange(line.id, 'customerId', match.id);
+                                        onLineChange(line.id, 'customCustomerName', '');
+                                        if (isNonCustomerExpense) {
+                                            onLineChange(line.id, 'nonCustomerExpense', false);
+                                        }
+                                    } else {
+                                        onLineChange(line.id, 'customerId', '');
+                                        onLineChange(line.id, 'customCustomerName', value);
+                                    }
+                                };
+
+                                const handleProjectInputChange = (value: string) => {
+                                    const trimmed = value.trim();
+                                    const match = availableProjects.find(
+                                        project => project.title.toLowerCase() === trimmed.toLowerCase()
+                                    );
+                                    if (match) {
+                                        onLineChange(line.id, 'projectId', match.id);
+                                        onLineChange(line.id, 'projectName', match.title);
+                                    } else {
+                                        onLineChange(line.id, 'projectId', '');
+                                        onLineChange(line.id, 'projectName', value);
+                                    }
+                                };
+
+                                return (
+                                    <tr key={line.id} className={line.ocrExtracted ? 'bg-yellow-50 dark:bg-yellow-500/10' : ''}>
+                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-0">
+                                            <input
+                                                type="text"
+                                                value={line.description}
+                                                onChange={e => onLineChange(line.id, 'description', e.target.value)}
+                                                className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                disabled={isDisabled}
+                                                placeholder="例: 校了データ発送作業"
+                                            />
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <input
+                                                type="date"
+                                                value={line.lineDate}
+                                                onChange={e => onLineChange(line.id, 'lineDate', e.target.value)}
+                                                className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                disabled={isDisabled}
+                                            />
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    list={customerDatalistId}
+                                                    value={customerDisplayName}
+                                                    onChange={e => handleCustomerInputChange(e.target.value)}
+                                                    onBlur={e => handleCustomerInputChange(e.target.value)}
+                                                    className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                    disabled={isDisabled}
+                                                    placeholder="顧客名や「その他」「校正用プリント」など"
+                                                />
+                                                <datalist id={customerDatalistId}>
+                                                    {customers.map(customer => (
+                                                        <option key={customer.id} value={customer.customerName} />
+                                                    ))}
+                                                </datalist>
+                                                <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isNonCustomerExpense}
+                                                        onChange={e => {
+                                                            onLineChange(line.id, 'nonCustomerExpense', e.target.checked);
+                                                            if (e.target.checked) {
+                                                                onLineChange(line.id, 'customerId', '');
+                                                            }
+                                                        }}
+                                                        disabled={isDisabled}
+                                                    />
+                                                    顧客に紐付けず処理する（資材・社内用途など）
+                                                </label>
+                                                {!line.customerId && !line.customCustomerName && !isDisabled && (
+                                                    <p className="text-xs text-amber-600">
+                                                        まず名称を入力しておくと後で得意先登録がしやすくなります。
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    list={projectDatalistId}
+                                                    value={projectDisplayName}
+                                                    onChange={e => handleProjectInputChange(e.target.value)}
+                                                    onBlur={e => handleProjectInputChange(e.target.value)}
+                                                    className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                    disabled={isDisabled}
+                                                    placeholder="案件名 / プロジェクト名（自由入力可）"
+                                                />
+                                                <datalist id={projectDatalistId}>
+                                                    {limitedProjectOptions.map(project => (
+                                                        <option key={project.id} value={project.title} />
+                                                    ))}
+                                                </datalist>
+                                                {!line.customerId && (
+                                                    <p className="text-xs text-slate-500">
+                                                        得意先が未登録でも案件名をメモできます。登録後に紐付けてください。
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <input
+                                                type="number"
+                                                value={line.amountExclTax}
+                                                onChange={e => onLineChange(line.id, 'amountExclTax', numberFromInput(e.target.value))}
+                                                className="w-full text-right rounded-md border-slate-300 dark:border-slate-600"
+                                                disabled={isDisabled}
+                                            />
+                                        </td>
+                                        <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => onRemoveLine(line.id)}
+                                                className="text-slate-500 hover:text-rose-600 disabled:opacity-50"
+                                                disabled={isDisabled}
+                                                aria-label="明細行を削除"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                     <div className="mt-4">

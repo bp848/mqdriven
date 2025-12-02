@@ -1,5 +1,5 @@
 import { getSupabase } from './supabaseClient';
-import { sendApprovalNotification } from './notificationService';
+import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from './notificationService';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
     EmployeeUser,
@@ -1224,10 +1224,17 @@ export const getApprovalRoutes = async (): Promise<ApprovalRoute[]> => {
 };
 export const addApprovalRoute = async (routeData: any): Promise<ApprovalRoute> => {
     const supabase = getSupabase();
-    const dbRouteData = { name: routeData.name, route_data: { steps: routeData.routeData.steps.map((s:any) => ({ approver_id: s.approverId })) } };
+    const steps = (routeData.routeData?.steps ?? []).map((s: any) => ({ approver_id: s.approverId }));
+    const dbRouteData = { name: routeData.name, route_data: { steps } };
     const { data, error } = await supabase.from('approval_routes').insert(dbRouteData).select().single();
     ensureSupabaseSuccess(error, 'Failed to add approval route');
-    return dbApprovalRouteToApprovalRoute(data);
+    const createdRoute = dbApprovalRouteToApprovalRoute(data);
+    try {
+        await sendApprovalRouteCreatedNotification(createdRoute);
+    } catch (notificationError) {
+        console.warn('Failed to send approval route notification', notificationError);
+    }
+    return createdRoute;
 };
 export const updateApprovalRoute = async (id: string, updates: Partial<ApprovalRoute>): Promise<ApprovalRoute> => {
     const supabase = getSupabase();
