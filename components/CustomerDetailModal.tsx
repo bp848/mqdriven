@@ -185,6 +185,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                     <Divider />
 
                     {renderField('代表者', customer?.representative, 'representative', 'text', { autoComplete: 'name' })}
+                    {renderField('役職', customer?.representativeTitle, 'representativeTitle', 'text', { autoComplete: 'organization-title' })}
                     {renderField('電話番号', customer?.phoneNumber, 'phoneNumber', 'text', { autoComplete: 'tel' })}
                     {renderField('FAX', customer?.fax, 'fax', 'text', { autoComplete: 'fax' })}
                     {renderField('Webサイト', customer?.websiteUrl, 'websiteUrl', 'text', { autoComplete: 'url' })}

@@ -62,11 +62,8 @@ const normalizeContact = (contact: BusinessCardContact | null | undefined): Busi
 
 const buildContactNote = (contact: BusinessCardContact): string | undefined => {
   const lines = [
-    contact.personName
-      ? `${contact.personName}${contact.title ? `（${contact.title}）` : ''}`
-      : null,
-    !contact.personName && contact.title ? `肩書: ${contact.title}` : null,
     contact.department ? `部署: ${contact.department}` : null,
+    contact.personNameKana ? `カナ: ${contact.personNameKana}` : null,
     contact.phoneNumber ? `直通: ${contact.phoneNumber}` : null,
     contact.mobileNumber ? `携帯: ${contact.mobileNumber}` : null,
     contact.email ? `メール: ${contact.email}` : null,
@@ -77,6 +74,8 @@ const buildContactNote = (contact: BusinessCardContact): string | undefined => {
 
 const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): Partial<Customer> => ({
   customerName: contact.companyName || contact.personName || fallbackName,
+  representative: contact.personName || undefined,
+  representativeTitle: contact.title || undefined,
   phoneNumber: contact.phoneNumber || contact.mobileNumber,
   fax: contact.faxNumber,
   address1: contact.address,
@@ -85,6 +84,15 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
   customerContactInfo: contact.email,
   note: [buildContactNote(contact), contact.notes].filter(Boolean).join('\n\n') || undefined,
 });
+
+const describeRepresentative = (name?: string | null, title?: string | null | undefined) => {
+  const safeName = name?.trim();
+  const safeTitle = title?.trim();
+  if (safeTitle) {
+    return `${safeName || '不明'}（${safeTitle}）`;
+  }
+  return safeName || '不明';
+};
 
 const OCR_STATUS_STYLES: Record<OcrStatus, { label: string; className: string }> = {
   processing: { label: 'OCR解析中', className: 'bg-blue-100 text-blue-700' },
@@ -139,7 +147,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           severity: 'info',
           status: 'pending',
           summary: `名刺OCR: ${payload.customerName || '不明'} をフォームに転記`,
-          detail: `担当: ${payload.representative || '不明'}`,
+          detail: `担当: ${describeRepresentative(payload.representative, payload.representativeTitle)}`,
           ...actorInfo,
         });
         handleRemoveDraft(draftId);
@@ -173,7 +181,10 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           severity: 'info',
           status: 'success',
           summary: `名刺OCR: ${created.customerName || payload.customerName || '不明'} を顧客登録`,
-          detail: `担当: ${created.representative || payload.representative || '不明'}`,
+          detail: `担当: ${describeRepresentative(
+            created.representative ?? payload.representative,
+            created.representativeTitle ?? payload.representativeTitle
+          )}`,
           ...actorInfo,
         });
       } catch (error) {
@@ -223,7 +234,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           severity: 'info',
           status: 'success',
           summary: `名刺OCR: ${file.name} の解析が完了しました`,
-          detail: `会社: ${contact.companyName || '不明'} / 担当: ${contact.personName || '不明'}`,
+          detail: `会社: ${contact.companyName || '不明'} / 担当: ${describeRepresentative(contact.personName, contact.title)}`,
           ...actorInfo,
         });
         await autoCreateCustomer(draftId, payload);
@@ -454,7 +465,15 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                     </div>
                     <div>
                       <dt className="text-xs font-semibold text-slate-500">担当者</dt>
-                      <dd>{draft.customerPayload?.representative || '―'}</dd>
+                      <dd className="flex flex-wrap items-center gap-1">
+                        {draft.customerPayload?.representative || '―'}
+                        {draft.customerPayload?.representative &&
+                          draft.customerPayload?.representativeTitle && (
+                            <span className="text-xs text-slate-500">
+                              （{draft.customerPayload.representativeTitle}）
+                            </span>
+                          )}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-xs font-semibold text-slate-500">電話 / メール</dt>

@@ -102,6 +102,17 @@ interface ComputedTotals {
     gross: number;
 }
 
+const resolveEnvValue = (key: string): string | undefined => {
+    if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
+        const value = (import.meta.env as Record<string, string | undefined>)[key];
+        if (value !== undefined) return value;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+        return process.env[key];
+    }
+    return undefined;
+};
+
 const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 const createEmptyLine = (ocr: boolean = false): ExpenseLine => ({
@@ -143,7 +154,18 @@ const STEPS = [
     { id: 3, name: '申請内容の最終確認と提出' },
 ];
 
-const RINGI_BUCKET = 'ringi';
+const RINGI_BUCKET =
+    resolveEnvValue('VITE_RINGI_BUCKET') ??
+    resolveEnvValue('NEXT_PUBLIC_RINGI_BUCKET') ??
+    resolveEnvValue('RINGI_BUCKET') ??
+    'ringi';
+
+const shouldFallbackToDefaultBucket = (error: unknown): boolean => {
+    if (!(error instanceof Error)) return false;
+    const normalized = (error.message || '').toLowerCase();
+    if (!normalized) return false;
+    return normalized.includes('bucket') && (normalized.includes('not found') || normalized.includes('does not exist'));
+};
 
 
 // --- UTILITY FUNCTIONS ---
@@ -378,7 +400,17 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const persistDocumentAttachment = async (file: File): Promise<ExpenseAttachment> => {
         setIsDocumentUploading(true);
         try {
-            const { publicUrl, path } = await uploadFile(file, RINGI_BUCKET);
+            const { publicUrl, path } = await (async () => {
+                try {
+                    return await uploadFile(file, RINGI_BUCKET);
+                } catch (err) {
+                    if (shouldFallbackToDefaultBucket(err)) {
+                        console.warn(`[ExpenseReimbursementForm] Bucket "${RINGI_BUCKET}" is unavailable. Falling back to default storage bucket.`, err);
+                        return await uploadFile(file);
+                    }
+                    throw err;
+                }
+            })();
             if (!publicUrl) {
                 throw new Error('添付ファイルの公開URL取得に失敗しました。');
             }

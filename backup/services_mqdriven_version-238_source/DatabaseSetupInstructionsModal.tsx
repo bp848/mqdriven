@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS public.customers (
     customer_name TEXT NOT NULL,
     customer_name_kana TEXT,
     representative TEXT,
+    representative_title TEXT,
     phone_number TEXT,
     address1 TEXT,
     company_content TEXT,
@@ -185,6 +186,9 @@ CREATE TABLE IF NOT EXISTS public.customers (
     info_sales_ideas TEXT,
     customer_contact_info TEXT
 );
+
+ALTER TABLE public.customers
+    ADD COLUMN IF NOT EXISTS representative_title TEXT;
 
 -- invoices テーブル
 CREATE TABLE IF NOT EXISTS public.invoices (

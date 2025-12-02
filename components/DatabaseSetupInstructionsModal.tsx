@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS public.customers (
     customer_name TEXT NOT NULL,
     customer_name_kana TEXT,
     representative TEXT,
+    representative_title TEXT,
     phone_number TEXT,
     address1 TEXT,
     company_content TEXT,
@@ -250,6 +251,9 @@ CREATE TABLE IF NOT EXISTS public.customers (
     customer_contact_info TEXT,
     ai_analysis JSONB
 );
+
+ALTER TABLE public.customers
+    ADD COLUMN IF NOT EXISTS representative_title TEXT;
 
 -- invoices テーブル
 CREATE TABLE IF NOT EXISTS public.invoices (
@@ -341,6 +345,76 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE name = 'ringi') THEN
         PERFORM storage.create_bucket('ringi', public => true);
+    END IF;
+END;
+$$;
+
+-- ringiバケットのRLSポリシー
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'storage'
+          AND tablename = 'objects'
+          AND policyname = 'Allow authenticated read ringi'
+    ) THEN
+        EXECUTE $policy$
+        CREATE POLICY "Allow authenticated read ringi"
+        ON storage.objects
+        FOR SELECT
+        TO authenticated
+        USING (bucket_id = 'ringi');
+        $policy$;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'storage'
+          AND tablename = 'objects'
+          AND policyname = 'Allow authenticated upload ringi'
+    ) THEN
+        EXECUTE $policy$
+        CREATE POLICY "Allow authenticated upload ringi"
+        ON storage.objects
+        FOR INSERT
+        TO authenticated
+        WITH CHECK (bucket_id = 'ringi');
+        $policy$;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'storage'
+          AND tablename = 'objects'
+          AND policyname = 'Allow authenticated update ringi'
+    ) THEN
+        EXECUTE $policy$
+        CREATE POLICY "Allow authenticated update ringi"
+        ON storage.objects
+        FOR UPDATE
+        TO authenticated
+        USING (bucket_id = 'ringi')
+        WITH CHECK (bucket_id = 'ringi');
+        $policy$;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'storage'
+          AND tablename = 'objects'
+          AND policyname = 'Allow authenticated delete ringi'
+    ) THEN
+        EXECUTE $policy$
+        CREATE POLICY "Allow authenticated delete ringi"
+        ON storage.objects
+        FOR DELETE
+        TO authenticated
+        USING (bucket_id = 'ringi');
+        $policy$;
     END IF;
 END;
 $$;

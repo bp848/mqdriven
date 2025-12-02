@@ -60,7 +60,6 @@ const normalizeContact = (contact: BusinessCardContact | null | undefined): Busi
 const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): Partial<Customer> => {
   const memoLines = [
     contact.department || '',
-    contact.title || '',
     contact.personNameKana ? `カナ: ${contact.personNameKana}` : '',
     contact.mobileNumber ? `携帯: ${contact.mobileNumber}` : '',
     contact.notes || '',
@@ -69,6 +68,7 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
   return {
     customerName: contact.companyName || contact.personName || fallbackName,
     representative: contact.personName,
+    representativeTitle: contact.title,
     phoneNumber: contact.phoneNumber || contact.mobileNumber,
     fax: contact.faxNumber,
     address1: contact.address,
@@ -77,6 +77,15 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
     customerContactInfo: contact.email,
     note: contact.notes,
   };
+};
+
+const describeRepresentative = (name?: string | null, title?: string | null) => {
+  const safeName = name?.trim();
+  const safeTitle = title?.trim();
+  if (safeTitle) {
+    return `${safeName || '不明'}（${safeTitle}）`;
+  }
+  return safeName || '不明';
 };
 
 const STATUS_STYLES: Record<CardDraftStatus, { label: string; className: string }> = {
@@ -136,7 +145,7 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
         severity: 'info',
         status: 'success',
         summary: `名刺OCR: ${file.name} の解析が完了しました`,
-        detail: `会社: ${contact.companyName || '不明'} / 担当: ${contact.personName || '不明'}`,
+        detail: `会社: ${contact.companyName || '不明'} / 担当: ${describeRepresentative(contact.personName, contact.title)}`,
         ...actorInfo,
       });
     } catch (error) {
@@ -271,7 +280,7 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
       severity: 'info',
       status: 'pending',
       summary: `名刺OCR: ${draft.fileName} を顧客フォームに読み込み`,
-      detail: `会社: ${payload.customerName || '不明'} / 担当: ${payload.representative || '不明'}`,
+      detail: `会社: ${payload.customerName || '不明'} / 担当: ${describeRepresentative(payload.representative, payload.representativeTitle)}`,
       ...actorInfo,
     });
     handleRemoveDraft(draft.id);

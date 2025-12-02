@@ -358,6 +358,7 @@ const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
     customerName: dbCustomer.customer_name,
     customerNameKana: dbCustomer.customer_name_kana,
     representative: dbCustomer.representative ?? dbCustomer.representative_name ?? null,
+    representativeTitle: dbCustomer.representative_title ?? null,
     phoneNumber: dbCustomer.phone_number,
     address1: dbCustomer.address_1,
     companyContent: dbCustomer.company_content,
@@ -403,6 +404,7 @@ const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
     address1: 'address_1',
     address2: 'address_2',
     representative: 'representative_name',
+    representativeTitle: 'representative_title',
 };
 
 const customerToDbCustomer = (customer: Partial<Customer>): any => {
@@ -1024,7 +1026,7 @@ export const deleteJob = async (id: string): Promise<void> => {
 
 export const getCustomers = async (): Promise<Customer[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: true, nullsFirst: true });
     ensureSupabaseSuccess(error, 'Failed to fetch customers');
     return (data || []).map(dbCustomerToCustomer);
 };
