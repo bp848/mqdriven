@@ -176,6 +176,15 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     />
   );
 
+  const formatDate = (value?: string | null) => {
+    if (!value) return '-';
+    try {
+      return new Date(value).toLocaleDateString('ja-JP');
+    } catch {
+      return value;
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
@@ -186,6 +195,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
               <SortableHeader sortKey="phoneNumber" label="電話番号" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="address1" label="住所" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="websiteUrl" label="Webサイト" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader sortKey="createdAt" label="登録日" sortConfig={sortConfig} requestSort={requestSort} />
               <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
             </tr>
           </thead>
@@ -207,6 +217,9 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
                     {isEditing ? <InlineEditInput name="websiteUrl" value={editedData.websiteUrl} onChange={handleFieldChange} /> : (
                       customer.websiteUrl ? <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 hover:underline">{customer.websiteUrl}</a> : '-'
                     )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                    {formatDate(customer.createdAt)}
                 </td>
                 <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
