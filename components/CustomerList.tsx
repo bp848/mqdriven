@@ -116,23 +116,33 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     }
   };
 
-  const filteredCustomers = useMemo(() => {
-    if (!searchTerm) return customers;
-    const needle = searchTerm.trim().toLowerCase();
-    if (!needle) return customers;
+  const normalize = (value?: string | null) =>
+    value?.toLowerCase().normalize('NFKC').replace(/\s+/g, ' ').trim() ?? '';
 
-    const matches = (value?: string | null) =>
-      !!value && value.toLowerCase().includes(needle);
+  const filteredCustomers = useMemo(() => {
+    const keyword = normalize(searchTerm);
+    if (!keyword) return customers;
+
+    const keys: Array<keyof Customer | string> = [
+      'customerName',
+      'customerNameKana',
+      'representative',
+      'customerContactInfo',
+      'phoneNumber',
+      'address1',
+      'websiteUrl',
+      'note',
+      'customer_name',
+      'customer_name_kana',
+      'representative_name',
+      'customer_contact_info',
+      'phone_number',
+      'address_1',
+      'website_url',
+    ];
 
     return customers.filter(customer =>
-      matches(customer.customerName) ||
-      matches(customer.customerNameKana) ||
-      matches(customer.representative) ||
-      matches(customer.customerContactInfo) ||
-      matches(customer.phoneNumber) ||
-      matches(customer.address1) ||
-      matches(customer.websiteUrl) ||
-      matches(customer.note)
+      keys.some(key => normalize((customer as any)[key]).includes(keyword))
     );
   }, [customers, searchTerm]);
 
