@@ -60,16 +60,30 @@ const normalizeContact = (contact: BusinessCardContact | null | undefined): Busi
   return normalized;
 };
 
+const buildContactNote = (contact: BusinessCardContact): string | undefined => {
+  const lines = [
+    contact.personName
+      ? `${contact.personName}${contact.title ? `（${contact.title}）` : ''}`
+      : null,
+    !contact.personName && contact.title ? `肩書: ${contact.title}` : null,
+    contact.department ? `部署: ${contact.department}` : null,
+    contact.phoneNumber ? `直通: ${contact.phoneNumber}` : null,
+    contact.mobileNumber ? `携帯: ${contact.mobileNumber}` : null,
+    contact.email ? `メール: ${contact.email}` : null,
+  ].filter(Boolean);
+  if (!lines.length) return undefined;
+  return `【担当者情報】\n${lines.join('\n')}`;
+};
+
 const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): Partial<Customer> => ({
   customerName: contact.companyName || contact.personName || fallbackName,
-  representative: contact.personName,
   phoneNumber: contact.phoneNumber || contact.mobileNumber,
   fax: contact.faxNumber,
   address1: contact.address,
   zipCode: contact.postalCode,
   websiteUrl: contact.websiteUrl,
   customerContactInfo: contact.email,
-  note: contact.notes,
+  note: [buildContactNote(contact), contact.notes].filter(Boolean).join('\n\n') || undefined,
 });
 
 const OCR_STATUS_STYLES: Record<OcrStatus, { label: string; className: string }> = {
@@ -153,6 +167,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           )
         );
         addToast(`「${created.customerName || payload.customerName || '名刺'}」を自動登録しました。`, 'success');
+        onApplyToForm(created);
         logActionEvent({
           module: '名刺OCR',
           severity: 'info',
@@ -308,7 +323,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           <div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">名刺で自動入力</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              名刺を1枚ずつ、または複数まとめてアップロードして顧客情報を取り込みます。
+              名刺をまとめてアップロードするだけで、AIが解析して顧客マスタ登録とフォーム反映まで自動で行います。
             </p>
           </div>
           <button
@@ -352,8 +367,8 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
       <div className="px-6 py-5 space-y-4 max-h-[360px] overflow-y-auto">
         {drafts.length === 0 ? (
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">
-            <p>・名刺をアップロードするとAIが自動で顧客マスタに登録します。</p>
-            <p>・登録済みデータを編集したい場合は右側フォームで読み込み、保存してください。</p>
+            <p>・名刺をアップロードするとAIが解析→顧客登録→右フォームへの反映まで自動で実施します。</p>
+            <p>・複数枚アップロードした場合はステータスを見ながら順番に編集・保存できます。</p>
             <p>・ステータスに応じて登録状況が表示されます。</p>
           </div>
         ) : (

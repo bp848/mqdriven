@@ -26,10 +26,30 @@ import {
 } from "../types";
 import { formatJPY } from "../utils";
 
-// AI機能をグローバルに制御する環境変数
-const NEXT_PUBLIC_AI_OFF = process.env.NEXT_PUBLIC_AI_OFF === "1";
+const resolveEnvValue = (key: string): string | undefined => {
+  if (typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined") {
+    const envValue = (import.meta.env as Record<string, string | undefined>)[key];
+    if (envValue !== undefined) return envValue;
+  }
+  if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
+    return process.env[key];
+  }
+  return undefined;
+};
 
-const API_KEY = process.env.API_KEY;
+// AI機能をグローバルに制御する環境変数
+const aiOffRaw =
+  resolveEnvValue("VITE_AI_OFF") ??
+  resolveEnvValue("NEXT_PUBLIC_AI_OFF") ??
+  resolveEnvValue("AI_OFF") ??
+  "0";
+const NEXT_PUBLIC_AI_OFF = aiOffRaw === "1" || aiOffRaw.toLowerCase?.() === "true";
+
+const API_KEY =
+  resolveEnvValue("VITE_GEMINI_API_KEY") ??
+  resolveEnvValue("NEXT_PUBLIC_GEMINI_API_KEY") ??
+  resolveEnvValue("GEMINI_API_KEY") ??
+  resolveEnvValue("API_KEY");
 
 if (!API_KEY && !NEXT_PUBLIC_AI_OFF) {
   console.error("API_KEY environment variable not set. AI functions might be unavailable.");
