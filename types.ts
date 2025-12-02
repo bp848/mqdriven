@@ -575,7 +575,7 @@ export interface Application {
     applicationCodeId: string;
     formData: any;
     documentUrl?: string | null;
-    status: 'draft' | 'pending_approval' | 'approved' | 'rejected';
+    status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
     submittedAt: string | null;
     approvedAt: string | null;
     rejectedAt: string | null;

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ApplicationWithDetails, SortConfig } from '../types';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
-import { ArrowUpDown, ChevronDown, Eye, RefreshCw } from './Icons';
+import { ArrowUpDown, ChevronDown, Eye, RefreshCw, X } from './Icons';
 import { formatDateTime, formatJPY } from '../utils';
 
 interface ApplicationListProps {
@@ -10,6 +10,9 @@ interface ApplicationListProps {
   selectedApplicationId: string | null;
   onResumeDraft?: (app: ApplicationWithDetails) => void;
   currentUserId?: string | null;
+  onCancelApplication?: (app: ApplicationWithDetails) => void;
+  resubmittedParentIds?: string[];
+  resubmissionChildrenMap?: Record<string, string>;
 }
 
 const toNumber = (value: any): number | null => {
@@ -85,8 +88,19 @@ const deriveApplicationSummary = (app: ApplicationWithDetails) => {
   return { amount: formattedAmount, payee, customer };
 };
 
-const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onApplicationSelect, selectedApplicationId, onResumeDraft, currentUserId }) => {
+const ApplicationList: React.FC<ApplicationListProps> = ({
+  applications,
+  onApplicationSelect,
+  selectedApplicationId,
+  onResumeDraft,
+  currentUserId,
+  onCancelApplication,
+  resubmittedParentIds,
+  resubmissionChildrenMap,
+}) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
+  const resubmittedParentIdSet = useMemo(() => new Set(resubmittedParentIds || []), [resubmittedParentIds]);
+  const resubmissionChildLookup = resubmissionChildrenMap || {};
 
   const sortedApplications = useMemo(() => {
     let sortableItems = [...applications];
@@ -174,15 +188,25 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
               const canResumeDraft = Boolean(onResumeDraft) && app.status === 'draft';
               const canResubmit =
                 Boolean(onResumeDraft) && app.status === 'rejected' && currentUserId && currentUserId === app.applicantId;
+              const canCancel =
+                Boolean(onCancelApplication) && currentUserId === app.applicantId && app.status === 'pending_approval';
+              const isResubmissionChild = Boolean(resubmissionChildLookup[app.id]);
+              const isResubmittedParent = resubmittedParentIdSet.has(app.id);
 
               const summary = deriveApplicationSummary(app);
               return (
               <tr
                 key={app.id}
-                className={`border-b dark:border-slate-700 transition-colors duration-150 cursor-pointer ${
+                className={`border-b dark:border-slate-700 border-l-4 transition-colors duration-150 cursor-pointer ${
                   selectedApplicationId === app.id
                     ? 'bg-blue-50 dark:bg-blue-900/30'
                     : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'
+                } ${
+                  isResubmittedParent
+                    ? 'border-purple-300 dark:border-purple-500/70'
+                    : isResubmissionChild
+                    ? 'border-indigo-300 dark:border-indigo-500/70'
+                    : 'border-transparent'
                 }`}
                 onClick={() => onApplicationSelect(app)}
               >
@@ -192,38 +216,69 @@ const ApplicationList: React.FC<ApplicationListProps> = ({ applications, onAppli
                 <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{summary.payee}</td>
                 <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{summary.customer}</td>
                 <td className="px-6 py-4">{formatDateTime(app.updatedAt || app.createdAt)}</td>
-                <td className="px-6 py-4"><ApplicationStatusBadge status={app.status} /></td>
-                <td className="px-6 py-4 text-center">
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if ((canResumeDraft || canResubmit) && onResumeDraft) {
-                        onResumeDraft(app);
-                        return;
-                      }
-                      onApplicationSelect(app);
-                    }}
-                    className="flex items-center justify-center gap-1.5 w-full text-blue-600 dark:text-blue-400 font-semibold hover:underline"
-                  >
-                    {canResumeDraft || canResubmit ? (
-                      <>
-                        <RefreshCw className="w-4 h-4" />
-                        <span>{canResumeDraft ? '下書きを再開' : '再申請'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="w-4 h-4" />
-                        <span>詳細表示</span>
-                      </>
+                <td className="px-6 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ApplicationStatusBadge status={app.status} />
+                    {isResubmissionChild && (
+                      <span
+                        className="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200"
+                        title={`元申請ID: ${resubmissionChildLookup[app.id]}`}
+                      >
+                        再申請
+                      </span>
                     )}
-                  </button>
+                    {isResubmittedParent && (
+                      <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                        再申請済
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-col items-stretch gap-2">
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if ((canResumeDraft || canResubmit) && onResumeDraft) {
+                          onResumeDraft(app);
+                          return;
+                        }
+                        onApplicationSelect(app);
+                      }}
+                      className="flex items-center justify-center gap-1.5 w-full text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                    >
+                      {canResumeDraft || canResubmit ? (
+                        <>
+                          <RefreshCw className="w-4 h-4" />
+                          <span>{canResumeDraft ? '下書きを再開' : '再申請'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-4 h-4" />
+                          <span>詳細表示</span>
+                        </>
+                      )}
+                    </button>
+                    {canCancel && (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onCancelApplication?.(app);
+                        }}
+                        className="flex items-center justify-center gap-1.5 w-full text-rose-600 dark:text-rose-400 font-semibold hover:underline"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>申請を取り消す</span>
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
             })}
             {sortedApplications.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-16 text-slate-500 dark:text-slate-400">
+                <td colSpan={8} className="text-center py-16 text-slate-500 dark:text-slate-400">
                   <p>表示する申請がありません。</p>
                 </td>
               </tr>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ApplicationList from '../ApplicationList';
 import ApplicationDetailModal from '../ApplicationDetailModal';
-import { getApplications, getApplicationCodes, approveApplication, rejectApplication } from '../../services/dataService';
+import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication } from '../../services/dataService';
 // FIX: Import AllocationDivision type.
 import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
 import { Loader, AlertTriangle } from '../Icons';
+import { summarizeResubmissionLinks } from '../../utils/applicationResubmission';
 
 // Form components
 import ExpenseReimbursementForm from '../forms/ExpenseReimbursementForm';
@@ -240,6 +241,30 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         }
     };
     
+    const handleCancelApplication = async (
+        application: ApplicationWithDetails,
+        options?: { skipConfirm?: boolean }
+    ) => {
+        if (!currentUser) return;
+        if (!options?.skipConfirm) {
+            const confirmed =
+                typeof window === 'undefined'
+                    ? true
+                    : window.confirm('この申請を承認ルートから取り消しますか？再申請する場合は新しく作成してください。');
+            if (!confirmed) {
+                return;
+            }
+        }
+        try {
+            await cancelApplication(application, currentUser as any);
+            addToast('申請を取り消しました。', 'success');
+            handleModalClose();
+            await fetchListData();
+        } catch (err: any) {
+            addToast(`エラー: ${err.message}`, 'error');
+        }
+    };
+    
     const { displayedApplications, tabCounts, tabTotals } = useMemo(() => {
         const approvalQueue = applications.filter(
             app => app.approverId === currentUser?.id && app.status === 'pending_approval'
@@ -249,7 +274,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         const submittedQueue = myApplications.filter(app => app.status !== 'draft');
         const completedQueue = applications.filter(app => {
             const involved = app.applicantId === currentUser?.id || app.approverId === currentUser?.id;
-            const isDone = app.status === 'approved' || app.status === 'rejected';
+            const isDone = app.status === 'approved' || app.status === 'rejected' || app.status === 'cancelled';
             return involved && isDone;
         });
 
@@ -286,6 +311,8 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         }
         return { displayedApplications: filteredByTab, tabCounts: counts, tabTotals: totals };
     }, [applications, activeTab, searchTerm, currentUser]);
+
+    const resubmissionInfo = useMemo(() => summarizeResubmissionLinks(applications), [applications]);
 
 
     // Form View Logic
@@ -416,6 +443,9 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         selectedApplicationId={selectedApplication?.id || null}
                         onResumeDraft={onResumeDraft}
                         currentUserId={currentUser?.id}
+                        onCancelApplication={handleCancelApplication}
+                        resubmittedParentIds={resubmissionInfo.parentIds}
+                        resubmissionChildrenMap={resubmissionInfo.childMap}
                     />
                 ) : (
                     <EmptyState />
@@ -427,6 +457,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         currentUser={currentUser}
                         onApprove={handleApprove}
                         onReject={handleReject}
+                        onCancel={handleCancelApplication}
                         onClose={handleModalClose}
                     />
                 )}

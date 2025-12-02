@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { submitApplication, saveApplicationDraft, clearApplicationDraft } from '../../services/dataService';
 import { generateWeeklyReportSummary } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
@@ -6,6 +6,7 @@ import { Loader, Sparkles, AlertTriangle } from '../Icons';
 import { User, Toast, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
+import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
 interface WeeklyReportFormProps {
     onSuccess: () => void;
@@ -27,6 +28,7 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
+    const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
 
@@ -70,7 +72,7 @@ const WeeklyReportForm: React.FC<WeeklyReportFormProps> = ({ onSuccess, applicat
 
     const buildSubmissionPayload = () => ({
         applicationCodeId,
-        formData,
+        formData: attachResubmissionMeta(formData, resubmissionMeta),
         approvalRouteId,
     });
 

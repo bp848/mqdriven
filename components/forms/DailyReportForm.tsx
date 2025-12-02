@@ -6,6 +6,7 @@ import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
 import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
+import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
 interface DailyReportFormProps {
     onSuccess: () => void;
@@ -70,6 +71,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
     const templateText = useMemo(() => buildReportTemplate(formData), [formData]);
+    const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
 
     const persistSavedReports = (next: Record<string, DailyReportData>) => {
         setSavedReports(next);
@@ -207,7 +209,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
     const buildSubmissionPayload = () => ({
         applicationCodeId,
-        formData,
+        formData: attachResubmissionMeta(formData, resubmissionMeta),
         approvalRouteId,
     });
 

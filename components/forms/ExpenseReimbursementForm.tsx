@@ -24,6 +24,7 @@ import {
     ApplicationWithDetails,
 } from '../../types';
 import { findMatchingPaymentRecipientId, findMatchingCustomerId } from '../../utils/matching';
+import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
 // --- TYPES AND CONSTANTS ---
 
@@ -275,6 +276,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [isRestoring, setIsRestoring] = useState(true);
     const [error, setError] = useState('');
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
+    const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
 
     const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError || hasSubmitted || isDocumentUploading;
 
@@ -531,22 +533,24 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
               }
             : {};
 
+        const baseFormData = {
+            departmentId,
+            approvalRouteId,
+            notes,
+            invoice: {
+                ...invoice,
+                ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
+            },
+            mqAccounting: {
+                expectedSalesPQ: mqExpectedSalesPQ === '' ? undefined : mqExpectedSalesPQ,
+                expectedMarginMQ: mqExpectedMarginMQ === '' ? undefined : mqExpectedMarginMQ,
+            },
+            ...attachmentPayload,
+        };
+
         return {
             applicationCodeId,
-            formData: {
-                departmentId,
-                approvalRouteId,
-                notes,
-                invoice: {
-                    ...invoice,
-                    ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
-                },
-                mqAccounting: {
-                    expectedSalesPQ: mqExpectedSalesPQ === '' ? undefined : mqExpectedSalesPQ,
-                    expectedMarginMQ: mqExpectedMarginMQ === '' ? undefined : mqExpectedMarginMQ,
-                },
-                ...attachmentPayload,
-            },
+            formData: attachResubmissionMeta(baseFormData, resubmissionMeta),
             approvalRouteId,
             documentUrl: documentAttachment?.publicUrl,
         };
