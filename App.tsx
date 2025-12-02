@@ -499,17 +499,36 @@ const App: React.FC = () => {
     }, [currentUser, supabaseUser, addToast]);
 
 
-    useEffect(() => {
-        if (!isSupabaseConfigured) {
-            setIsLoading(false);
-            return;
-        }
+useEffect(() => {
+    if (!isSupabaseConfigured) {
+        setIsLoading(false);
+        return;
+    }
         if (!isAuthenticated) {
             setIsLoading(false);
             return;
         }
         loadAllData();
     }, [isSupabaseConfigured, isAuthenticated, loadAllData]);
+
+    useEffect(() => {
+        if (!isSupabaseConfigured) return;
+        const supabase = getSupabase();
+        const channel = supabase
+            .channel('customers-realtime')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'customers' },
+                () => {
+                    loadAllData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [isSupabaseConfigured, loadAllData]);
     
     useEffect(() => {
         if (currentPage === 'analysis_dashboard' && jobs.length > 0 && !isAIOff) {

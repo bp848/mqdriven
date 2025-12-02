@@ -1031,7 +1031,15 @@ export const getCustomers = async (): Promise<Customer[]> => {
 
 export const addCustomer = async (customerData: Partial<Customer>): Promise<Customer> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('customers').insert(customerToDbCustomer(customerData)).select().single();
+    const payload: Partial<Customer> = {
+        ...customerData,
+        createdAt: customerData.createdAt ?? new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+        .from('customers')
+        .insert(customerToDbCustomer(payload))
+        .select()
+        .single();
     ensureSupabaseSuccess(error, 'Failed to add customer');
     return dbCustomerToCustomer(data);
 };
