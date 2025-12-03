@@ -4,7 +4,7 @@ import SortableHeader from '../ui/SortableHeader';
 import EmptyState from '../ui/EmptyState';
 import { FileText, PlusCircle, Loader, Sparkles, Trash2, Send, X, Save, Eye, Pencil } from '../Icons';
 import { formatJPY, formatDate } from '../../utils';
-import { draftEstimate } from '../../services/geminiService';
+import { draftEstimate, draftEstimateFromSpecFile } from '../../services/geminiService';
 import EstimateDetailModal from './EstimateDetailModal';
 
 declare const jspdf: any;
@@ -22,11 +22,27 @@ interface EstimateModalProps {
     isAIOff: boolean;
 }
 
+const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                resolve(reader.result.split(',')[1]);
+            } else {
+                reject(new Error('ファイルの読み込みに失敗しました。'));
+            }
+        };
+        reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました。'));
+        reader.readAsDataURL(file);
+    });
+};
+
 const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, customers, addToast, estimateToEdit, currentUser, isAIOff }) => {
     const [estimate, setEstimate] = useState<Partial<Estimate>>({});
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
     const [aiPrompt, setAiPrompt] = useState('');
     const [isAiLoading, setIsAiLoading] = useState(false);
+    const [isSpecLoading, setIsSpecLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -82,6 +98,34 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
             setError(e instanceof Error ? e.message : 'AIによる下書き作成に失敗しました。');
         } finally {
             setIsAiLoading(false);
+        }
+    };
+
+    const handleSpecUpload = async (file: File | null) => {
+        if (!file) return;
+        if (isAIOff) {
+            addToast('AI機能は現在無効です。', 'error');
+            return;
+        }
+        setIsSpecLoading(true);
+        setError('');
+        try {
+            const base64 = await readFileAsBase64(file);
+            const draft = await draftEstimateFromSpecFile(base64, file.type);
+            setEstimate(prev => ({
+                ...prev,
+                title: draft.title ?? prev.title,
+                items: draft.items ?? prev.items,
+                notes: draft.notes ?? prev.notes,
+                deliveryDate: draft.deliveryDate ?? prev.deliveryDate,
+                paymentTerms: draft.paymentTerms ?? prev.paymentTerms,
+                deliveryMethod: draft.deliveryMethod ?? prev.deliveryMethod,
+            }));
+            addToast('仕様書を解析して見積の下書きを作成しました。', 'success');
+        } catch (e: any) {
+            setError(e?.message || '仕様書の解析に失敗しました。');
+        } finally {
+            setIsSpecLoading(false);
         }
     };
     
@@ -166,6 +210,28 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
                             {isAiLoading ? <Loader className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />} AIで下書き
                         </button>
                       </div>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            仕様書アップロード (PDF / 画像) から見積りを作成
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="file"
+                                accept="application/pdf,image/*"
+                                onChange={e => {
+                                    const file = e.target.files?.[0] || null;
+                                    handleSpecUpload(file);
+                                    if (e.target.value) e.target.value = '';
+                                }}
+                                disabled={isSpecLoading || isAIOff}
+                                className="text-sm"
+                            />
+                            {isSpecLoading && <Loader className="w-4 h-4 animate-spin text-blue-600" />}
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-300 mt-1">
+                        スキャンした仕様書やPDFをアップロードすると、自動で明細案を起こします。
+                      </p>
                     </div>
                     {/* Form Fields */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
