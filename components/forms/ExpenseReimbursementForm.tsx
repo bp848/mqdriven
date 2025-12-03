@@ -270,6 +270,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [departmentId, setDepartmentId] = useState<string>('');
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [notes, setNotes] = useState('');
+    const [isInternalExpense, setIsInternalExpense] = useState(false);
     const [mqExpectedSalesPQ, setMqExpectedSalesPQ] = useState<number | ''>('');
     const [mqExpectedMarginMQ, setMqExpectedMarginMQ] = useState<number | ''>('');
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -299,6 +300,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         setDepartmentId('');
         setApprovalRouteId('');
         setNotes('');
+        setIsInternalExpense(false);
         setMqExpectedSalesPQ('');
         setMqExpectedMarginMQ('');
         setDocumentAttachment(null);
@@ -344,6 +346,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     setDepartmentId(data.departmentId || '');
                     setApprovalRouteId(data.approvalRouteId || '');
                     setNotes(data.notes || '');
+                    setIsInternalExpense(Boolean(data.isInternalExpense));
 
                     const mq = data.mqAccounting || {};
                     setMqExpectedSalesPQ(
@@ -543,6 +546,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             departmentId,
             approvalRouteId,
             notes,
+            isInternalExpense,
             invoice: {
                 ...invoice,
                 ocrExtractedFields: Array.from(invoice.ocrExtractedFields),
@@ -815,6 +819,21 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 <FormField label="承認ルート" required>
                                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} highlightRequired />
                                 </FormField>
+                                <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-600 rounded-xl p-4 space-y-2">
+                                    <label className="flex items-start gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                        <input
+                                            type="checkbox"
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            checked={isInternalExpense}
+                                            onChange={e => setIsInternalExpense(e.target.checked)}
+                                            disabled={isDisabled}
+                                        />
+                                        <span>社内経費として処理（顧客や案件へ配賦しない）</span>
+                                    </label>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        社内備品や福利厚生費など、特定顧客に紐づかない支出の場合はチェックしてください。帳票出力時に「社内用」の目印が付きます。
+                                    </p>
+                                </div>
                                 <FormField label="備考" htmlFor="notes">
                                     <textarea
                                         id="notes"

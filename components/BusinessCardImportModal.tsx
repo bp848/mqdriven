@@ -435,6 +435,7 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                       </div>
                     )}
                     {draft.status !== 'error' && (
+                      <>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(
                           [
@@ -484,6 +485,7 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                           </button>
                         )}
                       </div>
+                      </>
                     )}
                   </div>
                 );
