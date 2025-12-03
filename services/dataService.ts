@@ -1897,9 +1897,66 @@ export const getEstimates = async (): Promise<Estimate[]> => {
     ensureSupabaseSuccess(error, 'Failed to fetch estimates');
     return data || [];
 };
+const generateEstimateId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `est-${Date.now()}`;
+};
+
 export const addEstimate = async (estimateData: any): Promise<void> => {
     const supabase = getSupabase();
-    const { error } = await supabase.from('estimates').insert(estimateData);
+
+    const normalizedItems = (estimateData.items ?? []).map((item: any) => {
+        const quantity = Number(item.quantity ?? item.qty ?? 0);
+        const unitPrice = Number(item.unitPrice ?? 0);
+        const subtotal = Number(
+            item.subtotal ??
+            item.price ??
+            (quantity * unitPrice)
+        );
+        const taxAmount = Number(
+            item.taxAmount ??
+            Math.round(subtotal * 0.1)
+        );
+        const total = Number(item.total ?? subtotal + taxAmount);
+
+        return {
+            ...item,
+            name: item.name ?? item.content ?? '',
+            qty: item.qty ?? quantity,
+            subtotal,
+            taxAmount,
+            total,
+        };
+    });
+
+    const subtotal = normalizedItems.reduce((sum: number, item: any) => sum + (item.subtotal ?? 0), 0);
+    const taxTotal = estimateData.taxTotal ?? Math.round(subtotal * 0.1);
+    const grandTotal = estimateData.grandTotal ?? subtotal + taxTotal;
+
+    const { data: latestNumberRows, error: numberError } = await supabase
+        .from('estimates')
+        .select('estimateNumber')
+        .order('estimateNumber', { ascending: false })
+        .limit(1);
+    ensureSupabaseSuccess(numberError, 'Failed to fetch latest estimate number');
+    const latestNumber = latestNumberRows?.[0]?.estimateNumber ?? 23000;
+
+    const payload = {
+        ...estimateData,
+        id: estimateData.id ?? generateEstimateId(),
+        estimateNumber: latestNumber + 1,
+        items: normalizedItems,
+        subtotal,
+        taxTotal,
+        grandTotal,
+        total: grandTotal,
+        createdAt: estimateData.createdAt ?? new Date().toISOString(),
+        updatedAt: estimateData.updatedAt ?? new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('estimates').insert(payload);
     ensureSupabaseSuccess(error, 'Failed to add estimate');
 };
 

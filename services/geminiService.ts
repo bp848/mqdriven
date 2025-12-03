@@ -696,6 +696,33 @@ export const draftEstimate = async (prompt: string): Promise<Partial<Estimate>> 
   });
 };
 
+export const draftEstimateFromSpecFile = async (
+  fileBase64: string,
+  mimeType: string,
+): Promise<Partial<Estimate>> => {
+  checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const filePart = { inlineData: { data: fileBase64, mimeType } };
+    const instructionPart = {
+      text: `このファイルは印刷物などの仕様書/PDF/スキャン画像です。内容を読み取り、以下のJSONフォーマットで見積の下書きを作成してください。数量、用紙、加工、納期、支払条件が読み取れない場合は推定し、備考にその旨を記載してください。`,
+    };
+    const response = await ai.models.generateContent({
+      model,
+      contents: { parts: [filePart, instructionPart] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: draftEstimateSchema as any,
+      },
+    });
+    const jsonStr = response.text.trim();
+    const parsed = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed.items)) {
+      parsed.items = [];
+    }
+    return parsed;
+  });
+};
+
 export const generateProposalSection = async (
   sectionTitle: string,
   customer: Customer,

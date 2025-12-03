@@ -1,9 +1,40 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Estimate } from '../../types.ts';
 
 type Props = { estimate: Estimate; footerLeft?: string; footerRight?: string };
 
+const DEFAULT_TAX_RATE = 0.1;
+
+const formatCurrency = (value?: number) => `¥${Number(value ?? 0).toLocaleString()}`;
+
 export const EstimatePdfContent: React.FC<Props> = ({ estimate, footerLeft, footerRight }) => {
+  const normalizedItems = useMemo(() => {
+    return estimate.items.map(item => {
+      const name = item.name ?? item.content ?? '';
+      const qty = item.qty ?? item.quantity ?? 0;
+      const unitPrice = item.unitPrice ?? 0;
+      const subtotal = item.subtotal ?? item.price ?? qty * unitPrice;
+      const taxAmount = item.taxAmount ?? Math.round(subtotal * DEFAULT_TAX_RATE);
+      const total = item.total ?? subtotal + taxAmount;
+      return {
+        name,
+        qty,
+        unit: item.unit ?? '',
+        unitPrice,
+        subtotal,
+        taxAmount,
+        total,
+      };
+    });
+  }, [estimate.items]);
+
+  const totals = useMemo(() => {
+    const subtotal = estimate.subtotal ?? normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const taxTotal = estimate.taxTotal ?? Math.round(subtotal * DEFAULT_TAX_RATE);
+    const grandTotal = estimate.grandTotal ?? subtotal + taxTotal;
+    return { subtotal, taxTotal, grandTotal };
+  }, [estimate.subtotal, estimate.taxTotal, estimate.grandTotal, normalizedItems]);
+
   // 画面プレビュー用（実PDFは generateMultipagePdf を使用）
   return (
     <div className="w-full h-full p-6 text-sm text-white bg-[#1E1E2F]" style={{ overflow: 'hidden' }}>
@@ -37,16 +68,16 @@ export const EstimatePdfContent: React.FC<Props> = ({ estimate, footerLeft, foot
           </tr>
         </thead>
         <tbody>
-          {estimate.items.map((it, i) => (
+          {normalizedItems.map((it, i) => (
             <tr key={i}>
-              <td className="border border-[#444] p-2">{it.name}</td>
+              <td className="border border-[#444] p-2">{it.name || '-'}</td>
               <td className="border border-[#444] p-2 text-center">
-                {it.qty}{it.unit ?? ''}
+                {it.qty}{it.unit}
               </td>
-              <td className="border border-[#444] p-2 text-right">¥{it.unitPrice.toLocaleString()}</td>
-              <td className="border border-[#444] p-2 text-right">¥{(it.subtotal ?? 0).toLocaleString()}</td>
-              <td className="border border-[#444] p-2 text-right">¥{(it.taxAmount ?? 0).toLocaleString()}</td>
-              <td className="border border-[#444] p-2 text-right">¥{(it.total ?? 0).toLocaleString()}</td>
+              <td className="border border-[#444] p-2 text-right">{formatCurrency(it.unitPrice)}</td>
+              <td className="border border-[#444] p-2 text-right">{formatCurrency(it.subtotal)}</td>
+              <td className="border border-[#444] p-2 text-right">{formatCurrency(it.taxAmount)}</td>
+              <td className="border border-[#444] p-2 text-right">{formatCurrency(it.total)}</td>
             </tr>
           ))}
         </tbody>
@@ -56,13 +87,13 @@ export const EstimatePdfContent: React.FC<Props> = ({ estimate, footerLeft, foot
         <div />
         <div className="border border-[#444] p-3">
           <div className="flex justify-between">
-            <span>小計</span><span>¥{estimate.subtotal.toLocaleString()}</span>
+            <span>小計</span><span>{formatCurrency(totals.subtotal)}</span>
           </div>
           <div className="flex justify-between">
-            <span>消費税</span><span>¥{estimate.taxTotal.toLocaleString()}</span>
+            <span>消費税</span><span>{formatCurrency(totals.taxTotal)}</span>
           </div>
           <div className="flex justify-between font-semibold">
-            <span>合計</span><span>¥{estimate.grandTotal.toLocaleString()}</span>
+            <span>合計</span><span>{formatCurrency(totals.grandTotal)}</span>
           </div>
         </div>
       </div>
