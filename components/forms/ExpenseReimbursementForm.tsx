@@ -295,6 +295,18 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         return (mq / pq) * 100;
     }, [mqExpectedSalesPQ, mqExpectedMarginMQ]);
 
+    const normalizeLinesForInternalExpense = useCallback((lines: ExpenseLine[]): ExpenseLine[] => {
+        if (!isInternalExpense) return lines;
+        return lines.map(line => ({
+            ...line,
+            customerId: '',
+            customCustomerName: '',
+            projectId: '',
+            projectName: '',
+            nonCustomerExpense: true,
+        }));
+    }, [isInternalExpense]);
+
     const resetFormFields = useCallback(() => {
         setInvoice(createEmptyInvoiceDraft());
         setDepartmentId('');
@@ -342,7 +354,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     } else {
                         setDocumentAttachment(null);
                     }
-                    setInvoice(restoredInvoice);
+                    setInvoice({
+                        ...restoredInvoice,
+                        lines: data.isInternalExpense ? normalizeLinesForInternalExpense(restoredInvoice.lines) : restoredInvoice.lines,
+                    });
                     setDepartmentId(data.departmentId || '');
                     setApprovalRouteId(data.approvalRouteId || '');
                     setNotes(data.notes || '');
@@ -379,6 +394,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     };
 
     const handleLineChange = (lineId: string, field: keyof ExpenseLine, value: any) => {
+        if (isInternalExpense && (field === 'customerId' || field === 'customCustomerName' || field === 'projectId' || field === 'projectName')) {
+            return;
+        }
         setInvoice(prev => {
             const newLines = prev.lines.map(line => {
                 if (line.id !== lineId) return line;
@@ -395,18 +413,27 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     };
 
     const addLine = () => {
-        setInvoice(prev => ({ ...prev, lines: [...prev.lines, createEmptyLine()] }));
+        setInvoice(prev => ({ ...prev, lines: normalizeLinesForInternalExpense([...prev.lines, createEmptyLine()]) }));
     };
 
     const removeLine = (lineId: string) => {
         setInvoice(prev => {
             const newLines = prev.lines.filter(l => l.id !== lineId);
             if (newLines.length === 0) {
-                return { ...prev, lines: [createEmptyLine()] };
+                return { ...prev, lines: normalizeLinesForInternalExpense([createEmptyLine()]) };
             }
             return { ...prev, lines: newLines };
         });
     };
+
+    useEffect(() => {
+        if (isInternalExpense) {
+            setInvoice(prev => ({
+                ...prev,
+                lines: normalizeLinesForInternalExpense(prev.lines),
+            }));
+        }
+    }, [isInternalExpense, normalizeLinesForInternalExpense]);
 
     const persistDocumentAttachment = async (file: File): Promise<ExpenseAttachment> => {
         setIsDocumentUploading(true);
@@ -751,6 +778,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                     isDisabled={isDisabled}
                                     customers={customers}
                                     jobs={jobs}
+                                    isInternalExpense={isInternalExpense}
                                 />
                             </CardContent>
                             <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 flex justify-end items-center gap-6 bg-slate-50/50 dark:bg-slate-800/30 rounded-b-xl">
@@ -998,7 +1026,8 @@ const LineItemTable: React.FC<{
     isDisabled: boolean;
     customers: Customer[];
     jobs: Job[];
-}> = ({ lines, onLineChange, onAddLine, onRemoveLine, isDisabled, customers, jobs }) => {
+    isInternalExpense: boolean;
+}> = ({ lines, onLineChange, onAddLine, onRemoveLine, isDisabled, customers, jobs, isInternalExpense }) => {
     return (
         <div className="flow-root">
             <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -1008,8 +1037,15 @@ const LineItemTable: React.FC<{
                             <tr>
                                 <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 dark:text-white sm:pl-0">品名 / 用途</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">日付</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">顧客候補（オートコンプリート可）</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">プロジェクト / 案件名</th>
+                                {!isInternalExpense && (
+                                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">顧客候補（オートコンプリート可）</th>
+                                )}
+                                {!isInternalExpense && (
+                                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">プロジェクト / 案件名</th>
+                                )}
+                                {isInternalExpense && (
+                                    <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">社内用途メモ</th>
+                                )}
                                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">金額(税抜)</th>
                                 <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0"><span className="sr-only">削除</span></th>
                             </tr>
@@ -1080,68 +1116,76 @@ const LineItemTable: React.FC<{
                                                 disabled={isDisabled}
                                             />
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                            <div className="space-y-2">
-                                                <input
-                                                    type="text"
-                                                    list={customerDatalistId}
-                                                    value={customerDisplayName}
-                                                    onChange={e => handleCustomerInputChange(e.target.value)}
-                                                    onBlur={e => handleCustomerInputChange(e.target.value)}
-                                                    className="w-full rounded-md border-slate-300 dark:border-slate-600"
-                                                    disabled={isDisabled}
-                                                    placeholder="顧客名や「その他」「校正用プリント」など"
-                                                />
-                                                <datalist id={customerDatalistId}>
-                                                    {customers.map(customer => (
-                                                        <option key={customer.id} value={customer.customerName} />
-                                                    ))}
-                                                </datalist>
-                                                <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                        {!isInternalExpense ? (
+                                            <>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                                <div className="space-y-2">
                                                     <input
-                                                        type="checkbox"
-                                                        checked={isNonCustomerExpense}
-                                                        onChange={e => {
-                                                            onLineChange(line.id, 'nonCustomerExpense', e.target.checked);
-                                                            if (e.target.checked) {
-                                                                onLineChange(line.id, 'customerId', '');
-                                                            }
-                                                        }}
+                                                        type="text"
+                                                        list={customerDatalistId}
+                                                        value={customerDisplayName}
+                                                        onChange={e => handleCustomerInputChange(e.target.value)}
+                                                        onBlur={e => handleCustomerInputChange(e.target.value)}
+                                                        className="w-full rounded-md border-slate-300 dark:border-slate-600"
                                                         disabled={isDisabled}
+                                                        placeholder="顧客名や「その他」「校正用プリント」など"
                                                     />
-                                                    顧客に紐付けず処理する（資材・社内用途など）
-                                                </label>
-                                                {!line.customerId && !line.customCustomerName && !isDisabled && (
-                                                    <p className="text-xs text-amber-600">
-                                                        まず名称を入力しておくと後で得意先登録がしやすくなります。
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                            <div className="space-y-2">
-                                                <input
-                                                    type="text"
-                                                    list={projectDatalistId}
-                                                    value={projectDisplayName}
-                                                    onChange={e => handleProjectInputChange(e.target.value)}
-                                                    onBlur={e => handleProjectInputChange(e.target.value)}
-                                                    className="w-full rounded-md border-slate-300 dark:border-slate-600"
-                                                    disabled={isDisabled}
-                                                    placeholder="案件名 / プロジェクト名（自由入力可）"
-                                                />
-                                                <datalist id={projectDatalistId}>
-                                                    {limitedProjectOptions.map(project => (
-                                                        <option key={project.id} value={project.title} />
-                                                    ))}
-                                                </datalist>
-                                                {!line.customerId && (
-                                                    <p className="text-xs text-slate-500">
-                                                        得意先が未登録でも案件名をメモできます。登録後に紐付けてください。
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </td>
+                                                    <datalist id={customerDatalistId}>
+                                                        {customers.map(customer => (
+                                                            <option key={customer.id} value={customer.customerName} />
+                                                        ))}
+                                                    </datalist>
+                                                    <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isNonCustomerExpense}
+                                                            onChange={e => {
+                                                                onLineChange(line.id, 'nonCustomerExpense', e.target.checked);
+                                                                if (e.target.checked) {
+                                                                    onLineChange(line.id, 'customerId', '');
+                                                                }
+                                                            }}
+                                                            disabled={isDisabled}
+                                                        />
+                                                        顧客に紐付けず処理する（資材・社内用途など）
+                                                    </label>
+                                                    {!line.customerId && !line.customCustomerName && !isDisabled && (
+                                                        <p className="text-xs text-amber-600">
+                                                            まず名称を入力しておくと後で得意先登録がしやすくなります。
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                                <div className="space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        list={projectDatalistId}
+                                                        value={projectDisplayName}
+                                                        onChange={e => handleProjectInputChange(e.target.value)}
+                                                        onBlur={e => handleProjectInputChange(e.target.value)}
+                                                        className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                        disabled={isDisabled}
+                                                        placeholder="案件名 / プロジェクト名（自由入力可）"
+                                                    />
+                                                    <datalist id={projectDatalistId}>
+                                                        {limitedProjectOptions.map(project => (
+                                                            <option key={project.id} value={project.title} />
+                                                        ))}
+                                                    </datalist>
+                                                    {!line.customerId && (
+                                                        <p className="text-xs text-slate-500">
+                                                            得意先が未登録でも案件名をメモできます。登録後に紐付けてください。
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            </>
+                                        ) : (
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                                                社内経費として処理されます。必要であれば備考や各明細の品名に部署・用途を記載してください。
+                                            </td>
+                                        )}
                                         <td className="whitespace-nowrap px-3 py-4 text-sm">
                                             <input
                                                 type="number"
