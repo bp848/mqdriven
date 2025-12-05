@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Search } from './Icons';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Briefcase, Search, Users } from './Icons';
 
 type HeaderAction = {
   label: string;
@@ -7,6 +7,14 @@ type HeaderAction = {
   icon?: React.ElementType;
   disabled?: boolean;
   tooltip?: string;
+};
+
+type SearchSuggestion = {
+  id: string;
+  value: string;
+  label: string;
+  subLabel?: string;
+  type?: 'customer' | 'job';
 };
 
 interface HeaderProps {
@@ -17,6 +25,8 @@ interface HeaderProps {
     value: string;
     onChange: (value: string) => void;
     placeholder: string;
+    suggestions?: SearchSuggestion[];
+    onSuggestionSelect?: (suggestion: SearchSuggestion) => void;
   };
 }
 
@@ -50,6 +60,7 @@ const ActionButton: React.FC<{ action: HeaderAction; variant?: 'primary' | 'seco
 
 const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, search }) => {
   const [now, setNow] = useState<Date>(new Date());
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -58,10 +69,39 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (!search) {
+      setIsSearchFocused(false);
+    }
+  }, [search]);
+
   const timeString = now.toLocaleTimeString('ja-JP', {
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const showSuggestions = Boolean(
+    search &&
+      search.value.trim() &&
+      search.suggestions &&
+      search.suggestions.length > 0 &&
+      isSearchFocused
+  );
+
+  const suggestionIconMap = useMemo(
+    () => ({
+      customer: Users,
+      job: Briefcase,
+    }),
+    []
+  );
+
+  const handleSuggestionSelect = (suggestion: SearchSuggestion) => {
+    if (!search) return;
+    search.onChange(suggestion.value);
+    search.onSuggestionSelect?.(suggestion);
+    setIsSearchFocused(false);
+  };
 
   return (
     <header className="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-700">
@@ -71,18 +111,59 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
           {timeString}
         </div>
         {search && (
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="w-5 h-5 text-slate-400" />
-                </div>
-                <input
-                    type="text"
-                    placeholder={search.placeholder}
-                    value={search.value}
-                    onChange={(e) => search.onChange(e.target.value)}
-                    className="w-80 text-base bg-slate-100 dark:bg-slate-700/50 border border-transparent dark:border-transparent text-slate-900 dark:text-white rounded-lg p-2.5 pl-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="w-5 h-5 text-slate-400" />
             </div>
+            <input
+              type="text"
+              placeholder={search.placeholder}
+              value={search.value}
+              onChange={(e) => search.onChange(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              className="w-80 text-base bg-slate-100 dark:bg-slate-700/50 border border-transparent dark:border-transparent text-slate-900 dark:text-white rounded-lg p-2.5 pl-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            {showSuggestions && (
+              <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl shadow-slate-900/10 max-h-72 overflow-y-auto">
+                <div className="px-3 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500">
+                  サジェスト候補
+                </div>
+                <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {search.suggestions!.map((suggestion) => {
+                    const Icon =
+                      (suggestion.type && suggestionIconMap[suggestion.type]) || Search;
+                    return (
+                      <li key={suggestion.id}>
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-blue-50 dark:hover:bg-slate-700/60 transition-colors"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSuggestionSelect(suggestion);
+                          }}
+                        >
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-200">
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                              {suggestion.label}
+                            </p>
+                            {suggestion.subLabel && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {suggestion.subLabel}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
         {(primaryAction || (secondaryActions && secondaryActions.length > 0)) && (
           <div className="flex items-center gap-2">
