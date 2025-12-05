@@ -257,7 +257,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
             );
             case 'karte':
                 return (
-                    <CustomerInfoForm customerId={customer?.id ?? null} />
+                    <CustomerInfoForm customerId={customer?.id ?? null} onSaved={onClose} />
                 );
             default: return null;
         }
