@@ -322,13 +322,29 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* AI提案カードは一時的に非表示 */}
-                {/* <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} /> */}
+                <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} />
                 <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
                 <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} isLoading={isBulletinLoading} />
             </div>
 
-            {/* KPIカードとグラフは非表示 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <MQCard title="限界利益" value={mq} subValue={`${mRate}%`} subLabel="M率" colorClass="bg-gradient-to-br from-blue-500 to-blue-600" meterGoal={MONTHLY_GOALS.mq} />
+                <MQCard title="利益" value={g} subValue={getFmRatioRank(parseFloat(fmRatio))} subLabel={`F/M比 ${fmRatio}%`} colorClass="bg-gradient-to-br from-violet-500 to-violet-600" />
+                <MQCard title="売上高" value={pq} colorClass="bg-gradient-to-br from-sky-500 to-sky-600" />
+                <MQCard title="固定費" value={f} colorClass="bg-gradient-to-br from-orange-500 to-orange-600">
+                    <div className="text-xs text-white/80 space-y-1">
+                        <p>人件費: {formatJPY(fBreakdown.f1)}</p>
+                        <p>その他経費: {formatJPY(fBreakdown.f2)}</p>
+                        <p>営業外費用: {formatJPY(fBreakdown.f3)}</p>
+                        <p>販管費: {formatJPY(fBreakdown.f4)}</p>
+                        <p>減価償却費: {formatJPY(fBreakdown.f5)}</p>
+                    </div>
+                </MQCard>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6">
+                <MonthlyTrendChart data={chartData} />
+            </div>
         </div>
     );
 };

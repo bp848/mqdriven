@@ -43,6 +43,10 @@ import {
     ProjectBudgetFilter,
     BulletinThread,
     BulletinComment,
+    DraftJournalEntry,
+    PayableItem,
+    ReceivableItem,
+    CashScheduleData,
 } from '../types';
 
 type SupabaseClient = ReturnType<typeof getSupabase>;
@@ -1254,6 +1258,24 @@ export const deleteApprovalRoute = async (id: string): Promise<void> => {
     ensureSupabaseSuccess(error, 'Failed to delete approval route');
 };
 
+export const getApprovedApplications = async (): Promise<ApplicationWithDetails[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('applications')
+        .select(`*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`)
+        .eq('status', 'approved')
+        .order('approved_at', { ascending: false });
+        
+    ensureSupabaseSuccess(error, 'Failed to fetch approved applications');
+    return (data || []).map(app => ({
+        ...dbApplicationToApplication(app),
+        applicant: app.applicant,
+        applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
+        approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
+    }));
+};
+
+
 export const getApplications = async (currentUser: User | null): Promise<ApplicationWithDetails[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
@@ -1735,6 +1757,35 @@ export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Pro
     ensureSupabaseSuccess(error, '支払先の保存に失敗しました');
 };
 
+export const getGeneralLedger = async (accountId: string, period: { start: string, end: string }): Promise<GeneralLedgerEntry[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('get_general_ledger', {
+        p_account_id: accountId,
+        p_start_date: period.start,
+        p_end_date: period.end,
+    });
+
+    ensureSupabaseSuccess(error, 'Failed to fetch general ledger entries');
+
+    if (!data) {
+        return [];
+    }
+
+    return (data as any[]).map(row => ({
+        id: row.id,
+        date: row.date,
+        voucherNo: row.voucher_no,
+        description: row.description,
+        partner: row.partner,
+        debit: row.debit,
+        credit: row.credit,
+        balance: row.balance,
+        // The 'type' is for UI display only and can be derived on the client
+        type: row.debit > 0 ? '借' : (row.credit > 0 ? '貸' : '繰'),
+    }));
+};
+
+
 export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
     if (!item.companyName && !item.recipientName) {
         throw new Error('支払先の名称を入力してください。');
@@ -2003,35 +2054,83 @@ export const getInvoices = async (): Promise<Invoice[]> => {
 
 export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoiceNo: string }> => {
     const supabase = getSupabase();
-    const { data: jobsToInvoice, error: jobsError } = await supabase.from('jobs').select('*').in('id', jobIds);
-    if (jobsError) throw formatSupabaseError('Failed to fetch jobs for invoicing', jobsError);
-    if (!jobsToInvoice || jobsToInvoice.length === 0) throw new Error("No jobs found for invoicing.");
 
-    const customerName = jobsToInvoice[0].client_name;
-    const subtotal = jobsToInvoice.reduce((sum, job) => sum + job.price, 0);
-    const tax = subtotal * 0.1;
-    const total = subtotal + tax;
+    // This is a placeholder implementation.
+    // In a real scenario, you would call an RPC function or a Supabase Edge Function
+    // to handle the complex logic of invoice creation in a transaction.
+
+    const { data: jobs, error: jobsError } = await supabase
+        .from('projects')
+        .select('id, customer_name, amount')
+        .in('id', jobIds);
+
+    ensureSupabaseSuccess(jobsError, 'Failed to fetch jobs for invoicing');
+
+    if (!jobs || jobs.length === 0) {
+        throw new Error('No valid jobs found for invoicing.');
+    }
+
+    const customerName = jobs[0].customer_name;
+    if (!jobs.every(j => j.customer_name === customerName)) {
+        throw new Error('All jobs must belong to the same customer to be invoiced together.');
+    }
+
     const invoiceNo = `INV-${Date.now()}`;
+    const invoiceDate = new Date().toISOString().split('T')[0];
+    const subtotalAmount = jobs.reduce((sum, job) => sum + (job.amount || 0), 0);
+    const taxAmount = subtotalAmount * 0.1; // Assuming 10% tax
+    const totalAmount = subtotalAmount + taxAmount;
 
-    const { data: newInvoice, error: invoiceError } = await supabase.from('invoices').insert({
-        invoice_no: invoiceNo, invoice_date: new Date().toISOString().split('T')[0], customer_name: customerName,
-        subtotal_amount: subtotal, tax_amount: tax, total_amount: total, status: 'issued',
-    }).select().single();
-    if (invoiceError) throw formatSupabaseError('Failed to create invoice record', invoiceError);
+    const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert({
+            invoice_no: invoiceNo,
+            invoice_date: invoiceDate,
+            customer_name: customerName,
+            subtotal_amount: subtotalAmount,
+            tax_amount: taxAmount,
+            total_amount: totalAmount,
+            status: 'draft',
+        })
+        .select('id')
+        .single();
+    
+    ensureSupabaseSuccess(invoiceError, 'Failed to create invoice header');
 
-    const invoiceItems: Omit<InvoiceItem, 'id'>[] = jobsToInvoice.map((job, index) => ({
-        invoiceId: newInvoice.id, jobId: job.id, description: `${job.title} (案件番号: ${job.job_number})`,
-        quantity: 1, unit: '式', unitPrice: job.price, lineTotal: job.price, sortIndex: index,
+    const invoiceItems = jobs.map((job, index) => ({
+        invoice_id: invoice.id,
+        job_id: job.id,
+        description: `Job #${job.id}`,
+        quantity: 1,
+        unit: '式',
+        unit_price: job.amount || 0,
+        line_total: job.amount || 0,
+        sort_index: index,
     }));
-    const { error: itemsError } = await supabase.from('invoice_items').insert(invoiceItems.map(item => ({...item, invoice_id: item.invoiceId, job_id: item.jobId, unit_price: item.unitPrice, line_total: item.lineTotal, sort_index: item.sortIndex})));
-    if (itemsError) throw formatSupabaseError('Failed to create invoice items', itemsError);
 
-    const { error: updateJobsError } = await supabase.from('jobs').update({
-        invoice_id: newInvoice.id, invoice_status: InvoiceStatus.Invoiced, invoiced_at: new Date().toISOString(),
-    }).in('id', jobIds);
-    if (updateJobsError) throw formatSupabaseError('Failed to update jobs after invoicing', updateJobsError);
+    const { error: itemsError } = await supabase.from('invoice_items').insert(invoiceItems);
+    ensureSupabaseSuccess(itemsError, 'Failed to create invoice items');
 
     return { invoiceNo };
+};
+
+export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('get_journal_drafts');
+
+    ensureSupabaseSuccess(error, '仕訳下書きの取得に失敗しました。');
+
+    // The RPC returns data in the shape of DraftJournalEntry[], so we can cast it.
+    return (data as any[] as DraftJournalEntry[]) || [];
+};
+
+export const approveJournalBatch = async (batchId: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('approve_journal_batch', {
+        p_batch_id: batchId
+    });
+
+    ensureSupabaseSuccess(error, 'Failed to approve journal batch');
 };
 
 export const getFaxIntakes = async (): Promise<FaxIntake[]> => {
@@ -2228,3 +2327,40 @@ export const updateJobReadyToInvoice = async (jobId: string, value: boolean): Pr
     const { error } = await supabase.from('jobs').update({ ready_to_invoice: value }).eq('id', jobId);
     ensureSupabaseSuccess(error, 'Failed to update job ready status');
 };
+
+export const getPayables = async (filters: { status?: string, startDate?: string, endDate?: string }): Promise<PayableItem[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('get_payables', {
+        p_status: filters.status,
+        p_due_date_start: filters.startDate,
+        p_due_date_end: filters.endDate,
+    });
+
+    ensureSupabaseSuccess(error, 'Failed to fetch payables');
+    return (data as any[] as PayableItem[]) || [];
+};
+
+export const getReceivables = async (filters: { status?: string, startDate?: string, endDate?: string }): Promise<ReceivableItem[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('get_receivables', {
+        p_status: filters.status,
+        p_due_date_start: filters.startDate,
+        p_due_date_end: filters.endDate,
+    });
+
+    ensureSupabaseSuccess(error, 'Failed to fetch receivables');
+    return (data as any[] as ReceivableItem[]) || [];
+};
+
+export const getCashSchedule = async (period: { startDate: string, endDate: string }): Promise<CashScheduleData[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('get_cash_schedule', {
+        p_start_date: period.startDate,
+        p_end_date: period.endDate,
+    });
+
+    ensureSupabaseSuccess(error, 'Failed to fetch cash schedule');
+    return (data as any[] as CashScheduleData[]) || [];
+};
+
+
