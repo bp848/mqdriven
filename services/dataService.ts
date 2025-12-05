@@ -407,10 +407,15 @@ const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
     representativeTitle: 'representative_title',
 };
 
+const IMMUTABLE_CUSTOMER_FIELDS: (keyof Customer)[] = ['id', 'createdAt'];
+
 const customerToDbCustomer = (customer: Partial<Customer>): any => {
     const dbData: { [key: string]: any } = {};
     for (const key in customer) {
         const camelKey = key as keyof Customer;
+        if (IMMUTABLE_CUSTOMER_FIELDS.includes(camelKey)) {
+            continue;
+        }
         if (camelKey === 'infoSalesActivity') continue;
         const snakeKey = CUSTOMER_FIELD_OVERRIDES[camelKey] ?? camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
         dbData[snakeKey] = customer[camelKey];
