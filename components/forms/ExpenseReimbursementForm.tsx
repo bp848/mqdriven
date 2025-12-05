@@ -626,7 +626,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         if (!departmentId) return setError('部門を選択してください。');
         if (!approvalRouteId) return setError('承認ルートを選択してください。');
         if (!invoice.supplierName) return setError('サプライヤー名を入力してください。');
-        if (!documentAttachment?.publicUrl) return setError('請求書ファイルをアップロードしてください。');
 
         requestConfirmation({
             label: '申請を送信する',
@@ -698,8 +697,8 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     <div className="space-y-6 animate-fade-in">
                         <Card>
                             <CardHeader>
-                                <CardTitle>ステップ1: 請求書のアップロードと確認</CardTitle>
-                                <CardDescription>請求書のPDFや画像をアップロードすると、AI-OCRが情報を自動で読み取ります。</CardDescription>
+                                <CardTitle>ステップ1: 請求書のアップロードと確認（任意）</CardTitle>
+                                <CardDescription>請求書のPDFや画像をアップロードするとAI-OCRが情報を自動で読み取ります。資料がまだ無い場合は手入力のみで次へ進めます。</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <UploadZone
