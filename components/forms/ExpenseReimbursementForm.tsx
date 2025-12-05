@@ -779,6 +779,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                     customers={customers}
                                     jobs={jobs}
                                     isInternalExpense={isInternalExpense}
+                                    accountItems={accountItems}
                                 />
                             </CardContent>
                             <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 flex justify-end items-center gap-6 bg-slate-50/50 dark:bg-slate-800/30 rounded-b-xl">
@@ -1027,7 +1028,8 @@ const LineItemTable: React.FC<{
     customers: Customer[];
     jobs: Job[];
     isInternalExpense: boolean;
-}> = ({ lines, onLineChange, onAddLine, onRemoveLine, isDisabled, customers, jobs, isInternalExpense }) => {
+    accountItems: AccountItem[];
+}> = ({ lines, onLineChange, onAddLine, onRemoveLine, isDisabled, customers, jobs, isInternalExpense, accountItems }) => {
     return (
         <div className="flow-root">
             <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -1046,6 +1048,7 @@ const LineItemTable: React.FC<{
                                 {isInternalExpense && (
                                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">社内用途メモ</th>
                                 )}
+                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">勘定科目</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">金額(税抜)</th>
                                 <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0"><span className="sr-only">削除</span></th>
                             </tr>
@@ -1186,6 +1189,14 @@ const LineItemTable: React.FC<{
                                                 社内経費として処理されます。必要であれば備考や各明細の品名に部署・用途を記載してください。
                                             </td>
                                         )}
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <AccountItemSelect
+                                                accountItems={accountItems}
+                                                value={line.accountItemId}
+                                                onChange={(newId: string) => onLineChange(line.id, 'accountItemId', newId)}
+                                                disabled={isDisabled}
+                                            />
+                                        </td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm">
                                             <input
                                                 type="number"

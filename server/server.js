@@ -13,13 +13,25 @@ const path = require('path');
 const WebSocket = require('ws');
 const { URLSearchParams, URL } = require('url');
 const rateLimit = require('express-rate-limit');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// --- Gemini Proxy Configuration ---
 const externalApiBaseUrl = 'https://generativelanguage.googleapis.com';
 const externalWsBaseUrl = 'wss://generativelanguage.googleapis.com';
-// Support either API key env-var variant
 const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+
+// --- Supabase Client Initialization ---
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+    console.error("Warning: SUPABASE_URL and SUPABASE_KEY environment variables are not set! Application API functionality will be disabled.");
+}
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 
 const staticPath = path.join(__dirname,'dist');
 const publicPath = path.join(__dirname,'public');
@@ -37,6 +49,92 @@ else {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({extended: true, limit: '50mb'}));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
+
+
+// --- Application API Routes for Accounting ---
+
+// GET /api/accounting/journal-drafts - Fetches all journal drafts
+app.get('/api/accounting/journal-drafts', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized. Check server configuration.' });
+    }
+    try {
+        const { data, error } = await supabase.rpc('get_journal_drafts');
+
+        if (error) {
+            console.error('Error from get_journal_drafts RPC:', error);
+            // Pass along Supabase's error details if available
+            return res.status(500).json({ error: 'Database RPC error', details: error.message });
+        }
+
+        res.status(200).json(data);
+    } catch (err) {
+        console.error('Unexpected error in /api/accounting/journal-drafts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/accounting/applications/:id/create-journal - Creates a journal draft from an application
+app.post('/api/accounting/applications/:id/create-journal', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized. Check server configuration.' });
+    }
+    try {
+        const applicationId = req.params.id;
+        // TODO: Implement proper user authentication and pass the actual user ID.
+        // For now, p_user_id is passed as null.
+        const { data: batchId, error } = await supabase.rpc('create_journal_from_application', {
+            p_application_id: applicationId,
+            p_user_id: null 
+        });
+
+        if (error) {
+            console.error('Error from create_journal_from_application RPC:', error);
+             // Check for specific, user-facing errors from the RPC
+            if (error.message.includes('Journal has already been created')) {
+                return res.status(409).json({ error: 'Conflict', details: error.message });
+            }
+            if (error.message.includes('not found')) {
+                return res.status(404).json({ error: 'Not Found', details: error.message });
+            }
+            return res.status(500).json({ error: 'Database RPC error', details: error.message });
+        }
+
+        res.status(201).json({ message: 'Journal draft created successfully', batchId });
+    } catch (err) {
+        console.error('Unexpected error in /api/accounting/applications/:id/create-journal:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/accounting/journal-batches/:id/approve - Approves (posts) a journal draft batch
+app.post('/api/accounting/journal-batches/:id/approve', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized. Check server configuration.' });
+    }
+    try {
+        const batchId = req.params.id;
+        const { error } = await supabase.rpc('approve_journal_batch', {
+            p_batch_id: batchId
+        });
+
+        if (error) {
+            console.error('Error from approve_journal_batch RPC:', error);
+            if (error.message.includes('not found')) {
+                return res.status(404).json({ error: 'Not Found', details: error.message });
+            }
+            return res.status(500).json({ error: 'Database RPC error', details: error.message });
+        }
+
+        res.status(200).json({ message: 'Journal batch approved successfully' });
+    } catch (err) {
+        console.error('Unexpected error in /api/accounting/journal-batches/:id/approve:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+// --- Gemini Proxy Logic ---
 
 // Rate limiter for the proxy
 const proxyLimiter = rateLimit({

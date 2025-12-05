@@ -33,7 +33,6 @@ const HIDDEN_CATEGORY_IDS: string[] = [
   'project_management',
   'inventory',
   'hr',
-  'accounting',
   'admin',
   'management',
 ];
@@ -64,6 +63,25 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_transport', name: '交通費精算' },
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
+    ],
+  },
+  {
+    id: 'accounting',
+    name: '会計',
+    icon: DollarSign,
+    items: [
+        { page: 'accounting_dashboard', name: '会計ダッシュボード' },
+        { page: 'accounting_journal_review', name: '仕訳レビュー' },
+        { page: 'accounting_journal', name: '仕訳帳' },
+        { page: 'accounting_general_ledger', name: '総勘定元帳' },
+        { page: 'accounting_payables', name: '支払管理' },
+        { page: 'accounting_receivables', name: '売掛金管理' },
+        { page: 'accounting_cash_schedule', name: '資金繰り表' },
+        { page: 'accounting_approved_applications', name: '承認済申請' },
+        { page: 'accounting_trial_balance', name: '試算表' },
+        { page: 'accounting_tax_summary', name: '消費税集計' },
+        { page: 'accounting_period_closing', name: '締処理' },
+        { page: 'accounting_business_plan', name: '経営計画' },
     ],
   },
   {

@@ -29,6 +29,12 @@ import EstimateManagementPage from './components/sales/EstimateManagementPage';
 import SalesRanking from './components/accounting/SalesRanking';
 import BusinessPlanPage from './components/accounting/BusinessPlanPage';
 import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
+import AccountingDashboard from './components/accounting/AccountingDashboard';
+import { JournalReviewPage } from './components/accounting/JournalEntry';
+import { ApprovedApplications } from './components/accounting/ApprovedApplications';
+import { PayablesPage } './components/accounting/Payables';
+import { ReceivablesPage } from './components/accounting/Receivables';
+import { CashSchedulePage } from './components/accounting/CashSchedule';
 import BusinessSupportPage from './components/BusinessSupportPage';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
@@ -104,6 +110,12 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_tax_summary: '消費税集計',
     accounting_period_closing: '締処理',
     accounting_business_plan: '経営計画',
+    accounting_dashboard: '会計ダッシュボード',
+    accounting_journal_review: '仕訳レビュー',
+    accounting_payables: '支払管理',
+    accounting_receivables: '売掛金管理',
+    accounting_cash_schedule: '資金繰り表',
+    accounting_approved_applications: '承認済申請',
     business_support_proposal: '提案書作成',
     ai_business_consultant: 'AI経営相談',
     ai_market_research: 'AI市場調査',
@@ -807,6 +819,20 @@ useEffect(() => {
                 return <SalesRanking initialSummaries={jobs} customers={customers} />;
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
+            case 'accounting_dashboard':
+                return <AccountingDashboard setCurrentView={handleNavigate} pendingDraftsCount={0} />;
+            case 'accounting_journal_review':
+                return <JournalReviewPage notify={addToast} />;
+            case 'accounting_general_ledger':
+                return <GeneralLedger />;
+            case 'accounting_payables':
+                return <PayablesPage />;
+            case 'accounting_receivables':
+                return <ReceivablesPage />;
+            case 'accounting_cash_schedule':
+                return <CashSchedulePage />;
+            case 'accounting_approved_applications':
+                return <ApprovedApplications notify={addToast} />;
             case 'bulletin_board':
                 return <BulletinBoardPage currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
             case 'approval_list':
