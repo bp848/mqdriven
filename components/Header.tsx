@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Briefcase, Search, Users } from './Icons';
 
 type HeaderAction = {
@@ -15,6 +15,11 @@ type SearchSuggestion = {
   label: string;
   subLabel?: string;
   type?: 'customer' | 'job';
+};
+
+const SUGGESTION_ICON_MAP: Record<'customer' | 'job', React.ElementType> = {
+  customer: Users,
+  job: Briefcase,
 };
 
 interface HeaderProps {
@@ -80,20 +85,9 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
     minute: '2-digit',
   });
 
+  const suggestions = search?.suggestions ?? [];
   const showSuggestions = Boolean(
-    search &&
-      search.value.trim() &&
-      search.suggestions &&
-      search.suggestions.length > 0 &&
-      isSearchFocused
-  );
-
-  const suggestionIconMap = useMemo(
-    () => ({
-      customer: Users,
-      job: Briefcase,
-    }),
-    []
+    search && search.value.trim() && suggestions.length > 0 && isSearchFocused
   );
 
   const handleSuggestionSelect = (suggestion: SearchSuggestion) => {
@@ -130,9 +124,9 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
                   サジェスト候補
                 </div>
                 <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {search.suggestions!.map((suggestion) => {
+                  {suggestions.map((suggestion) => {
                     const Icon =
-                      (suggestion.type && suggestionIconMap[suggestion.type]) || Search;
+                      (suggestion.type && SUGGESTION_ICON_MAP[suggestion.type]) || Search;
                     return (
                       <li key={suggestion.id}>
                         <button
