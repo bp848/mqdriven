@@ -12,7 +12,11 @@ export type Page =
   | 'ai_business_consultant'
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
-  | 'admin_master_management' | 'admin_bug_reports' | 'settings';
+  | 'admin_master_management' | 'admin_bug_reports' | 'settings'
+  | 'bulletin_board' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
+  | 'accounting_dashboard' | 'accounting_journal_review'
+  | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
+  | 'accounting_approved_applications';
 
 export enum JobStatus {
   Pending = '保留',
@@ -774,4 +778,58 @@ export interface DraftJournalEntry {
   creditAccount?: string;
   creditAmount?: number;
   confidence?: number;
+}
+
+export interface ProposalFormData {
+  purpose: string;
+  referenceInfo: string;
+  targetIndustry: string;
+  customerName: string;
+  salesRepName: string;
+  pageCount: number;
+  graphCount: number;
+  imageCount: number;
+  deepResearch: boolean;
+}
+
+export type ProposalGraphType = 'bar' | 'line' | 'pie';
+
+export interface ProposalGraphDataPoint {
+  name: string;
+  value: number;
+}
+
+export interface ProposalSlideGraph {
+  type: ProposalGraphType;
+  dataDescription: string;
+  data: ProposalGraphDataPoint[];
+}
+
+export interface ProposalSlideImage {
+  description: string;
+}
+
+export interface ProposalSlide {
+  title: string;
+  content: string[];
+  graph?: ProposalSlideGraph;
+  image?: ProposalSlideImage;
+  imageUrl?: string;
+  evidence?: string;
+  speakerNotes: string;
+}
+
+export interface ProposalPresentation {
+  title: string;
+  slides: ProposalSlide[];
+}
+
+export interface ProposalSource {
+  title: string;
+  uri: string;
+}
+
+export interface ProposalGenerationResult {
+  presentation: ProposalPresentation;
+  sources: ProposalSource[] | null;
 }

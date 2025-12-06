@@ -1,20 +1,21 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import type { LiveServerMessage } from '@google/genai';
 import { createPcmBlob } from '../utils/audioUtils';
 import type { MeetingTask } from '../types/meetingAssistant';
+import { isGeminiAIDisabled, requireGeminiClient } from './Gemini';
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  throw new Error('API_KEY環境変数が設定されていません。Gemini Live会議アシスタントを利用するにはAPIキーが必要です。');
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const getGeminiClient = () => {
+  if (isGeminiAIDisabled) {
+    throw new Error('AI機能は現在無効です。Gemini Live会議アシスタントを利用するにはAIを有効化してください。');
+  }
+  return requireGeminiClient();
+};
 
 export async function startMeetingSession(
   onMessage: (message: LiveServerMessage) => void,
   onError: (error: Error | ErrorEvent) => void
 ): Promise<{ session: any; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; source: MediaStreamAudioSourceNode }> {
+  const ai = getGeminiClient();
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
   const source = audioContext.createMediaStreamSource(stream);
@@ -65,6 +66,7 @@ export async function generateMinutesAndTasks(transcript: string): Promise<{ mee
     `;
 
   try {
+    const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
