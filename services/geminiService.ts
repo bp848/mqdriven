@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai";
+import { Type, Chat } from "@google/genai";
+import { GEMINI_DEFAULT_MODEL, isGeminiAIDisabled, requireGeminiClient } from "./Gemini";
 // FIX: Import MarketResearchReport type.
 import {
   AISuggestions,
@@ -26,46 +27,16 @@ import {
 } from "../types";
 import { formatJPY } from "../utils";
 
-const resolveEnvValue = (key: string): string | undefined => {
-  if (typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined") {
-    const envValue = (import.meta.env as Record<string, string | undefined>)[key];
-    if (envValue !== undefined) return envValue;
-  }
-  if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
-    return process.env[key];
-  }
-  return undefined;
-};
-
-// AI機能をグローバルに制御する環境変数
-const aiOffRaw =
-  resolveEnvValue("VITE_AI_OFF") ??
-  resolveEnvValue("NEXT_PUBLIC_AI_OFF") ??
-  resolveEnvValue("AI_OFF") ??
-  "0";
-const NEXT_PUBLIC_AI_OFF = aiOffRaw === "1" || aiOffRaw.toLowerCase?.() === "true";
-
-const API_KEY =
-  resolveEnvValue("VITE_GEMINI_API_KEY") ??
-  resolveEnvValue("NEXT_PUBLIC_GEMINI_API_KEY") ??
-  resolveEnvValue("GEMINI_API_KEY") ??
-  resolveEnvValue("API_KEY");
-
-if (!API_KEY && !NEXT_PUBLIC_AI_OFF) {
-  console.error("API_KEY environment variable not set. AI functions might be unavailable.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
-
-const model = "gemini-2.5-flash";
+const model = GEMINI_DEFAULT_MODEL;
 
 const checkOnlineAndAIOff = () => {
-  if (NEXT_PUBLIC_AI_OFF) {
+  if (isGeminiAIDisabled) {
     throw new Error("AI機能は現在無効です。");
   }
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     throw new Error("オフラインです。ネットワーク接続を確認してください。");
   }
+  return requireGeminiClient();
 };
 
 async function withRetry<T>(
@@ -135,7 +106,7 @@ export const suggestJobParameters = async (
   paperTypes: string[],
   finishingOptions: string[]
 ): Promise<AISuggestions> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const fullPrompt = `以下の依頼内容に基づき、印刷案件のパラメータを提案してください。
 依頼内容: "${prompt}"
@@ -153,9 +124,8 @@ export const suggestJobParameters = async (
     return JSON.parse(jsonStr);
   });
 };
-
 export const analyzeCompany = async (customer: Customer): Promise<CompanyAnalysis> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下の企業情報に基づいて、詳細な企業分析レポートをJSON形式で作成してください。Web検索も活用し、最新の情報を反映させてください。
 
@@ -215,7 +185,7 @@ JSONのフォーマットは以下のようにしてください:
 export const investigateLeadCompany = async (
   companyName: string
 ): Promise<CompanyInvestigation> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   const modelWithSearch = "gemini-2.5-flash";
   return withRetry(async () => {
     const prompt = `企業名「${companyName}」について、その事業内容、最近のニュース、市場での評判を調査し、簡潔にまとめてください。`;
@@ -247,7 +217,7 @@ export const investigateLeadCompany = async (
 export const enrichCustomerData = async (
   customerName: string
 ): Promise<Partial<Customer>> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `企業名「${customerName}」について、Web検索を用いて以下の情報を調査し、必ずJSON形式で返してください。見つからない情報はnullとしてください。
 - 公式ウェブサイトURL (websiteUrl)
@@ -375,7 +345,7 @@ export const extractInvoiceDetails = async (
   imageBase64: string,
   mimeType: string
 ): Promise<InvoiceData> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const imagePart = { inlineData: { data: imageBase64, mimeType } };
     const textPart = {
@@ -418,7 +388,7 @@ export const extractBusinessCardDetails = async (
   fileBase64: string,
   mimeType: string
 ): Promise<BusinessCardContact> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const filePart = { inlineData: { data: fileBase64, mimeType } };
     const instructionPart = {
@@ -455,7 +425,7 @@ const suggestJournalEntrySchema = {
 export const suggestJournalEntry = async (
   prompt: string
 ): Promise<AIJournalSuggestion> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const fullPrompt = `以下の日常的な取引内容を会計仕訳に変換してください。「${prompt}」`;
     const response = await ai.models.generateContent({
@@ -475,7 +445,7 @@ export const generateSalesEmail = async (
   customer: Customer,
   senderName: string
 ): Promise<{ subject: string; body: string }> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `顧客名「${customer.customerName}」向けの営業提案メールを作成してください。送信者は「${senderName}」です。`;
     const response = await ai.models.generateContent({ model, contents: prompt });
@@ -493,7 +463,7 @@ export const generateLeadReplyEmail = async (
   lead: Lead,
   senderName: string
 ): Promise<{ subject: string; body: string }> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のリード情報に対して、初回の返信メールを作成してください。
 会社名: ${lead.company}
@@ -513,7 +483,7 @@ export const generateLeadReplyEmail = async (
 
 // FIX: Add missing 'analyzeLeadData' function.
 export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のリードデータ（${leads.length}件）を分析し、営業活動に関する簡潔なインサイトや提案を1つ生成してください。
         特に、有望なリードの傾向や、アプローチすべきセグメントなどを指摘してください。
@@ -538,7 +508,7 @@ export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
 };
 
 export const getDashboardSuggestion = async (jobs: Job[]): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const recentJobs = jobs.slice(0, 5).map((j) => ({
       title: j.title,
@@ -562,7 +532,7 @@ export const generateDailyReportSummary = async (
   customerName: string,
   activityContent: string
 ): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のキーワードを元に、営業日報の活動内容をビジネス文書としてまとめてください。
 訪問先: ${customerName}
@@ -577,7 +547,7 @@ export const extractDailyReportFromImage = async (
   imageBase64: string,
   mimeType: string
 ): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const imagePart = { inlineData: { data: imageBase64, mimeType } };
     const textPart = {
@@ -593,7 +563,7 @@ export const extractDailyReportFromImage = async (
 };
 
 export const generateWeeklyReportSummary = async (keywords: string): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のキーワードを元に、週報の報告内容をビジネス文書としてまとめてください。
 キーワード: ${keywords}`;
@@ -671,7 +641,7 @@ const draftEstimateSchema = {
 };
 
 export const draftEstimate = async (prompt: string): Promise<Partial<Estimate>> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const fullPrompt = `あなたは日本の印刷会社で20年以上の経験を持つベテランの見積担当者です。以下の顧客からの要望に基づき、現実的で詳細な見積の下書きをJSON形式で作成してください。原価計算も行い、適切な利益を乗せた単価と金額を設定してください。
 
@@ -700,7 +670,7 @@ export const draftEstimateFromSpecFile = async (
   fileBase64: string,
   mimeType: string,
 ): Promise<Partial<Estimate>> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const filePart = { inlineData: { data: fileBase64, mimeType } };
     const instructionPart = {
@@ -729,7 +699,7 @@ export const generateProposalSection = async (
   job?: Job | null,
   estimate?: Estimate | null
 ): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     let context = `
 顧客情報:
@@ -794,7 +764,7 @@ const scoreLeadSchema = {
 };
 
 export const scoreLead = async (lead: Lead): Promise<LeadScore> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のリード情報を分析し、有望度をスコアリングしてください。
 会社名: ${lead.company}
@@ -814,7 +784,7 @@ export const scoreLead = async (lead: Lead): Promise<LeadScore> => {
 };
 
 export const startBugReportChat = (): Chat => {
-  checkOnlineAndAIOff(); // Will throw if AI is off or offline
+  const ai = checkOnlineAndAIOff(); // Will throw if AI is off or offline
   const systemInstruction = `あなたはバグ報告と改善要望を受け付けるアシスタントです。ユーザーからの報告内容をヒアリングし、以下のJSON形式で最終的に出力してください。
     { "report_type": "bug" | "improvement", "summary": "簡潔な件名", "description": "詳細な内容" }
     このJSONを出力するまでは、自然な会話でユーザーから情報を引き出してください。`;
@@ -827,7 +797,7 @@ export const processApplicationChat = async (
   users: User[],
   routes: ApprovalRoute[]
 ): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `あなたは申請アシスタントです。ユーザーとの会話履歴と以下のマスター情報に基づき、ユーザーの申請を手伝ってください。
 最終的に、ユーザーの申請内容を以下のJSON形式で出力してください。それまでは自然な会話を続けてください。
@@ -850,7 +820,7 @@ export const generateClosingSummary = async (
   currentJournal: JournalEntry[],
   prevJournal: JournalEntry[]
 ): Promise<string> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のデータに基づき、${type}決算のサマリーを生成してください。前月比や課題、改善提案を含めてください。`;
     // In a real scenario, you'd pass the data, but for brevity we'll just send the prompt.
@@ -860,7 +830,7 @@ export const generateClosingSummary = async (
 };
 
 export const startBusinessConsultantChat = (): Chat => {
-  checkOnlineAndAIOff(); // Will throw if AI is off or offline
+  const ai = checkOnlineAndAIOff(); // Will throw if AI is off or offline
   const systemInstruction = `あなたは、中小企業の印刷会社を専門とする経験豊富な経営コンサルタントです。あなたの目的は、経営者がデータに基づいたより良い意思決定を行えるよう支援することです。提供されたデータコンテキストとユーザーからの質問に基づき、Web検索も活用して、具体的で実行可能なアドバイスを提供してください。専門的かつデータに基づいた、簡潔な回答を心がけてください。`;
   return ai.chats.create({
     model,
@@ -874,7 +844,7 @@ export const startBusinessConsultantChat = (): Chat => {
 export const generateLeadAnalysisAndProposal = async (
   lead: Lead
 ): Promise<{ analysisReport: string; draftProposal: string }> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のリード情報とWeb検索の結果を組み合わせて、企業分析レポートと提案書のドラフトを生成し、指定されたJSON形式で出力してください。
 
@@ -924,7 +894,7 @@ Web検索を活用して、企業の事業内容、最近の動向、および�
 export const generateMarketResearchReport = async (
   topic: string
 ): Promise<MarketResearchReport> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `以下のトピックについて、Web検索を活用して詳細な市場調査レポートを、必ず指定されたJSON形式で作成してください。
 
@@ -969,7 +939,7 @@ JSONフォーマット:
 export const generateCustomProposalContent = async (
   lead: Lead
 ): Promise<CustomProposalContent> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `あなたは「文唱堂印刷株式会社」の優秀なセールスコンサルタントです。以下のリード情報を基に、Webリサーチを徹底的に行い、その企業のためだけの本格的な提案資料のコンテンツを、必ず指定されたJSON形式で生成してください。
 
@@ -1015,7 +985,7 @@ export const generateCustomProposalContent = async (
 export const createLeadProposalPackage = async (
   lead: Lead
 ): Promise<LeadProposalPackage> => {
-  checkOnlineAndAIOff();
+  const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const prompt = `あなたは「文唱堂印刷株式会社」の非常に優秀なセールスコンサルタントです。以下のリード情報を分析し、次のタスクを実行してください。
 

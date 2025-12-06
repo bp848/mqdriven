@@ -1,198 +1,331 @@
-
-import React, { useState, useMemo } from 'react';
-import { Customer, Job, Estimate, EmployeeUser, Toast } from '../types';
-import { generateProposalSection } from '../services/geminiService';
-import { Loader, Sparkles, FileText } from './Icons';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import {
+  Customer,
+  Job,
+  Estimate,
+  EmployeeUser,
+  Toast,
+  ProposalFormData,
+} from '../types';
+import ProposalHeader from './businessSupport/ProposalHeader';
+import ProposalForm from './businessSupport/ProposalForm';
+import ProposalPreview from './businessSupport/ProposalPreview';
+import ProposalActionConsole from './businessSupport/ProposalActionConsole';
+import { Spinner } from './businessSupport/ui/Spinner';
+import { Button } from './businessSupport/ui/Button';
+import useProposalGenerator from '../hooks/useProposalGenerator';
 import { formatJPY } from '../utils';
-
-declare const jspdf: any;
-declare const html2canvas: any;
+import { AlertTriangle } from './Icons';
 
 interface BusinessSupportPageProps {
-    customers: Customer[];
-    jobs: Job[];
-    estimates: Estimate[];
-    currentUser: EmployeeUser | null;
-    addToast: (message: string, type: Toast['type']) => void;
-    isAIOff: boolean;
+  customers: Customer[];
+  jobs: Job[];
+  estimates: Estimate[];
+  currentUser: EmployeeUser | null;
+  addToast: (message: string, type: Toast['type']) => void;
+  isAIOff: boolean;
 }
 
-const BusinessSupportPage: React.FC<BusinessSupportPageProps> = ({ customers, jobs, estimates, currentUser, addToast, isAIOff }) => {
-    const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-    const [selectedJobId, setSelectedJobId] = useState<string>('');
-    const [selectedEstimateId, setSelectedEstimateId] = useState<string>('');
-    
-    const [proposal, setProposal] = useState({
-        title: '',
-        executiveSummary: '',
-        currentSituation: '',
-        proposalContent: '',
-        expectedBenefits: '',
-        schedule: '',
-        costEstimate: '',
+const DEFAULT_FORM_DATA: ProposalFormData = {
+  purpose: '法人向け「無料サステナビリティレポート作成支援サービス」の導入提案',
+  referenceInfo:
+    '参考URL: https://report.b-p.co.jp\n\n企業が対応を迫られているESG・SDGs・非財務情報の開示義務に対し、専門知識がなくても即座に対応可能なレポート自動生成支援ソリューションを提案し、貴社のサステナビリティ戦略強化とレピュテーション向上に資することを目的としています。\n\n補足構成として含めるべきキーワード:\n- ESG対応の重要性\n- 非財務情報開示(TCFD・GRI)\n- 中小企業向けの低負荷対応\n- 自動生成されたPDFレポートの品質と訴求力\n- ガイドライン準拠 (GRIスタンダード、環境省フォーマット等)',
+  targetIndustry: '中小企業',
+  customerName: '',
+  salesRepName: '',
+  pageCount: 10,
+  graphCount: 3,
+  imageCount: 2,
+  deepResearch: false,
+};
+
+const BusinessSupportPage: React.FC<BusinessSupportPageProps> = ({
+  customers,
+  jobs,
+  estimates,
+  currentUser,
+  addToast,
+  isAIOff,
+}) => {
+  const [formData, setFormData] = useState<ProposalFormData>(DEFAULT_FORM_DATA);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState('');
+  const [selectedEstimateId, setSelectedEstimateId] = useState('');
+
+  const { state, generate, reset } = useProposalGenerator();
+  const { status, presentation, sources, error, actions } = state;
+
+  const selectedCustomer = useMemo(
+    () => customers.find(customer => customer.id === selectedCustomerId),
+    [customers, selectedCustomerId],
+  );
+  const selectedJob = useMemo(() => jobs.find(job => job.id === selectedJobId), [jobs, selectedJobId]);
+  const selectedEstimate = useMemo(
+    () => estimates.find(estimate => estimate.id === selectedEstimateId),
+    [estimates, selectedEstimateId],
+  );
+
+  const relatedJobs = useMemo(() => {
+    if (!selectedCustomer) return [];
+    return jobs.filter(
+      job => job.customerId === selectedCustomer.id || job.clientName === selectedCustomer.customerName,
+    );
+  }, [jobs, selectedCustomer]);
+
+  const relatedEstimates = useMemo(() => {
+    if (!selectedCustomer) return [];
+    return estimates.filter(estimate => estimate.customerName === selectedCustomer.customerName);
+  }, [estimates, selectedCustomer]);
+
+  useEffect(() => {
+    setSelectedJobId('');
+    setSelectedEstimateId('');
+  }, [selectedCustomerId]);
+
+  const toastStatusRef = useRef<typeof status>('idle');
+  const lastErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (toastStatusRef.current === 'loading' && status === 'success') {
+      addToast('AIが提案書を生成しました。', 'success');
+    }
+    if (status === 'error' && error && error !== lastErrorRef.current) {
+      addToast(error, 'error');
+      lastErrorRef.current = error;
+    }
+    toastStatusRef.current = status;
+  }, [status, error, addToast]);
+
+  const handleFormChange = useCallback(
+    (updater: (prev: ProposalFormData) => ProposalFormData) => {
+      setFormData(prev => updater(prev));
+    },
+    [],
+  );
+
+  const buildReferenceBlock = useCallback((): string => {
+    const blocks: string[] = [];
+    if (selectedCustomer) {
+      blocks.push(
+        [
+          `顧客: ${selectedCustomer.customerName}`,
+          selectedCustomer.representative ? `代表者: ${selectedCustomer.representative}` : null,
+          selectedCustomer.companyContent ? `事業内容: ${selectedCustomer.companyContent}` : null,
+          selectedCustomer.infoRequirements ? `要望: ${selectedCustomer.infoRequirements}` : null,
+          selectedCustomer.infoSalesActivity ? `営業履歴: ${selectedCustomer.infoSalesActivity}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      );
+    }
+    if (selectedJob) {
+      blocks.push(
+        [
+          `案件: ${selectedJob.title}`,
+          selectedJob.dueDate ? `納期: ${new Date(selectedJob.dueDate).toLocaleDateString('ja-JP')}` : null,
+          selectedJob.quantity ? `数量: ${selectedJob.quantity.toLocaleString()}部` : null,
+          selectedJob.price ? `売上見込: ${formatJPY(selectedJob.price)}` : null,
+          selectedJob.details ? `仕様: ${selectedJob.details}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      );
+    }
+    if (selectedEstimate) {
+      const topItems = selectedEstimate.items.slice(0, 3).map(item => `- ${item.content} (${formatJPY(item.price)})`);
+      blocks.push(
+        [
+          `見積: ${selectedEstimate.title}`,
+          `合計金額: ${formatJPY(selectedEstimate.total)}`,
+          selectedEstimate.deliveryDate ? `希望納期: ${selectedEstimate.deliveryDate}` : null,
+          selectedEstimate.notes ? `備考: ${selectedEstimate.notes}` : null,
+          topItems.length > 0 ? `主要構成:\n${topItems.join('\n')}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      );
+    }
+    return blocks.join('\n\n');
+  }, [selectedCustomer, selectedJob, selectedEstimate]);
+
+  const handleApplyPrefill = useCallback(() => {
+    if (!selectedCustomer) {
+      addToast('顧客を選択してください。', 'info');
+      return;
+    }
+    const referenceBlock = buildReferenceBlock();
+    setFormData(prev => {
+      const hasCustomReference = prev.referenceInfo !== DEFAULT_FORM_DATA.referenceInfo;
+      const mergedReference = [referenceBlock, hasCustomReference ? prev.referenceInfo : null]
+        .filter(Boolean)
+        .join('\n\n');
+      return {
+        ...prev,
+        customerName: selectedCustomer.customerName,
+        salesRepName: prev.salesRepName || currentUser?.name || '',
+        targetIndustry:
+          prev.targetIndustry !== DEFAULT_FORM_DATA.targetIndustry
+            ? prev.targetIndustry
+            : selectedCustomer.customerDivision || selectedCustomer.companyContent || prev.targetIndustry,
+        referenceInfo: mergedReference || prev.referenceInfo,
+      };
     });
+    addToast('顧客・案件情報を入力欄に反映しました。', 'success');
+  }, [selectedCustomer, buildReferenceBlock, currentUser, addToast]);
 
-    const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
-    const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const handleGenerate = useCallback(() => {
+    if (isAIOff) {
+      addToast('AI機能は現在無効です。', 'error');
+      return;
+    }
+    generate(formData);
+  }, [generate, formData, addToast, isAIOff]);
 
-    const selectedCustomer = useMemo(() => customers.find(c => c.id === selectedCustomerId), [customers, selectedCustomerId]);
-    const relatedJobs = useMemo(() => selectedCustomer ? jobs.filter(j => j.clientName === selectedCustomer.customerName) : [], [jobs, selectedCustomer]);
-    const relatedEstimates = useMemo(() => selectedCustomer ? estimates.filter(e => e.customerName === selectedCustomer.customerName) : [], [estimates, selectedCustomer]);
-    const selectedJob = useMemo(() => jobs.find(j => j.id === selectedJobId), [jobs, selectedJobId]);
-    const selectedEstimate = useMemo(() => estimates.find(e => e.id === selectedEstimateId), [estimates, selectedEstimateId]);
-    
-    const handleGenerateSection = async (section: keyof typeof proposal, sectionTitle: string) => {
-        if (!selectedCustomer) {
-            addToast('提案の対象となる顧客を選択してください。', 'info');
-            return;
-        }
-        if (isAIOff) {
-            addToast('AI機能は現在無効です。', 'error');
-            return;
-        }
-        setLoadingStates(prev => ({ ...prev, [section]: true }));
-        try {
-            const content = await generateProposalSection(sectionTitle, selectedCustomer, selectedJob, selectedEstimate);
-            setProposal(prev => ({ ...prev, [section]: content }));
-        } catch (error: any) {
-            console.error(error);
-            addToast(`「${sectionTitle}」の生成に失敗しました。${error.message || ''}`, 'error');
-        } finally {
-            setLoadingStates(prev => ({ ...prev, [section]: false }));
-        }
-    };
-    
-    const handleGeneratePdf = async () => {
-        setIsPdfLoading(true);
-        const input = document.getElementById('proposal-preview');
-        if (!input) {
-            addToast('プレビュー要素が見つかりません。', 'error');
-            setIsPdfLoading(false);
-            return;
-        }
-    
-        try {
-            const canvas = await html2canvas(input, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: null,
-            });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jspdf.jsPDF({
-                orientation: 'p',
-                unit: 'px',
-                format: [canvas.width, canvas.height]
-            });
-            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-            
-            const customerName = selectedCustomer?.customerName || 'customer';
-            const date = new Date().toISOString().split('T')[0];
-            pdf.save(`提案書_${customerName}_${date}.pdf`);
-            addToast('提案書PDFが正常に生成されました。', 'success');
-        } catch (error) {
-            console.error("PDF generation failed", error);
-            addToast('PDFの生成に失敗しました。', 'error');
-        } finally {
-            setIsPdfLoading(false);
-        }
-    };
+  const handleReset = useCallback(() => {
+    reset();
+    setFormData(DEFAULT_FORM_DATA);
+    setSelectedCustomerId('');
+    setSelectedJobId('');
+    setSelectedEstimateId('');
+  }, [reset]);
 
-
-    const SectionEditor: React.FC<{
-        field: keyof typeof proposal;
-        title: string;
-    }> = ({ field, title }) => (
-        <div>
-            <div className="flex justify-between items-center mb-1">
-                <label className="text-base font-semibold">{title}</label>
-                <button 
-                    onClick={() => handleGenerateSection(field, title)} 
-                    disabled={loadingStates[field] || isAIOff} 
-                    className="flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {loadingStates[field] ? <Loader className="w-4 h-4 animate-spin"/> : <Sparkles className="w-4 h-4"/>}
-                    AIで下書きを作成
-                </button>
-            </div>
-            <textarea
-                value={proposal[field]}
-                onChange={e => setProposal(prev => ({ ...prev, [field]: e.target.value }))}
-                rows={5}
-                className="w-full text-base bg-slate-50 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5 focus:ring-blue-500"
-                disabled={isAIOff && loadingStates[field]}
-            />
+  const renderStatusPanel = () => {
+    if (status === 'loading') {
+      return (
+        <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-8 flex flex-col items-center text-center text-white gap-4 shadow-2xl">
+          <Spinner />
+          <div>
+            <p className="text-lg font-semibold">AIが提案書を生成中です...</p>
+            <p className="text-sm text-slate-300 mt-2">画像生成と調査には数十秒かかる場合があります。</p>
+          </div>
+          <Button onClick={handleReset} variant="outline" className="mt-2">
+            中断して条件を変更
+          </Button>
         </div>
-    );
-    
+      );
+    }
+
+    if (status === 'error') {
+      return (
+        <div className="bg-red-900/30 border border-red-500/40 rounded-2xl p-8 text-white shadow-2xl space-y-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-300" />
+            <h3 className="text-xl font-semibold">提案書の生成に失敗しました</h3>
+          </div>
+          <p className="text-sm text-red-100">{error || '不明なエラーが発生しました。'}</p>
+          <Button onClick={handleReset}>条件を見直して再実行</Button>
+        </div>
+      );
+    }
+
+    if (status === 'success' && presentation) {
+      return <ProposalPreview presentation={presentation} sources={sources} onReset={handleReset} />;
+    }
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left Column: Controls */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 space-y-6 h-fit">
-                <h2 className="text-xl font-semibold">提案内容の入力</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <select onChange={e => setSelectedCustomerId(e.target.value)} value={selectedCustomerId} className="md:col-span-1 w-full text-base bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5">
-                        <option value="">顧客を選択...</option>
-                        {customers.map(c => <option key={c.id} value={c.id}>{c.customerName}</option>)}
-                    </select>
-                    <select onChange={e => setSelectedJobId(e.target.value)} value={selectedJobId} disabled={!selectedCustomer} className="md:col-span-1 w-full text-base bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5">
-                        <option value="">関連案件を選択...</option>
-                        {relatedJobs.map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
-                    </select>
-                    <select onChange={e => setSelectedEstimateId(e.target.value)} value={selectedEstimateId} disabled={!selectedCustomer} className="md:col-span-1 w-full text-base bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-2.5">
-                        <option value="">関連見積を選択...</option>
-                        {relatedEstimates.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
-                    </select>
-                </div>
-
-                <div className="space-y-4">
-                    <SectionEditor field="title" title="提案タイトル" />
-                    <SectionEditor field="executiveSummary" title="エグゼクティブサマリー" />
-                    <SectionEditor field="currentSituation" title="現状分析と課題" />
-                    <SectionEditor field="proposalContent" title="提案内容" />
-                    <SectionEditor field="expectedBenefits" title="期待される効果" />
-                    <SectionEditor field="schedule" title="実施スケジュール" />
-                    <SectionEditor field="costEstimate" title="費用概算" />
-                </div>
-            </div>
-
-            {/* Right Column: Preview */}
-            <div>
-                 <div className="sticky top-8">
-                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">プレビュー</h2>
-                         <button onClick={handleGeneratePdf} disabled={isPdfLoading} className="flex items-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 disabled:bg-slate-400">
-                             {isPdfLoading ? <Loader className="w-5 h-5 animate-spin"/> : <FileText className="w-5 h-5"/>}
-                             PDF生成
-                         </button>
-                     </div>
-                    <div id="proposal-preview" className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-10 border dark:border-slate-700 prose prose-slate dark:prose-invert max-w-none">
-                        <h1>{proposal.title || '提案書タイトル'}</h1>
-                        <p className="lead">対象: {selectedCustomer?.customerName || '〇〇株式会社 御中'}</p>
-                        <p className="text-sm">作成日: {new Date().toLocaleDateString('ja-JP')}</p>
-                        <p className="text-sm">作成者: {currentUser?.name || '担当者名'}</p>
-                        
-                        <h2>1. エグゼクティブサマリー</h2>
-                        <p>{proposal.executiveSummary || 'ここに概要が入ります。'}</p>
-
-                        <h2>2. 現状分析と課題</h2>
-                        <p>{proposal.currentSituation || 'ここに現状分析と課題が入ります。'}</p>
-
-                        <h2>3. 提案内容</h2>
-                        <p>{proposal.proposalContent || 'ここに具体的な提案内容が入ります。'}</p>
-
-                        <h2>4. 期待される効果</h2>
-                        <p>{proposal.expectedBenefits || 'ここに期待される効果が入ります。'}</p>
-
-                        <h2>5. 実施スケジュール</h2>
-                        <p>{proposal.schedule || 'ここに実施スケジュールが入ります。'}</p>
-
-                        <h2>6. 費用概算</h2>
-                        <p>{proposal.costEstimate || 'ここに費用概算が入ります。'}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-lg space-y-4">
+        <h3 className="text-2xl font-semibold text-slate-900 dark:text-white">AI提案書作成の流れ</h3>
+        <ol className="list-decimal list-inside space-y-2 text-slate-600 dark:text-slate-300">
+          <li>左側で顧客・案件を選び、「CRM情報を反映」ボタンでメモへ取り込みます。</li>
+          <li>必要に応じてDeep Researchを有効化して最新トレンドを調査します。</li>
+          <li>「プレゼンテーションを生成」を押すと、スライド構成・図版・話者ノートをAIが作成します。</li>
+          <li>生成結果は右側にプレビューされ、必要に応じて再生成できます。</li>
+        </ol>
+        <p className="text-sm text-slate-500 dark:text-slate-400">※ Deep ResearchはGoogle検索を利用するため、応答時間が長くなります。</p>
+      </div>
     );
+  };
+
+  return (
+    <div className="space-y-8">
+      <ProposalHeader />
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div className="space-y-6 xl:col-span-2">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">CRMデータを活用</h3>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Optional</span>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <select
+                value={selectedCustomerId}
+                onChange={event => setSelectedCustomerId(event.target.value)}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-sm text-slate-900 dark:text-slate-100"
+              >
+                <option value="">顧客を選択...</option>
+                {customers.map(customer => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.customerName}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedJobId}
+                onChange={event => setSelectedJobId(event.target.value)}
+                disabled={!selectedCustomer}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50"
+              >
+                <option value="">{selectedCustomer ? '関連案件を選択...' : '先に顧客を選択してください'}</option>
+                {relatedJobs.map(job => (
+                  <option key={job.id} value={job.id}>
+                    {job.title} / {job.dueDate ? new Date(job.dueDate).toLocaleDateString('ja-JP') : '納期未定'}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedEstimateId}
+                onChange={event => setSelectedEstimateId(event.target.value)}
+                disabled={!selectedCustomer}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50"
+              >
+                <option value="">{selectedCustomer ? '関連見積を選択...' : '先に顧客を選択してください'}</option>
+                {relatedEstimates.map(estimate => (
+                  <option key={estimate.id} value={estimate.id}>
+                    {estimate.title} / {formatJPY(estimate.total)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Button
+                onClick={handleApplyPrefill}
+                className="w-full"
+                variant="secondary"
+                disabled={!selectedCustomer || status !== 'idle'}
+              >
+                CRM情報を反映
+              </Button>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                顧客・案件・見積の情報を参考情報欄にまとめて入力できます。
+              </p>
+            </div>
+          </div>
+
+          {status === 'idle' ? (
+            <ProposalForm
+              formData={formData}
+              onChange={handleFormChange}
+              onSubmit={handleGenerate}
+              isSubmitting={status === 'loading'}
+              isAIOff={isAIOff}
+            />
+          ) : (
+            <div className="bg-slate-100 dark:bg-slate-800 border border-dashed border-slate-400 dark:border-slate-600 rounded-2xl p-6 text-center text-slate-500 dark:text-slate-300">
+              <p className="font-semibold">
+                {status === 'success' ? '生成結果を確認中です。' : 'AI生成中のためフォームはロックされています。'}
+              </p>
+              <p className="text-sm mt-2">「新しい提案書を作成」ボタンでフォームに戻れます。</p>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-6 xl:col-span-3">
+          {renderStatusPanel()}
+          <ProposalActionConsole actions={actions} />
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default BusinessSupportPage;
