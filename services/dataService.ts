@@ -2337,7 +2337,19 @@ export const getPayables = async (filters: { status?: string, startDate?: string
     });
 
     ensureSupabaseSuccess(error, 'Failed to fetch payables');
-    return (data as any[] as PayableItem[]) || [];
+    return (data || []).map((row: any) => ({
+        id: row.id,
+        supplier: row.supplier,
+        category: row.category ?? null,
+        amount: Number(row.amount ?? 0),
+        paidAmount: Number(row.paid_amount ?? 0),
+        date: row.date ?? '',
+        due: row.due_date ?? '',
+        status: (row.status ?? 'outstanding') as PayableItem['status'],
+        method: row.method ?? null,
+        invoiceImage: row.invoice_img ?? null,
+        journalLineId: row.journal_line_id ?? null,
+    }));
 };
 
 export const getReceivables = async (filters: { status?: string, startDate?: string, endDate?: string }): Promise<ReceivableItem[]> => {
@@ -2349,7 +2361,17 @@ export const getReceivables = async (filters: { status?: string, startDate?: str
     });
 
     ensureSupabaseSuccess(error, 'Failed to fetch receivables');
-    return (data as any[] as ReceivableItem[]) || [];
+    return (data || []).map((row: any) => ({
+        id: row.id,
+        customer: row.customer,
+        category: row.category ?? null,
+        amount: Number(row.amount ?? 0),
+        paidAmount: Number(row.paid_amount ?? 0),
+        date: row.date ?? '',
+        due_date: row.due_date ?? '',
+        status: (row.status ?? 'outstanding') as ReceivableItem['status'],
+        journalLineId: row.journal_line_id ?? null,
+    }));
 };
 
 export const getCashSchedule = async (period: { startDate: string, endDate: string }): Promise<CashScheduleData[]> => {
@@ -2360,7 +2382,12 @@ export const getCashSchedule = async (period: { startDate: string, endDate: stri
     });
 
     ensureSupabaseSuccess(error, 'Failed to fetch cash schedule');
-    return (data as any[] as CashScheduleData[]) || [];
+    return (data || []).map((row: any) => ({
+        date: row.date,
+        opening_balance: Number(row.opening_balance ?? 0),
+        inflows: Number(row.inflows ?? 0),
+        outflows: Number(row.outflows ?? 0),
+        closing_balance: Number(row.closing_balance ?? 0),
+    }));
 };
-
 

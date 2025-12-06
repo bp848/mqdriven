@@ -32,9 +32,10 @@ import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
 import AccountingDashboard from './components/accounting/AccountingDashboard';
 import { JournalReviewPage } from './components/accounting/JournalEntry';
 import { ApprovedApplications } from './components/accounting/ApprovedApplications';
-import { PayablesPage } './components/accounting/Payables';
-import { ReceivablesPage } from './components/accounting/Receivables';
-import { CashSchedulePage } from './components/accounting/CashSchedule';
+import GeneralLedger from './components/accounting/GeneralLedger';
+import PayablesPage from './components/accounting/Payables';
+import ReceivablesPage from './components/accounting/Receivables';
+import CashSchedulePage from './components/accounting/CashSchedule';
 import BusinessSupportPage from './components/BusinessSupportPage';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
@@ -73,6 +74,14 @@ const getEnvValue = (key: string): string | undefined => {
         return process.env[key];
     }
     return undefined;
+};
+
+type PredictiveSuggestion = {
+    id: string;
+    value: string;
+    label: string;
+    subLabel?: string;
+    type: 'customer' | 'job';
 };
 
 const PAGE_TITLES: Record<Page, string> = {
@@ -942,14 +951,75 @@ useEffect(() => {
     }
 
     const primaryActionEnabledPages = ['sales_orders', 'sales_leads', 'sales_customers', 'purchasing_orders', 'inventory_management'];
+    const searchEnabledPages: Page[] = ['sales_orders', 'sales_customers', 'sales_leads', 'purchasing_orders'];
+    const predictiveSuggestionPages: Page[] = ['sales_orders', 'sales_customers'];
+
+    const predictiveSuggestions = useMemo<PredictiveSuggestion[]>(() => {
+        if (!predictiveSuggestionPages.includes(currentPage)) return [];
+        const keyword = searchTerm.trim().toLowerCase();
+        if (!keyword) return [];
+
+        const matchesQuery = (value?: string | number | null) => {
+            if (value === null || value === undefined) return false;
+            return String(value).toLowerCase().includes(keyword);
+        };
+
+        const customerSuggestions: PredictiveSuggestion[] = [];
+        for (const customer of customers) {
+            if (customerSuggestions.length >= 5) break;
+            if (!customer.customerName) continue;
+            const isMatch =
+                matchesQuery(customer.customerName) ||
+                matchesQuery(customer.customerNameKana) ||
+                matchesQuery(customer.customerCode);
+            if (!isMatch) continue;
+            customerSuggestions.push({
+                id: `customer-${customer.id}`,
+                value: customer.customerName,
+                label: customer.customerName,
+                subLabel: customer.customerNameKana || customer.customerCode || undefined,
+                type: 'customer',
+            });
+        }
+
+        const jobSuggestions: PredictiveSuggestion[] = [];
+        for (const job of jobs) {
+            if (jobSuggestions.length >= 5) break;
+            const jobNumberLabel = job.jobNumber ? `案件番号: ${job.jobNumber}` : '';
+            const isMatch =
+                matchesQuery(job.title) ||
+                matchesQuery(job.clientName) ||
+                matchesQuery(job.jobNumber) ||
+                matchesQuery(job.projectCode);
+            if (!isMatch) continue;
+            const label = job.title?.trim() || job.clientName?.trim() || jobNumberLabel;
+            if (!label) continue;
+            const subParts: string[] = [];
+            if (job.clientName && job.clientName.trim() && job.clientName.trim() !== label) {
+                subParts.push(job.clientName.trim());
+            }
+            if (jobNumberLabel) subParts.push(jobNumberLabel);
+
+            jobSuggestions.push({
+                id: `job-${job.id ?? job.jobNumber ?? label}`,
+                value: label,
+                label,
+                subLabel: subParts.join(' / ') || undefined,
+                type: 'job',
+            });
+        }
+
+        return [...customerSuggestions, ...jobSuggestions];
+    }, [currentPage, searchTerm, customers, jobs]);
+
     const headerConfig = {
       title: PAGE_TITLES[currentPage],
       primaryAction: primaryActionEnabledPages.includes(currentPage)
         ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
         : undefined,
       secondaryActions: undefined,
-      search: ['sales_orders', 'sales_customers', 'sales_leads', 'purchasing_orders'].includes(currentPage)
-        ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...` }
+      search: searchEnabledPages.includes(currentPage)
+        ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...`, suggestions: predictiveSuggestions }
         : undefined,
     };
 
