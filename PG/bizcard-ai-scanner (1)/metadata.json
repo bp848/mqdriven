@@ -1,5 +1,0 @@
-{
-  "name": "BizCard AI Scanner",
-  "description": "Scans business cards using Gemini OCR and simulates insertion into a CRM database.",
-  "requestFramePermissions": []
-}
