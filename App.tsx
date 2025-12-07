@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import JobList from './components/JobList';
@@ -37,6 +36,7 @@ import PayablesPage from './components/accounting/Payables';
 import ReceivablesPage from './components/accounting/Receivables';
 import CashSchedulePage from './components/accounting/CashSchedule';
 import BusinessSupportPage from './components/BusinessSupportPage';
+import DocumentCreationHub from './components/DocumentCreationHub';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
@@ -125,6 +125,7 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_receivables: '売掛金管理',
     accounting_cash_schedule: '資金繰り表',
     accounting_approved_applications: '承認済申請',
+    document_creation_tools: '資料作成',
     business_support_proposal: '提案書作成',
     ai_business_consultant: 'AI経営相談',
     ai_market_research: 'AI市場調査',
@@ -147,6 +148,28 @@ const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
     DLY: 'approval_form_daily',
     WKR: 'approval_form_weekly',
 };
+
+const PRIMARY_ACTION_ENABLED_PAGES: Page[] = [
+    'sales_orders',
+    'sales_leads',
+    'sales_customers',
+    'purchasing_orders',
+    'inventory_management',
+    'sales_estimates',
+];
+
+const SEARCH_ENABLED_PAGES: Page[] = [
+    'sales_orders',
+    'sales_customers',
+    'sales_leads',
+    'sales_estimates',
+    'approval_list',
+];
+
+const PREDICTIVE_SUGGESTION_PAGES: Page[] = [
+    'sales_orders',
+    'sales_customers',
+];
 
 const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSetup: () => void; }> = ({ error, onRetry, onShowSetup }) => (
     <div className="bg-red-600 text-white p-3 flex items-center justify-between gap-4 flex-shrink-0 z-20">
@@ -231,13 +254,13 @@ const App: React.FC = () => {
     const [isAIOff, setIsAIOff] = useState(process.env.NEXT_PUBLIC_AI_OFF === '1');
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
     const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
 
     const predictiveSuggestions = useMemo<PredictiveSuggestion[]>(() => {
-        if (!PREDICTIVE_SUGGESTION_PAGES.includes(currentPage)) return [];
+        const predictiveSuggestionPages: Page[] = ['sales_orders', 'sales_customers', 'sales_estimates'];
+        if (!predictiveSuggestionPages.includes(currentPage)) return [];
         const keyword = searchTerm.trim().toLowerCase();
         if (!keyword) return [];
 
@@ -925,6 +948,8 @@ useEffect(() => {
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
             case 'business_support_proposal':
                 return <BusinessSupportPage customers={customers} jobs={jobs} estimates={estimates} currentUser={currentUser} addToast={addToast} isAIOff={isAIOff} />;
+            case 'document_creation_tools':
+                return <DocumentCreationHub />;
             case 'ai_business_consultant':
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':
@@ -1020,59 +1045,10 @@ useEffect(() => {
     };
 
     return (
-        <div className="flex min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
-            {/* Mobile sidebar overlay */}
-            <div className="md:hidden">
-                {isSidebarOpen && (
-                    <>
-                        <div
-                            className="fixed inset-0 bg-black/40 z-40"
-                            onClick={() => setIsSidebarOpen(false)}
-                        />
-                        <div className="fixed inset-y-0 left-0 z-50">
-                            <Sidebar
-                                currentPage={currentPage}
-                                onNavigate={(page) => {
-                                    setIsSidebarOpen(false);
-                                    handleNavigate(page);
-                                }}
-                                currentUser={currentUser}
-                                allUsers={allUsers}
-                                onUserChange={setCurrentUser}
-                                supabaseUserEmail={shouldRequireAuth ? (supabaseUser?.email ?? null) : null}
-                                onSignOut={shouldRequireAuth && isAuthenticated ? handleSignOut : undefined}
-                                approvalsCount={pendingApprovalCount}
-                            />
-                        </div>
-                    </>
-                )}
-            </div>
-
-            {/* Desktop sidebar */}
-            <div className="hidden md:block">
-                <Sidebar
-                    currentPage={currentPage}
-                    onNavigate={handleNavigate}
-                    currentUser={currentUser}
-                    allUsers={allUsers}
-                    onUserChange={setCurrentUser}
-                    supabaseUserEmail={shouldRequireAuth ? (supabaseUser?.email ?? null) : null}
-                    onSignOut={shouldRequireAuth && isAuthenticated ? handleSignOut : undefined}
-                    approvalsCount={pendingApprovalCount}
-                />
-            </div>
-
+        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
             <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
                 <div className={`flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {/* Mobile menu button */}
-                    <button
-                        type="button"
-                        className="md:hidden inline-flex items-center px-3 py-2 mb-4 text-sm font-semibold rounded-md bg-slate-800 text-white hover:bg-slate-700"
-                        onClick={() => setIsSidebarOpen(true)}
-                    >
-                        メニュー
-                    </button>
                     <Header {...headerConfig} />
                     <div className="mt-8">
                         {renderContent()}
