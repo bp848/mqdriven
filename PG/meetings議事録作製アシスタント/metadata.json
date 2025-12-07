@@ -1,0 +1,7 @@
+{
+  "name": "meetings議事録作製アシスタント",
+  "description": "音声を録音し、会話を書き起こし、Geminiを使用して構造化された議事録とアクションプランを生成するインテリジェントな会議アシスタント。Supabase統合による保存をサポート。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

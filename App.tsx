@@ -29,9 +29,9 @@ import EstimateManagementPage from './components/sales/EstimateManagementPage';
 import SalesRanking from './components/accounting/SalesRanking';
 import BusinessPlanPage from './components/accounting/BusinessPlanPage';
 import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
-import AccountingDashboard from './components/accounting/AccountingDashboard';
-import { JournalReviewPage } from './components/accounting/JournalEntry';
-import { ApprovedApplications } from './components/accounting/ApprovedApplications';
+import AccountingDashboard from './src/components/accounting/Dashboard';
+import { JournalReviewPage } from './src/components/accounting/JournalEntry';
+import { ApprovedApplications } from './src/components/accounting/ApprovedApplications';
 import GeneralLedger from './components/accounting/GeneralLedger';
 import PayablesPage from './components/accounting/Payables';
 import ReceivablesPage from './components/accounting/Receivables';
@@ -829,7 +829,7 @@ useEffect(() => {
             case 'accounting_business_plan':
                 return <BusinessPlanPage allUsers={allUsers} />;
             case 'accounting_dashboard':
-                return <AccountingDashboard setCurrentView={handleNavigate} pendingDraftsCount={0} />;
+                return <AccountingDashboard setCurrentView={handleNavigate} />;
             case 'accounting_journal_review':
                 return <JournalReviewPage notify={addToast} />;
             case 'accounting_general_ledger':

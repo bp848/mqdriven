@@ -13,10 +13,9 @@ import {
   Database,
   Receipt,
   Coins,
-  ArrowDownCircle,
   HelpCircle
 } from 'lucide-react';
-import { Page } from '../../types';
+import { Page } from '../../../types';
 
 interface WorkflowNavigatorProps {
   navigateTo: (view: Page) => void;

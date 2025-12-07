@@ -49,4 +49,4 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.approve_journal_batch(uuid, uuid)
-    IS '仕訳ドラフトを承認し、元の申請の accounting_status も posted に更新する';
+    IS '仕訳ドラフトを承認し、元の申請の accounting_status も posted に更新する'　　　

@@ -140,12 +140,6 @@ export const generateProposal = async (
     model: string;
     contents: { role: string; parts: { text: string }[] };
     config: Record<string, unknown>;
-  };
-
-  const requestPayload: {
-    model: string;
-    contents: { role: string; parts: { text: string }[] };
-    config: Record<string, unknown>;
   } = {
     model: GEMINI_DEFAULT_MODEL,
     contents: { role: 'user', parts: [{ text: prompt }] },
