@@ -3,45 +3,17 @@ import React, { useState } from 'react';
 const EMBEDDED_APPS = [
   {
     id: 'app1',
-    name: 'AI Document Wizard',
-    description: 'AI Document Wizard',
-    url: 'https://ai-document-wizard-365022685299.us-west1.run.app/',
-    category: 'document',
-  },
-  {
-    id: 'app2',
-    name: 'Lumina Proposal Generator',
-    description: 'Lumina Proposal Generator',
+    name: '提案書作成ツール',
+    description: 'Lumina 提案書ジェネレーター',
     url: 'https://lumina-proposal-generator-365022685299.us-west1.run.app',
     category: 'document',
-  },
-  {
-    id: 'app3',
-    name: 'SlideGenius AI',
-    description: 'SlideGenius AI',
-    url: 'https://slidegenius-ai-365022685299.us-west1.run.app',
-    category: 'document',
-  },
-  {
-    id: 'app4',
-    name: 'AI Presentation Generator',
-    description: 'AI Presentation Generator',
-    url: 'https://ai-presentation-generator-365022685299.us-west1.run.app',
-    category: 'document',
-  },
-  {
-    id: 'sim1',
-    name: 'AI Presentation Generator (シミュレーター)',
-    description: 'AI Presentation Generator シミュレーター',
-    url: 'https://aidriven-presentation-generator-365022685299.us-west1.run.app/',
-    category: 'simulator',
   },
 ];
 
 const iframeClass = 'w-full h-[calc(100vh-64px)] border-0';
 
 const DocumentCreationHub: React.FC = () => {
-  const [activeApp, setActiveApp] = useState<string>(EMBEDDED_APPS[0].id);
+  const [activeApp, setActiveApp] = useState<string>('app1');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const handleSelectApp = (appId: string) => {
@@ -61,39 +33,19 @@ const DocumentCreationHub: React.FC = () => {
         </div>
         <div className="py-4">
           <div className="space-y-6">
-            <div>
-              <p className="px-4 pb-2 text-sm font-semibold text-gray-500 uppercase tracking-wide">資料作成</p>
-              <nav className="space-y-1">
-                {EMBEDDED_APPS.filter(app => app.category === 'document').map(app => (
-                  <button
-                    key={app.id}
-                    onClick={() => handleSelectApp(app.id)}
-                    className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
-                      activeApp === app.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-                    }`}
-                  >
-                    {app.name}
-                  </button>
-                ))}
-              </nav>
-            </div>
-            
-            <div>
-              <p className="px-4 pb-2 text-sm font-semibold text-gray-500 uppercase tracking-wide">シミュレーター</p>
-              <nav className="space-y-1">
-                {EMBEDDED_APPS.filter(app => app.category === 'simulator').map(app => (
-                  <button
-                    key={app.id}
-                    onClick={() => handleSelectApp(app.id)}
-                    className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
-                      activeApp === app.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-                    }`}
-                  >
-                    {app.name}
-                  </button>
-                ))}
-              </nav>
-            </div>
+            <nav className="space-y-1">
+              {EMBEDDED_APPS.map(app => (
+                <button
+                  key={app.id}
+                  onClick={() => handleSelectApp(app.id)}
+                  className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
+                    activeApp === app.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
+                  }`}
+                >
+                  {app.name}
+                </button>
+              ))}
+            </nav>
           </div>
         </div>
       </aside>

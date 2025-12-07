@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Header from './components/Header';
+import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import JobList from './components/JobList';
 import CreateJobModal from './components/CreateJobModal';
@@ -207,6 +208,12 @@ const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>('analysis_dashboard');
     const [searchTerm, setSearchTerm] = useState('');
     const [currentUser, setCurrentUser] = useState<EmployeeUser | null>(null);
+    const [user, setUser] = useState<any>(null); // TODO: Replace 'any' with proper user type
+    
+    const onUserChange = (newUser: any) => {
+        setCurrentUser(newUser);
+        setUser(newUser);
+    };
     const [allUsers, setAllUsers] = useState<EmployeeUser[]>([]);
     
     // Data State
@@ -973,6 +980,7 @@ useEffect(() => {
             case 'admin_journal_queue':
                 return <JournalQueuePage />;
             case 'admin_action_console':
+                // @ts-ignore - TODO: Add 'admin_action_console' to Page type if needed
                 return <ActionConsolePage />;
             default:
                 return <PlaceholderPage title={PAGE_TITLES[currentPage] || currentPage} />;
@@ -1045,7 +1053,16 @@ useEffect(() => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans">
+        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans flex">
+            <Sidebar 
+                currentPage={currentPage}
+                onNavigate={handleNavigate}
+                currentUser={currentUser}
+                allUsers={allUsers}
+                onUserChange={onUserChange}
+                supabaseUserEmail={user?.email}
+                onSignOut={handleSignOut}
+            />
             <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
                 <div className={`flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>

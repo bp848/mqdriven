@@ -159,7 +159,6 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
         </div>
         <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80">
           <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">業務</a>
-          <a href="https://kaikei.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">会計</a>
           <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">MQ</a>
           <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">DTP</a>
           <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">エコ</a>

@@ -12,7 +12,7 @@ export type Page =
   | 'ai_business_consultant'
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
-  | 'admin_master_management' | 'admin_bug_reports' | 'settings'
+  | 'admin_master_management' | 'admin_bug_reports' | 'admin_action_console' | 'settings'
   | 'bulletin_board' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
   | 'accounting_dashboard' | 'accounting_journal_review'
   | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
