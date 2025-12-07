@@ -236,6 +236,64 @@ const App: React.FC = () => {
     const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
     const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
 
+    const predictiveSuggestions = useMemo<PredictiveSuggestion[]>(() => {
+        if (!PREDICTIVE_SUGGESTION_PAGES.includes(currentPage)) return [];
+        const keyword = searchTerm.trim().toLowerCase();
+        if (!keyword) return [];
+
+        const matchesQuery = (value?: string | number | null) => {
+            if (value === null || value === undefined) return false;
+            return String(value).toLowerCase().includes(keyword);
+        };
+
+        const customerSuggestions: PredictiveSuggestion[] = [];
+        for (const customer of customers) {
+            if (customerSuggestions.length >= 5) break;
+            if (!customer.customerName) continue;
+            const isMatch =
+                matchesQuery(customer.customerName) ||
+                matchesQuery(customer.customerNameKana) ||
+                matchesQuery(customer.customerCode);
+            if (!isMatch) continue;
+            customerSuggestions.push({
+                id: `customer-${customer.id}`,
+                value: customer.customerName,
+                label: customer.customerName,
+                subLabel: customer.customerNameKana || customer.customerCode || undefined,
+                type: 'customer',
+            });
+        }
+
+        const jobSuggestions: PredictiveSuggestion[] = [];
+        for (const job of jobs) {
+            if (jobSuggestions.length >= 5) break;
+            const jobNumberLabel = job.jobNumber ? `案件番号: ${job.jobNumber}` : '';
+            const isMatch =
+                matchesQuery(job.title) ||
+                matchesQuery(job.clientName) ||
+                matchesQuery(job.jobNumber) ||
+                matchesQuery(job.projectCode);
+            if (!isMatch) continue;
+            const label = job.title?.trim() || job.clientName?.trim() || jobNumberLabel;
+            if (!label) continue;
+            const subParts: string[] = [];
+            if (job.clientName && job.clientName.trim() && job.clientName.trim() !== label) {
+                subParts.push(job.clientName.trim());
+            }
+            if (jobNumberLabel) subParts.push(jobNumberLabel);
+
+            jobSuggestions.push({
+                id: `job-${job.id ?? job.jobNumber ?? label}`,
+                value: label,
+                label,
+                subLabel: subParts.join(' / ') || undefined,
+                type: 'job',
+            });
+        }
+
+        return [...customerSuggestions, ...jobSuggestions];
+    }, [currentPage, searchTerm, customers, jobs]);
+
     // Navigation and Modals
     const handleNavigate = (page: Page) => {
         setCurrentPage(page);
@@ -810,7 +868,7 @@ useEffect(() => {
                 />;
             case 'settings':
                 return <SettingsPage addToast={addToast} currentUser={currentUser} />;
-            case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_general_ledger': case 'accounting_trial_balance': case 'accounting_period_closing':
+            case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_trial_balance': case 'accounting_period_closing':
                 return <AccountingPage page={currentPage} journalEntries={journalEntries} accountItems={accountItems} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs} applications={applications} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers} employees={employees} onRefreshData={loadAllData} />;
             case 'inventory_management':
                 return <InventoryManagementPage inventoryItems={inventoryItems} onSelectItem={(item) => { setSelectedInventoryItem(item); setIsCreateInventoryItemModalOpen(true); }} />;
@@ -950,75 +1008,13 @@ useEffect(() => {
         );
     }
 
-    const primaryActionEnabledPages = ['sales_orders', 'sales_leads', 'sales_customers', 'purchasing_orders', 'inventory_management'];
-    const searchEnabledPages: Page[] = ['sales_orders', 'sales_customers', 'sales_leads', 'purchasing_orders'];
-    const predictiveSuggestionPages: Page[] = ['sales_orders', 'sales_customers'];
-
-    const predictiveSuggestions = useMemo<PredictiveSuggestion[]>(() => {
-        if (!predictiveSuggestionPages.includes(currentPage)) return [];
-        const keyword = searchTerm.trim().toLowerCase();
-        if (!keyword) return [];
-
-        const matchesQuery = (value?: string | number | null) => {
-            if (value === null || value === undefined) return false;
-            return String(value).toLowerCase().includes(keyword);
-        };
-
-        const customerSuggestions: PredictiveSuggestion[] = [];
-        for (const customer of customers) {
-            if (customerSuggestions.length >= 5) break;
-            if (!customer.customerName) continue;
-            const isMatch =
-                matchesQuery(customer.customerName) ||
-                matchesQuery(customer.customerNameKana) ||
-                matchesQuery(customer.customerCode);
-            if (!isMatch) continue;
-            customerSuggestions.push({
-                id: `customer-${customer.id}`,
-                value: customer.customerName,
-                label: customer.customerName,
-                subLabel: customer.customerNameKana || customer.customerCode || undefined,
-                type: 'customer',
-            });
-        }
-
-        const jobSuggestions: PredictiveSuggestion[] = [];
-        for (const job of jobs) {
-            if (jobSuggestions.length >= 5) break;
-            const jobNumberLabel = job.jobNumber ? `案件番号: ${job.jobNumber}` : '';
-            const isMatch =
-                matchesQuery(job.title) ||
-                matchesQuery(job.clientName) ||
-                matchesQuery(job.jobNumber) ||
-                matchesQuery(job.projectCode);
-            if (!isMatch) continue;
-            const label = job.title?.trim() || job.clientName?.trim() || jobNumberLabel;
-            if (!label) continue;
-            const subParts: string[] = [];
-            if (job.clientName && job.clientName.trim() && job.clientName.trim() !== label) {
-                subParts.push(job.clientName.trim());
-            }
-            if (jobNumberLabel) subParts.push(jobNumberLabel);
-
-            jobSuggestions.push({
-                id: `job-${job.id ?? job.jobNumber ?? label}`,
-                value: label,
-                label,
-                subLabel: subParts.join(' / ') || undefined,
-                type: 'job',
-            });
-        }
-
-        return [...customerSuggestions, ...jobSuggestions];
-    }, [currentPage, searchTerm, customers, jobs]);
-
     const headerConfig = {
       title: PAGE_TITLES[currentPage],
-      primaryAction: primaryActionEnabledPages.includes(currentPage)
+      primaryAction: PRIMARY_ACTION_ENABLED_PAGES.includes(currentPage)
         ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
         : undefined,
       secondaryActions: undefined,
-      search: searchEnabledPages.includes(currentPage)
+      search: SEARCH_ENABLED_PAGES.includes(currentPage)
         ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...`, suggestions: predictiveSuggestions }
         : undefined,
     };
