@@ -138,19 +138,19 @@ export const generateProposal = async (
 
   const requestPayload: {
     model: string;
-    contents: { role: string; parts: { text: string }[] };
+    contents: { role: string; parts: { text: string }[] }[];
     config: Record<string, unknown>;
   } = {
     model: GEMINI_DEFAULT_MODEL,
-    contents: { role: 'user', parts: [{ text: prompt }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config,
   };
 
   if (formData.deepResearch) {
-    requestPayload.config.tools = [{ googleSearch: {} }];
+    config.tools = [{ googleSearch: {} }];
   } else {
-    requestPayload.config.responseMimeType = 'application/json';
-    requestPayload.config.responseSchema = presentationSchema;
+    config.responseMimeType = 'application/json';
+    config.responseSchema = presentationSchema;
   }
 
   let response: GenerateContentResponse;
