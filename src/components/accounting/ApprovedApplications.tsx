@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { FileCheck, Search, Eye, Download, Calendar, Filter, FileJson, Loader } from 'lucide-react';
-import { ApplicationWithDetails } from '../../types';
-import * as dataService from '../../services/dataService';
+import { ApplicationWithDetails } from '../../../types';
+import * as dataService from '../../../services/dataService';
 
 interface ApprovedApplicationsProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;

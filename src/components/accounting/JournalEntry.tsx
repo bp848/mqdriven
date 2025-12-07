@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CheckCircle, AlertTriangle, FileText, ArrowRight, Wand2, RefreshCw, X, Plus, Loader } from 'lucide-react';
-import { DraftJournalEntry } from '../../types';
-import * as dataService from '../../services/dataService';
+import { CheckCircle, AlertTriangle, FileText, ArrowRight, Wand2, RefreshCw, X, Loader } from 'lucide-react';
+import { DraftJournalEntry } from '../../../types';
+import * as dataService from '../../../services/dataService';
 
 interface JournalReviewPageProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
