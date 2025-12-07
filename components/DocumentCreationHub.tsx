@@ -6,24 +6,35 @@ const EMBEDDED_APPS = [
     name: 'AI Document Wizard',
     description: 'AI Document Wizard',
     url: 'https://ai-document-wizard-365022685299.us-west1.run.app/',
+    category: 'document',
   },
   {
     id: 'app2',
     name: 'Lumina Proposal Generator',
     description: 'Lumina Proposal Generator',
     url: 'https://lumina-proposal-generator-365022685299.us-west1.run.app',
+    category: 'document',
   },
   {
     id: 'app3',
     name: 'SlideGenius AI',
     description: 'SlideGenius AI',
     url: 'https://slidegenius-ai-365022685299.us-west1.run.app',
+    category: 'document',
   },
   {
     id: 'app4',
     name: 'AI Presentation Generator',
     description: 'AI Presentation Generator',
     url: 'https://ai-presentation-generator-365022685299.us-west1.run.app',
+    category: 'document',
+  },
+  {
+    id: 'sim1',
+    name: 'AI Presentation Generator (シミュレーター)',
+    description: 'AI Presentation Generator シミュレーター',
+    url: 'https://aidriven-presentation-generator-365022685299.us-west1.run.app/',
+    category: 'simulator',
   },
 ];
 
@@ -49,20 +60,41 @@ const DocumentCreationHub: React.FC = () => {
           <p className="text-xs text-gray-500 mt-1">アプリを選択してAIで資料を生成</p>
         </div>
         <div className="py-4">
-          <p className="px-4 pb-2 text-sm font-semibold text-gray-500 uppercase tracking-wide">資料作成</p>
-          <nav className="space-y-1">
-            {EMBEDDED_APPS.map(app => (
-              <button
-                key={app.id}
-                onClick={() => handleSelectApp(app.id)}
-                className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
-                  activeApp === app.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
-                }`}
-              >
-                {app.name}
-              </button>
-            ))}
-          </nav>
+          <div className="space-y-6">
+            <div>
+              <p className="px-4 pb-2 text-sm font-semibold text-gray-500 uppercase tracking-wide">資料作成</p>
+              <nav className="space-y-1">
+                {EMBEDDED_APPS.filter(app => app.category === 'document').map(app => (
+                  <button
+                    key={app.id}
+                    onClick={() => handleSelectApp(app.id)}
+                    className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
+                      activeApp === app.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    {app.name}
+                  </button>
+                ))}
+              </nav>
+            </div>
+            
+            <div>
+              <p className="px-4 pb-2 text-sm font-semibold text-gray-500 uppercase tracking-wide">シミュレーター</p>
+              <nav className="space-y-1">
+                {EMBEDDED_APPS.filter(app => app.category === 'simulator').map(app => (
+                  <button
+                    key={app.id}
+                    onClick={() => handleSelectApp(app.id)}
+                    className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
+                      activeApp === app.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    {app.name}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
         </div>
       </aside>
 
