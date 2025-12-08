@@ -34,7 +34,8 @@ export const GEMINI_DEFAULT_MODEL =
   resolveEnvValue('NEXT_PUBLIC_GEMINI_MODEL') ??
   'gemini-2.5-flash';
 
-export const geminiClient = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY, vertexai: true }) : null;
+// Vertex AI endpoints reject API keys, so we default to the standard Google AI endpoint here.
+export const geminiClient = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 export const requireGeminiClient = (): GoogleGenAI => {
   if (!geminiClient) {
