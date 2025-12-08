@@ -36,7 +36,6 @@ import GeneralLedger from './components/accounting/GeneralLedger';
 import PayablesPage from './components/accounting/Payables';
 import ReceivablesPage from './components/accounting/Receivables';
 import CashSchedulePage from './components/accounting/CashSchedule';
-import BusinessSupportPage from './components/BusinessSupportPage';
 import DocumentCreationHub from './components/DocumentCreationHub';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
@@ -131,7 +130,6 @@ const PAGE_TITLES: Record<Page, string> = {
     document_creation_tools: '資料作成',
     pdf_editing_tools: 'PDF編集',
     dtp_tools: 'DTP自動組版',
-    business_support_proposal: '提案書作成',
     ai_business_consultant: 'AI経営相談',
     ai_market_research: 'AI市場調査',
     meeting_minutes: '議事録支援',
@@ -958,8 +956,6 @@ useEffect(() => {
                     />
                 );
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
-            case 'business_support_proposal':
-                return <BusinessSupportPage customers={customers} jobs={jobs} estimates={estimates} currentUser={currentUser} addToast={addToast} isAIOff={isAIOff} />;
             case 'document_creation_tools':
                 return <DocumentCreationHub />;
             case 'pdf_editing_tools':

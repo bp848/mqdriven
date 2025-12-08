@@ -60,7 +60,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_estimates', name: '見積管理' },
       { page: 'sales_orders', name: '案件予算管理' },
       { page: 'sales_billing', name: '売上請求 (AR)' },
-      { page: 'business_support_proposal', name: '提案書作成' },
       { page: 'document_creation_tools', name: '資料作成' },
     ],
   },

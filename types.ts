@@ -8,7 +8,6 @@ export type Page =
   | 'approval_form_approval' | 'approval_form_daily' | 'approval_form_weekly'
   | 'accounting_journal' | 'accounting_general_ledger' | 'accounting_trial_balance'
   | 'accounting_tax_summary' | 'accounting_period_closing' | 'accounting_business_plan'
-  | 'business_support_proposal'
   | 'ai_business_consultant'
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
