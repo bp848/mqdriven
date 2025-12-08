@@ -55,6 +55,7 @@ interface ExpenseLine {
     nonCustomerExpense?: boolean;
     linkedRevenueId: string;
     ocrExtracted: boolean;
+    internalMemo?: string;
 }
 
 interface ExpenseInvoiceDraft {
@@ -137,7 +138,26 @@ const createEmptyLine = (ocr: boolean = false): ExpenseLine => ({
     nonCustomerExpense: false,
     linkedRevenueId: '',
     ocrExtracted: ocr,
+    internalMemo: '',
 });
+
+const ensureExpenseLineShape = (rawLine?: Partial<ExpenseLine> | null): ExpenseLine => {
+    const baseLine = createEmptyLine(Boolean(rawLine?.ocrExtracted));
+    const merged = {
+        ...baseLine,
+        ...rawLine,
+    };
+    return {
+        ...merged,
+        id: rawLine?.id || baseLine.id,
+        internalMemo:
+            typeof rawLine?.internalMemo === 'string'
+                ? rawLine.internalMemo
+                : typeof rawLine?.customCustomerName === 'string'
+                ? rawLine.customCustomerName
+                : merged.internalMemo || '',
+    };
+};
 
 const createEmptyInvoiceDraft = (): ExpenseInvoiceDraft => ({
     id: generateId('invoice'),
@@ -304,6 +324,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             projectId: '',
             projectName: '',
             nonCustomerExpense: true,
+            internalMemo: line.internalMemo ?? line.customCustomerName ?? '',
         }));
     }, [isInternalExpense]);
 
@@ -332,9 +353,12 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 const draft = draftApplication ? draftApplication : await getApplicationDraft(applicationCodeId, currentUser.id);
                 if (draft?.formData) {
                     const data = draft.formData as any;
+                    const baseInvoice = createEmptyInvoiceDraft();
+                    const rawLines = Array.isArray(data.invoice?.lines) ? data.invoice.lines : null;
                     const restoredInvoice: ExpenseInvoiceDraft = {
-                        ...createEmptyInvoiceDraft(),
+                        ...baseInvoice,
                         ...data.invoice,
+                        lines: rawLines && rawLines.length > 0 ? rawLines.map((line: any) => ensureExpenseLineShape(line)) : baseInvoice.lines,
                         ocrExtractedFields: new Set(data.invoice?.ocrExtractedFields || []),
                     };
                     const documentUrl = data.documentUrl;
@@ -1184,8 +1208,20 @@ const LineItemTable: React.FC<{
                                             </td>
                                             </>
                                         ) : (
-                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
-                                                社内経費として処理されます。必要であれば備考や各明細の品名に部署・用途を記載してください。
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                                <div className="space-y-2">
+                                                    <textarea
+                                                        value={line.internalMemo ?? ''}
+                                                        onChange={e => onLineChange(line.id, 'internalMemo', e.target.value)}
+                                                        className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                        rows={3}
+                                                        placeholder="例: 広報部ノベルティ用・社内研修資料など"
+                                                        disabled={isDisabled}
+                                                    />
+                                                    {!line.internalMemo && !isDisabled && (
+                                                        <p className="text-xs text-slate-500">部署や目的を入力しておくと仕訳時に迷いません。</p>
+                                                    )}
+                                                </div>
                                             </td>
                                         )}
                                         <td className="whitespace-nowrap px-3 py-4 text-sm">
