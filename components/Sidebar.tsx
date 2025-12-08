@@ -156,40 +156,33 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   approvalsCount,
 }) => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
-  const [isHovered, setIsHovered] = React.useState(false);
-  
+
   const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed);
+    setIsCollapsed(prev => !prev);
   };
   const visibleCategories = React.useMemo(
     () => buildNavCategories(currentUser, approvalsCount),
     [currentUser, approvalsCount]
   );
 
-  const sidebarWidth = isCollapsed ? 'w-16' : 'w-64';
+  const sidebarWidth = isCollapsed ? 'w-20' : 'w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
-  
+
+  const navButtonText = isCollapsed ? '展開' : '折りたたむ';
+
   return (
-    <aside 
-      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen relative`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Collapse/Expand Button */}
-      <button
-        onClick={toggleSidebar}
-        className={`absolute -right-3 top-5 z-10 bg-slate-700 hover:bg-slate-600 rounded-full p-1 shadow-lg transition-all duration-200 ${isHovered ? 'opacity-100' : 'opacity-70'}`}
-        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      >
-        {isCollapsed ? (
-          <ChevronRight className="w-4 h-4 text-white" />
-        ) : (
-          <ChevronLeft className="w-4 h-4 text-white" />
-        )}
-      </button>
+    <aside className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen relative`}>
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''}`}>
         <div className="flex items-center gap-2">
           <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+            aria-label={isCollapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'}
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
         </div>
         <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
           <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
@@ -212,7 +205,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     title="ダッシュボード"
                 >
                     <PieChart className="w-5 h-5 flex-shrink-0" />
-                    <span className={`font-medium ${isCollapsed ? 'hidden' : 'ml-4'}`}>ダッシュボード</span>
+                    <span className={`font-medium ${isCollapsed ? 'sr-only' : 'ml-4'}`}>ダッシュボード</span>
                 </a>
             </li>
             <li>
@@ -227,7 +220,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     title="掲示板"
                 >
                     <Inbox className="w-5 h-5 flex-shrink-0" />
-                    <span className={`font-medium ${isCollapsed ? 'hidden' : 'ml-4'}`}>掲示板</span>
+                    <span className={`font-medium ${isCollapsed ? 'sr-only' : 'ml-4'}`}>掲示板</span>
                 </a>
             </li>
             <li>
@@ -288,7 +281,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
             </li>
           {visibleCategories.map(category => (
             <React.Fragment key={category.id}>
-              <li className="mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
                 {category.name}
               </li>
               {category.items.map(item => (
@@ -300,9 +293,9 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                       currentPage === item.page
                         ? 'bg-slate-700 text-white'
                         : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
+                    } ${isCollapsed ? 'px-2' : ''}`}
                   >
-                    <span className="ml-4 font-medium">{item.name}</span>
+                    <span className={`font-medium ${isCollapsed ? 'sr-only' : 'ml-4'}`}>{item.name}</span>
                     {item.badge !== undefined && item.badge > 0 && (
                       <span
                         className={`ml-3 inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${

@@ -24,7 +24,7 @@ export default function DocumentCreationHub() {
   const active = TOOLS.find((t) => t.id === activeId) ?? TOOLS[0];
 
   return (
-    <div className="flex h-full w-full bg-slate-50">
+    <div className="flex h-screen w-full bg-slate-50">
       <aside className="w-64 border-r border-slate-200 bg-white flex flex-col">
         <div className="px-4 py-3 border-b border-slate-200">
           <h1 className="text-base font-semibold text-slate-900">資料作成</h1>
@@ -60,7 +60,7 @@ export default function DocumentCreationHub() {
         </nav>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 h-full">
         <header className="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">{active.label}</h2>
@@ -68,11 +68,39 @@ export default function DocumentCreationHub() {
           </div>
         </header>
 
+        <div className="px-4 py-3 bg-slate-50 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">使いたいアプリを直接開く</p>
+            <a
+              href={active.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300"
+            >
+              {active.label} を新しいタブで開く
+            </a>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {TOOLS.map((tool) => (
+              <a
+                key={`link-${tool.id}`}
+                href={tool.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-400 hover:text-slate-900 transition"
+              >
+                <span className="uppercase tracking-wide text-[11px] text-slate-400">{tool.id}</span>
+                {tool.label}
+              </a>
+            ))}
+          </div>
+        </div>
+
         <div className="flex-1 min-h-0">
           <iframe
             key={active.id}
             src={active.url}
-            className="w-full h-full border-0"
+            className="w-full h-full min-h-full border-0"
             referrerPolicy="no-referrer-when-downgrade"
           />
         </div>
