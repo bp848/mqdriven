@@ -42,6 +42,8 @@ import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
 import MeetingMinutesIframe from './components/MeetingMinutesIframe';
+import PDFEditingHub from './components/PDFEditingHub';
+import DTPHub from './components/DTPHub';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SalesDashboard from './components/sales/SalesDashboard';
@@ -127,6 +129,8 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_cash_schedule: '資金繰り表',
     accounting_approved_applications: '承認済申請',
     document_creation_tools: '資料作成',
+    pdf_editing_tools: 'PDF編集',
+    dtp_tools: 'DTP自動組版',
     business_support_proposal: '提案書作成',
     ai_business_consultant: 'AI経営相談',
     ai_market_research: 'AI市場調査',
@@ -137,6 +141,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_route_management: '承認ルート管理',
     admin_master_management: 'マスタ管理',
     admin_action_console: 'アクションコンソール',
+    admin_bug_reports: 'バグ・改善報告',
     bulletin_board: '掲示板',
     settings: '設定',
 };
@@ -957,6 +962,8 @@ useEffect(() => {
                 return <BusinessSupportPage customers={customers} jobs={jobs} estimates={estimates} currentUser={currentUser} addToast={addToast} isAIOff={isAIOff} />;
             case 'document_creation_tools':
                 return <DocumentCreationHub />;
+            case 'pdf_editing_tools':
+                return <PDFEditingHub />;
             case 'ai_business_consultant':
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':

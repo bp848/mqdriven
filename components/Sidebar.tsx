@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { Calendar, ClipboardList, Users, Settings, Package, Briefcase, ChevronDown, DollarSign, Inbox, PieChart, ShoppingCart, BookOpen, CheckCircle, Archive } from './Icons';
+import { Calendar, ClipboardList, Users, Settings, Package, Briefcase, ChevronDown, DollarSign, Inbox, PieChart, ShoppingCart, BookOpen, CheckCircle, Archive, ChevronLeft, ChevronRight } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -38,6 +38,16 @@ const HIDDEN_CATEGORY_IDS: string[] = [
 ];
 
 const BASE_NAV_CATEGORIES: NavCategoryType[] = [
+  {
+    id: 'document_creation',
+    name: '資料作成',
+    icon: BookOpen,
+    items: [
+      { page: 'document_creation_tools', name: '提案書作成AI' },
+      { page: 'pdf_editing_tools', name: 'PDF編集AI' },
+      { page: 'dtp_tools', name: 'DTP自動組版AI' },
+    ],
+  },
   {
     id: 'sales',
     name: '販売・営業',
@@ -146,25 +156,50 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   onSignOut,
   approvalsCount,
 }) => {
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isHovered, setIsHovered] = React.useState(false);
+  
+  const toggleSidebar = () => {
+    setIsCollapsed(!isCollapsed);
+  };
   const visibleCategories = React.useMemo(
     () => buildNavCategories(currentUser, approvalsCount),
     [currentUser, approvalsCount]
   );
 
+  const sidebarWidth = isCollapsed ? 'w-16' : 'w-64';
+  const sidebarTransition = 'transition-all duration-300 ease-in-out';
+  
   return (
-    <aside className="w-64 flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen">
-      <div className="px-3 py-4 border-b border-slate-700">
+    <aside 
+      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 min-h-screen relative`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Collapse/Expand Button */}
+      <button
+        onClick={toggleSidebar}
+        className={`absolute -right-3 top-5 z-10 bg-slate-700 hover:bg-slate-600 rounded-full p-1 shadow-lg transition-all duration-200 ${isHovered ? 'opacity-100' : 'opacity-70'}`}
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="w-4 h-4 text-white" />
+        ) : (
+          <ChevronLeft className="w-4 h-4 text-white" />
+        )}
+      </button>
+      <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''}`}>
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold tracking-tight">業務</h1>
+          <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
         </div>
-        <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80">
-          <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">業務</a>
-          <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">MQ</a>
-          <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">DTP</a>
-          <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className="px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors">エコ</a>
+        <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
+          <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
+          <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
+          <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
+          <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
         </div>
       </div>
-      <nav className="flex-1 mt-6 space-y-2">
+      <nav className={`flex-1 mt-6 space-y-2 overflow-hidden ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
             <li>
                 <a
@@ -174,10 +209,11 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                         currentPage === 'analysis_dashboard'
                             ? 'bg-slate-700 text-white'
                             : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
+                    } ${isCollapsed ? 'justify-center' : ''}`}
+                    title="ダッシュボード"
                 >
-                    <PieChart className="w-5 h-5" />
-                    <span className="ml-4 font-medium">ダッシュボード</span>
+                    <PieChart className="w-5 h-5 flex-shrink-0" />
+                    <span className={`font-medium ${isCollapsed ? 'hidden' : 'ml-4'}`}>ダッシュボード</span>
                 </a>
             </li>
             <li>
@@ -188,10 +224,11 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                         currentPage === 'bulletin_board'
                             ? 'bg-slate-700 text-white'
                             : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
+                    } ${isCollapsed ? 'justify-center' : ''}`}
+                    title="掲示板"
                 >
-                    <Inbox className="w-5 h-5" />
-                    <span className="ml-4 font-medium">掲示板</span>
+                    <Inbox className="w-5 h-5 flex-shrink-0" />
+                    <span className={`font-medium ${isCollapsed ? 'hidden' : 'ml-4'}`}>掲示板</span>
                 </a>
             </li>
             <li>
@@ -204,8 +241,8 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                             : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                     }`}
                 >
-                    <Archive className="w-5 h-5" />
-                    <span className="ml-4 font-medium">データ自動入力</span>
+                    <Inbox className="w-5 h-5 flex-shrink-0" />
+                    <span className={`font-medium ${isCollapsed ? 'hidden' : 'ml-4'}`}>FAX OCR取り込み</span>
                 </a>
             </li>
             <li>
@@ -234,6 +271,20 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                 >
                     <Calendar className="w-5 h-5" />
                     <span className="ml-4 font-medium">予定/報告各種</span>
+                </a>
+            </li>
+            <li>
+                <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onNavigate('accounting_dashboard'); }}
+                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        currentPage.startsWith('accounting_')
+                            ? 'bg-slate-700 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                >
+                    <DollarSign className="w-5 h-5" />
+                    <span className="ml-4 font-medium">会計メニュー</span>
                 </a>
             </li>
           {visibleCategories.map(category => (
