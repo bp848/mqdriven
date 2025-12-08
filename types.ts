@@ -17,7 +17,9 @@ export type Page =
   | 'accounting_dashboard' | 'accounting_journal_review'
   | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
   | 'accounting_approved_applications'
-  | 'document_creation_tools';
+  | 'document_creation_tools'
+  | 'pdf_editing_tools'
+  | 'dtp_tools';
 
 export enum JobStatus {
   Pending = '保留',
