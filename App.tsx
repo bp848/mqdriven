@@ -1056,7 +1056,7 @@ useEffect(() => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans flex">
+        <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans flex">
             <Sidebar 
                 currentPage={currentPage}
                 onNavigate={handleNavigate}
@@ -1066,7 +1066,7 @@ useEffect(() => {
                 supabaseUserEmail={user?.email}
                 onSignOut={handleSignOut}
             />
-            <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative">
+            <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative min-h-0">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
                 <div className={`flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
                     <Header {...headerConfig} />
