@@ -12,6 +12,8 @@ OCR機能を使用するには、以下の環境変数が正しく設定され�
 VITE_API_KEY=your_gemini_api_key_here
 # または
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
+# 任意でOCR専用モデルを指定
+VITE_GEMINI_OCR_MODEL=gemini-2.0-flash
 
 # AI機能を無効化する場合（デバッグ用）
 VITE_AI_OFF=0  # 0=有効, 1=無効

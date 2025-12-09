@@ -1,5 +1,10 @@
 import { Type, Chat } from "@google/genai";
-import { GEMINI_DEFAULT_MODEL, isGeminiAIDisabled, requireGeminiClient } from "./Gemini";
+import {
+  GEMINI_DEFAULT_MODEL,
+  GEMINI_OCR_MODEL,
+  isGeminiAIDisabled,
+  requireGeminiClient,
+} from "./Gemini";
 // FIX: Import MarketResearchReport type.
 import {
   AISuggestions,
@@ -28,6 +33,7 @@ import {
 import { formatJPY } from "../utils";
 
 const model = GEMINI_DEFAULT_MODEL;
+const invoiceOcrModel = GEMINI_OCR_MODEL ?? GEMINI_DEFAULT_MODEL;
 
 const checkOnlineAndAIOff = () => {
   if (isGeminiAIDisabled) {
@@ -352,7 +358,7 @@ export const extractInvoiceDetails = async (
         "この画像から請求書の詳細情報をJSONで抽出してください。支払期日、登録番号、支払先銀行情報、明細行（品名/数量/単価）も可能な限り含めてください。",
     };
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: invoiceOcrModel,
       contents: { parts: [imagePart, textPart] },
       config: {
         responseMimeType: "application/json",
