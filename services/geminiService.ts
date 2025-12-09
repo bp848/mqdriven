@@ -329,7 +329,6 @@ const extractInvoiceSchema = {
     paymentRecipientName: { type: Type.STRING, description: "請求書に記載された支払先名。" },
     bankAccount: bankAccountSchema,
     lineItems: { type: Type.ARRAY, items: expenseLineSchema },
-    expenseDraft: expenseDraftSchema,
   },
   required: [
     "vendorName",
@@ -350,10 +349,10 @@ export const extractInvoiceDetails = async (
     const imagePart = { inlineData: { data: imageBase64, mimeType } };
     const textPart = {
       text:
-        "この画像から請求書の詳細情報をJSONで抽出してください。経費精算フォームと同じ構造になるように、支払期日・登録番号・支払先銀行情報・明細行（品名/数量/単価）も含めてください。",
+        "この画像から請求書の詳細情報をJSONで抽出してください。支払期日、登録番号、支払先銀行情報、明細行（品名/数量/単価）も可能な限り含めてください。",
     };
     const response = await ai.models.generateContent({
-      model,
+      model: "gemini-1.5-flash-latest",
       contents: { parts: [imagePart, textPart] },
       config: {
         responseMimeType: "application/json",
@@ -361,7 +360,12 @@ export const extractInvoiceDetails = async (
       },
     });
     const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr);
+    try {
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("AIからのJSON解析に失敗しました。", e);
+        throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${jsonStr}`);
+    }
   });
 };
 

@@ -2,7 +2,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { extractInvoiceDetails } from '../services/geminiService';
-// FIX: The member 'uploadToInbox' is not exported from '../services/dataService'. Use 'uploadFile' instead.
 import { getInboxItems, addInboxItem, updateInboxItem, deleteInboxItem, uploadFile } from '../services/dataService';
 import { InboxItem, InvoiceData, InboxItemStatus, Toast, ConfirmationDialogProps } from '../types';
 import { Upload, Loader, X, CheckCircle, Save, Trash2, AlertTriangle, RefreshCw } from './Icons';
@@ -102,9 +101,15 @@ const InboxItemCard: React.FC<{
         <div className={`bg-white dark:bg-slate-800 p-4 rounded-xl shadow-md border ${item.status === 'approved' ? 'border-green-300 dark:border-green-700' : 'border-slate-200 dark:border-slate-700'}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <a href={item.fileUrl} target="_blank" rel="noopener noreferrer">
-                        <img src={item.fileUrl} alt={item.fileName} className="w-full h-auto max-h-80 object-contain rounded-md border border-slate-200 dark:border-slate-700" />
-                    </a>
+                    <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden">
+                        {item.mimeType === 'application/pdf' ? (
+                            <iframe src={item.fileUrl} className="w-full h-96" title={item.fileName}></iframe>
+                        ) : (
+                            <a href={item.fileUrl} target="_blank" rel="noopener noreferrer">
+                                <img src={item.fileUrl} alt={item.fileName} className="w-full h-auto object-contain" />
+                            </a>
+                        )}
+                    </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 truncate" title={item.fileName}>{item.fileName}</p>
                 </div>
                 <div className="flex flex-col">
@@ -211,7 +216,6 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
         }
 
         try {
-            // FIX: 'uploadToInbox' is not defined. Use 'uploadFile' with the correct bucket name 'inbox'.
             const { path } = await uploadFile(file, 'inbox');
             tempItem.filePath = path;
 
