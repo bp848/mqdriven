@@ -1123,7 +1123,7 @@ const LineItemTable: React.FC<{
 
                                 return (
                                     <tr key={line.id} className={line.ocrExtracted ? 'bg-yellow-50 dark:bg-yellow-500/10' : ''}>
-                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-0">
+                                        <td className="py-4 pl-4 pr-3 text-sm align-top sm:pl-0">
                                             <input
                                                 type="text"
                                                 value={line.description}
@@ -1133,7 +1133,7 @@ const LineItemTable: React.FC<{
                                                 placeholder="例: 校了データ発送作業"
                                             />
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                        <td className="px-3 py-4 text-sm align-top">
                                             <input
                                                 type="date"
                                                 value={line.lineDate}
@@ -1144,7 +1144,7 @@ const LineItemTable: React.FC<{
                                         </td>
                                         {!isInternalExpense ? (
                                             <>
-                                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <td className="px-3 py-4 text-sm align-top">
                                                 <div className="space-y-2">
                                                     <input
                                                         type="text"
@@ -1182,7 +1182,7 @@ const LineItemTable: React.FC<{
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <td className="px-3 py-4 text-sm align-top">
                                                 <div className="space-y-2">
                                                     <input
                                                         type="text"
@@ -1208,7 +1208,7 @@ const LineItemTable: React.FC<{
                                             </td>
                                             </>
                                         ) : (
-                                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <td className="px-3 py-4 text-sm align-top">
                                                 <div className="space-y-2">
                                                     <textarea
                                                         value={line.internalMemo ?? ''}
@@ -1224,7 +1224,7 @@ const LineItemTable: React.FC<{
                                                 </div>
                                             </td>
                                         )}
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                        <td className="px-3 py-4 text-sm align-top">
                                             <AccountItemSelect
                                                 accountItems={accountItems}
                                                 value={line.accountItemId}
@@ -1232,7 +1232,7 @@ const LineItemTable: React.FC<{
                                                 disabled={isDisabled}
                                             />
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                        <td className="px-3 py-4 text-sm align-top">
                                             <input
                                                 type="number"
                                                 value={line.amountExclTax}
@@ -1241,7 +1241,7 @@ const LineItemTable: React.FC<{
                                                 disabled={isDisabled}
                                             />
                                         </td>
-                                        <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                                        <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0 align-top">
                                             <button
                                                 type="button"
                                                 onClick={() => onRemoveLine(line.id)}

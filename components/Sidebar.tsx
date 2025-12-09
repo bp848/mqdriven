@@ -171,7 +171,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   const navButtonText = isCollapsed ? '展開' : '折りたたむ';
 
   return (
-    <aside className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-screen relative`}>
+    <aside className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-full min-h-0 relative`}>
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''}`}>
         <div className="flex items-center gap-2">
           <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
@@ -191,7 +191,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
           <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
         </div>
       </div>
-      <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto ${isCollapsed ? 'px-1' : 'px-2'}`}>
+      <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
             <li>
                 <a
