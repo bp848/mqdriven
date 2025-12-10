@@ -18,7 +18,7 @@ interface ApprovalFormProps {
 }
 
 const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
-    const [formData, setFormData] = useState({ title: '', details: '' });
+    const [formData, setFormData] = useState({ title: '', details: '', amount: '' });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -35,13 +35,20 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
         setFormData({
             title: data.title || '',
             details: data.details || '',
+            amount: data.amount || '',
         });
         setApprovalRouteId(draftApplication.approvalRouteId || '');
     }, [draftApplication, applicationCodeId]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        if (name === 'amount') {
+            // Only allow numbers and 0
+            const numericValue = value.replace(/[^0-9]/g, '');
+            setFormData(prev => ({ ...prev, [name]: numericValue }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
     };
 
     const buildSubmissionPayload = () => ({
@@ -153,6 +160,22 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
                     <div>
                         <label htmlFor="details" className={labelClass}>目的・概要 *</label>
                         <textarea id="details" name="details" rows={6} value={formData.details} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="申請する決裁の目的、背景、具体的な内容などを記述してください。" autoComplete="on" />
+                    </div>
+
+                    <div>
+                        <label htmlFor="amount" className={labelClass}>金額（円）</label>
+                        <input 
+                            type="text" 
+                            id="amount" 
+                            name="amount" 
+                            value={formData.amount} 
+                            onChange={handleChange} 
+                            className={inputClass} 
+                            disabled={isDisabled} 
+                            placeholder="0円でも申請可能です（例: 100000）" 
+                            autoComplete="on" 
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">0円での申請も可能です</p>
                     </div>
                     
                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />
