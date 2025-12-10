@@ -5,7 +5,7 @@ import {
 import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread } from '../types';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
-import { Lightbulb, Loader, AlertTriangle, Inbox } from './Icons';
+import { AlertTriangle, Inbox } from './Icons';
 import { getBulletinThreads } from '../services/dataService';
 
 
