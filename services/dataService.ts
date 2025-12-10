@@ -47,6 +47,7 @@ import {
     PayableItem,
     ReceivableItem,
     CashScheduleData,
+    GeneralLedgerEntry,
 } from '../types';
 
 type SupabaseClient = ReturnType<typeof getSupabase>;
@@ -1277,20 +1278,51 @@ export const getApprovedApplications = async (): Promise<ApplicationWithDetails[
 
 
 export const getApplications = async (currentUser: User | null): Promise<ApplicationWithDetails[]> => {
+    if (!currentUser) return [];
+
     const supabase = getSupabase();
-    const { data, error } = await supabase
+    const applicationsQuery = supabase
         .from('applications')
-        .select(`*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`)
-        .or(`applicant_id.eq.${currentUser?.id},approver_id.eq.${currentUser?.id}`)
+        .select(
+            `*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`
+        )
+        .or(`applicant_id.eq.${currentUser.id},approver_id.eq.${currentUser.id}`)
         .order('created_at', { ascending: false });
-        
-    ensureSupabaseSuccess(error, 'Failed to fetch applications');
-    return (data || []).map(app => ({
+
+    const draftsQuery = supabase
+        .from('application_drafts')
+        .select(
+            `*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`
+        )
+        .eq('applicant_id', currentUser.id)
+        .order('updated_at', { ascending: false });
+
+    const [{ data: activeApps, error: applicationsError }, { data: draftApps, error: draftsError }] = await Promise.all([
+        applicationsQuery,
+        draftsQuery,
+    ]);
+
+    ensureSupabaseSuccess(applicationsError, 'Failed to fetch applications');
+    ensureSupabaseSuccess(draftsError, 'Failed to fetch application drafts');
+
+    const mappedApplications = (activeApps || []).map(app => ({
         ...dbApplicationToApplication(app),
         applicant: app.applicant,
         applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
         approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
     }));
+
+    const mappedDrafts = (draftApps || []).map(draft => ({
+        ...dbApplicationDraftToApplication(draft),
+        applicant: draft.applicant || currentUser,
+        applicationCode: draft.application_code ? dbApplicationCodeToApplicationCode(draft.application_code) : undefined,
+        approvalRoute: draft.approval_route ? dbApprovalRouteToApprovalRoute(draft.approval_route) : undefined,
+    }));
+
+    return [...mappedApplications, ...mappedDrafts].sort((a, b) => {
+        const toTime = (value?: string | null) => (value ? new Date(value).getTime() : 0);
+        return toTime(b.updatedAt || b.createdAt) - toTime(a.updatedAt || a.createdAt);
+    });
 };
 export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
     const supabase = getSupabase();
@@ -1420,6 +1452,12 @@ export const clearApplicationDraft = async (applicationCodeId: string, applicant
     const supabase = getSupabase();
     const { error } = await supabase.from('application_drafts').delete().eq('id', draftId);
     ensureSupabaseSuccess(error, 'Failed to clear application draft');
+};
+
+export const deleteApplicationDraft = async (draftId: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('application_drafts').delete().eq('id', draftId);
+    ensureSupabaseSuccess(error, 'Failed to delete application draft');
 };
 
 interface BulletinThreadInput {
@@ -2390,4 +2428,3 @@ export const getCashSchedule = async (period: { startDate: string, endDate: stri
         closing_balance: Number(row.closing_balance ?? 0),
     }));
 };
-

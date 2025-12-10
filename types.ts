@@ -132,6 +132,20 @@ export interface JournalEntry {
   description: string;
 }
 
+export interface GeneralLedgerEntry {
+  id: string;
+  accountId?: string | null;
+  date: string;
+  description: string;
+  debit: number | null;
+  credit: number | null;
+  balance: number | null;
+  jobId?: string | null;
+  voucherNo?: string | null;
+  partner?: string | null;
+  type?: string | null;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -148,6 +162,7 @@ export interface EmployeeUser {
   email: string;
   role: 'admin' | 'user';
   createdAt: string;
+  isActive?: boolean | null;
 }
 
 export interface Customer {
@@ -156,6 +171,7 @@ export interface Customer {
   customerName: string;
   customerNameKana?: string;
   representative?: string;
+  representativeTitle?: string | null;
   phoneNumber?: string;
   address1?: string;
   companyContent?: string;
@@ -195,6 +211,30 @@ export interface Customer {
   infoSalesIdeas?: string;
   customerContactInfo?: string; // for mailto
   aiAnalysis?: CompanyAnalysis | null;
+  isActive?: boolean | null;
+}
+
+export interface BusinessCardContact {
+  companyName?: string;
+  personName?: string;
+  personNameKana?: string;
+  department?: string;
+  title?: string;
+  phoneNumber?: string;
+  mobileNumber?: string;
+  faxNumber?: string;
+  email?: string;
+  address?: string;
+  postalCode?: string;
+  websiteUrl?: string;
+  notes?: string;
+}
+
+export interface BankAccountInfo {
+  bankName?: string | null;
+  branchName?: string | null;
+  accountType?: string | null;
+  accountNumber?: string | null;
 }
 
 export interface CustomerInfo {
@@ -308,6 +348,21 @@ export interface InvoiceData {
     account: string;
     relatedCustomer?: string;
     project?: string;
+    invoiceNumber?: string | null;
+    registrationNumber?: string | null;
+    dueDate?: string | null;
+    subtotalAmount?: number | null;
+    taxAmount?: number | null;
+    totalNet?: number | null;
+    totalGross?: number | null;
+    lineItems?: InvoiceItem[] | null;
+    expenseDraft?: Record<string, any> | null;
+    bankAccount?: BankAccountInfo | null;
+    matchedPaymentRecipientId?: string | null;
+    matchedCustomerId?: string | null;
+    paymentRecipientName?: string | null;
+    paymentRecipientId?: string | null;
+    paymentRecipientCode?: string | null;
 }
 
 export interface AIJournalSuggestion {
@@ -335,6 +390,10 @@ export interface EstimateItem {
     cost: number;
     costRate: number;
     subtotal: number;
+    name?: string;
+    qty?: number;
+    taxAmount?: number;
+    total?: number;
 }
 
 export interface Estimate {
@@ -354,6 +413,10 @@ export interface Estimate {
     user?: User;
     createdAt: string;
     updatedAt: string;
+    subtotal?: number;
+    taxTotal?: number;
+    grandTotal?: number;
+    deliveryTerms?: string;
 }
 
 export interface ScheduleItem {
@@ -381,7 +444,7 @@ export interface DailyReportData {
     comments: string[];
 }
 
-export interface DailyReportPrefill extends DailyReportData {
+export interface DailyReportPrefill extends Partial<DailyReportData> {
     id: string;
 }
 
@@ -440,7 +503,7 @@ export interface Application {
     applicantId: string;
     applicationCodeId: string;
     formData: any;
-    status: 'draft' | 'pending_approval' | 'approved' | 'rejected';
+    status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
     submittedAt: string | null;
     approvedAt: string | null;
     rejectedAt: string | null;
@@ -450,6 +513,7 @@ export interface Application {
     approvalRouteId: string;
     createdAt: string;
     updatedAt?: string | null;
+    documentUrl?: string | null;
 }
 
 export interface ApplicationWithDetails extends Application {
@@ -469,24 +533,34 @@ export interface Employee {
 }
 
 export interface AccountItem {
-    id: string;
-    code: string;
-    name: string;
-    categoryCode: string;
-    isActive: boolean;
-    sortOrder: number;
-    createdAt: string;
-    updatedAt: string;
+  id: string;
+  code: string;
+  name: string;
+  categoryCode?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  mqCode?: string | Record<string, any> | null;
 }
 
 export interface PurchaseOrder {
-    id: string;
-    supplierName: string;
-    itemName: string;
-    orderDate: string;
-    quantity: number;
-    unitPrice: number;
-    status: PurchaseOrderStatus;
+  id: string;
+  supplierName: string;
+  itemName: string;
+  orderDate: string;
+  quantity?: number;
+  unitPrice?: number;
+  status: PurchaseOrderStatus;
+  projectCode?: string | null;
+  projectId?: string | null;
+  paymentRecipientId?: string | null;
+  amount?: number | null;
+  subamount?: number | null;
+  totalCost?: number | null;
+  raw?: Record<string, any>;
+  orderCode?: string | null;
+  copies?: number | null;
 }
 
 export interface ProjectBudgetFilter {
@@ -559,7 +633,7 @@ export interface BulletinThread {
 export interface Toast {
     id: number;
     message: string;
-    type: 'success' | 'error' | 'info';
+    type: 'success' | 'error' | 'info' | 'warning';
 }
   
 export interface ConfirmationDialogProps {
@@ -603,6 +677,8 @@ export interface InvoiceItem {
     unitPrice: number;
     lineTotal: number;
     sortIndex: number;
+    amountExclTax?: number;
+    taxRate?: number;
 }
 
 export interface Invoice {
@@ -669,7 +745,7 @@ export interface MasterAccountItem {
   id: string;
   code: string;
   name: string;
-  categoryCode: string | null;
+  categoryCode?: string | null;
 }
 
 export interface PaymentRecipient {
@@ -677,6 +753,16 @@ export interface PaymentRecipient {
   recipientCode: string;
   companyName: string | null;
   recipientName: string | null;
+  phoneNumber?: string | null;
+  bankName?: string | null;
+  branchName?: string | null;
+  bankBranch?: string | null;
+  bankAccountType?: string | null;
+  bankAccountNumber?: string | null;
+  accountNumber?: string | null;
+  invoiceRegistrationNumber?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Department {

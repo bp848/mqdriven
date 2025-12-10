@@ -251,7 +251,7 @@ export const enrichCustomerData = async (
     const cleanedData: Partial<Customer> = {};
     for (const key in parsed) {
       if (parsed[key] !== null && parsed[key] !== undefined) {
-        cleanedData[key as keyof Customer] = parsed[key];
+        (cleanedData as Record<string, unknown>)[key] = parsed[key];
       }
     }
     return cleanedData;

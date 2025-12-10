@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Download, Calendar, Filter, ChevronDown, Printer, Loader } from 'lucide-react';
-import { AccountItem, GeneralLedgerEntry } from '../../types';
+import { AccountItem, GeneralLedgerEntry, JournalEntry } from '../../types';
 import * as dataService from '../../services/dataService';
 
 const formatCurrency = (val: number | null) => {
@@ -8,7 +8,12 @@ const formatCurrency = (val: number | null) => {
   return val.toLocaleString();
 };
 
-const GeneralLedger: React.FC = () => {
+interface GeneralLedgerProps {
+  entries?: JournalEntry[];
+  accountItems?: AccountItem[];
+}
+
+const GeneralLedger: React.FC<GeneralLedgerProps> = () => {
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
   const [ledgerData, setLedgerData] = useState<GeneralLedgerEntry[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
