@@ -136,10 +136,18 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             return null;
         };
 
+        // 優先順位: amount > totalAmount > requestedAmount > その他
+        const amount = toNumber(data.amount);
+        if (amount !== null) return amount;
+        
+        const totalAmount = toNumber(data.totalAmount);
+        if (totalAmount !== null) return totalAmount;
+        
+        const requestedAmount = toNumber(data.requestedAmount);
+        if (requestedAmount !== null) return requestedAmount;
+
+        // その他の候補
         const candidates = [
-            toNumber(data.amount),
-            toNumber(data.totalAmount),
-            toNumber(data.requestedAmount),
             toNumber(data.estimatedAmount),
             toNumber(invoice.totalGross),
             toNumber(invoice.totalNet),
@@ -422,16 +430,16 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                             : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-blue-400'
                     }`}
                 >
-                    <div className="flex items-start justify-between gap-4 text-[130%]">
+                    <div className="flex items-start justify-between gap-4">
                         <div>
-                            <p className={`text-[130%] font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-100'}`}>{config.label}</p>
-                            <p className={`mt-1 text-[130%] ${isActive ? 'text-white/80' : 'text-slate-500 dark:text-slate-400'}`}>{config.description}</p>
-                            <p className={`mt-2 text-[130%] font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                            <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-100'}`}>{config.label}</p>
+                            <p className={`mt-1 text-xs ${isActive ? 'text-white/80' : 'text-slate-500 dark:text-slate-400'}`}>{config.description}</p>
+                            <p className={`mt-2 text-xs font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
                                 合計 {count} 件 / 金額 ¥{total.toLocaleString()}
                             </p>
                         </div>
                         <span
-                            className={`rounded-full px-3 py-1 text-[390%] font-bold ${
+                            className={`rounded-full px-3 py-1 text-2xl font-bold ${
                                 isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                             }`}
                         >
@@ -455,7 +463,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         <span>{TABS_CONFIG[activeTab].title}</span>
                     </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{TABS_CONFIG[activeTab].description}</p>
-                    <div className="mt-3 flex flex-wrap items-baseline gap-4 text-sm">
+                    <div className="mt-3 flex flex-wrap items-baseline gap-4 text-[130%]">
                         <span className="font-semibold text-slate-800 dark:text-slate-100">件数: {tabCounts[activeTab]} 件</span>
                         <span className="font-semibold text-slate-800 dark:text-slate-100">合計金額: ¥{tabTotals[activeTab].toLocaleString()}</span>
                     </div>

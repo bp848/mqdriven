@@ -381,14 +381,18 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
             return (
                 <div className="space-y-2">
                     {value.map((item, index) => (
-                        <pre key={index} className="text-xs bg-slate-100 dark:bg-slate-900 p-2 rounded-lg whitespace-pre-wrap">{JSON.stringify(item, null, 2)}</pre>
+                        <div key={index} className="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+                            {renderObjectAsHTML(item)}
+                        </div>
                     ))}
                 </div>
             );
         }
         if (typeof value === 'object' && value !== null) {
             return (
-                <pre className="text-xs bg-slate-100 dark:bg-slate-900 p-2 rounded-lg whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>
+                <div className="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+                    {renderObjectAsHTML(value)}
+                </div>
             );
         }
         if (value === null || value === undefined || value === '') {
@@ -401,7 +405,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
             if (value.includes('#') || value.includes('**') || value.includes('*')) {
                 return (
                     <div className="prose prose-sm max-w-none dark:prose-invert">
-                        <pre className="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded-lg whitespace-pre-wrap font-mono">{value}</pre>
+                        <div className="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded-lg whitespace-pre-wrap font-mono">{value}</div>
                     </div>
                 );
             }
@@ -417,6 +421,38 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         }
         
         return value;
+    };
+
+    const renderObjectAsHTML = (obj: any) => {
+        if (obj === null || obj === undefined) return '-';
+        
+        if (Array.isArray(obj)) {
+            return (
+                <div className="ml-4">
+                    <span className="font-semibold text-blue-600">Array[{obj.length}]</span>
+                    {obj.map((item, index) => (
+                        <div key={index} className="ml-4 mt-1">
+                            [{index}]: {renderObjectAsHTML(item)}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+        
+        if (typeof obj === 'object') {
+            return (
+                <div className="space-y-1">
+                    {Object.entries(obj).map(([key, val]) => (
+                        <div key={key} className="flex">
+                            <span className="font-semibold text-blue-600 min-w-[100px]">{key}:</span>
+                            <span className="ml-2">{renderObjectAsHTML(val)}</span>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+        
+        return <span className="text-green-600">{String(obj)}</span>;
     };
 
     const applicationMetaRows = [
