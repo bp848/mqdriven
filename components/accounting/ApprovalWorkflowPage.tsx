@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ApplicationList from '../ApplicationList';
 import ApplicationDetailModal from '../ApplicationDetailModal';
-import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication } from '../../services/dataService';
+import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft } from '../../services/dataService';
 // FIX: Import AllocationDivision type.
 import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
 import { Loader, AlertTriangle } from '../Icons';
@@ -103,6 +103,8 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     onResumeDraft,
     resumedApplication,
     onResumeDraftClear,
+    dailyReportPrefill,
+    onDailyReportPrefillApplied,
 }) => {
     // State for list view
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
@@ -262,6 +264,28 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             await fetchListData();
         } catch (err: any) {
             addToast(`エラー: ${err.message}`, 'error');
+        }
+    };
+
+    const handleDeleteDraft = async (application: ApplicationWithDetails) => {
+        if (!currentUser) return;
+        if (application.status !== 'draft') return;
+        if (application.applicantId !== currentUser.id) {
+            addToast('自分の下書きのみ削除できます。', 'error');
+            return;
+        }
+        const confirmed =
+            typeof window === 'undefined'
+                ? true
+                : window.confirm('この下書きを完全に削除しますか？この操作は元に戻せません。');
+        if (!confirmed) return;
+
+        try {
+            await deleteApplicationDraft(application.id);
+            addToast('下書きを削除しました。', 'success');
+            await fetchListData();
+        } catch (err: any) {
+            addToast(`エラー: ${err.message || '下書きの削除に失敗しました。'}`, 'error');
         }
     };
     
@@ -444,6 +468,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         onResumeDraft={onResumeDraft}
                         currentUserId={currentUser?.id}
                         onCancelApplication={handleCancelApplication}
+                        onDeleteDraft={activeTab === 'drafts' ? handleDeleteDraft : undefined}
                         resubmittedParentIds={resubmissionInfo.parentIds}
                         resubmissionChildrenMap={resubmissionInfo.childMap}
                     />

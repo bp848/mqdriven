@@ -84,7 +84,14 @@ const StatusBadge: React.FC<{ status: PurchaseOrderStatus }> = ({ status }) => {
   );
 };
 
-const PRIMARY_HEADERS = [
+interface PrimaryHeader {
+    key: string;
+    label: string;
+    sortKey: string;
+    alignRight?: boolean;
+}
+
+const PRIMARY_HEADERS: PrimaryHeader[] = [
     { key: 'id', label: '受注ID (id)', sortKey: 'id' },
     { key: 'customerName', label: '顧客名 (project_id参照)', sortKey: 'customerName' },
     { key: 'projectCode', label: '案件番号 (project_code)', sortKey: 'projectCode' },
@@ -93,7 +100,7 @@ const PRIMARY_HEADERS = [
     { key: 'unitPrice', label: '単価', sortKey: 'unitPrice', alignRight: true },
     { key: 'totalAmount', label: '受注金額', sortKey: 'totalAmount', alignRight: true },
     { key: 'status', label: 'ステータス', sortKey: 'status' },
-] as const;
+] ;
 
 const formatRawValue = (value: unknown): string => {
     if (value === null || value === undefined || value === '') return '-';

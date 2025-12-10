@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ApplicationWithDetails, SortConfig } from '../types';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
-import { ArrowUpDown, ChevronDown, Eye, RefreshCw, X } from './Icons';
+import { ArrowUpDown, ChevronDown, Eye, RefreshCw, Trash2, X } from './Icons';
 import { formatDateTime, formatJPY } from '../utils';
 
 interface ApplicationListProps {
@@ -11,6 +11,7 @@ interface ApplicationListProps {
   onResumeDraft?: (app: ApplicationWithDetails) => void;
   currentUserId?: string | null;
   onCancelApplication?: (app: ApplicationWithDetails) => void;
+  onDeleteDraft?: (app: ApplicationWithDetails) => void;
   resubmittedParentIds?: string[];
   resubmissionChildrenMap?: Record<string, string>;
 }
@@ -95,6 +96,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
   onResumeDraft,
   currentUserId,
   onCancelApplication,
+  onDeleteDraft,
   resubmittedParentIds,
   resubmissionChildrenMap,
 }) => {
@@ -190,6 +192,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                 Boolean(onResumeDraft) && app.status === 'rejected' && currentUserId && currentUserId === app.applicantId;
               const canCancel =
                 Boolean(onCancelApplication) && currentUserId === app.applicantId && app.status === 'pending_approval';
+              const canDeleteDraft = Boolean(onDeleteDraft) && app.status === 'draft' && currentUserId === app.applicantId;
               const isResubmissionChild = Boolean(resubmissionChildLookup[app.id]);
               const isResubmittedParent = resubmittedParentIdSet.has(app.id);
 
@@ -269,6 +272,18 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                       >
                         <X className="w-4 h-4" />
                         <span>申請を取り消す</span>
+                      </button>
+                    )}
+                    {canDeleteDraft && (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteDraft?.(app);
+                        }}
+                        className="flex items-center justify-center gap-1.5 w-full text-rose-600 dark:text-rose-400 font-semibold hover:underline"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>下書きを削除</span>
                       </button>
                     )}
                   </div>
