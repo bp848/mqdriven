@@ -27,6 +27,21 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              vendor: ['react', 'react-dom'],
+              supabase: ['@supabase/supabase-js'],
+              charts: ['recharts'],
+              icons: ['lucide-react'],
+            }
+          }
+        }
+      },
+      optimizeDeps: {
+        include: ['react', 'react-dom', '@supabase/supabase-js', 'recharts', 'lucide-react']
       }
     };
 });

@@ -8,28 +8,6 @@ import { formatJPY } from '../utils';
 import { Lightbulb, Loader, AlertTriangle, Inbox } from './Icons';
 import { getBulletinThreads } from '../services/dataService';
 
-const AISuggestionCard: React.FC<{ suggestion: string; isLoading: boolean; isAIOff: boolean }> = ({ suggestion, isLoading, isAIOff }) => (
-    <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-800 dark:to-slate-900/70 p-6 rounded-2xl shadow-sm flex items-start gap-4 col-span-1 lg:col-span-2">
-        <div className="bg-blue-200 dark:bg-blue-900/50 p-3 rounded-full flex-shrink-0">
-            <Lightbulb className="w-6 h-6 text-blue-600 dark:text-blue-300" />
-        </div>
-        <div>
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-white">AIからの提案</h3>
-            <div className="mt-2 text-slate-600 dark:text-slate-300 min-h-[48px]">
-                {isAIOff ? (
-                    <p className="text-base">AI機能は現在無効です。</p>
-                ) : isLoading ? (
-                    <div className="flex items-center gap-2">
-                        <Loader className="w-5 h-5 animate-spin" />
-                        <span>分析中...</span>
-                    </div>
-                ) : (
-                    <p className="text-base">{suggestion}</p>
-                )}
-            </div>
-        </div>
-    </div>
-);
 
 const ActionItemsCard: React.FC<{
   jobs: Job[];
@@ -98,7 +76,7 @@ const MQCard: React.FC<{
 }> = ({ title, value, subValue, subLabel, colorClass, meterGoal, children }) => (
     <div className={`p-6 rounded-2xl shadow-sm ${colorClass} flex flex-col`}>
         <p className="text-lg font-semibold text-white/90">{title}</p>
-        <p className="text-5xl font-bold mt-2 text-white">{formatJPY(value)}</p>
+        <p className="text-3xl font-bold mt-2 text-white">{formatJPY(value)}</p>
         {(subValue || subLabel) && (
             <div className="mt-2 text-white/80 font-medium">
                 {subLabel && <span>{subLabel}: </span>}
@@ -137,12 +115,9 @@ interface DashboardProps {
   jobs: Job[];
   journalEntries: JournalEntry[];
   accountItems: AccountItem[];
-  suggestion: string;
-  isSuggestionLoading: boolean;
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
   onNavigateToBulletinBoard: () => void;
-  isAIOff: boolean;
 }
 
 const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: () => void; isLoading: boolean; }> = ({ threads, onNavigate, isLoading }) => {
@@ -199,7 +174,7 @@ const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: 
     );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, suggestion, isSuggestionLoading, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard, isAIOff }) => {
+const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard }) => {
     const [bulletinThreads, setBulletinThreads] = useState<BulletinThread[]>([]);
     const [isBulletinLoading, setIsBulletinLoading] = useState(true);
 
@@ -322,7 +297,6 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <AISuggestionCard suggestion={suggestion} isLoading={isSuggestionLoading} isAIOff={isAIOff} />
                 <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
                 <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} isLoading={isBulletinLoading} />
             </div>
