@@ -394,6 +394,28 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         if (value === null || value === undefined || value === '') {
             return '-';
         }
+        
+        // Handle markdown files and text content
+        if (typeof value === 'string') {
+            // Check if it's markdown content
+            if (value.includes('#') || value.includes('**') || value.includes('*')) {
+                return (
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <pre className="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded-lg whitespace-pre-wrap font-mono">{value}</pre>
+                    </div>
+                );
+            }
+            // Check if it's a file path to .md file
+            if (value.endsWith('.md') && value.length < 200) {
+                return (
+                    <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm font-mono text-blue-600 dark:text-blue-400">{value}</span>
+                    </div>
+                );
+            }
+        }
+        
         return value;
     };
 
