@@ -1289,15 +1289,30 @@ export const getApplications = async (currentUser: User | null): Promise<Applica
         .or(`applicant_id.eq.${currentUser.id},approver_id.eq.${currentUser.id}`)
         .order('created_at', { ascending: false });
 
-    const draftsQuery = supabase
-        .from('application_drafts')
-        .select(`*, application_code:application_code_id(*), approval_route:approval_route_id(*)`)
-        .eq('applicant_id', currentUser.id)
-        .order('updated_at', { ascending: false });
+    const draftsPromise = (async () => {
+        const draftWithApplicant = supabase
+            .from('application_drafts')
+            .select(
+                `*, applicant:users!application_drafts_applicant_id_fkey(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`
+            )
+            .eq('applicant_id', currentUser.id)
+            .order('updated_at', { ascending: false });
+
+        const result = await draftWithApplicant;
+        if (result.error && /relationship/i.test(result.error.message || '')) {
+            console.warn('[getApplications] applicant join unavailable, using fallback query:', result.error.message);
+            return await supabase
+                .from('application_drafts')
+                .select(`*, application_code:application_code_id(*), approval_route:approval_route_id(*)`)
+                .eq('applicant_id', currentUser.id)
+                .order('updated_at', { ascending: false });
+        }
+        return result;
+    })();
 
     const [{ data: activeApps, error: applicationsError }, { data: draftApps, error: draftsError }] = await Promise.all([
         applicationsQuery,
-        draftsQuery,
+        draftsPromise,
     ]);
 
     ensureSupabaseSuccess(applicationsError, 'Failed to fetch applications');
