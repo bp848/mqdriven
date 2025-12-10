@@ -295,7 +295,12 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         );
         const myApplications = applications.filter(app => app.applicantId === currentUser?.id);
         const draftQueue = myApplications.filter(app => app.status === 'draft');
-        const submittedQueue = myApplications.filter(app => app.status !== 'draft');
+        const submittedQueue = applications.filter(app => {
+            const involved = app.applicantId === currentUser?.id || app.approverId === currentUser?.id;
+            const isNotDraft = app.status !== 'draft';
+            const isNotCompleted = app.status !== 'approved' && app.status !== 'rejected' && app.status !== 'cancelled';
+            return involved && isNotDraft && isNotCompleted;
+        });
         const completedQueue = applications.filter(app => {
             const involved = app.applicantId === currentUser?.id || app.approverId === currentUser?.id;
             const isDone = app.status === 'approved' || app.status === 'rejected' || app.status === 'cancelled';
@@ -417,16 +422,16 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                             : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-blue-400'
                     }`}
                 >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4 text-[130%]">
                         <div>
-                            <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-100'}`}>{config.label}</p>
-                            <p className={`mt-1 text-xs ${isActive ? 'text-white/80' : 'text-slate-500 dark:text-slate-400'}`}>{config.description}</p>
-                            <p className={`mt-2 text-xs font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                            <p className={`text-[130%] font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-100'}`}>{config.label}</p>
+                            <p className={`mt-1 text-[130%] ${isActive ? 'text-white/80' : 'text-slate-500 dark:text-slate-400'}`}>{config.description}</p>
+                            <p className={`mt-2 text-[130%] font-semibold ${isActive ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
                                 合計 {count} 件 / 金額 ¥{total.toLocaleString()}
                             </p>
                         </div>
                         <span
-                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            className={`rounded-full px-3 py-1 text-[390%] font-bold ${
                                 isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                             }`}
                         >

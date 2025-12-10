@@ -99,6 +99,16 @@ const normalizeLookupKey = (value: unknown): string | null => {
     return key.length > 0 ? key : null;
 };
 
+const collectUniqueIds = (values: Array<string | null | undefined>): string[] => {
+    const ids = new Set<string>();
+    for (const value of values) {
+        if (typeof value !== 'string') continue;
+        const trimmed = value.trim();
+        if (trimmed) ids.add(trimmed);
+    }
+    return Array.from(ids);
+};
+
 const mapDbBulletinComment = (row: any): BulletinComment => ({
     id: row.id,
     postId: row.thread_id || row.postId || row.post_id || '',
@@ -745,6 +755,49 @@ const dbApplicationDraftToApplication = (draft: any): Application => ({
     updatedAt: draft.updated_at,
 });
 
+const fetchApplicationCodesByIds = async (
+    supabase: SupabaseClient,
+    ids: string[],
+): Promise<Map<string, ApplicationCode>> => {
+    const map = new Map<string, ApplicationCode>();
+    if (ids.length === 0) return map;
+
+    const { data, error } = await supabase.from('application_codes').select('*').in('id', ids);
+    if (error) {
+        console.warn('Failed to fetch application codes for drafts', error);
+        return map;
+    }
+
+    (data || []).forEach((row: any) => {
+        if (row?.id) {
+            map.set(row.id, dbApplicationCodeToApplicationCode(row));
+        }
+    });
+    return map;
+};
+
+const fetchApprovalRoutesByIds = async (
+    supabase: SupabaseClient,
+    ids: string[],
+): Promise<Map<string, ApprovalRoute>> => {
+    const map = new Map<string, ApprovalRoute>();
+    if (ids.length === 0) return map;
+
+    const { data, error } = await supabase.from('approval_routes').select('*').in('id', ids);
+    if (error) {
+        console.warn('Failed to fetch approval routes for drafts', error);
+        return map;
+    }
+
+    (data || []).forEach((row: any) => {
+        if (row?.id) {
+            map.set(row.id, dbApprovalRouteToApprovalRoute(row));
+        }
+    });
+
+    return map;
+};
+
 const extractApproverIdsFromRoute = (route?: ApprovalRoute): string[] => {
     if (!route?.routeData?.steps?.length) return [];
     return route.routeData.steps
@@ -1289,34 +1342,48 @@ export const getApplications = async (currentUser: User | null): Promise<Applica
         .or(`applicant_id.eq.${currentUser.id},approver_id.eq.${currentUser.id}`)
         .order('created_at', { ascending: false });
 
-    const draftsPromise = (async () => {
-        const draftWithApplicant = supabase
-            .from('application_drafts')
-            .select(
-                `*, applicant:users!application_drafts_applicant_id_fkey(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`
-            )
-            .eq('applicant_id', currentUser.id)
-            .order('updated_at', { ascending: false });
-
-        const result = await draftWithApplicant;
-        if (result.error && /relationship/i.test(result.error.message || '')) {
-            console.warn('[getApplications] applicant join unavailable, using fallback query:', result.error.message);
-            return await supabase
-                .from('application_drafts')
-                .select(`*, application_code:application_code_id(*), approval_route:approval_route_id(*)`)
-                .eq('applicant_id', currentUser.id)
-                .order('updated_at', { ascending: false });
-        }
-        return result;
-    })();
+    const draftsQuery = supabase
+        .from('application_drafts')
+        .select('*')
+        .eq('applicant_id', currentUser.id)
+        .order('updated_at', { ascending: false });
 
     const [{ data: activeApps, error: applicationsError }, { data: draftApps, error: draftsError }] = await Promise.all([
         applicationsQuery,
-        draftsPromise,
+        draftsQuery,
     ]);
 
     ensureSupabaseSuccess(applicationsError, 'Failed to fetch applications');
-    ensureSupabaseSuccess(draftsError, 'Failed to fetch application drafts');
+
+    let draftRows = draftApps || [];
+    if (draftsError) {
+        if (draftsError.code === 'PGRST200') {
+            console.warn(
+                'Missing Supabase relationship metadata for application_drafts; retrying without implicit joins.',
+                draftsError,
+            );
+            const { data: fallbackDrafts, error: fallbackError } = await supabase
+                .from('application_drafts')
+                .select('id, applicant_id, application_code_id, approval_route_id, form_data, created_at, updated_at')
+                .eq('applicant_id', currentUser.id)
+                .order('updated_at', { ascending: false });
+            ensureSupabaseSuccess(fallbackError, 'Failed to fetch application drafts');
+            draftRows = fallbackDrafts || [];
+        } else {
+            ensureSupabaseSuccess(draftsError, 'Failed to fetch application drafts');
+        }
+    }
+
+    let draftCodeMap = new Map<string, ApplicationCode>();
+    let draftRouteMap = new Map<string, ApprovalRoute>();
+    if (draftRows.length > 0) {
+        const codeIds = collectUniqueIds(draftRows.map((draft: any) => draft.application_code_id));
+        const routeIds = collectUniqueIds(draftRows.map((draft: any) => draft.approval_route_id));
+        [draftCodeMap, draftRouteMap] = await Promise.all([
+            fetchApplicationCodesByIds(supabase, codeIds),
+            fetchApprovalRoutesByIds(supabase, routeIds),
+        ]);
+    }
 
     const mappedApplications = (activeApps || []).map(app => ({
         ...dbApplicationToApplication(app),
@@ -1325,12 +1392,22 @@ export const getApplications = async (currentUser: User | null): Promise<Applica
         approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
     }));
 
-    const mappedDrafts = (draftApps || []).map(draft => ({
-        ...dbApplicationDraftToApplication(draft),
-        applicant: draft.applicant || currentUser,
-        applicationCode: draft.application_code ? dbApplicationCodeToApplicationCode(draft.application_code) : undefined,
-        approvalRoute: draft.approval_route ? dbApprovalRouteToApprovalRoute(draft.approval_route) : undefined,
-    }));
+    const mappedDrafts = draftRows.map(draft => {
+        const baseDraft = dbApplicationDraftToApplication(draft);
+        const applicationCode = draft.application_code
+            ? dbApplicationCodeToApplicationCode(draft.application_code)
+            : draftCodeMap.get(baseDraft.applicationCodeId);
+        const approvalRoute = draft.approval_route
+            ? dbApprovalRouteToApprovalRoute(draft.approval_route)
+            : (baseDraft.approvalRouteId ? draftRouteMap.get(baseDraft.approvalRouteId) : undefined);
+
+        return {
+            ...baseDraft,
+            applicant: draft.applicant || currentUser,
+            applicationCode,
+            approvalRoute,
+        };
+    });
 
     return [...mappedApplications, ...mappedDrafts].sort((a, b) => {
         const toTime = (value?: string | null) => (value ? new Date(value).getTime() : 0);
@@ -1410,6 +1487,33 @@ export const getApplicationDraft = async (applicationCodeId: string, applicantId
     ensureSupabaseSuccess(error, 'Failed to fetch application draft');
     if (!data || data.length === 0) return null;
     return dbApplicationDraftToApplication(data[0]);
+};
+
+export const updateApplication = async (id: string, updates: { applicantId?: string }): Promise<ApplicationWithDetails> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('applications')
+        .update({
+            applicant_id: updates.applicantId,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select(`
+            *,
+            applicant:applicant_id(*),
+            application_code:application_code_id(*),
+            approval_route:approval_route_id(*)
+        `)
+        .single();
+
+    ensureSupabaseSuccess(error, 'Failed to update application');
+
+    return {
+        ...dbApplicationToApplication(data),
+        applicant: data.applicant,
+        applicationCode: data.application_code ? dbApplicationCodeToApplicationCode(data.application_code) : undefined,
+        approvalRoute: data.approval_route ? dbApprovalRouteToApprovalRoute(data.approval_route) : undefined,
+    };
 };
 
 export const saveApplicationDraft = async (appData: any, applicantId: string): Promise<Application> => {
