@@ -593,31 +593,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                     </section>
                                 )}
 
-                                <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">フォーム詳細 (formData)</h3>
-                                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">RAW DATA</span>
-                                    </div>
-                                    <div className="mt-4 overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                                            <thead className="bg-slate-50 dark:bg-slate-800">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">値</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                                {formDataRows.map((row, index) => (
-                                                    <tr key={`form-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
-                                                        <td className="px-4 py-3 font-medium text-sm text-slate-700 dark:text-slate-200">{row.label}</td>
-                                                        <td className="px-4 py-3 text-sm">{renderValue(row.value)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </section>
-
+                                
                                 {hasAttachments && documentUrl && (
                                     <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6 space-y-4">
                                         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">添付ファイル</h3>
@@ -657,58 +633,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                             </div>
 
                             <div className="min-h-0 overflow-y-auto space-y-6 pl-1">
-                                <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
-                                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">関連情報</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
-                                            <thead className="bg-slate-50 dark:bg-slate-800">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">項目</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">内容</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                                {relatedRows.map((row, index) => (
-                                                    <tr key={`related-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
-                                                        <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{row.label}</td>
-                                                        <td className="px-4 py-3">{renderValue(row.value)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </section>
-
-                                <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6">
-                                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">承認ステップ</h3>
-                                    {routeStepRows.length > 0 ? (
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm">
-                                                <thead className="bg-slate-50 dark:bg-slate-800">
-                                                    <tr>
-                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ステップ</th>
-                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">承認者</th>
-                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">承認者ID</th>
-                                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ステータス</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                                    {routeStepRows.map((row) => (
-                                                        <tr key={`step-${row.level}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/70">
-                                                            <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{row.level}</td>
-                                                            <td className="px-4 py-3">{row.approverName}</td>
-                                                            <td className="px-4 py-3">{row.approverId}</td>
-                                                            <td className="px-4 py-3">{row.status}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">承認ルートのステップ情報がありません。</p>
-                                    )}
-                                </section>
-
+                                
                                 {showRejectionReason && (
                                     <section className="rounded-3xl border border-red-200 dark:border-red-500/50 bg-red-50 dark:bg-red-900/30 p-6">
                                         <h3 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-3">差し戻し理由</h3>
