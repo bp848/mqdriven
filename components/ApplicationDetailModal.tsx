@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ApplicationWithDetails, User } from '../types';
 import { X, CheckCircle, Send, Loader, FileText } from './Icons';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
-import { getUsers } from '../services/dataService';
+import { getUsers, updateApplication } from '../services/dataService';
 import { useSubmitWithConfirmation } from '../hooks/useSubmitWithConfirmation';
 
 type SummaryHighlight = {
@@ -247,6 +247,7 @@ interface ApplicationDetailModalProps {
     onReject: (app: ApplicationWithDetails, reason: string) => Promise<void>;
     onCancel?: (app: ApplicationWithDetails, options?: { skipConfirm?: boolean }) => Promise<void>;
     onClose: () => void;
+    onUpdateApplication?: (app: ApplicationWithDetails) => void;
 }
 
 const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
@@ -255,11 +256,14 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     onApprove,
     onReject,
     onCancel,
-    onClose
+    onClose,
+    onUpdateApplication
 }) => {
     const [rejectionReason, setRejectionReason] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [allUsers, setAllUsers] = useState<User[]>([]);
+    const [selectedApplicantId, setSelectedApplicantId] = useState('');
+    const [isUpdatingApplicant, setIsUpdatingApplicant] = useState(false);
     const mounted = useRef(true);
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
@@ -278,6 +282,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     useEffect(() => {
         if (application) {
             setRejectionReason('');
+            setSelectedApplicantId(application.applicantId);
         }
     }, [application]);
 
