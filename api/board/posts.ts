@@ -1,5 +1,7 @@
 import { getServerSupabase } from '../_lib/supabaseClient';
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+
 const parseJsonBody = (req: any) => {
     if (!req.body) {
         return {};
@@ -17,6 +19,16 @@ const parseJsonBody = (req: any) => {
 const sendMethodNotAllowed = (res: any, allow: string) => {
     res.setHeader('Allow', allow);
     res.status(405).json({ error: 'Method Not Allowed' });
+};
+
+const isUuid = (value: unknown): value is string =>
+    typeof value === 'string' && UUID_REGEX.test(value);
+
+const normalizeUuidArray = (values: unknown): string[] => {
+    if (!Array.isArray(values)) {
+        return [];
+    }
+    return values.filter(isUuid);
 };
 
 export default async function handler(req: any, res: any) {
@@ -62,8 +74,8 @@ export default async function handler(req: any, res: any) {
                 p_visibility: body.visibility ?? 'all',
                 p_is_task: body.is_task ?? false,
                 p_due_date: body.due_date ?? null,
-                p_assignees: body.assignees ?? [],
-                p_created_by: body.created_by ?? null,
+                p_assignees: normalizeUuidArray(body.assignees),
+                p_created_by: isUuid(body.created_by) ? body.created_by : null,
             });
 
             if (error) {
