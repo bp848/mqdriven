@@ -5,7 +5,13 @@ let cachedSupabase: SupabaseClient | null = null;
 const resolveSupabaseKey = (): string | undefined => {
     return process.env.SUPABASE_SERVICE_ROLE_KEY
         || process.env.SUPABASE_SERVICE_KEY
-        || process.env.SUPABASE_KEY;
+        || process.env.SUPABASE_KEY
+        || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+};
+
+const resolveSupabaseUrl = (): string | undefined => {
+    return process.env.SUPABASE_URL
+        || process.env.NEXT_PUBLIC_SUPABASE_URL;
 };
 
 export const getServerSupabase = (): SupabaseClient | null => {
@@ -13,11 +19,11 @@ export const getServerSupabase = (): SupabaseClient | null => {
         return cachedSupabase;
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseUrl = resolveSupabaseUrl();
     const supabaseKey = resolveSupabaseKey();
 
     if (!supabaseUrl || !supabaseKey) {
-        console.error('Missing Supabase configuration: ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.');
+        console.error('Missing Supabase configuration: ensure SUPABASE_URL/SUPABASE_KEY (or NEXT_PUBLIC equivalents) are set.');
         return null;
     }
 

@@ -24,13 +24,17 @@ const externalWsBaseUrl = 'wss://generativelanguage.googleapis.com';
 const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
 
 // --- Supabase Client Initialization ---
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_KEY
+    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-    console.error("Warning: SUPABASE_URL and SUPABASE_KEY environment variables are not set! Application API functionality will be disabled.");
+    console.error("Warning: Supabase environment variables are not fully configured (need URL + key). Application API functionality will be disabled.");
 }
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 
 const staticPath = path.join(__dirname,'dist');
