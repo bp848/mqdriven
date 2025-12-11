@@ -112,22 +112,24 @@ const collectUniqueIds = (values: Array<string | null | undefined>): string[] =>
 const mapDbBulletinComment = (row: any): BulletinComment => ({
     id: row.id,
     postId: row.thread_id || row.postId || row.post_id || '',
-    authorId: row.author_id,
-    authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
+    authorId: row.author_id ?? row.user_id ?? '',
+    authorName: row.author?.name ?? row.user?.name ?? row.author_name ?? '不明なユーザー',
     authorDepartment:
         row.author?.department ??
         row.author?.department_id ??
+        row.user?.department ??
+        row.user?.department_id ??
         row.author_department ??
         null,
-    body: row.body,
+    body: row.body ?? row.content ?? '',
     createdAt: row.created_at,
 });
 
 const mapDbBulletinThread = (row: any): BulletinThread => ({
     id: row.id,
-    title: row.title,
-    body: row.body,
-    authorId: row.author_id,
+    title: row.title ?? row.subject ?? '',
+    body: row.body ?? row.content ?? '',
+    authorId: row.author_id ?? row.created_by ?? '',
     authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
     authorDepartment:
         row.author?.department ??
@@ -136,10 +138,21 @@ const mapDbBulletinThread = (row: any): BulletinThread => ({
         null,
     tags: Array.isArray(row.tags) ? row.tags : [],
     pinned: Boolean(row.pinned),
-    assigneeIds: Array.isArray(row.assignee_ids) ? row.assignee_ids : [],
+    assigneeIds: Array.isArray(row.assignee_ids)
+        ? row.assignee_ids
+        : Array.isArray(row.post_assignments)
+            ? row.post_assignments.map((item: any) => item?.user_id).filter((id: any) => typeof id === 'string')
+            : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    comments: Array.isArray(row.comments) ? row.comments.map(mapDbBulletinComment) : [],
+    comments: Array.isArray(row.comments)
+        ? row.comments.map(mapDbBulletinComment)
+        : Array.isArray(row.post_comments)
+            ? row.post_comments.map(mapDbBulletinComment)
+            : [],
+    dueDate: row.due_date ?? null,
+    isTask: row.is_task ?? false,
+    completed: row.completed ?? false,
 });
 
 const BULLETIN_THREAD_SELECT = `
@@ -1624,10 +1637,52 @@ interface BulletinThreadInput {
     tags?: string[];
     pinned?: boolean;
     assigneeIds?: string[];
+    isTask?: boolean;
+    dueDate?: string | null;
+    completed?: boolean;
 }
 
 export const getBulletinThreads = async (options?: { limit?: number }): Promise<BulletinThread[]> => {
     const supabase = getSupabase();
+    const selectColumns = `
+        id,
+        title,
+        content,
+        visibility,
+        is_task,
+        due_date,
+        created_at,
+        updated_at,
+        created_by,
+        completed,
+        post_assignments (
+            user_id
+        ),
+        post_comments (
+            id,
+            post_id,
+            content,
+            user_id,
+            created_at
+        )
+    `;
+
+    let postsQuery = supabase
+        .from('posts')
+        .select(selectColumns)
+        .order('updated_at', { ascending: false });
+
+    if (options?.limit) {
+        postsQuery = postsQuery.limit(options.limit);
+    }
+
+    const { data: postData, error: postError } = await postsQuery;
+    if (!postError) {
+        return (postData || []).map(mapDbBulletinThread);
+    }
+
+    console.warn('Falling back to legacy bulletin_threads query:', postError?.message || postError);
+
     let query = supabase
         .from('bulletin_threads')
         .select(BULLETIN_THREAD_SELECT)
@@ -1645,9 +1700,59 @@ export const getBulletinThreads = async (options?: { limit?: number }): Promise<
 
 export const createBulletinThread = async (
     input: BulletinThreadInput,
-    author: EmployeeUser
+    author: EmployeeUser,
+    supabaseClient?: SupabaseClient
 ): Promise<BulletinThread> => {
-    const supabase = getSupabase();
+    const supabase = supabaseClient ?? getSupabase();
+    const visibility = (input.assigneeIds?.length ?? 0) > 0 ? 'assigned' : 'all';
+    const { data: createdId, error } = await supabase.rpc('create_post', {
+        p_title: input.title,
+        p_content: input.body,
+        p_visibility: visibility,
+        p_is_task: input.isTask ?? false,
+        p_due_date: input.dueDate ?? null,
+        p_assignees: input.assigneeIds ?? [],
+        p_created_by: author.id,
+    });
+
+    if (!error && createdId) {
+        const { data: createdRow, error: fetchError } = await supabase
+            .from('posts')
+            .select(`
+                id,
+                title,
+                content,
+                visibility,
+                is_task,
+                due_date,
+                created_at,
+                updated_at,
+                created_by,
+                completed,
+                post_assignments (
+                    user_id
+                ),
+                post_comments (
+                    id,
+                    post_id,
+                    content,
+                    user_id,
+                    created_at
+                )
+            `)
+            .eq('id', createdId)
+            .single();
+        ensureSupabaseSuccess(fetchError, 'Failed to fetch created post');
+        const mapped = mapDbBulletinThread(createdRow);
+        return {
+            ...mapped,
+            authorName: mapped.authorName || author.name,
+            authorDepartment: mapped.authorDepartment ?? author.department ?? null,
+        };
+    }
+
+    console.warn('Falling back to legacy bulletin_threads insert:', error?.message || error);
+
     const payload = {
         title: input.title,
         body: input.body,
@@ -1656,13 +1761,18 @@ export const createBulletinThread = async (
         assignee_ids: input.assigneeIds ?? [],
         author_id: author.id,
     };
-    const { data, error } = await supabase
+    const { data: legacyData, error: legacyError } = await supabase
         .from('bulletin_threads')
         .insert(payload)
         .select(BULLETIN_THREAD_SELECT)
         .single();
-    ensureSupabaseSuccess(error, 'Failed to create bulletin thread');
-    return mapDbBulletinThread(data);
+    ensureSupabaseSuccess(legacyError, 'Failed to create bulletin thread');
+    const mappedLegacy = mapDbBulletinThread(legacyData);
+    return {
+        ...mappedLegacy,
+        authorName: mappedLegacy.authorName || author.name,
+        authorDepartment: mappedLegacy.authorDepartment ?? author.department ?? null,
+    };
 };
 
 export const updateBulletinThread = async (
@@ -1672,25 +1782,69 @@ export const updateBulletinThread = async (
     const supabase = getSupabase();
     const updates: Record<string, any> = {};
     if (input.title !== undefined) updates.title = input.title;
-    if (input.body !== undefined) updates.body = input.body;
-    if (input.tags !== undefined) updates.tags = input.tags;
-    if (input.pinned !== undefined) updates.pinned = input.pinned;
-    if (input.assigneeIds !== undefined) updates.assignee_ids = input.assigneeIds;
+    if (input.body !== undefined) updates.content = input.body;
+    if (input.isTask !== undefined) updates.is_task = input.isTask;
+    if (input.dueDate !== undefined) updates.due_date = input.dueDate;
+    if (input.completed !== undefined) updates.completed = input.completed;
 
     const { data, error } = await supabase
-        .from('bulletin_threads')
+        .from('posts')
         .update(updates)
+        .eq('id', threadId)
+        .select(`
+            id,
+            title,
+            content,
+            visibility,
+            is_task,
+            due_date,
+            created_at,
+            updated_at,
+            created_by,
+            completed,
+            post_assignments (
+                user_id
+            ),
+            post_comments (
+                id,
+                post_id,
+                content,
+                user_id,
+                created_at
+            )
+        `)
+        .single();
+    if (!error && data) {
+        return mapDbBulletinThread(data);
+    }
+
+    console.warn('Falling back to legacy bulletin_threads update:', error?.message || error);
+
+    const legacyUpdates: Record<string, any> = {};
+    if (input.title !== undefined) legacyUpdates.title = input.title;
+    if (input.body !== undefined) legacyUpdates.body = input.body;
+    if (input.tags !== undefined) legacyUpdates.tags = input.tags;
+    if (input.pinned !== undefined) legacyUpdates.pinned = input.pinned;
+    if (input.assigneeIds !== undefined) legacyUpdates.assignee_ids = input.assigneeIds;
+
+    const { data: legacyData, error: legacyError } = await supabase
+        .from('bulletin_threads')
+        .update(legacyUpdates)
         .eq('id', threadId)
         .select(BULLETIN_THREAD_SELECT)
         .single();
-    ensureSupabaseSuccess(error, 'Failed to update bulletin thread');
-    return mapDbBulletinThread(data);
+    ensureSupabaseSuccess(legacyError, 'Failed to update bulletin thread');
+    return mapDbBulletinThread(legacyData);
 };
 
 export const deleteBulletinThread = async (threadId: string): Promise<void> => {
     const supabase = getSupabase();
-    const { error } = await supabase.from('bulletin_threads').delete().eq('id', threadId);
-    ensureSupabaseSuccess(error, 'Failed to delete bulletin thread');
+    const { error } = await supabase.from('posts').delete().eq('id', threadId);
+    if (!error) return;
+
+    console.warn('Falling back to legacy bulletin_threads delete:', error?.message || error);
+    const { error: legacyError } = await supabase.from('bulletin_threads').delete().eq('id', threadId);
+    ensureSupabaseSuccess(legacyError, 'Failed to delete bulletin thread');
 };
 
 export const addBulletinComment = async (
@@ -1700,6 +1854,32 @@ export const addBulletinComment = async (
 ): Promise<BulletinComment> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
+        .from('post_comments')
+        .insert({
+            post_id: threadId,
+            content: body,
+            user_id: author.id,
+        })
+        .select(`
+            id,
+            post_id,
+            content,
+            user_id,
+            created_at
+        `)
+        .single();
+    if (!error && data) {
+        const mapped = mapDbBulletinComment(data);
+        return {
+            ...mapped,
+            authorName: author.name ?? mapped.authorName,
+            authorDepartment: author.department ?? mapped.authorDepartment ?? null,
+        };
+    }
+
+    console.warn('Falling back to legacy bulletin_comments insert:', error?.message || error);
+
+    const { data: legacyData, error: legacyError } = await supabase
         .from('bulletin_comments')
         .insert({
             thread_id: threadId,
@@ -1719,8 +1899,13 @@ export const addBulletinComment = async (
             )
         `)
         .single();
-    ensureSupabaseSuccess(error, 'Failed to add bulletin comment');
-    return mapDbBulletinComment(data);
+    ensureSupabaseSuccess(legacyError, 'Failed to add bulletin comment');
+    const mappedLegacy = mapDbBulletinComment(legacyData);
+    return {
+        ...mappedLegacy,
+        authorName: author.name ?? mappedLegacy.authorName,
+        authorDepartment: author.department ?? mappedLegacy.authorDepartment ?? null,
+    };
 };
 export const approveApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
     if (app.approverId !== currentUser.id) {

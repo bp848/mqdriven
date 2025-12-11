@@ -7,13 +7,17 @@ import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
 import { AlertTriangle, Inbox } from './Icons';
 import { getBulletinThreads } from '../services/dataService';
+import { getSupabase } from '../services/supabaseClient';
 
 // Integrated Board API service
 const getIntegratedBoardPosts = async (userId?: string) => {
     try {
-        const response = await fetch(`/api/board/posts${userId ? `?user_id=${userId}` : ''}`);
-        if (!response.ok) throw new Error('Failed to fetch posts');
-        return await response.json();
+        const supabase = getSupabase();
+        const { data, error } = await supabase.rpc('get_user_posts', {
+            p_user_id: userId ?? null,
+        });
+        if (error) throw error;
+        return data ?? [];
     } catch (error) {
         console.error('Error fetching integrated board posts:', error);
         return [];
@@ -22,13 +26,18 @@ const getIntegratedBoardPosts = async (userId?: string) => {
 
 const createBoardPost = async (postData: any) => {
     try {
-        const response = await fetch('/api/board/posts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(postData)
+        const supabase = getSupabase();
+        const { data, error } = await supabase.rpc('create_post', {
+            p_title: postData.title,
+            p_content: postData.content,
+            p_visibility: postData.visibility ?? 'all',
+            p_is_task: postData.is_task ?? false,
+            p_due_date: postData.due_date ?? null,
+            p_assignees: Array.isArray(postData.assignees) ? postData.assignees : [],
+            p_created_by: postData.created_by ?? null,
         });
-        if (!response.ok) throw new Error('Failed to create post');
-        return await response.json();
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error('Error creating board post:', error);
         throw error;
@@ -37,13 +46,14 @@ const createBoardPost = async (postData: any) => {
 
 const addBoardComment = async (postId: string, content: string, userId?: string) => {
     try {
-        const response = await fetch(`/api/board/posts/${postId}/comments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, user_id: userId })
+        const supabase = getSupabase();
+        const { data, error } = await supabase.rpc('add_comment', {
+            p_post_id: postId,
+            p_content: content,
+            p_user_id: userId ?? null,
         });
-        if (!response.ok) throw new Error('Failed to add comment');
-        return await response.json();
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error('Error adding comment:', error);
         throw error;
@@ -52,13 +62,13 @@ const addBoardComment = async (postId: string, content: string, userId?: string)
 
 const completeTask = async (postId: string, userId?: string) => {
     try {
-        const response = await fetch(`/api/board/posts/${postId}/complete`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: userId })
+        const supabase = getSupabase();
+        const { error } = await supabase.rpc('complete_task', {
+            p_post_id: postId,
+            p_user_id: userId ?? null,
         });
-        if (!response.ok) throw new Error('Failed to complete task');
-        return await response.json();
+        if (error) throw error;
+        return { success: true };
     } catch (error) {
         console.error('Error completing task:', error);
         throw error;

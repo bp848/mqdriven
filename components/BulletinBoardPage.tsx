@@ -8,6 +8,7 @@ import {
     deleteBulletinThread,
     addBulletinComment,
 } from '../services/dataService';
+import { createSupabaseBrowser } from '@/lib/supabase';
 
 interface BulletinBoardPageProps {
     currentUser: EmployeeUser | null;
@@ -126,46 +127,23 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
 
         try {
             setIsSubmittingPost(true);
-            const postData = {
+            const supabase = createSupabaseBrowser();
+            const created = await createBulletinThread({
                 title: newPost.title.trim(),
-                content: newPost.body.trim(),
-                visibility: newPostAssignees.length > 0 ? 'assigned' : 'all',
-                is_task: newPost.is_task,
-                due_date: newPost.is_task && newPost.due_date ? new Date(newPost.due_date).toISOString() : null,
-                assignees: newPostAssignees,
-                created_by: currentUser?.id
-            };
-            
-            const response = await fetch('/api/board/posts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(postData)
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to create post');
-            }
-            
-            const result = await response.json();
-            // 既存のデータ構造に合わせて変換
-            const created = {
-                id: result.post_id,
-                title: postData.title,
-                body: postData.content,
-                tags: [],
-                assigneeIds: newPostAssignees,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                authorId: currentUser?.id,
-                authorName: currentUser?.name,
-                authorDepartment: currentUser?.department,
+                body: newPost.body.trim(),
+                tags,
                 pinned: false,
-                isTask: postData.is_task,
-                dueDate: postData.due_date,
-                completed: false,
-                comments: []
+                assigneeIds: newPostAssignees,
+                isTask: newPost.is_task,
+                dueDate: newPost.is_task && newPost.due_date ? new Date(newPost.due_date).toISOString() : null,
+            }, currentUser, supabase);
+            const enriched = {
+                ...created,
+                authorName: created.authorName || currentUser?.name || '不明なユーザー',
+                authorDepartment: created.authorDepartment ?? currentUser?.department ?? null,
             };
-            upsertThreadInState(created);
+            upsertThreadInState(enriched);
+            await refreshThreads(); // router.refresh() equivalent for this view
             setNewPost({ title: '', body: '', tags: '', due_date: '', is_task: false });
             setNewPostAssignees([]);
             addToast('掲示板に投稿しました。', 'success');
