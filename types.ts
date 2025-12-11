@@ -628,6 +628,9 @@ export interface BulletinThread {
     createdAt: string;
     updatedAt: string;
     comments: BulletinComment[];
+    dueDate?: string;
+    isTask?: boolean;
+    completed?: boolean;
 }
 
 export interface Toast {
