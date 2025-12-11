@@ -126,15 +126,45 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
 
         try {
             setIsSubmittingPost(true);
-            const created = await createBulletinThread(
-                {
-                    title: newPost.title.trim(),
-                    body: newPost.body.trim(),
-                    tags,
-                    assigneeIds: newPostAssignees,
-                },
-                currentUser
-            );
+            const postData = {
+                title: newPost.title.trim(),
+                content: newPost.body.trim(),
+                visibility: newPostAssignees.length > 0 ? 'assigned' : 'all',
+                is_task: newPost.is_task,
+                due_date: newPost.is_task && newPost.due_date ? new Date(newPost.due_date).toISOString() : null,
+                assignees: newPostAssignees,
+                created_by: currentUser?.id
+            };
+            
+            const response = await fetch('/api/board/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(postData)
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to create post');
+            }
+            
+            const result = await response.json();
+            // 既存のデータ構造に合わせて変換
+            const created = {
+                id: result.post_id,
+                title: postData.title,
+                body: postData.content,
+                tags: [],
+                assigneeIds: newPostAssignees,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                authorId: currentUser?.id,
+                authorName: currentUser?.name,
+                authorDepartment: currentUser?.department,
+                pinned: false,
+                isTask: postData.is_task,
+                dueDate: postData.due_date,
+                completed: false,
+                comments: []
+            };
             upsertThreadInState(created);
             setNewPost({ title: '', body: '', tags: '', due_date: '', is_task: false });
             setNewPostAssignees([]);
@@ -194,6 +224,8 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
             tags: (thread.tags || []).join(', '),
             pinned: Boolean(thread.pinned),
             assigneeIds: Array.isArray(thread.assigneeIds) ? thread.assigneeIds : [],
+            due_date: thread.dueDate,
+            is_task: thread.isTask
         });
     };
 
@@ -227,6 +259,8 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                 tags,
                 pinned: editingDraft.pinned,
                 assigneeIds: editingDraft.assigneeIds,
+                due_date: editingDraft.due_date,
+                is_task: editingDraft.is_task
             });
             upsertThreadInState(updated);
             setEditingThreadId(null);
@@ -371,7 +405,14 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                         <input
                             type="checkbox"
                             checked={newPost.is_task}
-                            onChange={(e) => setNewPost(prev => ({ ...prev, is_task: e.target.checked }))}
+                            onChange={(e) => {
+                                const isTask = e.target.checked;
+                                setNewPost(prev => ({ 
+                                    ...prev, 
+                                    is_task: isTask,
+                                    due_date: isTask ? new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 16) : ''
+                                }));
+                            }}
                             className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         />
                     </div>
