@@ -22,14 +22,24 @@ const sendMethodNotAllowed = (res: any, allow: string) => {
     res.status(405).json({ error: 'Method Not Allowed' });
 };
 
+const createRequestId = () => Math.random().toString(36).slice(2, 10);
+const getSupabaseStatus = (error?: { code?: string | null }) => {
+    if (!error?.code) return 400;
+    if (error.code === '42501') return 403; // insufficient privilege
+    if (error.code === 'PGRST301') return 401;
+    return 400;
+};
+
 export default async function handler(req: any, res: any) {
     if (req.method !== 'GET') {
         return sendMethodNotAllowed(res, 'GET');
     }
 
+    const requestId = createRequestId();
     const supabase = getServerSupabase();
     if (!supabase) {
-        return res.status(503).json({ error: 'Database client not initialized.' });
+        console.error('[api/users] missing Supabase client', { requestId });
+        return res.status(503).json({ error: 'Database client not initialized.', requestId });
     }
 
     try {
@@ -47,14 +57,15 @@ export default async function handler(req: any, res: any) {
         ]);
 
         if (userError) {
-            console.error('Error from users table query:', userError);
-            return res.status(500).json({ error: 'Database error', details: userError.message });
+            const status = getSupabaseStatus(userError);
+            console.error('[api/users] users query failed', { requestId, code: userError.code, message: userError.message });
+            return res.status(status).json({ error: userError.message, code: userError.code, requestId });
         }
         if (departmentError) {
-            console.warn('Failed to fetch departments for user mapping:', departmentError.message);
+            console.warn('[api/users] departments query failed', { requestId, message: departmentError.message });
         }
         if (titleError) {
-            console.warn('Failed to fetch titles for user mapping:', titleError.message);
+            console.warn('[api/users] employee_titles query failed', { requestId, message: titleError.message });
         }
 
         const departmentMap = new Map<string, string>();
@@ -91,8 +102,8 @@ export default async function handler(req: any, res: any) {
         });
 
         return res.status(200).json(payload);
-    } catch (err) {
-        console.error('Unexpected error in GET /api/users:', err);
-        return res.status(500).json({ error: 'Internal server error' });
+    } catch (err: any) {
+        console.error('[api/users] unexpected error', { requestId, err: err?.message, stack: err?.stack });
+        return res.status(500).json({ error: 'Internal server error', requestId });
     }
 }
