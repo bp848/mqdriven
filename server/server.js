@@ -36,6 +36,62 @@ if (!supabaseUrl || !supabaseKey) {
 }
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+const BOARD_VISIBILITY_VALUES = new Set(['all', 'public', 'private', 'assigned']);
+const createRequestId = () => Math.random().toString(36).slice(2, 10);
+const isUuid = value => typeof value === 'string' && UUID_REGEX.test(value);
+const normalizeUuidArray = values => {
+    if (!Array.isArray(values)) return [];
+    return values.filter(isUuid);
+};
+const validateBoardPostPayload = (body = {}) => {
+    const errors = [];
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    const visibility = typeof body.visibility === 'string' ? body.visibility : 'all';
+    const isTask = typeof body.is_task === 'boolean' ? body.is_task : false;
+    const dueDate = body?.due_date ?? null;
+    const assignees = body?.assignees;
+    const createdBy = typeof body?.created_by === 'string' ? body.created_by : null;
+
+    if (!title) errors.push('title is required');
+    if (!content) errors.push('content is required');
+    if (!BOARD_VISIBILITY_VALUES.has(visibility)) {
+        errors.push(`visibility must be one of: ${Array.from(BOARD_VISIBILITY_VALUES).join(', ')}`);
+    }
+    if (assignees !== undefined && !Array.isArray(assignees)) {
+        errors.push('assignees must be an array of UUID strings');
+    }
+    if (dueDate !== null && dueDate !== undefined) {
+        const date = new Date(dueDate);
+        if (Number.isNaN(date.getTime())) {
+            errors.push('due_date must be a valid date string or null');
+        }
+    }
+    if (createdBy && !isUuid(createdBy)) {
+        errors.push('created_by must be a valid UUID');
+    }
+
+    return {
+        errors,
+        payload: {
+            title,
+            content,
+            visibility,
+            is_task: isTask,
+            due_date: dueDate ?? null,
+            assignees: normalizeUuidArray(assignees),
+            created_by: createdBy && isUuid(createdBy) ? createdBy : null,
+        },
+    };
+};
+const getSupabaseStatus = error => {
+    if (!error?.code) return 400;
+    if (error.code === '23505') return 409;
+    if (error.code === '23503') return 400;
+    return 400;
+};
+
 
 const staticPath = path.join(__dirname,'dist');
 const publicPath = path.join(__dirname,'public');
@@ -141,8 +197,9 @@ app.post('/api/accounting/journal-batches/:id/approve', async (req, res) => {
 
 // GET /api/board/posts - Fetch posts for the current user
 app.get('/api/board/posts', async (req, res) => {
+    const requestId = createRequestId();
     if (!supabase) {
-        return res.status(503).json({ error: 'Database client not initialized.' });
+        return res.status(503).json({ error: 'Database client not initialized.', requestId });
     }
     try {
         const { data, error } = await supabase.rpc('get_user_posts', {
@@ -150,44 +207,55 @@ app.get('/api/board/posts', async (req, res) => {
         });
 
         if (error) {
-            console.error('Error from get_user_posts RPC:', error);
-            return res.status(500).json({ error: 'Database error', details: error.message });
+            console.error('Error from get_user_posts RPC:', { requestId, error });
+            const status = getSupabaseStatus(error);
+            return res.status(status).json({ error: error.message, requestId });
         }
 
         res.status(200).json(data);
     } catch (err) {
-        console.error('Error in /api/board/posts:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error in /api/board/posts GET:', { requestId, err });
+        res.status(500).json({ error: 'Internal server error', requestId });
     }
 });
 
 // POST /api/board/posts - Create a new post
 app.post('/api/board/posts', async (req, res) => {
+    const requestId = createRequestId();
     if (!supabase) {
-        return res.status(503).json({ error: 'Database client not initialized.' });
+        return res.status(503).json({ error: 'Database client not initialized.', requestId });
     }
     try {
-        const { title, content, visibility, is_task, due_date, assignees } = req.body;
-        
+        const { errors, payload } = validateBoardPostPayload(req.body || {});
+        if (errors.length) {
+            return res.status(400).json({ error: 'Invalid request body', details: errors, requestId });
+        }
+
         const { data, error } = await supabase.rpc('create_post', {
-            p_title: title,
-            p_content: content,
-            p_visibility: visibility || 'all',
-            p_is_task: is_task || false,
-            p_due_date: due_date,
-            p_assignees: assignees || [],
-            p_created_by: req.body.created_by || null
+            p_title: payload.title,
+            p_content: payload.content,
+            p_visibility: payload.visibility,
+            p_is_task: payload.is_task,
+            p_due_date: payload.due_date,
+            p_assignees: payload.assignees,
+            p_created_by: payload.created_by
         });
 
         if (error) {
-            console.error('Error from create_post RPC:', error);
-            return res.status(500).json({ error: 'Database error', details: error.message });
+            const status = getSupabaseStatus(error);
+            console.error('Error from create_post RPC:', { requestId, code: error.code, message: error.message, details: error.details });
+            return res.status(status).json({ error: error.message, code: error.code, requestId });
         }
 
-        res.status(201).json({ message: 'Post created successfully', post_id: data });
+        if (!data) {
+            console.error('create_post RPC returned no data', { requestId });
+            return res.status(500).json({ error: 'Post creation failed', requestId });
+        }
+
+        res.status(201).json({ message: 'Post created successfully', post_id: data, requestId });
     } catch (err) {
-        console.error('Error in /api/board/posts:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error in /api/board/posts POST:', { requestId, err });
+        res.status(500).json({ error: 'Internal server error', requestId });
     }
 });
 
