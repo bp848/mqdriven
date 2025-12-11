@@ -1,5 +1,7 @@
 import { getServerSupabase } from '../../../_lib/supabaseClient';
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+
 const parseJsonBody = (req: any) => {
     if (!req.body) {
         return {};
@@ -18,6 +20,9 @@ const sendMethodNotAllowed = (res: any) => {
     res.setHeader('Allow', 'PUT');
     res.status(405).json({ error: 'Method Not Allowed' });
 };
+
+const isUuid = (value: unknown): value is string =>
+    typeof value === 'string' && UUID_REGEX.test(value);
 
 export default async function handler(req: any, res: any) {
     if (req.method !== 'PUT') {
@@ -38,7 +43,7 @@ export default async function handler(req: any, res: any) {
         const body = parseJsonBody(req) as { user_id?: string | null };
         const { error } = await supabase.rpc('complete_task', {
             p_post_id: postId,
-            p_user_id: body.user_id ?? null,
+            p_user_id: isUuid(body.user_id) ? body.user_id : null,
         });
 
         if (error) {
