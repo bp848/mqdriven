@@ -258,9 +258,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                 body,
                 tags,
                 pinned: editingDraft.pinned,
-                assigneeIds: editingDraft.assigneeIds,
-                due_date: editingDraft.due_date,
-                is_task: editingDraft.is_task
+                assigneeIds: editingDraft.assigneeIds
             });
             upsertThreadInState(updated);
             setEditingThreadId(null);
