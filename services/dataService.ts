@@ -1128,7 +1128,6 @@ export const saveCustomerInfo = async (customerId: string, updates: Partial<Cust
     const supabase = getSupabase();
     await ensureCustomerInfoRecord(supabase, customerId);
     const payload = customerInfoToDbCustomerInfo(updates);
-    payload.updated_at = new Date().toISOString();
     const { data, error } = await supabase
         .from('customers_info')
         .update(payload)
@@ -1495,7 +1494,6 @@ export const updateApplication = async (id: string, updates: { applicantId?: str
         .from('applications')
         .update({
             applicant_id: updates.applicantId,
-            updated_at: new Date().toISOString(),
         })
         .eq('id', id)
         .select(`
@@ -1635,7 +1633,6 @@ export const updateBulletinThread = async (
     if (input.tags !== undefined) updates.tags = input.tags;
     if (input.pinned !== undefined) updates.pinned = input.pinned;
     if (input.assigneeIds !== undefined) updates.assignee_ids = input.assigneeIds;
-    updates.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
         .from('bulletin_threads')
@@ -1839,7 +1836,6 @@ export const cancelApplication = async (app: ApplicationWithDetails, currentUser
             rejection_reason: '申請者による取り消し',
             rejected_at: now,
             approved_at: null,
-            updated_at: now,
         })
         .eq('id', app.id)
         .eq('applicant_id', currentUser.id);
@@ -2358,7 +2354,6 @@ export const updateFaxIntake = async (
     if (Object.keys(updates).length === 0) {
         return;
     }
-    updates.updated_at = new Date().toISOString();
 
     const { error } = await supabase
         .from('fax_intakes')
@@ -2371,7 +2366,7 @@ export const deleteFaxIntake = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase
         .from('fax_intakes')
-        .update({ status: 'deleted', updated_at: new Date().toISOString() })
+        .update({ status: 'deleted' })
         .eq('id', id);
     ensureSupabaseSuccess(error, 'Failed to delete fax intake');
 };
