@@ -69,6 +69,18 @@ async function withRetry<T>(
   }
 }
 
+const stripCodeFences = (value: string): string => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed.startsWith("```")) {
+    return trimmed;
+  }
+  const withoutOpening = trimmed.replace(/^```[a-zA-Z0-9_-]*\s*/, "");
+  if (withoutOpening.endsWith("```")) {
+    return withoutOpening.slice(0, -3).trim();
+  }
+  return withoutOpening.trim();
+};
+
 const suggestJobSchema = {
   type: Type.OBJECT,
   properties: {
@@ -569,6 +581,28 @@ export const extractDailyReportFromImage = async (
       contents: { parts: [imagePart, textPart] },
     });
     return response.text;
+  });
+};
+
+export const optimizeScheduleRequestText = async (rawText: string): Promise<string> => {
+  const trimmed = rawText?.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const ai = checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const prompt = `以下の文章は、現場の社員に依頼事項を伝えるための下書きです。文脈が散らかっていたり口語表現が強い場合でも、
+1) 依頼の目的
+2) やってほしい内容（箇条書きで最大5項目）
+3) 期限や注意点
+を明快に整理してください。文章は日本語で、丁寧かつ簡潔にまとめ、依頼内容をわかりやすくしてください。
+
+下書き:
+${trimmed}`;
+    const response = await ai.models.generateContent({ model, contents: prompt });
+    const text = response.text ?? "";
+    const cleaned = stripCodeFences(text);
+    return cleaned || trimmed;
   });
 };
 

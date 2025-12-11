@@ -34,11 +34,11 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
     const [searchTerm, setSearchTerm] = useState('');
     const [showPinnedOnly, setShowPinnedOnly] = useState(false);
     const [showAssignedOnly, setShowAssignedOnly] = useState(false);
-    const [newPost, setNewPost] = useState({ title: '', body: '', tags: '' });
+    const [newPost, setNewPost] = useState({ title: '', body: '', tags: '', due_date: '', is_task: false });
     const [newPostAssignees, setNewPostAssignees] = useState<string[]>([]);
     const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
     const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
-    const [editingDraft, setEditingDraft] = useState({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] as string[] });
+    const [editingDraft, setEditingDraft] = useState({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] as string[], due_date: '', is_task: false });
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
@@ -136,7 +136,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                 currentUser
             );
             upsertThreadInState(created);
-            setNewPost({ title: '', body: '', tags: '' });
+            setNewPost({ title: '', body: '', tags: '', due_date: '', is_task: false });
             setNewPostAssignees([]);
             addToast('掲示板に投稿しました。', 'success');
         } catch (error) {
@@ -199,7 +199,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
 
     const handleCancelEdit = () => {
         setEditingThreadId(null);
-        setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
+        setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [], due_date: '', is_task: false });
     };
 
     const handleUpdateThread = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -230,7 +230,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
             });
             upsertThreadInState(updated);
             setEditingThreadId(null);
-            setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [] });
+            setEditingDraft({ title: '', body: '', tags: '', pinned: false, assigneeIds: [], due_date: '', is_task: false });
             addToast('投稿を更新しました。', 'success');
         } catch (error) {
             console.error('Failed to update bulletin thread', error);
@@ -366,6 +366,27 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                         </select>
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">依頼対象を指定すると、相手の「自分宛のみ」フィルターに表示されます。</p>
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">タスクとして投稿</label>
+                        <input
+                            type="checkbox"
+                            checked={newPost.is_task}
+                            onChange={(e) => setNewPost(prev => ({ ...prev, is_task: e.target.checked }))}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                    </div>
+                    {newPost.is_task && (
+                        <div>
+                            <label htmlFor="bb-due-date" className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">期日</label>
+                            <input
+                                id="bb-due-date"
+                                type="datetime-local"
+                                value={newPost.due_date}
+                                onChange={(e) => setNewPost(prev => ({ ...prev, due_date: e.target.value }))}
+                                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                    )}
                     <div className="flex justify-end">
                         <button
                             type="submit"
