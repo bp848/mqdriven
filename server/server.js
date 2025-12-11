@@ -314,8 +314,9 @@ app.put('/api/board/posts/:id/complete', async (req, res) => {
 
 // GET /api/users - Fetch employee directory with department/title info
 app.get('/api/users', async (_req, res) => {
+    const requestId = createRequestId();
     if (!supabase) {
-        return res.status(503).json({ error: 'Database client not initialized.' });
+        return res.status(503).json({ error: 'Database client not initialized.', requestId });
     }
     try {
         const [
@@ -332,14 +333,15 @@ app.get('/api/users', async (_req, res) => {
         ]);
 
         if (userError) {
-            console.error('Error from users table query:', userError);
-            return res.status(500).json({ error: 'Database error', details: userError.message });
+            const status = getSupabaseStatus(userError);
+            console.error('Error from users table query:', { requestId, code: userError.code, message: userError.message });
+            return res.status(status).json({ error: userError.message, code: userError.code, requestId });
         }
         if (departmentError) {
-            console.warn('Failed to fetch departments for user mapping:', departmentError.message);
+            console.warn('Failed to fetch departments for user mapping:', { requestId, message: departmentError.message });
         }
         if (titleError) {
-            console.warn('Failed to fetch titles for user mapping:', titleError.message);
+            console.warn('Failed to fetch titles for user mapping:', { requestId, message: titleError.message });
         }
 
         const departmentMap = new Map();
@@ -373,8 +375,8 @@ app.get('/api/users', async (_req, res) => {
 
         res.status(200).json(payload);
     } catch (err) {
-        console.error('Error in /api/users:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error in /api/users:', { requestId, err });
+        res.status(500).json({ error: 'Internal server error', requestId });
     }
 });
 
