@@ -133,6 +133,112 @@ app.post('/api/accounting/journal-batches/:id/approve', async (req, res) => {
     }
 });
 
+// --- Integrated Board API Routes ---
+
+// GET /api/board/posts - Fetch posts for the current user
+app.get('/api/board/posts', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized.' });
+    }
+    try {
+        const { data, error } = await supabase.rpc('get_user_posts', {
+            p_user_id: req.query.user_id || null
+        });
+
+        if (error) {
+            console.error('Error from get_user_posts RPC:', error);
+            return res.status(500).json({ error: 'Database error', details: error.message });
+        }
+
+        res.status(200).json(data);
+    } catch (err) {
+        console.error('Error in /api/board/posts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/board/posts - Create a new post
+app.post('/api/board/posts', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized.' });
+    }
+    try {
+        const { title, content, visibility, is_task, due_date, assignees } = req.body;
+        
+        const { data, error } = await supabase.rpc('create_post', {
+            p_title: title,
+            p_content: content,
+            p_visibility: visibility || 'all',
+            p_is_task: is_task || false,
+            p_due_date: due_date,
+            p_assignees: assignees || [],
+            p_created_by: req.body.created_by || null
+        });
+
+        if (error) {
+            console.error('Error from create_post RPC:', error);
+            return res.status(500).json({ error: 'Database error', details: error.message });
+        }
+
+        res.status(201).json({ message: 'Post created successfully', post_id: data });
+    } catch (err) {
+        console.error('Error in /api/board/posts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/board/posts/:id/comments - Add comment to post
+app.post('/api/board/posts/:id/comments', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized.' });
+    }
+    try {
+        const postId = req.params.id;
+        const { content, user_id } = req.body;
+        
+        const { data, error } = await supabase.rpc('add_comment', {
+            p_post_id: postId,
+            p_content: content,
+            p_user_id: user_id || null
+        });
+
+        if (error) {
+            console.error('Error from add_comment RPC:', error);
+            return res.status(500).json({ error: 'Database error', details: error.message });
+        }
+
+        res.status(201).json({ message: 'Comment added successfully', comment_id: data });
+    } catch (err) {
+        console.error('Error in /api/board/posts/:id/comments:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PUT /api/board/posts/:id/complete - Mark task as completed
+app.put('/api/board/posts/:id/complete', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Database client not initialized.' });
+    }
+    try {
+        const postId = req.params.id;
+        const { user_id } = req.body;
+        
+        const { error } = await supabase.rpc('complete_task', {
+            p_post_id: postId,
+            p_user_id: user_id || null
+        });
+
+        if (error) {
+            console.error('Error from complete_task RPC:', error);
+            return res.status(500).json({ error: 'Database error', details: error.message });
+        }
+
+        res.status(200).json({ message: 'Task completed successfully' });
+    } catch (err) {
+        console.error('Error in /api/board/posts/:id/complete:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 // --- Gemini Proxy Logic ---
 

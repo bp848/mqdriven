@@ -8,6 +8,63 @@ import { formatJPY } from '../utils';
 import { AlertTriangle, Inbox } from './Icons';
 import { getBulletinThreads } from '../services/dataService';
 
+// Integrated Board API service
+const getIntegratedBoardPosts = async (userId?: string) => {
+    try {
+        const response = await fetch(`/api/board/posts${userId ? `?user_id=${userId}` : ''}`);
+        if (!response.ok) throw new Error('Failed to fetch posts');
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching integrated board posts:', error);
+        return [];
+    }
+};
+
+const createBoardPost = async (postData: any) => {
+    try {
+        const response = await fetch('/api/board/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(postData)
+        });
+        if (!response.ok) throw new Error('Failed to create post');
+        return await response.json();
+    } catch (error) {
+        console.error('Error creating board post:', error);
+        throw error;
+    }
+};
+
+const addBoardComment = async (postId: string, content: string, userId?: string) => {
+    try {
+        const response = await fetch(`/api/board/posts/${postId}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content, user_id: userId })
+        });
+        if (!response.ok) throw new Error('Failed to add comment');
+        return await response.json();
+    } catch (error) {
+        console.error('Error adding comment:', error);
+        throw error;
+    }
+};
+
+const completeTask = async (postId: string, userId?: string) => {
+    try {
+        const response = await fetch(`/api/board/posts/${postId}/complete`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        if (!response.ok) throw new Error('Failed to complete task');
+        return await response.json();
+    } catch (error) {
+        console.error('Error completing task:', error);
+        throw error;
+    }
+};
+
 
 const ActionItemsCard: React.FC<{
   jobs: Job[];
