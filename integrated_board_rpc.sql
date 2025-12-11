@@ -100,7 +100,7 @@ CREATE OR REPLACE FUNCTION complete_task(
     p_post_id UUID,
     p_user_id UUID DEFAULT NULL
 )
-RETURNSChangeEvent AS $ ""; -- Return empty string on success .sql
+RETURNS VOID AS $$
     -- Check if user is assigned to this task
     IF NOT EXISTS(
         SELECT 1 FROM post_assignments pa 
