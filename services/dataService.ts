@@ -1153,8 +1153,34 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
     return data;
 };
 
-export async function getUsers(): Promise<EmployeeUser[]> {
-    const supabase = getSupabase();
+const fetchUsersViaApi = async (): Promise<EmployeeUser[] | null> => {
+    if (typeof fetch !== 'function') {
+        return null;
+    }
+    try {
+        const response = await fetch('/api/users', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+            },
+        });
+        if (!response.ok) {
+            const maybeJson = await response.json().catch(() => null);
+            const details = maybeJson?.details ?? maybeJson?.error ?? response.statusText ?? 'Unknown error';
+            throw new Error(details);
+        }
+        const payload = await response.json();
+        if (!Array.isArray(payload)) {
+            throw new Error('Unexpected response format from /api/users');
+        }
+        return payload as EmployeeUser[];
+    } catch (error) {
+        console.warn('Unable to fetch users via /api/users, falling back to direct Supabase call.', error);
+        return null;
+    }
+};
+
+const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUser[]> => {
     const [
         { data: userRows, error: userError },
         { data: departmentRows, error: departmentError },
@@ -1202,6 +1228,23 @@ export async function getUsers(): Promise<EmployeeUser[]> {
             isActive: user.is_active === null || user.is_active === undefined ? true : Boolean(user.is_active),
         };
     });
+};
+
+export async function getUsers(): Promise<EmployeeUser[]> {
+    const apiUsers = await fetchUsersViaApi();
+    if (apiUsers) {
+        return apiUsers;
+    }
+
+    const supabase = getSupabase();
+    try {
+        return await fetchUsersDirectly(supabase);
+    } catch (error: any) {
+        if (isSupabaseUnavailableError(error)) {
+            throw new Error('Failed to fetch users: network error communicating with the database.');
+        }
+        throw error;
+    }
 }
 
 export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean }): Promise<void> => {
