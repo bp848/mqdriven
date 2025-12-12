@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { Calendar, ClipboardList, Users, Settings, Package, Briefcase, ChevronDown, DollarSign, Inbox, PieChart, ShoppingCart, BookOpen, CheckCircle, Archive, ChevronLeft, ChevronRight } from './Icons';
+import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -17,55 +17,47 @@ type NavItemType = {
   name: string;
   badge?: number;
   badgeColor?: 'blue' | 'green' | 'red';
+  icon?: React.ElementType;
 };
 
 type NavCategoryType = {
   id: string;
   name: string;
-  icon: React.ElementType;
+  icon?: React.ElementType;
   items: NavItemType[];
   adminOnly?: boolean;
 };
 
-const HIDDEN_CATEGORY_IDS: string[] = [
-  'purchasing',
-  'analysis',
-  'project_management',
-  'inventory',
-  'hr',
-  'admin',
-  'management',
-];
-
 const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   {
-    id: 'document_creation',
-    name: '資料作成',
-    icon: BookOpen,
+    id: 'home',
+    name: 'ホーム',
+    icon: PieChart,
     items: [
-      { page: 'document_creation_tools', name: '提案書作成AI' },
-      { page: 'pdf_editing_tools', name: 'PDF編集AI' },
-      { page: 'dtp_tools', name: 'DTP自動組版AI' },
+      { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
+      { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
+      { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
+      { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },
+      { page: 'fax_ocr_intake', name: '何でも取り込み', icon: Inbox },
     ],
   },
   {
     id: 'sales',
-    name: '販売・営業',
+    name: '営業・販売',
     icon: Briefcase,
     items: [
-      { page: 'sales_dashboard', name: '販売ダッシュボード' },
+      { page: 'sales_dashboard', name: '販売状況' },
       { page: 'sales_leads', name: 'リード管理' },
-      { page: 'sales_customers', name: '取引先/お客様カルテ' },
-      { page: 'sales_pipeline', name: 'パイプライン（進捗）' },
+      { page: 'sales_customers', name: '取引先 / お客様カルテ' },
+      { page: 'sales_pipeline', name: '進捗管理' },
       { page: 'sales_estimates', name: '見積管理' },
-      { page: 'sales_orders', name: '案件予算管理' },
-      { page: 'sales_billing', name: '売上請求 (AR)' },
-      { page: 'document_creation_tools', name: '資料作成' },
+      { page: 'sales_orders', name: '予算管理' },
+      { page: 'sales_billing', name: '売上請求（AR）' },
     ],
   },
   {
     id: 'approvals',
-    name: '経費精算や会社への申請',
+    name: '経費・社内申請',
     icon: CheckCircle,
     items: [
       { page: 'approval_list', name: '承認一覧' },
@@ -73,6 +65,18 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_transport', name: '交通費精算' },
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
+      { page: 'accounting_approved_applications', name: '承認済み申請' },
+    ],
+  },
+  {
+    id: 'document_creation',
+    name: '制作・原稿 / DTP生成',
+    icon: BookOpen,
+    items: [
+      { page: 'document_creation_tools', name: '資料作成' },
+      { page: 'proposal_ai', name: '提案書作成AI' },
+      { page: 'pdf_editing_tools', name: 'PDF編集AI' },
+      { page: 'dtp_tools', name: 'DTP自動組版AI' },
     ],
   },
   {
@@ -87,7 +91,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
         { page: 'accounting_payables', name: '支払管理' },
         { page: 'accounting_receivables', name: '売掛金管理' },
         { page: 'accounting_cash_schedule', name: '資金繰り表' },
-        { page: 'accounting_approved_applications', name: '承認済申請' },
         { page: 'accounting_trial_balance', name: '試算表' },
         { page: 'accounting_tax_summary', name: '消費税集計' },
         { page: 'accounting_period_closing', name: '締処理' },
@@ -96,7 +99,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   },
   {
     id: 'admin_tools',
-    name: '管理メニュー',
+    name: '管理',
     icon: Settings,
     adminOnly: true,
     items: [
@@ -130,15 +133,12 @@ export const buildNavCategories = (
   pendingApprovalCount?: number
 ): NavCategoryType[] => {
   const baseCategories = decorateCategories(BASE_NAV_CATEGORIES, pendingApprovalCount);
-  const visibleCategories = baseCategories.filter(
-    (category) => !HIDDEN_CATEGORY_IDS.includes(category.id)
-  );
 
   if (user?.role === 'admin') {
-    return visibleCategories;
+    return baseCategories;
   }
 
-  return visibleCategories.filter((category) => !category.adminOnly);
+  return baseCategories.filter((category) => !category.adminOnly);
 };
 
 interface SidebarWithCountsProps extends SidebarProps {
@@ -168,8 +168,6 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   const sidebarWidth = isCollapsed ? 'w-20' : 'w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
-  const navButtonText = isCollapsed ? '展開' : '折りたたむ';
-
   return (
     <aside className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-full min-h-0 relative`}>
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''}`}>
@@ -193,125 +191,42 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       </div>
       <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('analysis_dashboard'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'analysis_dashboard'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    } ${isCollapsed ? 'justify-center' : ''}`}
-                    title="ダッシュボード"
-                >
-                    <PieChart className="w-5 h-5 flex-shrink-0" />
-                    <span className={`font-medium ${isCollapsed ? 'sr-only' : 'ml-4'}`}>ダッシュボード</span>
-                </a>
-            </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('bulletin_board'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'bulletin_board'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    } ${isCollapsed ? 'justify-center' : ''}`}
-                    title="掲示板"
-                >
-                    <Inbox className="w-5 h-5 flex-shrink-0" />
-                    <span className={`font-medium ${isCollapsed ? 'sr-only' : 'ml-4'}`}>掲示板</span>
-                </a>
-            </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('fax_ocr_intake'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'fax_ocr_intake'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <Inbox className="w-5 h-5 flex-shrink-0" />
-                    <span className={`font-medium ${isCollapsed ? 'hidden' : 'ml-4'}`}>FAX OCR取り込み</span>
-                </a>
-            </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={e => { e.preventDefault(); onNavigate('meeting_minutes'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'meeting_minutes'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <ClipboardList className="w-5 h-5" />
-                    <span className="ml-4 font-medium">議事録支援</span>
-                </a>
-            </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={e => { e.preventDefault(); onNavigate('my_schedule'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage === 'my_schedule'
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <Calendar className="w-5 h-5" />
-                    <span className="ml-4 font-medium">予定/報告各種</span>
-                </a>
-            </li>
-            <li>
-                <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate('accounting_dashboard'); }}
-                    className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                        currentPage.startsWith('accounting_')
-                            ? 'bg-slate-700 text-white'
-                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                >
-                    <DollarSign className="w-5 h-5" />
-                    <span className="ml-4 font-medium">会計メニュー</span>
-                </a>
-            </li>
           {visibleCategories.map(category => (
             <React.Fragment key={category.id}>
               <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
                 {category.name}
               </li>
-              {category.items.map(item => (
-                <li key={item.page}>
-                  <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onNavigate(item.page); }}
-                    className={`flex items-center justify-between p-3 rounded-lg transition-colors duration-200 ${
-                      currentPage === item.page
-                        ? 'bg-slate-700 text-white'
-                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                    } ${isCollapsed ? 'px-2' : ''}`}
-                  >
-                    <span className={`font-medium ${isCollapsed ? 'sr-only' : 'ml-4'}`}>{item.name}</span>
-                    {item.badge !== undefined && item.badge > 0 && (
-                      <span
-                        className={`ml-3 inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          item.badgeColor === 'green'
-                            ? 'bg-emerald-500 text-white'
-                            : item.badgeColor === 'red'
-                              ? 'bg-rose-500 text-white'
-                              : 'bg-blue-500 text-white'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </a>
-                </li>
-              ))}
+              {category.items.map(item => {
+                const ItemIcon = item.icon ?? category.icon;
+                const isActive = currentPage === item.page;
+                return (
+                  <li key={item.page}>
+                    <a
+                      href="#"
+                      onClick={(e) => { e.preventDefault(); onNavigate(item.page); }}
+                      className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                        isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                      } ${isCollapsed ? 'justify-center' : 'gap-3'}`}
+                    >
+                      {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
+                      <span className={`font-medium ${isCollapsed ? 'sr-only' : ''}`}>{item.name}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span
+                          className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            item.badgeColor === 'green'
+                              ? 'bg-emerald-500 text-white'
+                              : item.badgeColor === 'red'
+                                ? 'bg-rose-500 text-white'
+                                : 'bg-blue-500 text-white'
+                          } ${isCollapsed ? 'ml-0' : ''}`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </a>
+                  </li>
+                );
+              })}
             </React.Fragment>
           ))}
         </ul>

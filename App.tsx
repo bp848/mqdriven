@@ -88,15 +88,15 @@ type PredictiveSuggestion = {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ダッシュボード',
-    my_schedule: '予定/報告各種',
-    sales_dashboard: '販売ダッシュボード',
+    my_schedule: '日報タスクカレンダー',
+    sales_dashboard: '販売状況',
     sales_leads: 'リード管理',
     sales_customers: '取引先/お客様カルテ',
-    sales_pipeline: 'パイプライン（進捗）',
+    sales_pipeline: '進捗管理',
     sales_estimates: '見積管理',
-    sales_orders: '案件予算管理',
-    sales_billing: '売上請求 (AR)',
-    fax_ocr_intake: 'データ自動入力',
+    sales_orders: '予算管理',
+    sales_billing: '売上請求（AR）',
+    fax_ocr_intake: '何でも取り込み',
     analysis_ranking: '売上ランキング',
     purchasing_orders: '受注一覧',
     purchasing_invoices: '仕入計上 (AP)',
@@ -126,10 +126,11 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_payables: '支払管理',
     accounting_receivables: '売掛金管理',
     accounting_cash_schedule: '資金繰り表',
-    accounting_approved_applications: '承認済申請',
+    accounting_approved_applications: '承認済み申請',
     document_creation_tools: '資料作成',
-    pdf_editing_tools: 'PDF編集',
-    dtp_tools: 'DTP自動組版',
+    proposal_ai: '提案書作成AI',
+    pdf_editing_tools: 'PDF編集AI',
+    dtp_tools: 'DTP自動組版AI',
     ai_business_consultant: 'AI経営相談',
     ai_market_research: 'AI市場調査',
     meeting_minutes: '議事録支援',
@@ -140,7 +141,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_master_management: 'マスタ管理',
     admin_action_console: 'アクションコンソール',
     admin_bug_reports: 'バグ・改善報告',
-    bulletin_board: '掲示板',
+    bulletin_board: '議事録/掲示板',
     settings: '設定',
 };
 
@@ -956,6 +957,8 @@ useEffect(() => {
                     />
                 );
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'proposal_ai':
+                return <DocumentCreationHub />;
             case 'document_creation_tools':
                 return <DocumentCreationHub />;
             case 'pdf_editing_tools':
@@ -1065,6 +1068,7 @@ useEffect(() => {
                 onUserChange={onUserChange}
                 supabaseUserEmail={user?.email}
                 onSignOut={handleSignOut}
+                approvalsCount={pendingApprovalCount}
             />
             <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative min-h-0">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
