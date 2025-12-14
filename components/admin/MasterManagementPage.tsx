@@ -30,14 +30,15 @@ interface MasterManagementPageProps {
 type Tab = 'accounts' | 'recipients' | 'allocations' | 'departments' | 'titles';
 
 const MasterManagementPage: React.FC<MasterManagementPageProps> = (props) => {
+  const { accountItems, paymentRecipients, allocationDivisions, departments, titles } = props;
   const [activeTab, setActiveTab] = useState<Tab>('accounts');
 
   const tabs: {id: Tab, label: string}[] = [
-      { id: 'accounts', label: '勘定科目管理' },
-      { id: 'recipients', label: '支払先管理' },
-      { id: 'allocations', label: '振分区分管理' },
-      { id: 'departments', label: '部署管理' },
-      { id: 'titles', label: '役職管理' },
+      { id: 'accounts', label: `勘定科目管理（${accountItems.length}件）` },
+      { id: 'recipients', label: `支払先管理（${paymentRecipients.length}件）` },
+      { id: 'allocations', label: `振分区分管理（${allocationDivisions.length}件）` },
+      { id: 'departments', label: `部署管理（${departments.length}件）` },
+      { id: 'titles', label: `役職管理（${titles.length}件）` },
   ];
 
   return (
@@ -92,7 +93,7 @@ const AccountItemsManager: React.FC<MasterManagementPageProps> = ({ accountItems
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
-                 <h3 className="text-lg font-semibold">勘定科目マスタ</h3>
+                 <h3 className="text-lg font-semibold">勘定科目マスタ（{accountItems.length}件）</h3>
                  <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
@@ -139,7 +140,7 @@ const PaymentRecipientsManager: React.FC<MasterManagementPageProps> = ({ payment
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
-                 <h3 className="text-lg font-semibold">支払先マスタ</h3>
+                 <h3 className="text-lg font-semibold">支払先マスタ（{paymentRecipients.length}件）</h3>
                  <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
@@ -209,7 +210,7 @@ const AllocationDivisionsManager: React.FC<MasterManagementPageProps> = ({ alloc
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
-                 <h3 className="text-lg font-semibold">振分区分マスタ</h3>
+                 <h3 className="text-lg font-semibold">振分区分マスタ（{allocationDivisions.length}件）</h3>
                  <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
@@ -254,7 +255,7 @@ const DepartmentsManager: React.FC<MasterManagementPageProps> = ({ departments, 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
-                 <h3 className="text-lg font-semibold">部署マスタ</h3>
+                 <h3 className="text-lg font-semibold">部署マスタ（{departments.length}件）</h3>
                  <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
@@ -298,7 +299,7 @@ const TitlesManager: React.FC<MasterManagementPageProps> = ({ titles, onSaveTitl
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
              <div className="p-4 border-b flex justify-between items-center">
-                 <h3 className="text-lg font-semibold">役職マスタ</h3>
+                 <h3 className="text-lg font-semibold">役職マスタ（{titles.length}件）</h3>
                  <button onClick={() => handleOpenModal(null)} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"><PlusCircle className="w-5 h-5"/>新規追加</button>
              </div>
              <table className="w-full text-base">
