@@ -10,8 +10,8 @@ const FACTUAL_NOTES = [
             'M率：目標0.479に対し実績0.356と粗利率が大きく未達',
         ],
         actions: [
-            '低単価案件の足切りと値上げを徹底し、粗利重視で受注を選別する',
-            '短納期・高付加価値メニューの販促を即時開始し、単価と粗利を引き上げる',
+            '週次で粗利率0.48到達を確認（値上げ案件比率30%以上）し、低単価案件は足切りする',
+            '短納期・高付加価値メニューの売上構成比を当月15%→25%に引き上げる',
         ],
     },
     {
@@ -22,8 +22,8 @@ const FACTUAL_NOTES = [
             'M率：目標0.6に対し実績0.525',
         ],
         actions: [
-            '見積り時に最低粗利ラインで自動警告し、値引きを抑制する',
-            '重点ターゲットを絞った週次レビューで案件の粗利・単価を即改善する',
+            '見積り最低粗利ライン0.50を下回る案件ゼロを維持（週次チェック）',
+            '重点20案件の単価是正で粗利率を+3pt上乗せし、週次レビューで未達を即是正する',
         ],
     },
     {
@@ -33,8 +33,8 @@ const FACTUAL_NOTES = [
             'MQ：6月 目標6に対し実績1と粗利が極小',
         ],
         actions: [
-            '既存顧客の単価是正・再見積りを優先し、低粗利案件を是正する',
-            '高付加価値メニューをパッケージ化してアップセルを増やす',
+            '既存顧客の再見積りで粗利率を0.05→0.10まで引き上げる（週次5件実施）',
+            '高付加価値パッケージのアップセルを月5件獲得し、単価改定率30%以上を達成する',
         ],
     },
     {
@@ -44,8 +44,8 @@ const FACTUAL_NOTES = [
             'M率：目標0.7に対し実績0.592',
         ],
         actions: [
-            '高粗利商材へ商品ミックスを寄せ、低粗利案件の新規受注を制限する',
-            '見積り原価の精度を上げ、歩留まり悪化を即フィードバックする',
+            '高粗利商材比率を40%→55%へシフトし、低粗利新規受注を週次ゼロに抑える',
+            '歩留まり悪化の案件を当日フィードバックし、粗利率を0.592→0.65まで戻す',
         ],
     },
     {
@@ -55,8 +55,8 @@ const FACTUAL_NOTES = [
             '数量(Q)：前年611に対し今期611→564など減少が顕著',
         ],
         actions: [
-            '優先ラインを絞った稼働計画に組み直し、遊休ラインのシフトを最適化する',
-            '段取り・歩留まり改善でロスを削減し、外注・材料の発注ゲートを厳格化する',
+            '優先ラインを絞り稼働率を70%以上に回復、遊休ラインはシフト調整で残業抑制',
+            '段取り・歩留まりロスを2pt削減し、外注・材料の発注を日次ゲートで厳格化する',
         ],
     },
     {
@@ -66,8 +66,8 @@ const FACTUAL_NOTES = [
             '件数：目標25,000件に対し実績7,504件と大幅不足',
         ],
         actions: [
-            '既存顧客への追加受託・定期化提案で件数を即時上積みする',
-            'セット販売（保管＋発送＋加工）で単価を引き上げ、リードタイム短縮を徹底する',
+            '件数を月内で7,504件→15,000件まで積み上げ、単価を+10%改定する',
+            'セット販売（保管＋発送＋加工）を月10件獲得し、リードタイム短縮の標準手順を全案件に適用する',
         ],
     },
 ];
@@ -160,26 +160,26 @@ const BusinessPlanPage: React.FC<BusinessPlanPageProps> = ({ allUsers }) => {
                     </select>
                 </div>
             </div>
-            <div className="px-6 pb-4 space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">事実ベースの根拠とアクション</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="px-6 pb-4 space-y-4">
+                <h3 className="text-base font-semibold text-slate-700 dark:text-slate-200">事実ベースの根拠とアクション</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {FACTUAL_NOTES.map(note => (
                         <div key={note.title} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/60 dark:bg-slate-900/40">
                             <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-slate-800 dark:text-white">{note.title}</p>
+                                <p className="text-base font-semibold text-slate-800 dark:text-white">{note.title}</p>
                                 <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 dark:text-blue-200 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">事実と対応</span>
                             </div>
                             <div className="mt-2">
-                                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">根拠</p>
-                                <ul className="mt-1 space-y-1 text-xs text-slate-700 dark:text-slate-200 list-disc list-inside">
+                                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">根拠</p>
+                                <ul className="mt-1 space-y-1 text-sm text-slate-700 dark:text-slate-200 list-disc list-inside">
                                     {note.facts.map((fact, idx) => (
                                         <li key={idx}>{fact}</li>
                                     ))}
                                 </ul>
                             </div>
                             <div className="mt-3">
-                                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">アクション</p>
-                                <ul className="mt-1 space-y-1 text-xs text-slate-700 dark:text-slate-200 list-disc list-inside">
+                                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">アクション</p>
+                                <ul className="mt-1 space-y-1 text-sm text-slate-700 dark:text-slate-200 list-disc list-inside">
                                     {note.actions.map((action, idx) => (
                                         <li key={idx}>{action}</li>
                                     ))}
