@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { allBusinessPlans } from '../../data/businessPlanData';
 import { BusinessPlan, EmployeeUser } from '../../types';
 
+// December時点の事実ベース数値と、実行・検証しやすいKPI付きアクションの短評カード
 const FACTUAL_NOTES = [
     {
         title: '全社',
