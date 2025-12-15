@@ -18,6 +18,7 @@ type NavItemType = {
   badge?: number;
   badgeColor?: 'blue' | 'green' | 'red';
   icon?: React.ElementType;
+  adminOnly?: boolean;
 };
 
 type NavCategoryType = {
@@ -94,7 +95,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
         { page: 'accounting_trial_balance', name: '試算表' },
         { page: 'accounting_tax_summary', name: '消費税集計' },
         { page: 'accounting_period_closing', name: '締処理' },
-        { page: 'accounting_business_plan', name: '経営計画' },
+        { page: 'accounting_business_plan', name: '経営計画', adminOnly: true },
     ],
   },
   {
@@ -134,11 +135,15 @@ export const buildNavCategories = (
 ): NavCategoryType[] => {
   const baseCategories = decorateCategories(BASE_NAV_CATEGORIES, pendingApprovalCount);
 
-  if (user?.role === 'admin') {
-    return baseCategories;
-  }
+  const isAdmin = user?.role === 'admin';
 
-  return baseCategories.filter((category) => !category.adminOnly);
+  return baseCategories
+    .filter((category) => isAdmin || !category.adminOnly)
+    .map(category => {
+      const items = isAdmin ? category.items : category.items.filter(item => !item.adminOnly);
+      return { ...category, items };
+    })
+    .filter(category => category.items.length > 0);
 };
 
 interface SidebarWithCountsProps extends SidebarProps {

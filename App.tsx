@@ -330,6 +330,10 @@ const App: React.FC = () => {
 
     // Navigation and Modals
     const handleNavigate = (page: Page) => {
+        if (page === 'accounting_business_plan' && currentUser?.role !== 'admin') {
+            addToast('経営計画は管理者のみ閲覧できます。', 'error');
+            return;
+        }
         setCurrentPage(page);
         setSearchTerm('');
     };
@@ -919,6 +923,16 @@ useEffect(() => {
             case 'analysis_ranking':
                 return <SalesRanking initialSummaries={jobs} customers={customers} />;
             case 'accounting_business_plan':
+                if (currentUser?.role !== 'admin') {
+                    return (
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-8">
+                            <h2 className="text-xl font-semibold text-slate-800 dark:text-white">経営計画は管理者専用です</h2>
+                            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                                閲覧権限が必要です。管理者に相談してください。
+                            </p>
+                        </div>
+                    );
+                }
                 return <BusinessPlanPage allUsers={allUsers} />;
             case 'accounting_dashboard':
                 return <AccountingDashboard setCurrentView={handleNavigate} />;
