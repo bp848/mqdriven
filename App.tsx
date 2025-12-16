@@ -265,6 +265,8 @@ const App: React.FC = () => {
     const [isAIOff, setIsAIOff] = useState(process.env.NEXT_PUBLIC_AI_OFF === '1');
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+    const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
+    const [isGoogleAuthLoading, setIsGoogleAuthLoading] = useState(false);
 
     const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
     const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
@@ -362,6 +364,45 @@ const App: React.FC = () => {
     const clearResumedApplication = useCallback(() => {
         setResumedApplication(null);
     }, []);
+
+    useEffect(() => {
+        const key = 'google_calendar_modal_dismissed';
+        const dismissed = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
+        if (currentUser && !dismissed) {
+            setShowGoogleCalendarModal(true);
+        }
+    }, [currentUser]);
+
+    const handleDismissGoogleModal = () => {
+        const key = 'google_calendar_modal_dismissed';
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(key, '1');
+        }
+        setShowGoogleCalendarModal(false);
+    };
+
+    const handleStartGoogleCalendarAuth = async () => {
+        if (!currentUser) return;
+        setIsGoogleAuthLoading(true);
+        try {
+            const resp = await fetch(`/api/google/oauth/start?user_id=${currentUser.id}`);
+            if (!resp.ok) {
+                addToast('Googleカレンダー連携の開始に失敗しました。設定を確認してください。', 'error');
+                return;
+            }
+            const data = await resp.json();
+            if (data?.authUrl) {
+                window.open(data.authUrl, '_blank', 'noopener');
+            } else {
+                addToast('認可URLを取得できませんでした。', 'error');
+            }
+        } catch (err) {
+            console.error('Failed to start Google OAuth', err);
+            addToast('Googleカレンダー連携でエラーが発生しました。', 'error');
+        } finally {
+            setIsGoogleAuthLoading(false);
+        }
+    };
 
     const handleResumeApplicationDraft = useCallback((application: ApplicationWithDetails) => {
         if (!currentUser || application.applicantId !== currentUser.id) {
@@ -1131,6 +1172,43 @@ useEffect(() => {
             {isAnalysisModalOpen && <CompanyAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setAnalysisModalOpen(false)} analysis={companyAnalysis} customer={selectedCustomer} isLoading={isAnalysisLoading} error={analysisError} currentUser={currentUser} isAIOff={isAIOff} onReanalyze={handleAnalyzeCustomer}/>}
             {isBugReportModalOpen && <BugReportChatModal isOpen={isBugReportModalOpen} onClose={() => setIsBugReportModalOpen(false)} onReportSubmit={handleSaveBugReport} isAIOff={isAIOff} />}
             {isSetupModalOpen && <DatabaseSetupInstructionsModal onRetry={() => { setIsSetupModalOpen(false); loadAllData(); }} />}
+            {showGoogleCalendarModal && currentUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Googleカレンダー連携</h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                                    日報タスクをGoogleカレンダーと同期します。1回だけ同意が必要です。
+                                </p>
+                            </div>
+                            <button onClick={handleDismissGoogleModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">×</button>
+                        </div>
+                        <ul className="text-sm text-slate-700 dark:text-slate-200 list-disc list-inside space-y-1">
+                            <li>日報の開始/終了時刻をGoogleカレンダーに登録</li>
+                            <li>アカウントごとの連携（現在のログインユーザー: {currentUser.name}）</li>
+                            <li>いつでも再連携・取り消し可能</li>
+                        </ul>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={handleDismissGoogleModal}
+                                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200"
+                            >
+                                あとで
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleStartGoogleCalendarAuth}
+                                disabled={isGoogleAuthLoading}
+                                className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${isGoogleAuthLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                                {isGoogleAuthLoading ? '開始中...' : '連携を開始する'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Global UI */}
             <ToastContainer toasts={toasts} onDismiss={dismissToast} />
