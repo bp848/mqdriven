@@ -115,6 +115,8 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
+const DEFAULT_TIMEZONE = process.env.CALENDAR_TZ || 'Asia/Tokyo';
 
 const getGoogleOAuthClient = () => {
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
@@ -177,6 +179,24 @@ app.get('/api/google/oauth/start', async (req, res) => {
     }
 });
 
+// POST /api/google/calendar/sync - Sync ERP (DLY) -> Google Calendar for a user
+app.post('/api/google/calendar/sync', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.body?.user_id;
+    const timeMin = req.body?.timeMin;
+    const timeMax = req.body?.timeMax;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    try {
+        const summary = await syncErpToGoogle({ userId, timeMin, timeMax });
+        return res.status(200).json({ message: 'Sync completed', summary, requestId });
+    } catch (err) {
+        console.error('[google/calendar/sync] failed', { requestId, err: err?.message, stack: err?.stack });
+        return res.status(500).json({ error: err?.message || 'Sync failed', requestId });
+    }
+});
+
 app.get('/api/google/oauth/callback', async (req, res) => {
     const requestId = createRequestId();
     const client = getGoogleOAuthClient();
@@ -198,6 +218,202 @@ app.get('/api/google/oauth/callback', async (req, res) => {
         return res.status(500).json({ error: 'Failed to exchange token', requestId });
     }
 });
+
+// --- Google Calendar Sync Helpers ---
+const fetchGoogleTokenForUser = async (userId) => {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    const { data, error } = await supabase.from('user_google_tokens').select('*').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return data || null;
+};
+
+const refreshGoogleTokenIfNeeded = async (userId) => {
+    const client = getGoogleOAuthClient();
+    if (!client) throw new Error('Google OAuth is not configured');
+    const record = await fetchGoogleTokenForUser(userId);
+    if (!record) {
+        throw new Error('No Google tokens found for this user. Authorize calendar first.');
+    }
+    const now = Date.now();
+    const expiresAt = record.expires_at ? new Date(record.expires_at).getTime() : 0;
+    if (expiresAt && expiresAt - now > 2 * 60 * 1000) {
+        return record; // still valid
+    }
+    if (!record.refresh_token) {
+        throw new Error('Missing refresh_token. Re-authorize calendar access.');
+    }
+    const tokenClient = getGoogleOAuthClient();
+    tokenClient.setCredentials({
+        access_token: record.access_token,
+        refresh_token: record.refresh_token,
+    });
+    const { credentials } = await tokenClient.refreshAccessToken();
+    await upsertGoogleToken({ userId, tokens: credentials });
+    return {
+        ...record,
+        access_token: credentials.access_token,
+        expires_at: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : record.expires_at,
+    };
+};
+
+const fetchDlyApplications = async () => {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    // Resolve code id once
+    const { data: codeRow, error: codeErr } = await supabase
+        .from('application_codes')
+        .select('id')
+        .eq('code', 'DLY')
+        .single();
+    if (codeErr) throw codeErr;
+    const codeId = codeRow?.id;
+    if (!codeId) throw new Error('application_code DLY not found');
+
+    const { data, error } = await supabase
+        .from('applications')
+        .select('id, applicant_id, form_data, updated_at')
+        .eq('application_code_id', codeId);
+    if (error) throw error;
+    return data || [];
+};
+
+const parseDateTime = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    const normalized = `${dateStr}T${timeStr.length === 5 ? timeStr : `${timeStr}`}`;
+    const d = new Date(normalized);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+};
+
+const mapApplicationToGoogleEvent = (app, attendeeEmail) => {
+    const reportDate = app.form_data?.reportDate;
+    const startTime = app.form_data?.startTime;
+    const endTime = app.form_data?.endTime;
+    const startDateTime = parseDateTime(reportDate, startTime);
+    const endDateTime = parseDateTime(reportDate, endTime);
+    return {
+        summary: app.form_data?.customerName || '日報',
+        description: app.form_data?.activityContent || '',
+        location: '',
+        start: {
+            dateTime: startDateTime || null,
+            timeZone: DEFAULT_TIMEZONE,
+        },
+        end: {
+            dateTime: endDateTime || null,
+            timeZone: DEFAULT_TIMEZONE,
+        },
+        attendees: attendeeEmail ? [{ email: attendeeEmail }] : [],
+        extendedProperties: {
+            private: {
+                erp_event_id: app.id,
+                erp_updated_at: app.updated_at || '',
+            },
+        },
+    };
+};
+
+const fetchApplicantEmail = async (userId) => {
+    if (!userId || !supabase) return null;
+    const { data, error } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .maybeSingle();
+    if (error) return null;
+    return data?.email || null;
+};
+
+const fetchGoogleEventsByErpId = async (accessToken, timeMin, timeMax) => {
+    const params = new URLSearchParams({
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        showDeleted: 'true',
+    });
+    if (timeMin) params.append('timeMin', timeMin);
+    if (timeMax) params.append('timeMax', timeMax);
+    // Filter by private extended property if provided
+    const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events?${params.toString()}`;
+    const { data } = await axios.get(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const items = Array.isArray(data.items) ? data.items : [];
+    const byErpId = new Map();
+    for (const ev of items) {
+        const erpId = ev?.extendedProperties?.private?.erp_event_id;
+        if (erpId) byErpId.set(erpId, ev);
+    }
+    return byErpId;
+};
+
+const createGoogleEvent = async (accessToken, body) => {
+    const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events`;
+    const { data } = await axios.post(url, body, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return data;
+};
+
+const updateGoogleEvent = async (accessToken, eventId, body) => {
+    const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events/${encodeURIComponent(eventId)}`;
+    const { data } = await axios.patch(url, body, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return data;
+};
+
+const deleteGoogleEvent = async (accessToken, eventId) => {
+    const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events/${encodeURIComponent(eventId)}`;
+    await axios.delete(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+};
+
+const syncErpToGoogle = async ({ userId, timeMin, timeMax }) => {
+    const tokenRecord = await refreshGoogleTokenIfNeeded(userId);
+    const accessToken = tokenRecord.access_token;
+    const erpEvents = await fetchDlyApplications();
+
+    const googleMap = await fetchGoogleEventsByErpId(accessToken, timeMin, timeMax);
+    const summary = { created: 0, updated: 0, skipped: 0, missing: 0 };
+
+    for (const app of erpEvents) {
+        const attendeeEmail = await fetchApplicantEmail(app.applicant_id);
+        const mapped = mapApplicationToGoogleEvent(app, attendeeEmail);
+        if (!mapped.start?.dateTime || !mapped.end?.dateTime) {
+            summary.skipped += 1;
+            continue;
+        }
+        const existing = googleMap.get(app.id);
+        if (!existing) {
+            await createGoogleEvent(accessToken, mapped);
+            summary.created += 1;
+            continue;
+        }
+        const googleUpdated = existing.updated ? new Date(existing.updated).getTime() : 0;
+        const erpUpdated = app.updated_at ? new Date(app.updated_at).getTime() : 0;
+        if (erpUpdated && erpUpdated > googleUpdated + 1000) {
+            await updateGoogleEvent(accessToken, existing.id, mapped);
+            summary.updated += 1;
+        } else {
+            summary.skipped += 1;
+        }
+    }
+
+    // Optionally delete Google events that no longer exist in ERP
+    for (const [erpId, ev] of googleMap.entries()) {
+        const exists = erpEvents.find((e) => e.id === erpId);
+        if (!exists) {
+            try {
+                await deleteGoogleEvent(accessToken, ev.id);
+                summary.missing += 1;
+            } catch (err) {
+                console.warn('[google sync] failed to delete missing event', erpId, err?.response?.data || err?.message);
+            }
+        }
+    }
+
+    return summary;
+};
 
 // --- Application API Routes for Accounting ---
 
