@@ -15,6 +15,7 @@ const WebSocket = require('ws');
 const { URLSearchParams, URL } = require('url');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
+const { randomUUID } = require('crypto');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -117,6 +118,7 @@ const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar'];
 const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
 const DEFAULT_TIMEZONE = process.env.CALENDAR_TZ || 'Asia/Tokyo';
+const DEFAULT_WEBHOOK_PATH = '/api/google/calendar/webhook';
 
 const getGoogleOAuthClient = () => {
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
@@ -195,6 +197,40 @@ app.post('/api/google/calendar/sync', async (req, res) => {
         console.error('[google/calendar/sync] failed', { requestId, err: err?.message, stack: err?.stack });
         return res.status(500).json({ error: err?.message || 'Sync failed', requestId });
     }
+});
+
+// POST /api/google/calendar/watch - create webhook watch channel
+app.post('/api/google/calendar/watch', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.body?.user_id;
+    const callbackUrl = req.body?.callback_url || (process.env.PUBLIC_BASE_URL ? `${process.env.PUBLIC_BASE_URL}${DEFAULT_WEBHOOK_PATH}` : null);
+    const ttlSeconds = req.body?.ttl;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    if (!callbackUrl) {
+        return res.status(400).json({ error: 'callback_url is required (or set PUBLIC_BASE_URL)', requestId });
+    }
+    try {
+        const tokenRecord = await refreshGoogleTokenIfNeeded(userId);
+        const accessToken = tokenRecord.access_token;
+        const watch = await createGoogleWatch(accessToken, { callbackUrl, ttlSeconds });
+        return res.status(200).json({ message: 'Watch created', watch, requestId });
+    } catch (err) {
+        console.error('[google/calendar/watch] failed', { requestId, err: err?.message, stack: err?.stack });
+        return res.status(500).json({ error: err?.message || 'Watch creation failed', requestId });
+    }
+});
+
+// Webhook endpoint for Google Calendar push notifications
+app.post(DEFAULT_WEBHOOK_PATH, async (req, res) => {
+    // Google does not require a specific response body; 200 is enough.
+    // For now、詳細処理は未実装（Google→ERPの差分反映は別タスク）
+    const resourceState = req.headers['x-goog-resource-state'];
+    const channelId = req.headers['x-goog-channel-id'];
+    const messageNumber = req.headers['x-goog-message-number'];
+    console.log('[google/calendar/webhook]', { resourceState, channelId, messageNumber });
+    res.status(200).send('ok');
 });
 
 app.get('/api/google/oauth/callback', async (req, res) => {
@@ -366,6 +402,22 @@ const deleteGoogleEvent = async (accessToken, eventId) => {
     await axios.delete(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
     });
+};
+
+const createGoogleWatch = async (accessToken, { callbackUrl, channelId, ttlSeconds }) => {
+    const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events/watch`;
+    const body = {
+        id: channelId || randomUUID(),
+        type: 'webhook',
+        address: callbackUrl,
+    };
+    if (ttlSeconds) {
+        body.params = { ttl: ttlSeconds };
+    }
+    const { data } = await axios.post(url, body, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return data;
 };
 
 const syncErpToGoogle = async ({ userId, timeMin, timeMax }) => {
