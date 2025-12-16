@@ -10,6 +10,7 @@ const fs = require('fs');
 const axios = require('axios');
 const https = require('https');
 const path = require('path');
+const { OAuth2Client } = require('google-auth-library');
 const WebSocket = require('ws');
 const { URLSearchParams, URL } = require('url');
 const rateLimit = require('express-rate-limit');
@@ -96,7 +97,6 @@ const getSupabaseStatus = error => {
 const staticPath = path.join(__dirname,'dist');
 const publicPath = path.join(__dirname,'public');
 
-
 if (!apiKey) {
     // Only log an error, don't exit. The server will serve apps without proxy functionality
     console.error("Warning: GEMINI_API_KEY or API_KEY environment variable is not set! Proxy functionality will be disabled.");
@@ -110,6 +110,94 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({extended: true, limit: '50mb'}));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
 
+// --- Google OAuth Setup ---
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar'];
+
+const getGoogleOAuthClient = () => {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+        return null;
+    }
+    return new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
+};
+
+const upsertGoogleToken = async ({ userId, tokens }) => {
+    if (!supabase) {
+        throw new Error('Supabase client not initialized');
+    }
+    const expiresAt =
+        tokens.expiry_date
+            ? new Date(tokens.expiry_date)
+            : tokens.expires_in
+                ? new Date(Date.now() + tokens.expires_in * 1000)
+                : null;
+    const payload = {
+        user_id: userId,
+        provider: 'google',
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || null,
+        expires_at: expiresAt ? expiresAt.toISOString() : null,
+        scope: tokens.scope || GOOGLE_SCOPES.join(' '),
+        token_type: tokens.token_type || 'Bearer',
+        id_token: tokens.id_token || null,
+    };
+    const { error } = await supabase
+        .from('user_google_tokens')
+        .upsert(payload, { onConflict: 'user_id' });
+    if (error) {
+        throw error;
+    }
+    return payload;
+};
+
+// --- Google OAuth Routes ---
+app.get('/api/google/oauth/start', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.query.user_id;
+    const client = getGoogleOAuthClient();
+    if (!client) {
+        return res.status(503).json({ error: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI.', requestId });
+    }
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    try {
+        const authUrl = client.generateAuthUrl({
+            access_type: 'offline',
+            scope: GOOGLE_SCOPES,
+            prompt: 'consent',
+            state: userId, // keep simple: state carries user id
+        });
+        return res.status(200).json({ authUrl, requestId });
+    } catch (err) {
+        console.error('[google/oauth/start] failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to generate auth url', requestId });
+    }
+});
+
+app.get('/api/google/oauth/callback', async (req, res) => {
+    const requestId = createRequestId();
+    const client = getGoogleOAuthClient();
+    if (!client) {
+        return res.status(503).json({ error: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI.', requestId });
+    }
+    const code = req.query.code;
+    // user id is expected either in state or query param
+    const userId = req.query.user_id || req.query.state;
+    if (!code || !isUuid(userId)) {
+        return res.status(400).json({ error: 'code and user_id are required', requestId });
+    }
+    try {
+        const { tokens } = await client.getToken(code);
+        await upsertGoogleToken({ userId, tokens });
+        return res.status(200).json({ message: 'Google tokens saved', requestId });
+    } catch (err) {
+        console.error('[google/oauth/callback] token exchange failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to exchange token', requestId });
+    }
+});
 
 // --- Application API Routes for Accounting ---
 
