@@ -49,6 +49,7 @@ interface ExpenseLine {
     accountItemId: string;
     allocationDivisionId: string;
     customerId: string;
+    customerName: string;
     customCustomerName?: string;
     projectId: string;
     projectName?: string;
@@ -132,6 +133,7 @@ const createEmptyLine = (ocr: boolean = false): ExpenseLine => ({
     accountItemId: '',
     allocationDivisionId: '',
     customerId: '',
+    customerName: '',
     projectId: '',
     customCustomerName: '',
     projectName: '',
@@ -147,9 +149,16 @@ const ensureExpenseLineShape = (rawLine?: Partial<ExpenseLine> | null): ExpenseL
         ...baseLine,
         ...rawLine,
     };
+    const normalizedCustomerName =
+        typeof merged.customerName === 'string' && merged.customerName.trim()
+            ? merged.customerName
+            : typeof merged.customCustomerName === 'string'
+            ? merged.customCustomerName
+            : '';
     return {
         ...merged,
         id: rawLine?.id || baseLine.id,
+        customerName: normalizedCustomerName,
         internalMemo:
             typeof rawLine?.internalMemo === 'string'
                 ? rawLine.internalMemo
@@ -320,6 +329,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         return lines.map(line => ({
             ...line,
             customerId: '',
+            customerName: '',
             customCustomerName: '',
             projectId: '',
             projectName: '',
@@ -418,7 +428,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     };
 
     const handleLineChange = (lineId: string, field: keyof ExpenseLine, value: any) => {
-        if (isInternalExpense && (field === 'customerId' || field === 'customCustomerName' || field === 'projectId' || field === 'projectName')) {
+        if (isInternalExpense && (field === 'customerId' || field === 'customerName' || field === 'customCustomerName' || field === 'projectId' || field === 'projectName')) {
             return;
         }
         setInvoice(prev => {
@@ -531,19 +541,27 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 updateField('taxAmount', ocrData.taxAmount);
 
                 if (ocrData.lineItems && ocrData.lineItems.length > 0) {
-                    newDraft.lines = ocrData.lineItems.map(item => ({
+                    newDraft.lines = ocrData.lineItems.map(item => {
+                        const candidateCustomer = (item as any).customerName || ocrData.relatedCustomer || '';
+                        return {
                         ...createEmptyLine(true),
                         description: item.description || '',
+                        customerName: candidateCustomer || '',
+                        customCustomerName: candidateCustomer || '',
                         amountExclTax: item.amountExclTax || 0,
                         quantity: item.quantity || 1,
                         unitPrice: item.unitPrice || 0,
                         taxRate: item.taxRate || 10,
-                    }));
+                    };
+                    });
                     ocrFields.add('lines');
                 } else if (newDraft.totalNet) {
+                    const candidateCustomer = ocrData.relatedCustomer || ocrData.project || '';
                     newDraft.lines = [{
                         ...createEmptyLine(true),
                         description: ocrData.description || '品名不明',
+                        customerName: candidateCustomer || '',
+                        customCustomerName: candidateCustomer || '',
                         amountExclTax: newDraft.totalNet,
                     }];
                     ocrFields.add('lines');
@@ -1082,7 +1100,7 @@ const LineItemTable: React.FC<{
                                 const projectDatalistId = `project-options-${line.id}`;
                                 const selectedCustomer = customers.find(c => c.id === line.customerId);
                                 const selectedProject = jobs.find(job => job.id === line.projectId);
-                                const customerDisplayName = line.customCustomerName ?? selectedCustomer?.customerName ?? '';
+                                const customerDisplayName = line.customCustomerName || line.customerName || selectedCustomer?.customerName || '';
                                 const projectDisplayName = line.projectName || selectedProject?.title || '';
                                 const availableProjects = line.customerId
                                     ? jobs.filter(job => job.customerId === line.customerId)
@@ -1097,13 +1115,15 @@ const LineItemTable: React.FC<{
                                     );
                                     if (match) {
                                         onLineChange(line.id, 'customerId', match.id);
+                                        onLineChange(line.id, 'customerName', match.customerName);
                                         onLineChange(line.id, 'customCustomerName', '');
                                         if (isNonCustomerExpense) {
                                             onLineChange(line.id, 'nonCustomerExpense', false);
                                         }
                                     } else {
                                         onLineChange(line.id, 'customerId', '');
-                                        onLineChange(line.id, 'customCustomerName', value);
+                                        onLineChange(line.id, 'customerName', trimmed);
+                                        onLineChange(line.id, 'customCustomerName', trimmed);
                                     }
                                 };
 

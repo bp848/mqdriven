@@ -61,6 +61,29 @@ const calculateDayDiff = (start?: string, end?: string): number | null => {
     return Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 };
 
+const resolveCustomerCandidate = (line: any): string => {
+    if (!line || typeof line !== 'object') return '';
+    const candidates = [
+        line.customerName,
+        line.customCustomerName,
+        line.customerCandidate,
+        typeof line.customer === 'string' ? line.customer : null,
+        line.customer?.customerName,
+        line.customer?.name,
+    ];
+    for (const candidate of candidates) {
+        if (typeof candidate === 'string') {
+            const trimmed = candidate.trim();
+            if (trimmed) return trimmed;
+        }
+    }
+    if (typeof line.customerId === 'string') {
+        const trimmed = line.customerId.trim();
+        if (trimmed) return trimmed;
+    }
+    return '';
+};
+
 const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
     const summary: FormSummary = { highlights: [], listSections: [], tableSections: [] };
     if (!rawData || typeof rawData !== 'object') return summary;
@@ -102,6 +125,13 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
             pushHighlight('支払先', payee);
             pushHighlight('支払期限', invoice.dueDate, { format: 'date' });
 
+            const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
+            const customerCandidates = lines
+                .map((line: any) => resolveCustomerCandidate(line))
+                .filter(name => isFilled(name));
+            const uniqueCustomerCandidates = Array.from(new Set(customerCandidates));
+            const hasCustomerCandidates = lines.some(line => isFilled(resolveCustomerCandidate(line)));
+
             const mq = data.mqAccounting || {};
             const mqCostTypeLabel = mq.costType === 'V' ? '変動費 (V)' : mq.costType === 'F' ? '固定費 (F)' : '';
             const mqExpectedSales = mq.expectedSalesPQ;
@@ -115,6 +145,7 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
 
             pushListSection('請求情報', [
                 { label: 'サプライヤー / 支払先', value: invoice.supplierName ?? data.supplierName },
+                { label: '顧客候補', value: uniqueCustomerCandidates.join(' / ') },
                 { label: '請求書発行日', value: formatDateValue(invoice.invoiceDate) },
                 { label: '支払期限', value: formatDateValue(invoice.dueDate) },
                 { label: '登録番号', value: invoice.registrationNumber },
@@ -138,19 +169,30 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
                 { label: '口座番号', value: bankAccount.accountNumber },
             ]);
 
-            const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
             if (lines.length) {
-                pushTableSection(
-                    '経費明細',
-                    ['日付', '内容', '数量', '単価', '金額(税抜)', '税率'],
-                    lines.map((line: any, idx: number) => [
+                const columns = ['日付', '内容'];
+                if (hasCustomerCandidates) columns.push('顧客候補');
+                columns.push('数量', '単価', '金額(税抜)', '税率');
+                const rows = lines.map((line: any, idx: number) => {
+                    const cells: React.ReactNode[] = [
                         line.lineDate || `#${idx + 1}`,
                         line.description || '-',
+                    ];
+                    if (hasCustomerCandidates) {
+                        cells.push(resolveCustomerCandidate(line) || '-');
+                    }
+                    cells.push(
                         line.quantity ?? '-',
                         formatCurrency(line.unitPrice) || '-',
                         formatCurrency(line.amountExclTax) || '-',
                         isFilled(line.taxRate) ? `${line.taxRate}%` : '-',
-                    ])
+                    );
+                    return cells;
+                });
+                pushTableSection(
+                    '経費明細',
+                    columns,
+                    rows
                 );
             }
             break;
