@@ -3,7 +3,7 @@ import { submitApplication } from '../../services/dataService';
 import { generateDailyReportSummary, extractDailyReportFromImage } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
-import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill } from '../../types';
+import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill, Customer } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
@@ -19,6 +19,7 @@ interface DailyReportFormProps {
     draftApplication?: ApplicationWithDetails | null;
     prefill?: DailyReportPrefill;
     onPrefillApplied?: () => void;
+    customers?: Customer[];
 }
 
 const DailyReportForm: React.FC<DailyReportFormProps> = ({
@@ -32,6 +33,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     draftApplication,
     prefill,
     onPrefillApplied,
+    customers = [],
 }) => {
     const createScheduleItem = (item?: Partial<ScheduleItem>): ScheduleItem => ({
         id: item?.id || `schedule_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -72,6 +74,18 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
     const templateText = useMemo(() => buildReportTemplate(formData), [formData]);
     const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
+    const customerOptions = useMemo(() => {
+        const seen = new Set<string>();
+        return customers
+            .map(c => (c.customerName || '').trim())
+            .filter(name => {
+                if (!name) return false;
+                if (seen.has(name)) return false;
+                seen.add(name);
+                return true;
+            })
+            .sort((a, b) => a.localeCompare(b, 'ja'));
+    }, [customers]);
 
     const persistSavedReports = (next: Record<string, DailyReportData>) => {
         setSavedReports(next);
@@ -414,7 +428,28 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                     
                     <div>
                         <label htmlFor="customerName" className={labelClass}>訪問先・顧客名</label>
-                        <input type="text" id="customerName" name="customerName" value={formData.customerName} onChange={handleChange} className={inputClass} disabled={isDisabled} placeholder="例: 株式会社〇〇" autoComplete="organization" />
+                        <input
+                            type="text"
+                            id="customerName"
+                            name="customerName"
+                            value={formData.customerName}
+                            onChange={handleChange}
+                            className={inputClass}
+                            disabled={isDisabled}
+                            placeholder="例: 株式会社〇〇"
+                            autoComplete="organization"
+                            list="daily-report-customer-options"
+                        />
+                        {customerOptions.length > 0 && (
+                            <>
+                                <datalist id="daily-report-customer-options">
+                                    {customerOptions.map(name => (
+                                        <option key={name} value={name} />
+                                    ))}
+                                </datalist>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">顧客マスタから補完できます（自由入力も可）。</p>
+                            </>
+                        )}
                     </div>
 
                     <MetricsSection
