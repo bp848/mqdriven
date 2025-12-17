@@ -1166,33 +1166,6 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
     return data;
 };
 
-const fetchUsersViaApi = async (): Promise<EmployeeUser[] | null> => {
-    if (typeof fetch !== 'function') {
-        return null;
-    }
-    try {
-        const response = await fetch('/api/users', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-            },
-        });
-        if (!response.ok) {
-            const maybeJson = await response.json().catch(() => null);
-            const details = maybeJson?.details ?? maybeJson?.error ?? response.statusText ?? 'Unknown error';
-            throw new Error(details);
-        }
-        const payload = await response.json();
-        if (!Array.isArray(payload)) {
-            throw new Error('Unexpected response format from /api/users');
-        }
-        return payload as EmployeeUser[];
-    } catch (error) {
-        console.warn('Unable to fetch users via /api/users, falling back to direct Supabase call.', error);
-        return null;
-    }
-};
-
 const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUser[]> => {
     const [
         { data: userRows, error: userError },
@@ -1246,15 +1219,9 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
 export async function getUsers(): Promise<EmployeeUser[]> {
     const supabase = getSupabase();
     try {
-        // Prefer direct Supabase access to avoid noisy 500s when /api/users is not deployed.
         return await fetchUsersDirectly(supabase);
     } catch (error: any) {
         if (isSupabaseUnavailableError(error)) {
-            // As a last resort, try the legacy Express endpoint if the database is unreachable.
-            const apiUsers = await fetchUsersViaApi();
-            if (apiUsers) {
-                return apiUsers;
-            }
             throw new Error('Failed to fetch users: network error communicating with the database.');
         }
         throw error;
