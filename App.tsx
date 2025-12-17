@@ -266,7 +266,6 @@ const App: React.FC = () => {
     const [isAIOff, setIsAIOff] = useState(process.env.NEXT_PUBLIC_AI_OFF === '1');
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
-    const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
     const [isGoogleAuthLoading, setIsGoogleAuthLoading] = useState(false);
     const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
 
@@ -368,28 +367,12 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const key = 'google_calendar_modal_dismissed';
-        const dismissed = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
-        if (currentUser && !dismissed) {
-            setShowGoogleCalendarModal(true);
-        }
-    }, [currentUser]);
-
-    useEffect(() => {
         const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
         const seen = typeof window !== 'undefined' ? window.localStorage.getItem(todayKey) : null;
         if (currentUser && !seen) {
             setShowFeatureUpdateModal(true);
         }
     }, [currentUser]);
-
-    const handleDismissGoogleModal = () => {
-        const key = 'google_calendar_modal_dismissed';
-        if (typeof window !== 'undefined') {
-            window.localStorage.setItem(key, '1');
-        }
-        setShowGoogleCalendarModal(false);
-    };
 
     const handleDismissFeatureModal = () => {
         const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
@@ -1222,7 +1205,7 @@ useEffect(() => {
                         </div>
                         <ul className="space-y-2 text-sm text-slate-800 dark:text-slate-100 list-disc list-inside">
                             <li>日報フォームに顧客マスタのオートコンプリートを追加しました。</li>
-                            <li>Googleカレンダー連携の開始処理をEdge Function経由に統一しました。</li>
+                            <li>Googleカレンダー連携をEdge Function経由に統一し、認可URL取得を安定化しました。</li>
                         </ul>
                         <div className="flex justify-end gap-3">
                             <button
@@ -1234,47 +1217,11 @@ useEffect(() => {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => { setShowFeatureUpdateModal(false); setShowGoogleCalendarModal(true); }}
-                                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700"
-                            >
-                                連携設定を開く
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showGoogleCalendarModal && currentUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-                    <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 space-y-4">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Googleカレンダー連携</h3>
-                                <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                                    日報タスクをGoogleカレンダーと同期します。1回だけ同意が必要です。
-                                </p>
-                            </div>
-                            <button onClick={handleDismissGoogleModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">×</button>
-                        </div>
-                        <ul className="text-sm text-slate-700 dark:text-slate-200 list-disc list-inside space-y-1">
-                            <li>日報の開始/終了時刻をGoogleカレンダーに登録</li>
-                            <li>アカウントごとの連携（現在のログインユーザー: {currentUser.name}）</li>
-                            <li>いつでも再連携・取り消し可能</li>
-                        </ul>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={handleDismissGoogleModal}
-                                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200"
-                            >
-                                あとで
-                            </button>
-                            <button
-                                type="button"
                                 onClick={handleStartGoogleCalendarAuth}
                                 disabled={isGoogleAuthLoading}
                                 className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${isGoogleAuthLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                             >
-                                {isGoogleAuthLoading ? '開始中...' : '連携を開始する'}
+                                {isGoogleAuthLoading ? '開始中...' : 'Google連携を開始'}
                             </button>
                         </div>
                     </div>
