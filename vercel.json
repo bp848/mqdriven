@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/google/:path*",
-      "destination": "https://api.erp-backend.b-p.co.jp/api/google/:path*"
+      "destination": "https://erp.b-p.co.jp/api/google/:path*"
     },
     {
       "source": "/((?!api/|assets/).*)",
