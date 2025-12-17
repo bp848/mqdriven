@@ -60,6 +60,7 @@ import AuthCallbackPage from './components/AuthCallbackPage';
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
 import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
+import { SUPABASE_URL, SUPABASE_KEY } from './supabaseCredentials';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill } from './types';
@@ -385,7 +386,12 @@ const App: React.FC = () => {
         if (!currentUser) return;
         setIsGoogleAuthLoading(true);
         try {
-            const resp = await fetch(`/api/google/oauth/start?user_id=${currentUser.id}`);
+            const functionUrl = `${SUPABASE_URL}/functions/v1/google-oauth-start?user_id=${currentUser.id}`;
+            const resp = await fetch(functionUrl, {
+                headers: {
+                    Authorization: `Bearer ${SUPABASE_KEY}`,
+                },
+            });
             if (!resp.ok) {
                 addToast('Googleカレンダー連携の開始に失敗しました。設定を確認してください。', 'error');
                 return;
