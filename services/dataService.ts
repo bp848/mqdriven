@@ -1244,16 +1244,17 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
 };
 
 export async function getUsers(): Promise<EmployeeUser[]> {
-    const apiUsers = await fetchUsersViaApi();
-    if (apiUsers) {
-        return apiUsers;
-    }
-
     const supabase = getSupabase();
     try {
+        // Prefer direct Supabase access to avoid noisy 500s when /api/users is not deployed.
         return await fetchUsersDirectly(supabase);
     } catch (error: any) {
         if (isSupabaseUnavailableError(error)) {
+            // As a last resort, try the legacy Express endpoint if the database is unreachable.
+            const apiUsers = await fetchUsersViaApi();
+            if (apiUsers) {
+                return apiUsers;
+            }
             throw new Error('Failed to fetch users: network error communicating with the database.');
         }
         throw error;
