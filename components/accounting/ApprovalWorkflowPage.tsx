@@ -394,6 +394,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                     draftApplication={activeResumedApplication}
                     prefill={dailyReportPrefill}
                     onPrefillApplied={onDailyReportPrefillApplied}
+                    customers={customers || []}
                 />
             );
             case 'WKR': return <WeeklyReportForm {...formProps} draftApplication={activeResumedApplication} />;
