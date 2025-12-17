@@ -23,28 +23,26 @@ export default async function handler(
   });
 
   const token = await tokenRes.json();
+
   if (!tokenRes.ok) {
     return res.status(400).json(token);
   }
 
-  await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/user_google_tokens`,
-    {
-      method: "POST",
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify({
-        user_id: state,
-        access_token: token.access_token,
-        refresh_token: token.refresh_token,
-        expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
-      }),
-    }
-  );
+  await fetch(`${process.env.SUPABASE_URL}/rest/v1/user_google_tokens`, {
+    method: "POST",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify({
+      user_id: state,
+      access_token: token.access_token,
+      refresh_token: token.refresh_token,
+      expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
+    }),
+  });
 
-  res.redirect("https://erp.b-p.co.jp/settings/google?ok=1");
+  res.redirect("/settings/google?ok=1");
 }
