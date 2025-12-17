@@ -268,6 +268,7 @@ const App: React.FC = () => {
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
     const [showGoogleCalendarModal, setShowGoogleCalendarModal] = useState(false);
     const [isGoogleAuthLoading, setIsGoogleAuthLoading] = useState(false);
+    const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
 
     const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
     const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
@@ -374,12 +375,28 @@ const App: React.FC = () => {
         }
     }, [currentUser]);
 
+    useEffect(() => {
+        const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
+        const seen = typeof window !== 'undefined' ? window.localStorage.getItem(todayKey) : null;
+        if (currentUser && !seen) {
+            setShowFeatureUpdateModal(true);
+        }
+    }, [currentUser]);
+
     const handleDismissGoogleModal = () => {
         const key = 'google_calendar_modal_dismissed';
         if (typeof window !== 'undefined') {
             window.localStorage.setItem(key, '1');
         }
         setShowGoogleCalendarModal(false);
+    };
+
+    const handleDismissFeatureModal = () => {
+        const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(todayKey, '1');
+        }
+        setShowFeatureUpdateModal(false);
     };
 
     const handleStartGoogleCalendarAuth = async () => {
@@ -1191,6 +1208,41 @@ useEffect(() => {
             {isAnalysisModalOpen && <CompanyAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setAnalysisModalOpen(false)} analysis={companyAnalysis} customer={selectedCustomer} isLoading={isAnalysisLoading} error={analysisError} currentUser={currentUser} isAIOff={isAIOff} onReanalyze={handleAnalyzeCustomer}/>}
             {isBugReportModalOpen && <BugReportChatModal isOpen={isBugReportModalOpen} onClose={() => setIsBugReportModalOpen(false)} onReportSubmit={handleSaveBugReport} isAIOff={isAIOff} />}
             {isSetupModalOpen && <DatabaseSetupInstructionsModal onRetry={() => { setIsSetupModalOpen(false); loadAllData(); }} />}
+            {showFeatureUpdateModal && currentUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-xl bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">本日の追加機能</h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                                    連携と入力を少しだけ楽にしました。
+                                </p>
+                            </div>
+                            <button onClick={handleDismissFeatureModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">×</button>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-800 dark:text-slate-100 list-disc list-inside">
+                            <li>日報フォームに顧客マスタのオートコンプリートを追加しました。</li>
+                            <li>Googleカレンダー連携の開始処理をEdge Function経由に統一しました。</li>
+                        </ul>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={handleDismissFeatureModal}
+                                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200"
+                            >
+                                閉じる
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setShowFeatureUpdateModal(false); setShowGoogleCalendarModal(true); }}
+                                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700"
+                            >
+                                連携設定を開く
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {showGoogleCalendarModal && currentUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
                     <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 space-y-4">
