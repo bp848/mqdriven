@@ -243,6 +243,7 @@ const App: React.FC = () => {
     // UI State
     const [isLoading, setIsLoading] = useState(true);
     const [dbError, setDbError] = useState<string | null>(null);
+    const [isGoogleAuthLoading, setIsGoogleAuthLoading] = useState(false);
     const [isCreateJobModalOpen, setCreateJobModalOpen] = useState(false);
     const [isCreateLeadModalOpen, setCreateLeadModalOpen] = useState(false);
     const [isCreatePOModalOpen, setCreatePOModalOpen] = useState(false);
@@ -379,6 +380,49 @@ const App: React.FC = () => {
             window.localStorage.setItem(todayKey, '1');
         }
         setShowFeatureUpdateModal(false);
+    };
+
+    const handleStartGoogleCalendarAuth = async () => {
+        if (!currentUser) {
+            addToast('ログイン状態を確認してください。', 'error');
+            return;
+        }
+        setIsGoogleAuthLoading(true);
+        try {
+            const supabase = getSupabase();
+            const { data: sessionData } = await supabase.auth.getSession();
+            const accessToken = sessionData?.session?.access_token || SUPABASE_KEY;
+            const functionUrl = `${SUPABASE_URL}/functions/v1/google-oauth-start?user_id=${currentUser.id}`;
+            const resp = await fetch(functionUrl, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+            if (!resp.ok) {
+                const msg = await resp.text().catch(() => '');
+                console.error('Google OAuth start failed', resp.status, msg);
+                addToast('Googleカレンダー連携の開始に失敗しました。設定を確認してください。', 'error');
+                return;
+            }
+            const contentType = resp.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await resp.text();
+                console.error('Google OAuth start returned non-JSON', text);
+                addToast('認可URLの取得で予期しない応答が返されました。', 'error');
+                return;
+            }
+            const data = await resp.json();
+            if (data?.authUrl) {
+                window.open(data.authUrl, '_blank', 'noopener');
+            } else {
+                addToast('認可URLを取得できませんでした。', 'error');
+            }
+        } catch (err) {
+            console.error('Failed to start Google OAuth', err);
+            addToast('Googleカレンダー連携でエラーが発生しました。', 'error');
+        } finally {
+            setIsGoogleAuthLoading(false);
+        }
     };
 
     const handleResumeApplicationDraft = useCallback((application: ApplicationWithDetails) => {
@@ -1163,6 +1207,7 @@ useEffect(() => {
                         </div>
                         <ul className="space-y-2 text-sm text-slate-800 dark:text-slate-100 list-disc list-inside">
                             <li>日報フォームに顧客マスタのオートコンプリートを追加しました。</li>
+                            <li>Googleカレンダー連携をここから開始できます。</li>
                         </ul>
                         <div className="flex justify-end gap-3">
                             <button
@@ -1171,6 +1216,14 @@ useEffect(() => {
                                 className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-semibold text-slate-700 dark:text-slate-200"
                             >
                                 閉じる
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleStartGoogleCalendarAuth}
+                                disabled={isGoogleAuthLoading}
+                                className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${isGoogleAuthLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                                {isGoogleAuthLoading ? '開始中...' : 'Google連携を開始'}
                             </button>
                         </div>
                     </div>
