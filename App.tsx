@@ -1207,6 +1207,7 @@ useEffect(() => {
                         </div>
                         <ul className="space-y-2 text-sm text-slate-800 dark:text-slate-100 list-disc list-inside">
                             <li>日報フォームに顧客マスタのオートコンプリートを追加しました。</li>
+                            <li>名刺取り込みで「取得イベント」「受領者（社員番号/氏名）」を入力し、赤ペンの社員番号と突合できるようになりました。</li>
                             <li>Googleカレンダー連携をここから開始できます。</li>
                         </ul>
                         <div className="flex justify-end gap-3">
