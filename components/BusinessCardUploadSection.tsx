@@ -82,6 +82,7 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
   zipCode: contact.postalCode,
   websiteUrl: contact.websiteUrl,
   customerContactInfo: contact.email,
+  receivedByEmployeeCode: contact.recipientEmployeeCode || undefined,
   note: [buildContactNote(contact), contact.notes].filter(Boolean).join('\n\n') || undefined,
 });
 
@@ -115,6 +116,8 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   onAutoCreateCustomer,
 }) => {
   const [drafts, setDrafts] = useState<CardDraft[]>([]);
+  const [eventName, setEventName] = useState('');
+  const [recipientCode, setRecipientCode] = useState('');
   const actorInfo = useMemo(() => buildActionActorInfo(currentUser ?? null), [currentUser]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const draftsRef = useRef<CardDraft[]>(drafts);
@@ -126,11 +129,14 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
 
   useEffect(() => {
     mounted.current = true;
+    if (currentUser?.id) {
+      setRecipientCode(prev => prev || currentUser.id);
+    }
     return () => {
       mounted.current = false;
       draftsRef.current.forEach(draft => URL.revokeObjectURL(draft.fileUrl));
     };
-  }, []);
+  }, [currentUser?.id]);
 
   const generateId = () =>
     typeof crypto !== 'undefined' && crypto.randomUUID
@@ -222,10 +228,15 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         const parsed = await extractBusinessCardDetails(base64, file.type || 'application/octet-stream');
         const contact = normalizeContact(parsed);
         const payload = contactToCustomer(contact, file.name);
+        const payloadWithMeta: Partial<Customer> = {
+          ...payload,
+          businessEvent: eventName || undefined,
+          receivedByEmployeeCode: recipientCode || undefined,
+        };
         setDrafts(prev =>
           prev.map(draft =>
             draft.id === draftId
-              ? { ...draft, ocrStatus: 'ready', contact, customerPayload: payload, ocrError: undefined }
+              ? { ...draft, ocrStatus: 'ready', contact, customerPayload: payloadWithMeta, ocrError: undefined }
               : draft
           )
         );
@@ -237,7 +248,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           detail: `会社: ${contact.companyName || '不明'} / 担当: ${describeRepresentative(contact.personName, contact.title)}`,
           ...actorInfo,
         });
-        await autoCreateCustomer(draftId, payload);
+        await autoCreateCustomer(draftId, payloadWithMeta);
       } catch (error) {
         const message = error instanceof Error ? error.message : '名刺の解析に失敗しました。';
         setDrafts(prev =>
@@ -352,6 +363,31 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
             AI機能が無効のため、OCRは利用できません。
           </p>
         )}
+        <div className="mt-4 grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-2 text-sm">
+            <label className="font-semibold text-slate-700 dark:text-slate-200">取得イベント</label>
+            <input
+              type="text"
+              value={eventName}
+              onChange={e => setEventName(e.target.value)}
+              placeholder="展示会・商談会・社内イベントなど"
+              className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 text-sm">
+            <label className="font-semibold text-slate-700 dark:text-slate-200">受領者（社員番号／氏名）</label>
+            <input
+              type="text"
+              value={recipientCode}
+              onChange={e => setRecipientCode(e.target.value)}
+              placeholder="名刺右上に赤ペンで記載した社員番号を入力"
+              className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              名刺右上に赤ペンで社員番号を追記してもらい、その番号とここで入力した値で突合します。
+            </p>
+          </div>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -485,6 +521,14 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                     <div>
                       <dt className="text-xs font-semibold text-slate-500">住所</dt>
                       <dd>{draft.customerPayload?.address1 || '―'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-slate-500">取得イベント</dt>
+                      <dd>{draft.customerPayload?.businessEvent || '―'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-slate-500">受領者（社員番号/氏名）</dt>
+                      <dd>{draft.customerPayload?.receivedByEmployeeCode || '―'}</dd>
                     </div>
                   </dl>
                 </div>

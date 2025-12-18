@@ -181,6 +181,8 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                     {renderField('顧客名 (カナ)', customer?.customerNameKana, 'customerNameKana', 'text', { className: 'md:col-span-2', autoComplete: 'organization' })}
                     {renderField('顧客コード', customer?.customerCode, 'customerCode', 'text', { autoComplete: 'off' })}
                     {renderField('顧客名2', customer?.name2, 'name2', 'text', { autoComplete: 'organization-title' })}
+                    {renderField('取得イベント', customer?.businessEvent, 'businessEvent', 'text', { autoComplete: 'off' })}
+                    {renderField('受領者（社員番号/氏名）', customer?.receivedByEmployeeCode, 'receivedByEmployeeCode', 'text', { autoComplete: 'off' })}
                     
                     <Divider />
 

@@ -213,6 +213,8 @@ export interface Customer {
   customerContactInfo?: string; // for mailto
   aiAnalysis?: CompanyAnalysis | null;
   isActive?: boolean | null;
+  businessEvent?: string | null; // 名刺取得イベントなど
+  receivedByEmployeeCode?: string | null; // 名刺受領者（社員番号やID）
 }
 
 export interface BusinessCardContact {
@@ -229,6 +231,7 @@ export interface BusinessCardContact {
   postalCode?: string;
   websiteUrl?: string;
   notes?: string;
+  recipientEmployeeCode?: string; // 名刺右上などに手書きされた受領者の社員番号
 }
 
 export interface BankAccountInfo {

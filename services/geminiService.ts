@@ -403,6 +403,7 @@ const businessCardSchema = {
     postalCode: { type: Type.STRING, description: "郵便番号。" },
     websiteUrl: { type: Type.STRING, description: "WebサイトURL。" },
     notes: { type: Type.STRING, description: "その他、名刺から読み取れる補足事項。" },
+    recipientEmployeeCode: { type: Type.STRING, description: "名刺右上などに手書きされた受領者の社員番号（赤ペン書き込みを優先）。" },
   },
 };
 
@@ -415,7 +416,7 @@ export const extractBusinessCardDetails = async (
     const filePart = { inlineData: { data: fileBase64, mimeType } };
     const instructionPart = {
       text:
-        "このファイルは日本語の名刺または名刺スキャンPDFです。記載されている企業名、担当者、連絡先をJSON形式で抽出してください。項目が無い場合は空文字ではなくnullにしてください。",
+        "このファイルは日本語の名刺または名刺スキャンPDFです。記載されている企業名、担当者、連絡先をJSON形式で抽出してください。右上などに赤ペンで手書きされた社員番号があれば recipientEmployeeCode として抽出してください。項目が無い場合は空文字ではなくnullにしてください。",
     };
     const response = await ai.models.generateContent({
       model,
