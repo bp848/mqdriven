@@ -185,6 +185,13 @@ interface DashboardProps {
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
   onNavigateToBulletinBoard: () => void;
+  suggestion?: any;
+  isSuggestionLoading?: boolean;
+  isAIOff?: boolean;
+  onStartGoogleCalendarAuth: () => void;
+  isGoogleAuthLoading: boolean;
+  toastsEnabled: boolean;
+  onToggleToasts: () => void;
 }
 
 const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: () => void; isLoading: boolean; }> = ({ threads, onNavigate, isLoading }) => {
@@ -241,7 +248,7 @@ const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: 
     );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard }) => {
+const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard, onStartGoogleCalendarAuth, isGoogleAuthLoading, toastsEnabled, onToggleToasts }) => {
     const [bulletinThreads, setBulletinThreads] = useState<BulletinThread[]>([]);
     const [isBulletinLoading, setIsBulletinLoading] = useState(true);
 
@@ -363,6 +370,41 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
 
     return (
         <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-semibold text-blue-600 dark:text-blue-300">Googleカレンダー連携</p>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">スケジュールを同期</h3>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">OAuthを開始して予定をGoogleカレンダーへ連携します。</p>
+                        </div>
+                        <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                            <span className="text-blue-600 dark:text-blue-300 font-bold">G</span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onStartGoogleCalendarAuth}
+                        disabled={isGoogleAuthLoading}
+                        className={`mt-4 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${isGoogleAuthLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        {isGoogleAuthLoading ? '開始中...' : 'Google連携を開始'}
+                    </button>
+                </div>
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">通知設定</p>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">トースト通知を切替</h3>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">ワンクリックでトーストを{toastsEnabled ? 'オフにできます。' : 'オンにできます。'}</p>
+                    <button
+                        type="button"
+                        onClick={onToggleToasts}
+                        className={`mt-4 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold ${toastsEnabled ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-600 text-white hover:bg-slate-700'}`}
+                    >
+                        {toastsEnabled ? 'トーストをOFFにする' : 'トーストをONにする'}
+                    </button>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ActionItemsCard jobs={jobs} pendingApprovalCount={pendingApprovalCount} onNavigateToApprovals={onNavigateToApprovals} />
                 <BulletinHighlightsCard threads={bulletinThreads} onNavigate={onNavigateToBulletinBoard} isLoading={isBulletinLoading} />

@@ -16,6 +16,7 @@ interface CustomerDetailModalProps {
     addToast: (message: string, type: Toast['type']) => void;
     currentUser?: EmployeeUser | null;
     onAutoCreateCustomer?: (data: Partial<Customer>) => Promise<Customer>;
+    allUsers?: EmployeeUser[];
 }
 
 const TABS = [
@@ -26,7 +27,7 @@ const TABS = [
     { id: 'karte', label: 'お客様カルテ' },
 ];
 
-const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues, addToast, currentUser, onAutoCreateCustomer }) => {
+const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mode, onClose, onSave, onSetMode, onAnalyzeCustomer, isAIOff, initialValues, addToast, currentUser, onAutoCreateCustomer, allUsers = [] }) => {
     const [formData, setFormData] = useState<Partial<Customer>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -119,6 +120,22 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
         return isNaN(num) ? '-' : `¥${num.toLocaleString()}`;
     };
 
+    const userLookup = React.useMemo(() => {
+        const map = new Map<string, EmployeeUser>();
+        (allUsers || []).forEach(user => map.set(user.id, user));
+        return map;
+    }, [allUsers]);
+
+    const resolveReceivedByLabel = (code?: string | null) => {
+        if (!code) return '';
+        const match = userLookup.get(code);
+        if (match) {
+            const dept = match.department ? ` / ${match.department}` : '';
+            return `${match.name}${dept}`;
+        }
+        return code;
+    };
+
     const renderField = (label: string, value: any, key: keyof Customer, type = 'text', options: {rows?: number, className?: string, autoComplete?: string} = {}) => {
         let displayValue = value;
         if (type === 'date' && value) {
@@ -127,6 +144,12 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
             } catch (e) {
                 displayValue = value; // Show original value if date is invalid
             }
+        }
+
+        const isReceivedByField = key === 'receivedByEmployeeCode';
+        if (!isEditing && isReceivedByField) {
+            const resolved = resolveReceivedByLabel(value);
+            displayValue = resolved || value;
         }
         
         const inputClass = "block w-full rounded-md border-0 py-1.5 px-2.5 text-slate-900 dark:text-white bg-white dark:bg-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-base sm:leading-6 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -147,6 +170,31 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                                 disabled={isSubmitting}
                                 autoComplete={options.autoComplete || 'on'}
                             />
+                        ) : isReceivedByField ? (
+                            <>
+                                <input
+                                    type="text"
+                                    name={String(key)}
+                                    id={String(key)}
+                                    list="received-by-users"
+                                    value={String(formData[key] ?? '')}
+                                    onChange={handleChange}
+                                    className={inputClass}
+                                    disabled={isSubmitting}
+                                    autoComplete={options.autoComplete || 'on'}
+                                    placeholder="社員ID (または選択)"
+                                />
+                                <datalist id="received-by-users">
+                                    {(allUsers || []).map(user => (
+                                        <option key={user.id} value={user.id} label={`${user.name}${user.department ? ` / ${user.department}` : ''}`} />
+                                    ))}
+                                </datalist>
+                                {resolveReceivedByLabel(formData[key] as string) && (
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        表示名: {resolveReceivedByLabel(formData[key] as string)}
+                                    </p>
+                                )}
+                            </>
                         ) : (
                             <input
                                 type={type}

@@ -243,6 +243,11 @@ const App: React.FC = () => {
     // UI State
     const [isLoading, setIsLoading] = useState(true);
     const [dbError, setDbError] = useState<string | null>(null);
+    const [toastsEnabled, setToastsEnabled] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return true;
+        const stored = window.localStorage.getItem('toasts_enabled');
+        return stored === null ? true : stored === '1';
+    });
     const [isGoogleAuthLoading, setIsGoogleAuthLoading] = useState(false);
     const [isCreateJobModalOpen, setCreateJobModalOpen] = useState(false);
     const [isCreateLeadModalOpen, setCreateLeadModalOpen] = useState(false);
@@ -351,9 +356,10 @@ const App: React.FC = () => {
     };
 
     const addToast = useCallback((message: string, type: Toast['type']) => {
+        if (!toastsEnabled) return;
         const newToast: Toast = { id: Date.now(), message, type };
         setToasts(prev => [...prev, newToast]);
-    }, []);
+    }, [toastsEnabled]);
 
     const dismissToast = (id: number) => {
         setToasts(prev => prev.filter(t => t.id !== id));
@@ -369,10 +375,10 @@ const App: React.FC = () => {
     useEffect(() => {
         const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
         const seen = typeof window !== 'undefined' ? window.localStorage.getItem(todayKey) : null;
-        if (currentUser && !seen) {
+        if (currentUser && !seen && currentPage === 'my_schedule') {
             setShowFeatureUpdateModal(true);
         }
-    }, [currentUser]);
+    }, [currentUser, currentPage]);
 
     const handleDismissFeatureModal = () => {
         const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
@@ -380,6 +386,16 @@ const App: React.FC = () => {
             window.localStorage.setItem(todayKey, '1');
         }
         setShowFeatureUpdateModal(false);
+    };
+
+    const toggleToasts = () => {
+        setToastsEnabled(prev => {
+            const next = !prev;
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem('toasts_enabled', next ? '1' : '0');
+            }
+            return next;
+        });
     };
 
     const handleStartGoogleCalendarAuth = async () => {
@@ -892,6 +908,10 @@ useEffect(() => {
                             onNavigateToApprovals={() => handleNavigate('approval_list')}
                             onNavigateToBulletinBoard={() => handleNavigate('bulletin_board')}
                             isAIOff={isAIOff}
+                            onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
+                            isGoogleAuthLoading={isGoogleAuthLoading}
+                            toastsEnabled={toastsEnabled}
+                            onToggleToasts={toggleToasts}
                         />;
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;
@@ -1187,6 +1207,7 @@ useEffect(() => {
                     initialValues={customerInitialValues}
                     addToast={addToast}
                     currentUser={currentUser}
+                    allUsers={allUsers}
                     onAutoCreateCustomer={handleCreateCustomerInline}
                 />
             )}
@@ -1242,6 +1263,13 @@ useEffect(() => {
                 disabled={isAIOff}
             >
                 <PlusCircle className="w-6 h-6" />
+            </button>
+            <button
+                onClick={toggleToasts}
+                className="fixed bottom-8 right-24 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-4 py-2 rounded-full shadow hover:bg-slate-300 dark:hover:bg-slate-600 text-sm font-semibold"
+                title="トースト通知 ON/OFF"
+            >
+                {toastsEnabled ? 'トースト: ON' : 'トースト: OFF'}
             </button>
         </div>
     );
