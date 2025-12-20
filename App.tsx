@@ -248,6 +248,11 @@ const App: React.FC = () => {
         return stored === null ? true : stored === '1';
     });
     const [isGoogleAuthLoading, setIsGoogleAuthLoading] = useState(false);
+    const [googleAuthStatus, setGoogleAuthStatus] = useState<{ connected: boolean; expiresAt: string | null; loading: boolean }>({
+        connected: false,
+        expiresAt: null,
+        loading: false,
+    });
     const [isCreateJobModalOpen, setCreateJobModalOpen] = useState(false);
     const [isCreateLeadModalOpen, setCreateLeadModalOpen] = useState(false);
     const [isCreatePOModalOpen, setCreatePOModalOpen] = useState(false);
@@ -397,6 +402,45 @@ const App: React.FC = () => {
         });
     };
 
+    const fetchGoogleAuthStatus = useCallback(async () => {
+        if (!currentUser) {
+            setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
+            return;
+        }
+        setGoogleAuthStatus(prev => ({ ...prev, loading: true }));
+        try {
+            const supabase = getSupabase();
+            const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
+                body: { user_id: currentUser.id },
+            });
+            if (error) throw error;
+            setGoogleAuthStatus({
+                connected: !!data?.connected,
+                expiresAt: data?.expires_at ?? null,
+                loading: false,
+            });
+        } catch (err) {
+            console.error('Failed to fetch Google OAuth status', err);
+            setGoogleAuthStatus(prev => ({ ...prev, loading: false }));
+        }
+    }, [currentUser]);
+
+    useEffect(() => {
+        fetchGoogleAuthStatus();
+    }, [fetchGoogleAuthStatus]);
+
+    useEffect(() => {
+        const handleFocus = () => fetchGoogleAuthStatus();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', handleFocus);
+        }
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('focus', handleFocus);
+            }
+        };
+    }, [fetchGoogleAuthStatus]);
+
     const handleStartGoogleCalendarAuth = async () => {
         if (!currentUser) {
             addToast('ログイン状態を確認してください。', 'error');
@@ -421,6 +465,30 @@ const App: React.FC = () => {
         } catch (err) {
             console.error('Failed to start Google OAuth', err);
             addToast('Googleカレンダー連携でエラーが発生しました。', 'error');
+        } finally {
+            setIsGoogleAuthLoading(false);
+            fetchGoogleAuthStatus();
+        }
+    };
+
+    const handleDisconnectGoogleCalendar = async () => {
+        if (!currentUser) {
+            addToast('ログイン状態を確認してください。', 'error');
+            return;
+        }
+        setIsGoogleAuthLoading(true);
+        try {
+            const supabase = getSupabase();
+            const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
+                body: { user_id: currentUser.id },
+            });
+            if (error) throw error;
+            addToast('Googleカレンダー連携を解除しました。', 'success');
+            setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
+        } catch (err) {
+            console.error('Failed to disconnect Google OAuth', err);
+            addToast('Googleカレンダー連携の解除に失敗しました。', 'error');
+            setGoogleAuthStatus(prev => ({ ...prev, loading: false }));
         } finally {
             setIsGoogleAuthLoading(false);
         }
@@ -894,7 +962,11 @@ useEffect(() => {
                             onNavigateToBulletinBoard={() => handleNavigate('bulletin_board')}
                             isAIOff={isAIOff}
                             onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
+                            onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
                             isGoogleAuthLoading={isGoogleAuthLoading}
+                            googleAuthConnected={googleAuthStatus.connected}
+                            googleAuthExpiresAt={googleAuthStatus.expiresAt}
+                            googleAuthStatusLoading={googleAuthStatus.loading}
                             toastsEnabled={toastsEnabled}
                             onToggleToasts={toggleToasts}
                         />;

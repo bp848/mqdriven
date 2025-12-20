@@ -189,7 +189,11 @@ interface DashboardProps {
   isSuggestionLoading?: boolean;
   isAIOff?: boolean;
   onStartGoogleCalendarAuth: () => void;
+  onDisconnectGoogleCalendar: () => void;
   isGoogleAuthLoading: boolean;
+  googleAuthConnected: boolean;
+  googleAuthExpiresAt?: string | null;
+  googleAuthStatusLoading?: boolean;
   toastsEnabled: boolean;
   onToggleToasts: () => void;
 }
@@ -248,7 +252,22 @@ const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: 
     );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItems, pendingApprovalCount, onNavigateToApprovals, onNavigateToBulletinBoard, onStartGoogleCalendarAuth, isGoogleAuthLoading, toastsEnabled, onToggleToasts }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+    jobs,
+    journalEntries,
+    accountItems,
+    pendingApprovalCount,
+    onNavigateToApprovals,
+    onNavigateToBulletinBoard,
+    onStartGoogleCalendarAuth,
+    onDisconnectGoogleCalendar,
+    isGoogleAuthLoading,
+    googleAuthConnected,
+    googleAuthExpiresAt,
+    googleAuthStatusLoading,
+    toastsEnabled,
+    onToggleToasts,
+}) => {
     const [bulletinThreads, setBulletinThreads] = useState<BulletinThread[]>([]);
     const [isBulletinLoading, setIsBulletinLoading] = useState(true);
 
@@ -376,7 +395,16 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
                         <div>
                             <p className="text-sm font-semibold text-blue-600 dark:text-blue-300">Googleカレンダー連携</p>
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">スケジュールを同期</h3>
-                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">OAuthを開始して予定をGoogleカレンダーへ連携します。</p>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                                {googleAuthConnected ? '連携済みです。必要に応じて同期解除できます。' : 'OAuthを開始して予定をGoogleカレンダーへ連携します。'}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {googleAuthStatusLoading
+                                    ? 'ステータス確認中...'
+                                    : googleAuthConnected
+                                        ? `トークン有効期限: ${googleAuthExpiresAt ? new Date(googleAuthExpiresAt).toLocaleString('ja-JP') : '取得不可'}`
+                                        : '未連携'}
+                            </p>
                         </div>
                         <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
                             <span className="text-blue-600 dark:text-blue-300 font-bold">G</span>
@@ -384,11 +412,15 @@ const Dashboard: React.FC<DashboardProps> = ({ jobs, journalEntries, accountItem
                     </div>
                     <button
                         type="button"
-                        onClick={onStartGoogleCalendarAuth}
-                        disabled={isGoogleAuthLoading}
-                        className={`mt-4 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${isGoogleAuthLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        onClick={googleAuthConnected ? onDisconnectGoogleCalendar : onStartGoogleCalendarAuth}
+                        disabled={isGoogleAuthLoading || googleAuthStatusLoading}
+                        className={`mt-4 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${isGoogleAuthLoading || googleAuthStatusLoading ? 'bg-slate-400 cursor-not-allowed' : googleAuthConnected ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
-                        {isGoogleAuthLoading ? '開始中...' : 'Google連携を開始'}
+                        {isGoogleAuthLoading || googleAuthStatusLoading
+                            ? '処理中...'
+                            : googleAuthConnected
+                                ? '同期解除'
+                                : 'Google連携を開始'}
                     </button>
                 </div>
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
