@@ -43,8 +43,8 @@ BEGIN
             p.updated_at,
             p.created_by,
             COALESCE(p.completed, false) as completed,
-            (SELECT COUNT(*) FROM post_assignments pa WHERE pa.post_id = p.id) as assignee_count,
-            (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comment_count,
+            COALESCE((SELECT COUNT(*) FROM post_assignments pa WHERE pa.post_id = p.id), 0)::INT as assignee_count,
+            COALESCE((SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id), 0)::INT as comment_count,
             false as is_assigned
         FROM posts p
         WHERE p.visibility IN ('all', 'public')
@@ -65,8 +65,8 @@ BEGIN
             p.updated_at,
             p.created_by,
             COALESCE(p.completed, false) as completed,
-            (SELECT COUNT(*) FROM post_assignments pa WHERE pa.post_id = p.id) as assignee_count,
-            (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comment_count,
+            COALESCE((SELECT COUNT(*) FROM post_assignments pa WHERE pa.post_id = p.id), 0)::INT as assignee_count,
+            COALESCE((SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id), 0)::INT as comment_count,
             EXISTS(SELECT 1 FROM post_assignments pa WHERE pa.post_id = p.id AND pa.user_id = v_user_id) as is_assigned
         FROM posts p
         ORDER BY p.created_at DESC;
@@ -84,8 +84,8 @@ BEGIN
         p.updated_at,
         p.created_by,
         COALESCE(p.completed, false) as completed,
-        (SELECT COUNT(*) FROM post_assignments pa WHERE pa.post_id = p.id) as assignee_count,
-        (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) as comment_count,
+        COALESCE((SELECT COUNT(*) FROM post_assignments pa WHERE pa.post_id = p.id), 0)::INT as assignee_count,
+        COALESCE((SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id), 0)::INT as comment_count,
         EXISTS(SELECT 1 FROM post_assignments pa WHERE pa.post_id = p.id AND pa.user_id = v_user_id) as is_assigned
     FROM posts p
     WHERE 
@@ -130,8 +130,8 @@ BEGIN
     
     -- Add assignees if provided
     IF p_assignees IS NOT NULL AND array_length(p_assignees, 1) > 0 THEN
-        INSERT INTO post_assignments (post_id, user_id)
-        SELECT v_post_id, unnest(p_assignees);
+        INSERT INTO post_assignments (post_id, user_id, created_by)
+        SELECT v_post_id, unnest(p_assignees), v_user_id;
     END IF;
     
     RETURN v_post_id;

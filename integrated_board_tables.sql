@@ -1,5 +1,9 @@
--- Integrated Board System Tables
--- These tables support the unified board/messaging/task system
+
+-- Helper to consistently resolve the board admin user (full-access account)
+CREATE OR REPLACE FUNCTION board_admin_user()
+RETURNS UUID AS $$
+    SELECT '23a855d4-ccfc-443d-b898-5704aab94231'::UUID;
+$$ LANGUAGE sql IMMUTABLE;
 
 -- Posts table - unified posts, messages, and tasks
 CREATE TABLE IF NOT EXISTS posts (
@@ -20,9 +24,12 @@ CREATE TABLE IF NOT EXISTS post_assignments (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    created_by UUID REFERENCES auth.users(id),
     assigned_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(post_id, user_id)
 );
+-- Ensure created_by exists on existing deployments
+ALTER TABLE post_assignments ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id);
 
 -- Post comments table
 CREATE TABLE IF NOT EXISTS post_comments (
@@ -52,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_due_date ON posts(due_date) WHERE due_date 
 
 CREATE INDEX IF NOT EXISTS idx_post_assignments_post_id ON post_assignments(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_assignments_user_id ON post_assignments(user_id);
+CREATE INDEX IF NOT EXISTS idx_post_assignments_created_by ON post_assignments(created_by);
 
 CREATE INDEX IF NOT EXISTS idx_post_comments_post_id ON post_comments(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_comments_created_at ON post_comments(created_at DESC);
@@ -84,15 +92,37 @@ CREATE POLICY "Users can update their own posts" ON posts
     FOR UPDATE USING (created_by = auth.uid());
 
 -- Post assignments RLS policies
-CREATE POLICY "Users can view their assignments" ON post_assignments
-    FOR SELECT USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Users can view their assignments" ON post_assignments;
+DROP POLICY IF EXISTS "Post creators can view all assignments" ON post_assignments;
 
-CREATE POLICY "Post creators can view all assignments" ON post_assignments
+-- Break the recursive dependency between posts <-> post_assignments policies by
+-- keeping post_assignments self-contained. Creators can still view assignees
+-- because we store who created the assignment.
+CREATE POLICY "Assignments visible to assignee or creator" ON post_assignments
     FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM posts p 
-            WHERE p.id = post_assignments.post_id 
-            AND p.created_by = auth.uid()
+        auth.uid() IS NOT NULL
+        AND (
+            user_id = auth.uid()
+            OR created_by = auth.uid()
+            OR auth.uid() = board_admin_user()
+        )
+    );
+
+CREATE POLICY "Assignments can be inserted by creator" ON post_assignments
+    FOR INSERT WITH CHECK (
+        auth.uid() IS NOT NULL
+        AND (
+            created_by = auth.uid()
+            OR auth.uid() = board_admin_user()
+        )
+    );
+
+CREATE POLICY "Assignments can be removed by creator" ON post_assignments
+    FOR DELETE USING (
+        auth.uid() IS NOT NULL
+        AND (
+            created_by = auth.uid()
+            OR auth.uid() = board_admin_user()
         )
     );
 
@@ -140,3 +170,20 @@ CREATE TRIGGER set_posts_updated_at
     BEFORE UPDATE ON posts
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
+
+-- Populate created_by for existing assignments when the column is newly added
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns 
+        WHERE table_name = 'post_assignments'
+        AND column_name = 'created_by'
+    ) THEN
+        UPDATE post_assignments pa
+        SET created_by = p.created_by
+        FROM posts p
+        WHERE pa.post_id = p.id
+          AND pa.created_by IS NULL;
+    END IF;
+END$$;
