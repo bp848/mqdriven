@@ -60,7 +60,6 @@ import AuthCallbackPage from './components/AuthCallbackPage';
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
 import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
-import { SUPABASE_URL, SUPABASE_KEY } from './supabaseCredentials';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill } from './types';
@@ -406,28 +405,14 @@ const App: React.FC = () => {
         setIsGoogleAuthLoading(true);
         try {
             const supabase = getSupabase();
-            const { data: sessionData } = await supabase.auth.getSession();
-            const accessToken = sessionData?.session?.access_token || SUPABASE_KEY;
-            const functionUrl = `${SUPABASE_URL}/functions/v1/google-oauth-start?user_id=${currentUser.id}`;
-            const resp = await fetch(functionUrl, {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                },
+            const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
+                body: { user_id: currentUser.id },
             });
-            if (!resp.ok) {
-                const msg = await resp.text().catch(() => '');
-                console.error('Google OAuth start failed', resp.status, msg);
+            if (error) {
+                console.error('Google OAuth start failed', error);
                 addToast('Googleカレンダー連携の開始に失敗しました。設定を確認してください。', 'error');
                 return;
             }
-            const contentType = resp.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-                const text = await resp.text();
-                console.error('Google OAuth start returned non-JSON', text);
-                addToast('認可URLの取得で予期しない応答が返されました。', 'error');
-                return;
-            }
-            const data = await resp.json();
             if (data?.authUrl) {
                 window.open(data.authUrl, '_blank', 'noopener');
             } else {
