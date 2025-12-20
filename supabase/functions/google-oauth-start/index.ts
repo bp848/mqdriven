@@ -1,9 +1,27 @@
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "https://erp.b-p.co.jp";
-const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Max-Age": "86400",
+const DEFAULT_ALLOWED_HEADERS = [
+  "authorization",
+  "x-client-info",
+  "apikey",
+  "content-type",
+  "x-requested-with",
+];
+const buildCorsHeaders = (req: Request) => {
+  const origin = req.headers.get("origin") || ALLOWED_ORIGIN;
+  const requestedHeaders = req.headers.get("access-control-request-headers");
+  const requestedList = requestedHeaders
+    ? requestedHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    : [];
+  const allowHeaders = Array.from(
+    new Set([...DEFAULT_ALLOWED_HEADERS, ...requestedList]),
+  ).join(", ");
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Headers": allowHeaders,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin, Access-Control-Request-Headers",
+  };
 };
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
@@ -12,14 +30,14 @@ console.info("google-oauth-start ready");
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: buildCorsHeaders(req) });
   }
 
   try {
     if (req.method !== "GET" && req.method !== "POST") {
       return new Response(JSON.stringify({ error: "method not allowed" }), {
         status: 405,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { "Content-Type": "application/json", ...buildCorsHeaders(req) },
       });
     }
 
@@ -35,7 +53,7 @@ Deno.serve(async (req: Request) => {
     if (!userId || !UUID_REGEX.test(userId)) {
       return new Response(JSON.stringify({ error: "missing or invalid user_id" }), {
         status: 400,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { "Content-Type": "application/json", ...buildCorsHeaders(req) },
       });
     }
 
@@ -44,7 +62,7 @@ Deno.serve(async (req: Request) => {
     if (!clientId || !redirectUri) {
       return new Response(
         JSON.stringify({ error: "server not configured: missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        { status: 500, headers: { "Content-Type": "application/json", ...buildCorsHeaders(req) } },
       );
     }
 
@@ -65,14 +83,14 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
         Connection: "keep-alive",
-        ...corsHeaders,
+        ...buildCorsHeaders(req),
       },
     });
   } catch (error) {
     console.error("google-oauth-start failed", error);
     return new Response(JSON.stringify({ error: "internal error" }), {
       status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { "Content-Type": "application/json", ...buildCorsHeaders(req) },
     });
   }
 });
