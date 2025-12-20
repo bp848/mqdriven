@@ -29,3 +29,5 @@ aisanbo-*.json
 .env
 .env.*
 src/config.generated.ts
+
+.vercel

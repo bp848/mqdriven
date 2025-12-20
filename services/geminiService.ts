@@ -45,6 +45,47 @@ const checkOnlineAndAIOff = () => {
   return requireGeminiClient();
 };
 
+const isApiKeyExpiredError = (error: any): boolean => {
+  const candidates = [
+    error?.message,
+    error?.error?.message,
+    typeof error?.error === "string" ? error.error : null,
+    typeof error === "string" ? error : null,
+    JSON.stringify(error?.error ?? error ?? ""),
+  ];
+  return candidates.some(
+    (value) =>
+      typeof value === "string" &&
+      (value.toLowerCase().includes("api key expired") ||
+        value.toLowerCase().includes("api_key_invalid"))
+  );
+};
+
+const isApiKeyLeakedError = (error: any): boolean => {
+  const message = JSON.stringify(error?.error ?? error ?? "").toLowerCase();
+  return message.includes("reported as leaked") || message.includes("key was leaked");
+};
+
+const normalizeGeminiError = (error: any): Error => {
+  if (isApiKeyExpiredError(error)) {
+    const friendly = new Error(
+      "Gemini APIキーの期限が切れています。環境変数 VITE_GEMINI_API_KEY（または GEMINI_API_KEY / API_KEY）を有効なキーに更新してください。"
+    );
+    friendly.name = "GeminiApiKeyExpired";
+    return friendly;
+  }
+  if (isApiKeyLeakedError(error)) {
+    const friendly = new Error(
+      "Gemini APIキーが漏洩扱いとなり失効しています。新しいキーを発行し、環境変数 VITE_GEMINI_API_KEY（または GEMINI_API_KEY / API_KEY）に設定してください。"
+    );
+    friendly.name = "GeminiApiKeyLeaked";
+    return friendly;
+  }
+  return error instanceof Error
+    ? error
+    : new Error(typeof error === "string" ? error : "Gemini API error");
+};
+
 async function withRetry<T>(
   fn: (signal?: AbortSignal) => Promise<T>,
   retries = 2,
@@ -59,13 +100,17 @@ async function withRetry<T>(
     if (error?.name === "AbortError") {
       throw error; // Propagate AbortError directly
     }
+    const normalized = normalizeGeminiError(error);
+    if (normalized.name === "GeminiApiKeyExpired" || normalized.name === "GeminiApiKeyLeaked") {
+      throw normalized;
+    }
     if (retries > 0) {
       console.warn(`AI API call failed, retrying (${retries} retries left):`, error);
       await new Promise((res) => setTimeout(res, delay));
       controller.abort(); // Abort previous attempt
       return withRetry(fn, retries - 1, delay * 2); // Exponential backoff
     }
-    throw error;
+    throw normalized;
   }
 }
 

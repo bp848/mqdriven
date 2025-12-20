@@ -1,6 +1,6 @@
 {
   "installCommand": "npm ci",
-  "buildCommand": "npm run build",
+  "buildCommand": "VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY npm run build",
   "outputDirectory": "dist",
   "rewrites": [
     {

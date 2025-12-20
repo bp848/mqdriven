@@ -1,7 +1,10 @@
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://erp.b-p.co.jp',
   'http://localhost:3000',
+  'http://localhost:5173',
   'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
 ];
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
