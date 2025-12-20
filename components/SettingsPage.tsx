@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, Save, Mail, CheckCircle } from './Icons';
 import { Toast, EmployeeUser } from '../types';
+import { getSupabase } from '../services/supabaseClient';
 
 type NotificationTemplateKey = 'submitted' | 'step_forward' | 'approved' | 'rejected';
 
@@ -12,6 +13,7 @@ interface NotificationTemplate {
 const TEMPLATE_STORAGE_KEY = 'notificationTemplates';
 const SIGNATURE_STORAGE_KEY = 'signatureSettings';
 const SMTP_STORAGE_KEY = 'smtpSettings';
+const GOOGLE_SYNC_STORAGE_KEY = 'googleCalendarSyncSettings';
 
 const NOTIFICATION_TEMPLATE_CONFIG: Record<NotificationTemplateKey, {
     label: string;
@@ -101,6 +103,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const mounted = useRef(true);
+    const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; expiresAt: string | null; loading: boolean }>({
+        connected: false,
+        expiresAt: null,
+        loading: false,
+    });
+    const [googleSyncSettings, setGoogleSyncSettings] = useState({
+        importWindowDays: 14,
+        targetCalendarId: 'primary',
+        autoImport: true,
+        autoExport: true,
+    });
+    const [isGoogleActionLoading, setIsGoogleActionLoading] = useState(false);
 
     useEffect(() => {
         mounted.current = true;
@@ -135,6 +149,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                     return next;
                 });
             }
+            const savedGoogleSync = localStorage.getItem(GOOGLE_SYNC_STORAGE_KEY);
+            if (savedGoogleSync) {
+                const parsed = JSON.parse(savedGoogleSync);
+                setGoogleSyncSettings(prev => ({
+                    ...prev,
+                    ...parsed,
+                    importWindowDays: parsed?.importWindowDays ? Number(parsed.importWindowDays) : prev.importWindowDays,
+                }));
+            }
         } catch (error) {
             console.error("Failed to load signature settings from localStorage", error);
         }
@@ -143,6 +166,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             mounted.current = false;
         };
     }, []);
+
+    const fetchGoogleStatus = useCallback(async () => {
+        if (!currentUser) {
+            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+            return;
+        }
+        setGoogleStatus(prev => ({ ...prev, loading: true }));
+        try {
+            const supabase = getSupabase();
+            const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
+                body: { user_id: currentUser.id },
+            });
+            if (error) throw error;
+            setGoogleStatus({
+                connected: !!data?.connected,
+                expiresAt: data?.expires_at ?? null,
+                loading: false,
+            });
+        } catch (err) {
+            console.error('Failed to fetch Google OAuth status', err);
+            setGoogleStatus(prev => ({ ...prev, loading: false }));
+        }
+    }, [currentUser]);
+
+    useEffect(() => {
+        fetchGoogleStatus();
+    }, [fetchGoogleStatus]);
 
     const handleSmtpChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -180,6 +230,55 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         addToast(`「${config.label}」を初期テンプレートに戻しました。`, 'success');
     };
 
+    const startGoogleAuth = async () => {
+        if (!currentUser) {
+            addToast('ログイン状態を確認してください。', 'error');
+            return;
+        }
+        setIsGoogleActionLoading(true);
+        try {
+            const supabase = getSupabase();
+            const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
+                body: { user_id: currentUser.id },
+            });
+            if (error) throw error;
+            if (data?.authUrl) {
+                window.open(data.authUrl, '_blank', 'noopener');
+                addToast('Google認可画面を開きました。完了後この画面に戻ってください。', 'success');
+            } else {
+                addToast('認可URLを取得できませんでした。', 'error');
+            }
+        } catch (err) {
+            console.error('Failed to start Google OAuth', err);
+            addToast('Googleカレンダー連携の開始に失敗しました。', 'error');
+        } finally {
+            setIsGoogleActionLoading(false);
+            fetchGoogleStatus();
+        }
+    };
+
+    const disconnectGoogleAuth = async () => {
+        if (!currentUser) {
+            addToast('ログイン状態を確認してください。', 'error');
+            return;
+        }
+        setIsGoogleActionLoading(true);
+        try {
+            const supabase = getSupabase();
+            const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
+                body: { user_id: currentUser.id },
+            });
+            if (error) throw error;
+            addToast('Googleカレンダー連携を解除しました。', 'success');
+            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+        } catch (err) {
+            console.error('Failed to disconnect Google OAuth', err);
+            addToast('Googleカレンダー連携の解除に失敗しました。', 'error');
+        } finally {
+            setIsGoogleActionLoading(false);
+        }
+    };
+
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
@@ -188,6 +287,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 localStorage.setItem(SIGNATURE_STORAGE_KEY, JSON.stringify(signatureSettings));
                 localStorage.setItem(SMTP_STORAGE_KEY, JSON.stringify(smtpSettings));
                 localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(notificationTemplates));
+                localStorage.setItem(GOOGLE_SYNC_STORAGE_KEY, JSON.stringify(googleSyncSettings));
 
                 setIsSaving(false);
                 console.log('Saved settings:', {smtpSettings, signatureSettings, notificationTemplates});
@@ -234,7 +334,101 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
     ];
 
     return (
-        <form onSubmit={handleSave} className="space-y-8">
+        <div className="space-y-8">
+            <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Googleカレンダー同期設定</h2>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                            Googleからのインポート/エクスポート条件を管理します。認可後にインポート設定を保存してください。
+                        </p>
+                        <div className="mt-3 text-sm text-slate-700 dark:text-slate-200 space-y-1">
+                            <p>連携状態: {googleStatus.loading ? '確認中...' : googleStatus.connected ? '連携済み' : '未連携'}</p>
+                            {googleStatus.connected && (
+                                <p>トークン有効期限: {googleStatus.expiresAt ? new Date(googleStatus.expiresAt).toLocaleString('ja-JP') : '取得不可'}</p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            type="button"
+                            onClick={googleStatus.connected ? disconnectGoogleAuth : startGoogleAuth}
+                            disabled={isGoogleActionLoading || googleStatus.loading}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${isGoogleActionLoading || googleStatus.loading ? 'bg-slate-400 cursor-not-allowed' : googleStatus.connected ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        >
+                            {isGoogleActionLoading || googleStatus.loading
+                                ? '処理中...'
+                                : googleStatus.connected
+                                    ? '同期解除'
+                                    : 'Google連携を開始'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={fetchGoogleStatus}
+                            disabled={googleStatus.loading}
+                            className="px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:hover:bg-blue-900/30"
+                        >
+                            再読み込み
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                    <div>
+                        <label className={labelClass}>インポート期間（日数）</label>
+                        <input
+                            type="number"
+                            min={1}
+                            max={90}
+                            value={googleSyncSettings.importWindowDays}
+                            onChange={(e) => setGoogleSyncSettings(prev => ({ ...prev, importWindowDays: Number(e.target.value) }))}
+                            className={inputClass}
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Google→ERP 取り込み時に見る過去・未来の範囲。</p>
+                    </div>
+                    <div>
+                        <label className={labelClass}>対象カレンダーID</label>
+                        <input
+                            type="text"
+                            value={googleSyncSettings.targetCalendarId}
+                            onChange={(e) => setGoogleSyncSettings(prev => ({ ...prev, targetCalendarId: e.target.value }))}
+                            className={inputClass}
+                            placeholder="primary または calendarId@group.calendar.google.com"
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">取り込み・書き込み先のカレンダーID。</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <input
+                            id="autoImport"
+                            type="checkbox"
+                            checked={googleSyncSettings.autoImport}
+                            onChange={(e) => setGoogleSyncSettings(prev => ({ ...prev, autoImport: e.target.checked }))}
+                            className="h-4 w-4 text-blue-600 border-slate-300 rounded"
+                        />
+                        <label htmlFor="autoImport" className="text-sm text-slate-800 dark:text-slate-200">
+                            Google→ERP の自動インポートを有効にする
+                        </label>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <input
+                            id="autoExport"
+                            type="checkbox"
+                            checked={googleSyncSettings.autoExport}
+                            onChange={(e) => setGoogleSyncSettings(prev => ({ ...prev, autoExport: e.target.checked }))}
+                            className="h-4 w-4 text-blue-600 border-slate-300 rounded"
+                        />
+                        <label htmlFor="autoExport" className="text-sm text-slate-800 dark:text-slate-200">
+                            ERP→Google の同期（エクスポート）を有効にする
+                        </label>
+                    </div>
+                </div>
+                <div className="mt-4 rounded-lg bg-slate-50 dark:bg-slate-700/50 p-3 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                    <p>※ インポート/エクスポートの実行ロジックはバックエンドジョブで処理してください。ここでは対象範囲とカレンダーを記録します。</p>
+                    <p>※ 連携解除するとトークンは削除されます。再度連携するときは「Google連携を開始」を押してください。</p>
+                </div>
+            </section>
+
+            <form onSubmit={handleSave} className="space-y-8">
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-200 dark:border-slate-700">
                     <h2 className="text-xl font-semibold text-slate-800 dark:text-white">マイプロフィール</h2>
@@ -425,6 +619,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 </button>
             </div>
         </form>
+        </div>
     );
 };
 
