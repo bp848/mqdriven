@@ -2,6 +2,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "https://erp.b-p.co.jp",
   "http://localhost:3000",
   "http://localhost:5174",
+  "*",
 ];
 
 const DEFAULT_ALLOWED_HEADERS = [
@@ -28,12 +29,15 @@ const ALLOWED_ORIGINS = parseAllowedOrigins();
 
 const buildCorsHeaders = (req: Request) => {
   const origin = req.headers.get("origin");
-  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const wildcard = ALLOWED_ORIGINS.includes("*");
+  const allowedOrigin = wildcard ? "*" : (origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
   const requestedHeaders = req.headers.get("access-control-request-headers");
   const requestedList = requestedHeaders
     ? requestedHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
     : [];
-  const allowHeaders = Array.from(new Set([...DEFAULT_ALLOWED_HEADERS, ...requestedList])).join(", ");
+  const allowHeaders = wildcard
+    ? "*"
+    : Array.from(new Set([...DEFAULT_ALLOWED_HEADERS, ...requestedList])).join(", ");
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers": allowHeaders,

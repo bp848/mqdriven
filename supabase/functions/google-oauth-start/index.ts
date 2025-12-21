@@ -7,6 +7,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://localhost:5174",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
+  "*",
 ];
 
 const parseAllowedOrigins = (): string[] => {
@@ -22,12 +23,13 @@ const parseAllowedOrigins = (): string[] => {
 const ALLOWED_ORIGINS = parseAllowedOrigins();
 
 const corsHeaders = (origin: string | null) => {
+  const wildcard = ALLOWED_ORIGINS.includes("*");
   const pickOrigin = () => {
+    if (wildcard) return "*";
     if (!origin) return ALLOWED_ORIGINS[0];
     const normalized = origin.trim();
     if (ALLOWED_ORIGINS.includes(normalized)) return normalized;
     if (normalized.startsWith("http://localhost:") || normalized.startsWith("http://127.0.0.1:")) {
-      // allow any local dev port
       return normalized;
     }
     return ALLOWED_ORIGINS[0];
@@ -35,7 +37,7 @@ const corsHeaders = (origin: string | null) => {
   const allowedOrigin = pickOrigin();
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": wildcard ? "*" : "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
