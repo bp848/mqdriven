@@ -37,10 +37,11 @@ const corsHeaders = (origin: string | null) => {
   const allowedOrigin = pickOrigin();
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": wildcard ? "*" : "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": wildcard ? "*" : "authorization, x-client-info, apikey, content-type, x-requested-with",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin, Access-Control-Request-Headers",
   };
 };
 

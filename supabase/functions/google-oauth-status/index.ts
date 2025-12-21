@@ -43,6 +43,7 @@ const buildCorsHeaders = (req: Request) => {
     "Access-Control-Allow-Headers": allowHeaders,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
+    "Access-Control-Allow-Credentials": "true",
     Vary: "Origin, Access-Control-Request-Headers",
   };
 };

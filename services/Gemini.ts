@@ -1,10 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
 
 const resolveEnvValue = (key: string): string | undefined => {
+  // Check Vite environment variables first (development)
   if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
     const envValue = (import.meta.env as Record<string, string | undefined>)[key];
     if (envValue !== undefined) return envValue;
   }
+  // Check process.env (fallback for other environments)
   if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
     return process.env[key];
   }
@@ -23,7 +25,8 @@ const GEMINI_API_KEY =
   resolveEnvValue('VITE_GEMINI_API_KEY') ??
   resolveEnvValue('NEXT_PUBLIC_GEMINI_API_KEY') ??
   resolveEnvValue('GEMINI_API_KEY') ??
-  resolveEnvValue('API_KEY');
+  resolveEnvValue('API_KEY') ??
+  '';
 
 if (!GEMINI_API_KEY && !isGeminiAIDisabled) {
   console.error('Gemini APIキーが設定されていません。AI機能を利用するにはAPIキーが必要です。');
