@@ -451,7 +451,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           解析結果は下部に表示され、フォームへワンクリックで取り込めます。
         </p>
       </div>
-      <div className="px-6 py-5 space-y-4 max-h-[360px] overflow-y-auto lg:w-[50%]">
+      <div className="px-6 py-5 space-y-4 max-h-[360px] overflow-y-auto w-full">
         {drafts.length === 0 ? (
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">
             <p>・名刺をアップロードするとAIが解析→顧客登録→右フォームへの反映まで自動で実施します。</p>

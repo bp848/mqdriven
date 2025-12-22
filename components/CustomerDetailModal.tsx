@@ -332,7 +332,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                     )}
                     <div className={`${mode === 'new' ? 'grid gap-6 lg:grid-cols-[minmax(320px,360px)_minmax(0,1fr)] items-start' : ''}`}>
                         {mode === 'new' && (
-                            <div className="order-2 lg:order-1 lg:sticky lg:top-6">
+                            <div className="order-2 lg:order-1 lg:sticky lg:top-6 lg:w-1/2">
                                 <BusinessCardUploadSection
                                     addToast={addToast}
                                     isAIOff={isAIOff}
@@ -344,7 +344,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                             </div>
                         )}
 
-                        <div className={`${mode === 'new' ? 'order-1 lg:order-2' : ''}`}>
+                        <div className={`${mode === 'new' ? 'order-1 lg:order-2 lg:w-1/2' : ''}`}>
                             <div className="border-b border-slate-200 dark:border-slate-700 mb-6">
                                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                                     {TABS.map(tab => (
