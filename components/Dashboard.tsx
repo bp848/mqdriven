@@ -327,9 +327,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       // Journal entries (debit > credit) as expense
       journalEntries.forEach(entry => {
-        const entryDate = new Date(entry.date);
+        const rawDate = (entry as any).date || (entry as any).createdAt || (entry as any).created_at;
+        const entryDate = rawDate ? new Date(rawDate) : null;
+        if (!entryDate) return;
         if (entryDate.getFullYear() !== currentYear || entryDate.getMonth() !== currentMonth) return;
-        const amount = entry.debit - entry.credit;
+        const debit = Number(entry.debit ?? 0);
+        const credit = Number(entry.credit ?? 0);
+        const amount = debit - credit;
         if (amount <= 0) return;
         const label = entry.account || '仕訳';
         expenseMap[label] = (expenseMap[label] || 0) + amount;
@@ -337,10 +341,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       // Purchase orders (amount/totalCost) as expense-like
       purchaseOrders.forEach(po => {
-        if (!po.orderDate) return;
-        const d = new Date(po.orderDate);
+        const rawDate = (po as any).orderDate || (po as any).createdAt || (po as any).order_date || (po as any).created_at;
+        if (!rawDate) return;
+        const d = new Date(rawDate);
         if (d.getFullYear() !== currentYear || d.getMonth() !== currentMonth) return;
-        const amount = po.totalCost ?? po.amount ?? po.subamount ?? 0;
+        const amount = Number(po.totalCost ?? po.amount ?? po.subamount ?? 0);
         if (!amount || amount <= 0) return;
         const label = po.supplierName || '発注';
         expenseMap[label] = (expenseMap[label] || 0) + amount;
@@ -351,8 +356,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         .sort((a, b) => b.amount - a.amount);
       const total = rows.reduce((sum, r) => sum + r.amount, 0);
       const count = purchaseOrders.filter(po => {
-        if (!po.orderDate) return false;
-        const d = new Date(po.orderDate);
+        const rawDate = (po as any).orderDate || (po as any).createdAt || (po as any).order_date || (po as any).created_at;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
         return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
       }).length;
       return { rows, total, count };
