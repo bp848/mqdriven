@@ -8,6 +8,7 @@ interface BusinessCardUploadSectionProps {
   addToast: (message: string, type: Toast['type']) => void;
   isAIOff: boolean;
   currentUser?: EmployeeUser | null;
+  allUsers?: EmployeeUser[];
   onApplyToForm: (data: Partial<Customer>) => void;
   onAutoCreateCustomer?: (data: Partial<Customer>) => Promise<Customer>;
 }
@@ -112,6 +113,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   addToast,
   isAIOff,
   currentUser,
+  allUsers = [],
   onApplyToForm,
   onAutoCreateCustomer,
 }) => {
@@ -137,6 +139,19 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
       draftsRef.current.forEach(draft => URL.revokeObjectURL(draft.fileUrl));
     };
   }, [currentUser?.id]);
+
+  const recipientOptions = useMemo(() => {
+    const sorted = [...allUsers].sort((a, b) => {
+      const na = a.name?.toLowerCase() || '';
+      const nb = b.name?.toLowerCase() || '';
+      return na.localeCompare(nb);
+    });
+    return sorted.map(user => ({
+      value: user.id,
+      label: user.name || user.email || user.id,
+      department: user.department || '',
+    }));
+  }, [allUsers]);
 
   const generateId = () =>
     typeof crypto !== 'undefined' && crypto.randomUUID
@@ -375,16 +390,32 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
             />
           </div>
           <div className="grid grid-cols-1 gap-2 text-sm">
-            <label className="font-semibold text-slate-700 dark:text-slate-200">受領者（社員番号／氏名）</label>
-            <input
-              type="text"
-              value={recipientCode}
-              onChange={e => setRecipientCode(e.target.value)}
-              placeholder="名刺右上に赤ペンで記載した社員番号を入力"
-              className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
-            />
+            <label className="font-semibold text-slate-700 dark:text-slate-200">受領者（担当者）</label>
+            {recipientOptions.length > 0 ? (
+              <select
+                value={recipientCode}
+                onChange={e => setRecipientCode(e.target.value)}
+                className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+              >
+                <option value="">選択してください</option>
+                {recipientOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                    {opt.department ? ` / ${opt.department}` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={recipientCode}
+                onChange={e => setRecipientCode(e.target.value)}
+                placeholder="名刺を受け取った担当者（IDまたは氏名）"
+                className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+              />
+            )}
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              名刺右上に赤ペンで社員番号を追記してもらい、その番号とここで入力した値で突合します。
+              名刺を受け取った担当者を選択します。表示名は氏名（部門）で、保存される値は社員IDです。
             </p>
           </div>
         </div>

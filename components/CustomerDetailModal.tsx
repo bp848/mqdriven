@@ -337,6 +337,7 @@ const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({ customer, mod
                                     addToast={addToast}
                                     isAIOff={isAIOff}
                                     currentUser={currentUser}
+                                    allUsers={allUsers}
                                     onApplyToForm={handleApplyBusinessCard}
                                     onAutoCreateCustomer={onAutoCreateCustomer}
                                 />
