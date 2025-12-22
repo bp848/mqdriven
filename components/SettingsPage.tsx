@@ -79,6 +79,12 @@ interface SettingsPageProps {
     currentUser: EmployeeUser | null;
 }
 
+const isGoogleOAuthAllowedOrigin = () => {
+    if (typeof window === 'undefined') return false;
+    const allowedOrigins = ['https://erp.b-p.co.jp'];
+    return allowedOrigins.includes(window.location.origin);
+};
+
 const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) => {
     const [smtpSettings, setSmtpSettings] = useState({
         host: 'smtp.example.com',
@@ -172,6 +178,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             setGoogleStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
+        if (!isGoogleOAuthAllowedOrigin()) {
+            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+            return;
+        }
         setGoogleStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabase = getSupabase();
@@ -235,6 +245,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             addToast('ログイン状態を確認してください。', 'error');
             return;
         }
+        if (!isGoogleOAuthAllowedOrigin()) {
+            addToast('ローカル環境ではGoogle連携を呼び出しません（CORS制限）。', 'info');
+            return;
+        }
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
@@ -260,6 +274,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
     const disconnectGoogleAuth = async () => {
         if (!currentUser) {
             addToast('ログイン状態を確認してください。', 'error');
+            return;
+        }
+        if (!isGoogleOAuthAllowedOrigin()) {
+            addToast('ローカル環境ではGoogle連携を呼び出しません（CORS制限）。', 'info');
+            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
         setIsGoogleActionLoading(true);

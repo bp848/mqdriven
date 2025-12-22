@@ -64,6 +64,7 @@ import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
+import { IS_AI_DISABLED as ENV_SHIM_AI_OFF } from './src/envShim';
 
 const getEnvValue = (key: string): string | undefined => {
     if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -273,7 +274,14 @@ const App: React.FC = () => {
     const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogProps>({ isOpen: false, title: '', message: '', onConfirm: () => {}, onClose: () => () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });
     const [aiSuggestion, setAiSuggestion] = useState('');
     const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
-    const [isAIOff, setIsAIOff] = useState(process.env.NEXT_PUBLIC_AI_OFF === '1');
+    const [isAIOff, setIsAIOff] = useState(() => {
+        if (ENV_SHIM_AI_OFF) return true;
+        if (typeof window !== 'undefined' && (window as any).__ENV?.VITE_AI_OFF === '1') return true;
+        if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AI_OFF === '1') return true;
+        if (typeof import.meta !== 'undefined' && import.meta.env?.NEXT_PUBLIC_AI_OFF === '1') return true;
+        if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_AI_OFF === '1') return true;
+        return false;
+    });
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
     const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
@@ -402,8 +410,18 @@ const App: React.FC = () => {
         });
     };
 
+    const isGoogleOAuthAllowedOrigin = () => {
+        if (typeof window === 'undefined') return false;
+        const allowedOrigins = ['https://erp.b-p.co.jp'];
+        return allowedOrigins.includes(window.location.origin);
+    };
+
     const fetchGoogleAuthStatus = useCallback(async () => {
         if (!currentUser) {
+            setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
+            return;
+        }
+        if (!isGoogleOAuthAllowedOrigin()) {
             setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
@@ -446,6 +464,10 @@ const App: React.FC = () => {
             addToast('ログイン状態を確認してください。', 'error');
             return;
         }
+        if (!isGoogleOAuthAllowedOrigin()) {
+            addToast('ローカル環境ではGoogle連携を呼び出しません（CORS制限）。', 'info');
+            return;
+        }
         setIsGoogleAuthLoading(true);
         try {
             const supabase = getSupabase();
@@ -474,6 +496,11 @@ const App: React.FC = () => {
     const handleDisconnectGoogleCalendar = async () => {
         if (!currentUser) {
             addToast('ログイン状態を確認してください。', 'error');
+            return;
+        }
+        if (!isGoogleOAuthAllowedOrigin()) {
+            addToast('ローカル環境ではGoogle連携を呼び出しません（CORS制限）。', 'info');
+            setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
         setIsGoogleAuthLoading(true);

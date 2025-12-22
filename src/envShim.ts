@@ -1,3 +1,40 @@
+// Helper to log which environment sources are available and whether keys are present (sanitized)
+const logEnvDebug = () => {
+  const hasWindow = typeof window !== 'undefined';
+  const windowEnv = hasWindow ? (window as any).__ENV ?? {} : {};
+  const hasImportMetaEnv = typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined';
+  const importEnv = hasImportMetaEnv ? import.meta.env : {};
+  const processEnv = hasWindow && (window as any).process?.env ? (window as any).process.env : {};
+  const summarizeValue = (value: unknown) => {
+    if (!value) return 'missing';
+    if (typeof value === 'string') return `present (${value.length} chars)`;
+    return 'present (non-string)';
+  };
+
+  console.log('[envShim] Debug env sources', {
+    hasWindow,
+    hasImportMetaEnv,
+    hasProcessEnv: Object.keys(processEnv ?? {}).length > 0,
+    windowEnvKeys: Object.keys(windowEnv),
+    importMetaEnvKeys: hasImportMetaEnv ? Object.keys(importEnv) : [],
+    processEnvKeys: Object.keys(processEnv ?? {}),
+    keyPresence: {
+      windowViteGemini: summarizeValue((windowEnv as any).VITE_GEMINI_API_KEY),
+      importViteGemini: summarizeValue((importEnv as any).VITE_GEMINI_API_KEY),
+      importViteApi: summarizeValue((importEnv as any).VITE_API_KEY),
+      processGemini: summarizeValue((processEnv as any)?.GEMINI_API_KEY),
+    },
+    aiFlags: {
+      windowFlag: hasWindow ? (window as any).IS_AI_DISABLED ?? null : null,
+      VITE_AI_OFF: (importEnv as any)?.VITE_AI_OFF ?? null,
+      VITE_IS_AI_DISABLED: (importEnv as any)?.VITE_IS_AI_DISABLED ?? null,
+      NEXT_PUBLIC_AI_OFF: (importEnv as any)?.NEXT_PUBLIC_AI_OFF ?? null,
+    },
+  });
+};
+
+logEnvDebug();
+
 // Get API key from environment
 const getApiKey = (): string => {
   // Check window.__ENV first (for production builds with runtime injection)
