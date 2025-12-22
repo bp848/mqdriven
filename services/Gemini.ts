@@ -6,6 +6,12 @@ const summarizeValue = (value: unknown) => {
   return 'present (non-string)';
 };
 
+const readLocalStorageValue = (key: string): string | undefined => {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return undefined;
+  const val = window.localStorage.getItem(key);
+  return val === null ? undefined : val;
+};
+
 const readWindowEnvValue = (key: string): string | undefined => {
   if (typeof window === 'undefined') return undefined;
   const win = window as any;
@@ -18,6 +24,11 @@ const readWindowEnvValue = (key: string): string | undefined => {
 const resolveEnvValue = (key: string): string | undefined => {
   const fromWindow = readWindowEnvValue(key);
   if (fromWindow !== undefined) return fromWindow;
+
+  const fromLocalStorage =
+    readLocalStorageValue(key) ||
+    (key === 'VITE_GEMINI_API_KEY' ? readLocalStorageValue('GEMINI_API_KEY') ?? readLocalStorageValue('API_KEY') : undefined);
+  if (fromLocalStorage !== undefined) return fromLocalStorage;
 
   // Check Vite environment variables first (development / Vite build-time)
   if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
@@ -36,12 +47,17 @@ const logGeminiEnvDebug = () => {
   const windowEnv = hasWindow ? (window as any).__ENV ?? {} : {};
   const importEnv = typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' ? import.meta.env : {};
   const processEnv = typeof process !== 'undefined' ? process.env ?? {} : {};
+  const localStorageKeys =
+    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+      ? Object.keys(window.localStorage)
+      : [];
 
   console.log('[Gemini] Env debug', {
     hasWindow,
     windowEnvKeys: Object.keys(windowEnv),
     importMetaEnvKeys: typeof importEnv === 'object' ? Object.keys(importEnv as any) : [],
     processEnvKeys: Object.keys(processEnv),
+    localStorageKeys,
     keyPresence: {
       windowViteGemini: summarizeValue(readWindowEnvValue('VITE_GEMINI_API_KEY')),
       windowGemini: summarizeValue(readWindowEnvValue('GEMINI_API_KEY')),
@@ -49,6 +65,14 @@ const logGeminiEnvDebug = () => {
       importGemini: summarizeValue((importEnv as any)?.GEMINI_API_KEY),
       importApi: summarizeValue((importEnv as any)?.API_KEY),
       processGemini: summarizeValue((processEnv as any)?.GEMINI_API_KEY),
+      localViteGemini:
+        typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+          ? summarizeValue(window.localStorage.getItem('VITE_GEMINI_API_KEY'))
+          : 'missing',
+      localGemini:
+        typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+          ? summarizeValue(window.localStorage.getItem('GEMINI_API_KEY'))
+          : 'missing',
     },
     aiFlags: {
       VITE_AI_OFF: resolveEnvValue('VITE_AI_OFF') ?? null,

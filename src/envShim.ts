@@ -5,6 +5,10 @@ const logEnvDebug = () => {
   const hasImportMetaEnv = typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined';
   const importEnv = hasImportMetaEnv ? import.meta.env : {};
   const processEnv = hasWindow && (window as any).process?.env ? (window as any).process.env : {};
+  const localStorageKeys =
+    hasWindow && typeof window.localStorage !== 'undefined'
+      ? Object.keys(window.localStorage)
+      : [];
   const summarizeValue = (value: unknown) => {
     if (!value) return 'missing';
     if (typeof value === 'string') return `present (${value.length} chars)`;
@@ -18,11 +22,20 @@ const logEnvDebug = () => {
     windowEnvKeys: Object.keys(windowEnv),
     importMetaEnvKeys: hasImportMetaEnv ? Object.keys(importEnv) : [],
     processEnvKeys: Object.keys(processEnv ?? {}),
+    localStorageKeys,
     keyPresence: {
       windowViteGemini: summarizeValue((windowEnv as any).VITE_GEMINI_API_KEY),
       importViteGemini: summarizeValue((importEnv as any).VITE_GEMINI_API_KEY),
       importViteApi: summarizeValue((importEnv as any).VITE_API_KEY),
       processGemini: summarizeValue((processEnv as any)?.GEMINI_API_KEY),
+      localViteGemini:
+        hasWindow && typeof window.localStorage !== 'undefined'
+          ? summarizeValue(window.localStorage.getItem('VITE_GEMINI_API_KEY'))
+          : 'missing',
+      localGemini:
+        hasWindow && typeof window.localStorage !== 'undefined'
+          ? summarizeValue(window.localStorage.getItem('GEMINI_API_KEY'))
+          : 'missing',
     },
     aiFlags: {
       windowFlag: hasWindow ? (window as any).IS_AI_DISABLED ?? null : null,
@@ -60,6 +73,18 @@ const getApiKey = (): string => {
   if (typeof window !== 'undefined' && (window as any).process?.env?.GEMINI_API_KEY) {
     console.log('✓ API Key loaded from process.env.GEMINI_API_KEY');
     return (window as any).process.env.GEMINI_API_KEY;
+  }
+
+  // Check localStorage (last-resort runtime override)
+  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+    const localKey =
+      window.localStorage.getItem('VITE_GEMINI_API_KEY') ||
+      window.localStorage.getItem('GEMINI_API_KEY') ||
+      window.localStorage.getItem('API_KEY');
+    if (localKey) {
+      console.log('✓ API Key loaded from localStorage (VITE_GEMINI_API_KEY/GEMINI_API_KEY/API_KEY)');
+      return localKey;
+    }
   }
   
   console.warn('✗ No API Key found in any environment variable');
