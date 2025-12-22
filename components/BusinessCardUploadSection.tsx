@@ -153,6 +153,15 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
     }));
   }, [allUsers]);
 
+  const formatRecipientLabel = (code?: string | null) => {
+    if (!code) return '―';
+    const match = recipientOptions.find(opt => opt.value === code);
+    if (match) {
+      return match.department ? `${match.label} / ${match.department}` : match.label;
+    }
+    return code;
+  };
+
   const generateId = () =>
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -559,7 +568,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                     </div>
                     <div>
                       <dt className="text-xs font-semibold text-slate-500">受領者（社員番号/氏名）</dt>
-                      <dd>{draft.customerPayload?.receivedByEmployeeCode || '―'}</dd>
+                      <dd>{formatRecipientLabel(draft.customerPayload?.receivedByEmployeeCode)}</dd>
                     </div>
                   </dl>
                 </div>
