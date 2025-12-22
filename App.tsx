@@ -835,7 +835,8 @@ useEffect(() => {
     };
     const handleCreateCustomerInline = async (customerData: Partial<Customer>): Promise<Customer> => {
         const created = await dataService.addCustomer(customerData);
-        setCustomers(prev => [created, ...prev]);
+        // 最新データで一覧を確実に反映させる
+        await loadAllData();
         addToast('顧客を登録しました。', 'success');
         return created;
     };
