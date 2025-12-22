@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line,
 } from 'recharts';
-import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread, Customer } from '../types';
+import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread, Customer, PurchaseOrder } from '../types';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
 import { AlertTriangle, Inbox } from './Icons';
@@ -183,6 +183,7 @@ interface DashboardProps {
   journalEntries: JournalEntry[];
   accountItems: AccountItem[];
   customers: Customer[];
+  purchaseOrders: PurchaseOrder[];
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
   onNavigateToBulletinBoard: () => void;
@@ -258,6 +259,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     journalEntries,
     accountItems,
     customers,
+    purchaseOrders,
     pendingApprovalCount,
     onNavigateToApprovals,
     onNavigateToBulletinBoard,
@@ -322,20 +324,39 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     const expenseBreakdown = useMemo(() => {
       const expenseMap: Record<string, number> = {};
+
+      // Journal entries (debit > credit) as expense
       journalEntries.forEach(entry => {
         const entryDate = new Date(entry.date);
         if (entryDate.getFullYear() !== currentYear || entryDate.getMonth() !== currentMonth) return;
         const amount = entry.debit - entry.credit;
         if (amount <= 0) return;
-        const label = entry.account || '不明';
+        const label = entry.account || '仕訳';
         expenseMap[label] = (expenseMap[label] || 0) + amount;
       });
+
+      // Purchase orders (amount/totalCost) as expense-like
+      purchaseOrders.forEach(po => {
+        if (!po.orderDate) return;
+        const d = new Date(po.orderDate);
+        if (d.getFullYear() !== currentYear || d.getMonth() !== currentMonth) return;
+        const amount = po.totalCost ?? po.amount ?? po.subamount ?? 0;
+        if (!amount || amount <= 0) return;
+        const label = po.supplierName || '発注';
+        expenseMap[label] = (expenseMap[label] || 0) + amount;
+      });
+
       const rows = Object.entries(expenseMap)
         .map(([label, amount]) => ({ label, amount }))
         .sort((a, b) => b.amount - a.amount);
       const total = rows.reduce((sum, r) => sum + r.amount, 0);
-      return { rows, total };
-    }, [journalEntries, currentMonth, currentYear]);
+      const count = purchaseOrders.filter(po => {
+        if (!po.orderDate) return false;
+        const d = new Date(po.orderDate);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      }).length;
+      return { rows, total, count };
+    }, [journalEntries, purchaseOrders, currentMonth, currentYear]);
 
     const mqData = useMemo(() => {
         const currentMonthJobs = jobs.filter(job => {
@@ -510,10 +531,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
                     <h3 className="text-lg font-semibold text-slate-900 dark:text-white">今月の経費内訳</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">カテゴリ別の支出合計</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">カテゴリ別の支出合計（仕訳 + 発注）</p>
+                    <p className="mt-1 text-base font-semibold text-slate-800 dark:text-slate-100">合計: {formatJPY(expenseBreakdown.total)} / 件数: {expenseBreakdown.count ?? 0} 件</p>
                     <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
                         {expenseBreakdown.rows.length === 0 ? (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">今月の経費データがありません。</p>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                                <p>今月の経費データがありません。</p>
+                                <p>仕訳または発注を登録するとここに集計されます。</p>
+                            </div>
                         ) : (
                             expenseBreakdown.rows.map(row => {
                                 const pct = expenseBreakdown.total > 0 ? Math.round((row.amount / expenseBreakdown.total) * 100) : 0;

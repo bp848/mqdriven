@@ -1010,6 +1010,7 @@ useEffect(() => {
                             journalEntries={journalEntries} 
                             accountItems={accountItems} 
                             customers={customers}
+                            purchaseOrders={purchaseOrders}
                             suggestion={aiSuggestion} 
                             isSuggestionLoading={isSuggestionLoading}
                             pendingApprovalCount={pendingApprovalCount}
