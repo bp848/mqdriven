@@ -1104,7 +1104,11 @@ export const deleteJob = async (id: string): Promise<void> => {
 
 export const getCustomers = async (): Promise<Customer[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: true, nullsFirst: true });
+    // 新しいものを上に表示するため created_at 降順で取得
+    const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false, nullsLast: true });
     ensureSupabaseSuccess(error, 'Failed to fetch customers');
     return (data || []).map(dbCustomerToCustomer);
 };
