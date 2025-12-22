@@ -284,7 +284,7 @@ const App: React.FC = () => {
     });
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
-    const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
+  const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
 
     const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
     const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
@@ -656,11 +656,11 @@ const App: React.FC = () => {
         };
     }, [isSupabaseConfigured, shouldRequireAuth, resetAppData]);
 
-    const loadAllData = useCallback(async () => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
-        abortControllerRef.current = new AbortController();
+  const loadAllData = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
         const signal = abortControllerRef.current.signal;
 
         try {
@@ -718,9 +718,9 @@ const App: React.FC = () => {
 
             if (signal.aborted) return;
 
-            const [
-                jobsResult,
-                customersResult,
+      const [
+        jobsResult,
+        customersResult,
                 journalResult,
                 accountItemsResult,
                 leadsResult,
@@ -734,8 +734,21 @@ const App: React.FC = () => {
                 titlesResult,
             ] = results;
 
-            if (jobsResult.status === 'fulfilled') setJobs(jobsResult.value); else console.error('Failed to load jobs:', jobsResult.reason);
-            if (customersResult.status === 'fulfilled') setCustomers(customersResult.value); else console.error('Failed to load customers:', customersResult.reason);
+      const sortCustomersDesc = (items: Customer[]) =>
+        [...items].sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime;
+        });
+
+      if (jobsResult.status === 'fulfilled') setJobs(jobsResult.value); else console.error('Failed to load jobs:', jobsResult.reason);
+      if (customersResult.status === 'fulfilled') {
+        const sorted = sortCustomersDesc(customersResult.value);
+        console.log('[loadAllData] customers sorted', { count: sorted.length, newest: sorted[0]?.createdAt });
+        setCustomers(sorted);
+      } else {
+        console.error('Failed to load customers:', customersResult.reason);
+      }
             if (journalResult.status === 'fulfilled') setJournalEntries(journalResult.value); else console.error('Failed to load journal entries:', journalResult.reason);
             if (accountItemsResult.status === 'fulfilled') setAccountItems(accountItemsResult.value); else console.error('Failed to load account items:', accountItemsResult.reason);
             if (leadsResult.status === 'fulfilled') setLeads(leadsResult.value); else console.error('Failed to load leads:', leadsResult.reason);
@@ -834,9 +847,20 @@ useEffect(() => {
         await loadAllData();
     };
     const handleCreateCustomerInline = async (customerData: Partial<Customer>): Promise<Customer> => {
-        const created = await dataService.addCustomer(customerData);
+        const payload: Partial<Customer> = {
+            userId: customerData.userId ?? currentUser?.id ?? undefined,
+            ...customerData,
+        };
+        const created = await dataService.addCustomer(payload);
         // まず即座に追加し、続けて全体リロードで整合性を保つ
-        setCustomers(prev => [created, ...prev]);
+        setCustomers(prev => {
+            const next = [created, ...prev];
+            return next.sort((a, b) => {
+                const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return bTime - aTime;
+            });
+        });
         console.log('[inline customer] created', created.customerName || created.id);
         await loadAllData();
         addToast('顧客を登録しました。', 'success');
