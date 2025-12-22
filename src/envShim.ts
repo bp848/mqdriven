@@ -25,9 +25,12 @@ const logEnvDebug = () => {
     localStorageKeys,
     keyPresence: {
       windowViteGemini: summarizeValue((windowEnv as any).VITE_GEMINI_API_KEY),
+      windowNextPublicGemini: summarizeValue((windowEnv as any).NEXT_PUBLIC_GEMINI_API_KEY),
       importViteGemini: summarizeValue((importEnv as any).VITE_GEMINI_API_KEY),
+      importNextPublicGemini: summarizeValue((importEnv as any).NEXT_PUBLIC_GEMINI_API_KEY),
       importViteApi: summarizeValue((importEnv as any).VITE_API_KEY),
       processGemini: summarizeValue((processEnv as any)?.GEMINI_API_KEY),
+      processNextPublicGemini: summarizeValue((processEnv as any)?.NEXT_PUBLIC_GEMINI_API_KEY),
       localViteGemini:
         hasWindow && typeof window.localStorage !== 'undefined'
           ? summarizeValue(window.localStorage.getItem('VITE_GEMINI_API_KEY'))
@@ -55,12 +58,21 @@ const getApiKey = (): string => {
     console.log('✓ API Key loaded from window.__ENV.VITE_GEMINI_API_KEY');
     return (window as any).__ENV.VITE_GEMINI_API_KEY;
   }
+  if (typeof window !== 'undefined' && (window as any).__ENV?.NEXT_PUBLIC_GEMINI_API_KEY) {
+    console.log('✓ API Key loaded from window.__ENV.NEXT_PUBLIC_GEMINI_API_KEY');
+    return (window as any).__ENV.NEXT_PUBLIC_GEMINI_API_KEY;
+  }
   
   // Check Vite environment variables (available in development)
   if (typeof import.meta.env !== 'undefined') {
     if (import.meta.env.VITE_GEMINI_API_KEY) {
       console.log('✓ API Key loaded from import.meta.env.VITE_GEMINI_API_KEY');
       return import.meta.env.VITE_GEMINI_API_KEY as string;
+    }
+
+    if ((import.meta.env as any).NEXT_PUBLIC_GEMINI_API_KEY) {
+      console.log('✓ API Key loaded from import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY');
+      return (import.meta.env as any).NEXT_PUBLIC_GEMINI_API_KEY as string;
     }
     
     if (import.meta.env.VITE_API_KEY) {
@@ -73,6 +85,10 @@ const getApiKey = (): string => {
   if (typeof window !== 'undefined' && (window as any).process?.env?.GEMINI_API_KEY) {
     console.log('✓ API Key loaded from process.env.GEMINI_API_KEY');
     return (window as any).process.env.GEMINI_API_KEY;
+  }
+  if (typeof window !== 'undefined' && (window as any).process?.env?.NEXT_PUBLIC_GEMINI_API_KEY) {
+    console.log('✓ API Key loaded from process.env.NEXT_PUBLIC_GEMINI_API_KEY');
+    return (window as any).process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   }
 
   // Check localStorage (last-resort runtime override)
