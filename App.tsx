@@ -1009,6 +1009,7 @@ useEffect(() => {
                             jobs={jobs} 
                             journalEntries={journalEntries} 
                             accountItems={accountItems} 
+                            customers={customers}
                             suggestion={aiSuggestion} 
                             isSuggestionLoading={isSuggestionLoading}
                             pendingApprovalCount={pendingApprovalCount}

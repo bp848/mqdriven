@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line,
 } from 'recharts';
-import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread } from '../types';
+import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread, Customer } from '../types';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
 import { AlertTriangle, Inbox } from './Icons';
@@ -182,6 +182,7 @@ interface DashboardProps {
   jobs: Job[];
   journalEntries: JournalEntry[];
   accountItems: AccountItem[];
+  customers: Customer[];
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
   onNavigateToBulletinBoard: () => void;
@@ -256,6 +257,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     jobs,
     journalEntries,
     accountItems,
+    customers,
     pendingApprovalCount,
     onNavigateToApprovals,
     onNavigateToBulletinBoard,
@@ -293,12 +295,49 @@ const Dashboard: React.FC<DashboardProps> = ({
         };
     }, []);
 
-    
-    const mqData = useMemo(() => {
-        const today = new Date();
-        const currentYear = today.getFullYear();
-        const currentMonth = today.getMonth();
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    const prevMonth = new Date(currentYear, currentMonth - 1, 1);
 
+    const currentMonthCustomers = useMemo(
+      () => customers.filter(c => {
+        if (!c.createdAt) return false;
+        const d = new Date(c.createdAt);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      }),
+      [customers, currentYear, currentMonth]
+    );
+
+    const prevMonthCustomers = useMemo(
+      () => customers.filter(c => {
+        if (!c.createdAt) return false;
+        const d = new Date(c.createdAt);
+        return d.getFullYear() === prevMonth.getFullYear() && d.getMonth() === prevMonth.getMonth();
+      }),
+      [customers, prevMonth]
+    );
+
+    const customerDelta = currentMonthCustomers.length - prevMonthCustomers.length;
+
+    const expenseBreakdown = useMemo(() => {
+      const expenseMap: Record<string, number> = {};
+      journalEntries.forEach(entry => {
+        const entryDate = new Date(entry.date);
+        if (entryDate.getFullYear() !== currentYear || entryDate.getMonth() !== currentMonth) return;
+        const amount = entry.debit - entry.credit;
+        if (amount <= 0) return;
+        const label = entry.account || '不明';
+        expenseMap[label] = (expenseMap[label] || 0) + amount;
+      });
+      const rows = Object.entries(expenseMap)
+        .map(([label, amount]) => ({ label, amount }))
+        .sort((a, b) => b.amount - a.amount);
+      const total = rows.reduce((sum, r) => sum + r.amount, 0);
+      return { rows, total };
+    }, [journalEntries, currentMonth, currentYear]);
+
+    const mqData = useMemo(() => {
         const currentMonthJobs = jobs.filter(job => {
             const jobDate = new Date(job.createdAt);
             return jobDate.getFullYear() === currentYear && jobDate.getMonth() === currentMonth;
@@ -456,7 +495,43 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                 </MQCard>
             </div>
-            
+
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">今月の新規顧客</h3>
+                    <p className="mt-2 text-4xl font-bold text-blue-600 dark:text-blue-300">{currentMonthCustomers.length} 件</p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                        先月比: <span className={customerDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                            {customerDelta >= 0 ? '+' : ''}{customerDelta}
+                        </span>
+                    </p>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">新規登録がゼロでも件数を表示します。</p>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">今月の経費内訳</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">カテゴリ別の支出合計</p>
+                    <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                        {expenseBreakdown.rows.length === 0 ? (
+                            <p className="text-sm text-slate-500 dark:text-slate-400">今月の経費データがありません。</p>
+                        ) : (
+                            expenseBreakdown.rows.map(row => {
+                                const pct = expenseBreakdown.total > 0 ? Math.round((row.amount / expenseBreakdown.total) * 100) : 0;
+                                return (
+                                    <div key={row.label} className="flex items-center justify-between text-sm">
+                                        <div className="flex-1">
+                                            <p className="font-semibold text-slate-800 dark:text-slate-100">{row.label}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">{pct}%</p>
+                                        </div>
+                                        <p className="font-semibold text-slate-800 dark:text-slate-100">{formatJPY(row.amount)}</p>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-6">
                 <MonthlyTrendChart data={chartData} />
             </div>
