@@ -837,6 +837,7 @@ useEffect(() => {
         const created = await dataService.addCustomer(customerData);
         // まず即座に追加し、続けて全体リロードで整合性を保つ
         setCustomers(prev => [created, ...prev]);
+        console.log('[inline customer] created', created.customerName || created.id);
         await loadAllData();
         addToast('顧客を登録しました。', 'success');
         return created;

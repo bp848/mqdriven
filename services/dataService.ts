@@ -1110,7 +1110,9 @@ export const getCustomers = async (): Promise<Customer[]> => {
         .select('*')
         .order('created_at', { ascending: false, nullsLast: true });
     ensureSupabaseSuccess(error, 'Failed to fetch customers');
-    return (data || []).map(dbCustomerToCustomer);
+    const customers = (data || []).map(dbCustomerToCustomer);
+    console.log('[dataService] customers fetched', { count: customers.length });
+    return customers;
 };
 
 export const addCustomer = async (customerData: Partial<Customer>): Promise<Customer> => {
