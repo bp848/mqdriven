@@ -341,7 +341,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         const rawDate = app.approvedAt || app.submittedAt || app.createdAt;
         if (!rawDate) return false;
         const d = new Date(rawDate);
-        return d.getFullYear() === currentYear && d.getMonth() === currentMonth && app.status === 'approved';
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth && 
+               (app.status === 'approved' || app.status === 'pending_approval');
       });
       console.log('[Dashboard] Approved apps this month:', approvedAppsThisMonth.length);
       approvedAppsThisMonth.forEach(app => {
@@ -395,7 +396,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         .map(([label, amount]) => ({ label, amount }))
         .sort((a, b) => b.amount - a.amount);
       const total = rows.reduce((sum, r) => sum + r.amount, 0);
-      const count = purchaseOrdersThisMonth.length + approvedAppsThisMonth.length;
+      const count = purchaseOrdersThisMonth.length + approvedAppsThisMonth.filter(app => 
+        app.status === 'approved' || app.status === 'pending_approval'
+      ).length;
       
       console.log('[Dashboard] Final expense breakdown:', {
         rows: rows.length,
