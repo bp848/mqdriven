@@ -1011,6 +1011,7 @@ useEffect(() => {
                             accountItems={accountItems} 
                             customers={customers}
                             purchaseOrders={purchaseOrders}
+                            applications={applications}
                             suggestion={aiSuggestion} 
                             isSuggestionLoading={isSuggestionLoading}
                             pendingApprovalCount={pendingApprovalCount}

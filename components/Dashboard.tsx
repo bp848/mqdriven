@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line,
 } from 'recharts';
-import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread, Customer, PurchaseOrder } from '../types';
+import { Job, JournalEntry, AccountItem, JobStatus, BulletinThread, Customer, PurchaseOrder, ApplicationWithDetails } from '../types';
 import { MONTHLY_GOALS, FIXED_COSTS } from '../constants';
 import { formatJPY } from '../utils';
 import { AlertTriangle, Inbox } from './Icons';
@@ -184,6 +184,7 @@ interface DashboardProps {
   accountItems: AccountItem[];
   customers: Customer[];
   purchaseOrders: PurchaseOrder[];
+  applications: ApplicationWithDetails[];
   pendingApprovalCount: number;
   onNavigateToApprovals: () => void;
   onNavigateToBulletinBoard: () => void;
@@ -260,6 +261,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     accountItems,
     customers,
     purchaseOrders,
+    applications,
     pendingApprovalCount,
     onNavigateToApprovals,
     onNavigateToBulletinBoard,
@@ -325,6 +327,28 @@ const Dashboard: React.FC<DashboardProps> = ({
     const expenseBreakdown = useMemo(() => {
       const expenseMap: Record<string, number> = {};
 
+      // Approved applications (expense/transport/etc.)
+      const approvedAppsThisMonth = applications.filter(app => {
+        const rawDate = app.approvedAt || app.submittedAt || app.createdAt;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth && app.status === 'approved';
+      });
+      approvedAppsThisMonth.forEach(app => {
+        const form = app.formData || {};
+        const amount =
+          Number(form.totalGross ?? 0) ||
+          Number(form.totalNet ?? 0) ||
+          Number(form.totalAmount ?? 0) ||
+          Number(form.amountInclTax ?? 0) ||
+          Number(form.amountExclTax ?? 0) ||
+          0;
+        if (amount > 0) {
+          const label = app.applicationCode?.name || '経費申請';
+          expenseMap[label] = (expenseMap[label] || 0) + amount;
+        }
+      });
+
       // Journal entries (debit > credit) as expense
       journalEntries.forEach(entry => {
         const rawDate = (entry as any).date || (entry as any).createdAt || (entry as any).created_at;
@@ -360,9 +384,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         if (!rawDate) return false;
         const d = new Date(rawDate);
         return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-      }).length;
+      }).length + approvedAppsThisMonth.length;
       return { rows, total, count };
-    }, [journalEntries, purchaseOrders, currentMonth, currentYear]);
+    }, [journalEntries, purchaseOrders, applications, currentMonth, currentYear]);
 
     const mqData = useMemo(() => {
         const currentMonthJobs = jobs.filter(job => {
