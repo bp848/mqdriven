@@ -327,6 +327,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     const expenseBreakdown = useMemo(() => {
       const expenseMap: Record<string, number> = {};
 
+      // Debug logging
+      console.log('[Dashboard] Processing expense breakdown', {
+        applicationsCount: applications.length,
+        journalEntriesCount: journalEntries.length,
+        purchaseOrdersCount: purchaseOrders.length,
+        currentMonth: currentMonth + 1,
+        currentYear: currentYear
+      });
+
       // Approved applications (expense/transport/etc.)
       const approvedAppsThisMonth = applications.filter(app => {
         const rawDate = app.approvedAt || app.submittedAt || app.createdAt;
@@ -334,6 +343,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         const d = new Date(rawDate);
         return d.getFullYear() === currentYear && d.getMonth() === currentMonth && app.status === 'approved';
       });
+      console.log('[Dashboard] Approved apps this month:', approvedAppsThisMonth.length);
       approvedAppsThisMonth.forEach(app => {
         const form = app.formData || {};
         const amount =
@@ -350,11 +360,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
 
       // Journal entries (debit > credit) as expense
-      journalEntries.forEach(entry => {
+      const journalEntriesThisMonth = journalEntries.filter(entry => {
         const rawDate = (entry as any).date || (entry as any).createdAt || (entry as any).created_at;
-        const entryDate = rawDate ? new Date(rawDate) : null;
-        if (!entryDate) return;
-        if (entryDate.getFullYear() !== currentYear || entryDate.getMonth() !== currentMonth) return;
+        if (!rawDate) return false;
+        const entryDate = new Date(rawDate);
+        return entryDate.getFullYear() === currentYear && entryDate.getMonth() === currentMonth;
+      });
+      console.log('[Dashboard] Journal entries this month:', journalEntriesThisMonth.length);
+      journalEntriesThisMonth.forEach(entry => {
         const debit = Number(entry.debit ?? 0);
         const credit = Number(entry.credit ?? 0);
         const amount = debit - credit;
@@ -364,11 +377,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
 
       // Purchase orders (amount/totalCost) as expense-like
-      purchaseOrders.forEach(po => {
+      const purchaseOrdersThisMonth = purchaseOrders.filter(po => {
         const rawDate = (po as any).orderDate || (po as any).createdAt || (po as any).order_date || (po as any).created_at;
-        if (!rawDate) return;
+        if (!rawDate) return false;
         const d = new Date(rawDate);
-        if (d.getFullYear() !== currentYear || d.getMonth() !== currentMonth) return;
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      });
+      console.log('[Dashboard] Purchase orders this month:', purchaseOrdersThisMonth.length);
+      purchaseOrdersThisMonth.forEach(po => {
         const amount = Number(po.totalCost ?? po.amount ?? po.subamount ?? 0);
         if (!amount || amount <= 0) return;
         const label = po.supplierName || '発注';
@@ -379,12 +395,15 @@ const Dashboard: React.FC<DashboardProps> = ({
         .map(([label, amount]) => ({ label, amount }))
         .sort((a, b) => b.amount - a.amount);
       const total = rows.reduce((sum, r) => sum + r.amount, 0);
-      const count = purchaseOrders.filter(po => {
-        const rawDate = (po as any).orderDate || (po as any).createdAt || (po as any).order_date || (po as any).created_at;
-        if (!rawDate) return false;
-        const d = new Date(rawDate);
-        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-      }).length + approvedAppsThisMonth.length;
+      const count = purchaseOrdersThisMonth.length + approvedAppsThisMonth.length;
+      
+      console.log('[Dashboard] Final expense breakdown:', {
+        rows: rows.length,
+        total,
+        count,
+        expenseMapKeys: Object.keys(expenseMap)
+      });
+      
       return { rows, total, count };
     }, [journalEntries, purchaseOrders, applications, currentMonth, currentYear]);
 
