@@ -333,7 +333,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         journalEntriesCount: journalEntries.length,
         purchaseOrdersCount: purchaseOrders.length,
         currentMonth: currentMonth + 1,
-        currentYear: currentYear
+        currentYear: currentYear,
+        sampleApplication: applications[0],
+        sampleJournalEntry: journalEntries[0],
+        samplePurchaseOrder: purchaseOrders[0]
       });
 
       // All applications (regardless of status) for now
