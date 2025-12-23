@@ -73,8 +73,13 @@ Deno.serve(async (req: Request) => {
     const redirectUri = Deno.env.get('GOOGLE_REDIRECT_URI');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRole = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const redirectOk = Deno.env.get('GOOGLE_CALLBACK_REDIRECT_OK') ?? 'https://erp.b-p.co.jp/settings/google?ok=1';
-    const redirectNg = Deno.env.get('GOOGLE_CALLBACK_REDIRECT_NG') ?? 'https://erp.b-p.co.jp/settings/google?ok=0';
+    const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+    const redirectOk =
+      Deno.env.get('GOOGLE_CALLBACK_REDIRECT_OK') ??
+      `${allowedOrigin}/settings?google_calendar=ok`;
+    const redirectNg =
+      Deno.env.get('GOOGLE_CALLBACK_REDIRECT_NG') ??
+      `${allowedOrigin}/settings?google_calendar=error`;
 
     if (!clientId || !clientSecret || !redirectUri || !supabaseUrl || !serviceRole) {
       return jsonResponse({ error: 'server not configured: missing env vars' }, 500, origin);
