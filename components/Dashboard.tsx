@@ -324,91 +324,31 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     const customerDelta = currentMonthCustomers.length - prevMonthCustomers.length;
 
-    const expenseBreakdown = useMemo(() => {
-      const expenseMap: Record<string, number> = {};
+    const [expenseBreakdown, setExpenseBreakdown] = useState({ rows: [], total: 0, count: 0 });
 
-      // Debug logging
-      console.log('[Dashboard] Processing expense breakdown', {
-        applicationsCount: applications.length,
-        journalEntriesCount: journalEntries.length,
-        purchaseOrdersCount: purchaseOrders.length,
-        currentMonth: currentMonth + 1,
-        currentYear: currentYear,
-        sampleApplication: applications[0],
-        sampleJournalEntry: journalEntries[0],
-        samplePurchaseOrder: purchaseOrders[0]
-      });
-
-      // All applications (regardless of status) for now
-      const approvedAppsThisMonth = applications.filter(app => {
-        const rawDate = app.approvedAt || app.submittedAt || app.createdAt;
-        if (!rawDate) return false;
-        const d = new Date(rawDate);
-        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-      });
-      console.log('[Dashboard] Approved apps this month:', approvedAppsThisMonth.length);
-      approvedAppsThisMonth.forEach(app => {
-        const form = app.formData || {};
-        const amount =
-          Number(form.totalGross ?? 0) ||
-          Number(form.totalNet ?? 0) ||
-          Number(form.totalAmount ?? 0) ||
-          Number(form.amountInclTax ?? 0) ||
-          Number(form.amountExclTax ?? 0) ||
-          0;
-        if (amount > 0) {
-          const label = app.applicationCode?.name || '経費申請';
-          expenseMap[label] = (expenseMap[label] || 0) + amount;
+    useEffect(() => {
+      const fetchMonthlyExpenses = async () => {
+        const supabase = getSupabase();
+        const { data, error } = await supabase.rpc('get_monthly_expenses');
+        if (error) {
+          console.error('[Dashboard] Error fetching monthly expenses:', error);
+          setExpenseBreakdown({ rows: [], total: 0, count: 0 });
+          return;
         }
-      });
+        
+        const rows = (data || []).map(item => ({
+          label: item.category_name,
+          amount: Number(item.total_amount)
+        }));
+        const total = rows.reduce((sum, r) => sum + r.amount, 0);
+        const count = data?.reduce((sum, item) => sum + (item.count || 0), 0) || 0;
+        
+        console.log('[Dashboard] Monthly expenses from RPC:', { rows: rows.length, total, count });
+        setExpenseBreakdown({ rows, total, count });
+      };
 
-      // Journal entries (debit > credit) as expense
-      const journalEntriesThisMonth = journalEntries.filter(entry => {
-        const rawDate = (entry as any).date || (entry as any).createdAt || (entry as any).created_at;
-        if (!rawDate) return false;
-        const entryDate = new Date(rawDate);
-        return entryDate.getFullYear() === currentYear && entryDate.getMonth() === currentMonth;
-      });
-      console.log('[Dashboard] Journal entries this month:', journalEntriesThisMonth.length);
-      journalEntriesThisMonth.forEach(entry => {
-        const debit = Number(entry.debit ?? 0);
-        const credit = Number(entry.credit ?? 0);
-        const amount = debit - credit;
-        if (amount <= 0) return;
-        const label = entry.account || '仕訳';
-        expenseMap[label] = (expenseMap[label] || 0) + amount;
-      });
-
-      // Purchase orders (amount/totalCost) as expense-like
-      const purchaseOrdersThisMonth = purchaseOrders.filter(po => {
-        const rawDate = (po as any).orderDate || (po as any).createdAt || (po as any).order_date || (po as any).created_at;
-        if (!rawDate) return false;
-        const d = new Date(rawDate);
-        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-      });
-      console.log('[Dashboard] Purchase orders this month:', purchaseOrdersThisMonth.length);
-      purchaseOrdersThisMonth.forEach(po => {
-        const amount = Number(po.totalCost ?? po.amount ?? po.subamount ?? 0);
-        if (!amount || amount <= 0) return;
-        const label = po.supplierName || '発注';
-        expenseMap[label] = (expenseMap[label] || 0) + amount;
-      });
-
-      const rows = Object.entries(expenseMap)
-        .map(([label, amount]) => ({ label, amount }))
-        .sort((a, b) => b.amount - a.amount);
-      const total = rows.reduce((sum, r) => sum + r.amount, 0);
-      const count = purchaseOrdersThisMonth.length + approvedAppsThisMonth.length;
-      
-      console.log('[Dashboard] Final expense breakdown:', {
-        rows: rows.length,
-        total,
-        count,
-        expenseMapKeys: Object.keys(expenseMap)
-      });
-      
-      return { rows, total, count };
-    }, [journalEntries, purchaseOrders, applications, currentMonth, currentYear]);
+      fetchMonthlyExpenses();
+    }, []);
 
     const mqData = useMemo(() => {
         const currentMonthJobs = jobs.filter(job => {
