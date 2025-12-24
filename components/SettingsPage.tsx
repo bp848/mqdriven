@@ -79,10 +79,42 @@ interface SettingsPageProps {
     currentUser: EmployeeUser | null;
 }
 
+const getEnvValue = (key: string): string | undefined => {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key] !== undefined) {
+        return import.meta.env[key];
+    }
+    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+        return process.env[key];
+    }
+    return undefined;
+};
+
+const getAllowedGoogleOrigins = (): string[] => {
+    const raw =
+        getEnvValue('VITE_GOOGLE_OAUTH_ALLOWED_ORIGINS')
+        || getEnvValue('GOOGLE_OAUTH_ALLOWED_ORIGINS');
+    if (raw) {
+        const parsed = raw
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean);
+        if (parsed.length) return parsed;
+    }
+    return [
+        'https://erp.b-p.co.jp',
+        'http://localhost:5174',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://localhost:3000',
+    ];
+};
+
 const isGoogleOAuthAllowedOrigin = () => {
     if (typeof window === 'undefined') return false;
-    const allowedOrigins = ['https://erp.b-p.co.jp'];
-    return allowedOrigins.includes(window.location.origin);
+    const allowed = getAllowedGoogleOrigins();
+    if (allowed.includes('*')) return true;
+    return allowed.includes(window.location.origin);
 };
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) => {

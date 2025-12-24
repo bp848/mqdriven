@@ -10,6 +10,39 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "*",
 ];
 
+const buildFunctionsRedirectUri = (): string | null => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!supabaseUrl) return null;
+  try {
+    const host = new URL(supabaseUrl).hostname; // e.g. rwjhpfghhgstvplmggks.supabase.co
+    const projectRef = host.split(".")[0];
+    if (!projectRef) return null;
+    return `https://${projectRef}.functions.supabase.co/google-oauth-callback`;
+  } catch {
+    return null;
+  }
+};
+
+const resolveRedirectUri = (): { uri: string | null; source: "env" | "fallback" } => {
+  const envUri = Deno.env.get("GOOGLE_REDIRECT_URI");
+  const fallback = buildFunctionsRedirectUri();
+  // Prefer a functions.* redirect. If env is set but not functions.*, fall back to computed one.
+  if (envUri) {
+    if (/functions\.supabase\.co/.test(envUri)) {
+      return { uri: envUri, source: "env" };
+    }
+    if (fallback) {
+      console.warn(
+        "GOOGLE_REDIRECT_URI does not point to Supabase Functions. Falling back to functions callback.",
+        { envUri, fallback },
+      );
+      return { uri: fallback, source: "fallback" };
+    }
+    return { uri: envUri, source: "env" };
+  }
+  return { uri: fallback, source: "fallback" };
+};
+
 const parseAllowedOrigins = (): string[] => {
   const raw = Deno.env.get("ALLOWED_ORIGINS") ?? Deno.env.get("ALLOWED_ORIGIN");
   if (!raw) return DEFAULT_ALLOWED_ORIGINS;
@@ -81,7 +114,7 @@ serve(async (req: Request) => {
     }
 
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-    const redirectUri = Deno.env.get("GOOGLE_REDIRECT_URI");
+    const { uri: redirectUri, source: redirectSource } = resolveRedirectUri();
     if (!clientId || !redirectUri) {
       return jsonResponse(
         { error: "server not configured: missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI" },
@@ -101,7 +134,9 @@ serve(async (req: Request) => {
         client_id: clientId,
         redirect_uri: redirectUri,
       }).toString();
-
+    if (redirectSource === "fallback") {
+      console.warn("Using fallback functions redirect URI for Google OAuth:", redirectUri);
+    }
     return new Response(JSON.stringify({ authUrl }), {
       headers: {
         "Content-Type": "application/json",

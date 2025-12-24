@@ -1,4 +1,5 @@
 import { Type, Chat } from "@google/genai";
+import JSZip from "jszip";
 import {
   GEMINI_DEFAULT_MODEL,
   GEMINI_OCR_MODEL,
@@ -124,6 +125,78 @@ const stripCodeFences = (value: string): string => {
     return withoutOpening.slice(0, -3).trim();
   }
   return withoutOpening.trim();
+};
+
+const base64ToUint8Array = (base64: string): Uint8Array => {
+  const binary =
+    typeof atob === "function"
+      ? atob(base64)
+      : Buffer.from(base64, "base64").toString("binary");
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const stripXmlTags = (xml: string): string =>
+  xml
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const extractDocxTextFromBase64 = async (fileBase64: string): Promise<string> => {
+  try {
+    const zip = await JSZip.loadAsync(base64ToUint8Array(fileBase64));
+    const parts: string[] = [];
+    const addPart = async (path: string) => {
+      const entry = zip.file(path);
+      if (entry) {
+        const xml = await entry.async("text");
+        parts.push(stripXmlTags(xml));
+      }
+    };
+    await addPart("word/document.xml");
+    for (let i = 1; i <= 3; i++) {
+      await addPart(`word/header${i}.xml`);
+      await addPart(`word/footer${i}.xml`);
+    }
+    return parts.join("\n");
+  } catch {
+    return "";
+  }
+};
+
+const extractXlsxStringsFromBase64 = async (fileBase64: string): Promise<string> => {
+  try {
+    const zip = await JSZip.loadAsync(base64ToUint8Array(fileBase64));
+    const shared = zip.file("xl/sharedStrings.xml");
+    if (!shared) return "";
+    const xml = await shared.async("text");
+    const texts = Array.from(xml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)).map((m) =>
+      stripXmlTags(m[1]),
+    );
+    return texts.join("\n");
+  } catch {
+    return "";
+  }
+};
+
+const decodeTextFromBase64 = (fileBase64: string): string => {
+  try {
+    if (typeof atob === "function") {
+      return decodeURIComponent(escape(atob(fileBase64)));
+    }
+    return Buffer.from(fileBase64, "base64").toString("utf-8");
+  } catch {
+    return "";
+  }
 };
 
 const suggestJobSchema = {
@@ -760,6 +833,57 @@ export const draftEstimateFromSpecFile = async (
   fileBase64: string,
   mimeType: string,
 ): Promise<Partial<Estimate>> => {
+  const normalizedMime = (mimeType || "application/octet-stream").toLowerCase();
+  const isPdfOrImage = ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(
+    normalizedMime,
+  );
+  const isDocx =
+    normalizedMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const isXlsx =
+    normalizedMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    normalizedMime === "application/vnd.ms-excel";
+  const isTextLike =
+    normalizedMime.startsWith("text/") ||
+    normalizedMime === "application/json" ||
+    normalizedMime === "application/csv";
+
+  // Avoid unsupported MIME errors by handling text/Excel/Word before calling Gemini with inline data
+  if (isTextLike) {
+    const text = decodeTextFromBase64(fileBase64);
+    if (!text) {
+      throw new Error("テキストを読み取れませんでした。ファイル内容を確認してください。");
+    }
+    return draftEstimate(`以下の仕様書内容を読み取り、見積の下書きを作成してください。\n\n${text}`);
+  }
+
+  if (isDocx) {
+    const text = await extractDocxTextFromBase64(fileBase64);
+    if (text) {
+      return draftEstimate(
+        `以下のWord仕様書を読み取り、見積の下書きを作成してください。\n\n${text}`,
+      );
+    }
+    // If extraction failed, fall through to try inline upload as a last resort
+  }
+
+  if (isXlsx) {
+    const text = await extractXlsxStringsFromBase64(fileBase64);
+    if (text) {
+      return draftEstimate(
+        `以下のExcel仕様書を読み取り、見積の下書きを作成してください。\n\n${text}`,
+      );
+    }
+    throw new Error(
+      "Excelファイルを解析できませんでした。PDFや画像、テキスト形式でアップロードしてください。",
+    );
+  }
+
+  if (!isPdfOrImage) {
+    throw new Error(
+      "このファイル形式はサポートされていません。PDF/画像/テキスト/Excel(.xlsx)/Word(.docx)でアップロードしてください。",
+    );
+  }
+
   const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
     const filePart = { inlineData: { data: fileBase64, mimeType } };

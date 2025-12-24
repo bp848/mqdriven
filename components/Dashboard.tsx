@@ -326,29 +326,122 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     const [expenseBreakdown, setExpenseBreakdown] = useState({ rows: [], total: 0, count: 0 });
 
-    useEffect(() => {
-      const fetchMonthlyExpenses = async () => {
-        const supabase = getSupabase();
-        const { data, error } = await supabase.rpc('get_monthly_expenses');
-        if (error) {
-          console.error('[Dashboard] Error fetching monthly expenses:', error);
-          setExpenseBreakdown({ rows: [], total: 0, count: 0 });
-          return;
-        }
-        
-        const rows = (data || []).map(item => ({
-          label: item.category_name,
-          amount: Number(item.total_amount)
-        }));
-        const total = rows.reduce((sum, r) => sum + r.amount, 0);
-        const count = data?.reduce((sum, item) => sum + (item.count || 0), 0) || 0;
-        
-        console.log('[Dashboard] Monthly expenses from RPC:', { rows: rows.length, total, count });
-        setExpenseBreakdown({ rows, total, count });
-      };
+    const isCurrentMonthDate = (value?: string | null) => {
+        if (!value) return false;
+        const d = new Date(value);
+        return !Number.isNaN(d.getTime()) && d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+    };
 
-      fetchMonthlyExpenses();
-    }, []);
+    useEffect(() => {
+        const numeric = (candidates: any[]): number | null => {
+            for (const cand of candidates) {
+                const n = Number(cand);
+                if (Number.isFinite(n) && !Number.isNaN(n) && n !== 0) {
+                    return n;
+                }
+            }
+            return null;
+        };
+
+        const buildLocalBreakdown = () => {
+            const bucket = new Map<string, number>();
+            let count = 0;
+
+            journalEntries.forEach(entry => {
+                if (!isCurrentMonthDate(entry.date)) return;
+                const amount = entry.debit - entry.credit;
+                if (amount <= 0) return;
+                const label = entry.account || '仕訳';
+                bucket.set(label, (bucket.get(label) || 0) + amount);
+                count += 1;
+            });
+
+            purchaseOrders.forEach(po => {
+                if (!isCurrentMonthDate(po.orderDate)) return;
+                const amount = numeric([
+                    po.totalCost,
+                    po.subamount,
+                    po.amount,
+                    (po.quantity ?? 0) * (po.unitPrice ?? 0),
+                ]);
+                if (!amount || amount <= 0) return;
+                const label = po.itemName || po.supplierName || '発注';
+                bucket.set(label, (bucket.get(label) || 0) + amount);
+                count += 1;
+            });
+
+            applications.forEach(app => {
+                if (!['approved', 'pending_approval'].includes(app.status)) return;
+                const dateCandidate = app.approvedAt || app.submittedAt || app.createdAt;
+                if (!isCurrentMonthDate(dateCandidate)) return;
+                const form = (app.formData ?? {}) as any;
+                const invoice = form.invoice ?? {};
+                const amount = numeric([
+                    invoice.totalGross,
+                    invoice.totalAmount,
+                    invoice.totalNet,
+                    form.totalAmount,
+                    form.amount,
+                ]);
+                if (!amount || amount <= 0) return;
+                const label =
+                    invoice.categoryName ||
+                    invoice.supplierName ||
+                    form.categoryName ||
+                    (app.applicationCode?.code ? `申請(${app.applicationCode.code})` : '申請');
+                bucket.set(label, (bucket.get(label) || 0) + amount);
+                count += 1;
+            });
+
+            const rows = Array.from(bucket.entries())
+                .map(([label, amount]) => ({ label, amount }))
+                .sort((a, b) => b.amount - a.amount);
+            const total = rows.reduce((sum, r) => sum + r.amount, 0);
+            return { rows, total, count };
+        };
+
+        const fetchMonthlyExpenses = async () => {
+            let rpcResult: { rows: { label: string; amount: number }[]; total: number; count: number } | null = null;
+            try {
+                const supabase = getSupabase();
+                const { data, error } = await supabase.rpc('get_monthly_expenses');
+                if (error) {
+                    console.error('[Dashboard] Error fetching monthly expenses:', error);
+                } else {
+                    const rows = (data || []).map((item: any) => ({
+                        label: item.category_name,
+                        amount: Number(item.total_amount),
+                    }));
+                    const total = rows.reduce((sum, r) => sum + r.amount, 0);
+                    const count = data?.reduce((sum: number, item: any) => sum + (item.count || 0), 0) || 0;
+                    rpcResult = { rows, total, count };
+                    console.log('[Dashboard] Monthly expenses from RPC:', { rows: rows.length, total, count });
+                }
+            } catch (err) {
+                console.error('[Dashboard] RPC get_monthly_expenses failed:', err);
+            }
+
+            const localResult = buildLocalBreakdown();
+            const chosen =
+                rpcResult && rpcResult.total > 0
+                    ? rpcResult
+                    : localResult;
+
+            console.log('[Dashboard] Processing expense breakdown', {
+                source: rpcResult && rpcResult.total > 0 ? 'rpc' : 'local',
+                rpcTotal: rpcResult?.total ?? 0,
+                localTotal: localResult.total,
+                counts: {
+                    applications: applications.length,
+                    journalEntries: journalEntries.length,
+                    purchaseOrders: purchaseOrders.length,
+                },
+            });
+            setExpenseBreakdown(chosen);
+        };
+
+        fetchMonthlyExpenses();
+    }, [applications, journalEntries, purchaseOrders, currentYear, currentMonth]);
 
     const mqData = useMemo(() => {
         const currentMonthJobs = jobs.filter(job => {

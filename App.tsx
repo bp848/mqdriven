@@ -79,6 +79,34 @@ const getEnvValue = (key: string): string | undefined => {
     return undefined;
 };
 
+const getAllowedGoogleOrigins = (): string[] => {
+    const envValue =
+        getEnvValue('VITE_GOOGLE_OAUTH_ALLOWED_ORIGINS')
+        || getEnvValue('GOOGLE_OAUTH_ALLOWED_ORIGINS');
+    if (envValue) {
+        const parsed = envValue
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean);
+        if (parsed.length) return parsed;
+    }
+    return [
+        'https://erp.b-p.co.jp',
+        'http://localhost:5174',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://localhost:3000',
+    ];
+};
+
+const isGoogleOAuthAllowedOrigin = () => {
+    if (typeof window === 'undefined') return false;
+    const allowed = getAllowedGoogleOrigins();
+    if (allowed.includes('*')) return true;
+    return allowed.includes(window.location.origin);
+};
+
 type PredictiveSuggestion = {
     id: string;
     value: string;
@@ -410,12 +438,6 @@ const App: React.FC = () => {
         });
     };
 
-    const isGoogleOAuthAllowedOrigin = () => {
-        if (typeof window === 'undefined') return false;
-        const allowedOrigins = ['https://erp.b-p.co.jp'];
-        return allowedOrigins.includes(window.location.origin);
-    };
-
     const fetchGoogleAuthStatus = useCallback(async () => {
         if (!currentUser) {
             setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
@@ -458,6 +480,41 @@ const App: React.FC = () => {
             }
         };
     }, [fetchGoogleAuthStatus]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const url = new URL(window.location.href);
+        const googleCalendarStatus = url.searchParams.get('google_calendar');
+        if (!googleCalendarStatus) return;
+        const reason = url.searchParams.get('reason');
+
+        if (googleCalendarStatus === 'ok') {
+            addToast('Googleカレンダー連携が完了しました。', 'success');
+        } else {
+            const reasonMessage = (() => {
+                switch (reason) {
+                    case 'missing_refresh_token':
+                        return 'Googleからrefresh_tokenが返却されませんでした。Googleのアクセス権を一度削除して再認可してください。';
+                    case 'store_failed':
+                        return 'トークン保存に失敗しました。管理者に連絡してください。';
+                    case 'token_exchange_failed':
+                        return 'Googleとのトークン交換に失敗しました。再度お試しください。';
+                    case 'server_not_configured':
+                        return '環境変数が不足しているためGoogle連携を完了できません。管理者に連絡してください。';
+                    default:
+                        return 'Googleカレンダー連携に失敗しました。再度お試しください。';
+                }
+            })();
+            addToast(reasonMessage, 'error');
+        }
+        fetchGoogleAuthStatus();
+
+        url.searchParams.delete('google_calendar');
+        url.searchParams.delete('reason');
+        const newSearch = url.searchParams.toString();
+        const newUrl = `${url.pathname}${newSearch ? `?${newSearch}` : ''}${url.hash ?? ''}`;
+        window.history.replaceState({}, document.title, newUrl);
+    }, [addToast, fetchGoogleAuthStatus]);
 
     const handleStartGoogleCalendarAuth = async () => {
         if (!currentUser) {

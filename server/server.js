@@ -127,9 +127,32 @@ const getGoogleOAuthClient = () => {
     return new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
 };
 
+const getExistingRefreshToken = async (userId) => {
+    if (!supabase) return null;
+    try {
+        const { data, error } = await supabase
+            .from('user_google_tokens')
+            .select('refresh_token')
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (error) {
+            console.error('[google/oauth] failed to load existing refresh_token', error);
+            return null;
+        }
+        return data?.refresh_token || null;
+    } catch (err) {
+        console.error('[google/oauth] unexpected error while loading refresh_token', err);
+        return null;
+    }
+};
+
 const upsertGoogleToken = async ({ userId, tokens }) => {
     if (!supabase) {
         throw new Error('Supabase client not initialized');
+    }
+    const refreshToken = tokens.refresh_token || await getExistingRefreshToken(userId);
+    if (!refreshToken) {
+        throw new Error('Missing refresh_token from Google. Please re-authorize calendar access.');
     }
     const expiresAt =
         tokens.expiry_date
@@ -141,7 +164,7 @@ const upsertGoogleToken = async ({ userId, tokens }) => {
         user_id: userId,
         provider: 'google',
         access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || null,
+        refresh_token: refreshToken,
         expires_at: expiresAt ? expiresAt.toISOString() : null,
         scope: tokens.scope || GOOGLE_SCOPES.join(' '),
         token_type: tokens.token_type || 'Bearer',

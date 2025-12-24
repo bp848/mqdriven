@@ -9,6 +9,38 @@ const DEFAULT_ALLOWED_ORIGINS = [
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 
+const buildFunctionsRedirectUri = (): string | null => {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  if (!supabaseUrl) return null;
+  try {
+    const host = new URL(supabaseUrl).hostname; // e.g. rwjhpfghhgstvplmggks.supabase.co
+    const projectRef = host.split('.')[0];
+    if (!projectRef) return null;
+    return `https://${projectRef}.functions.supabase.co/google-oauth-callback`;
+  } catch {
+    return null;
+  }
+};
+
+const resolveRedirectUri = (): { uri: string | null; source: 'env' | 'fallback' } => {
+  const envUri = Deno.env.get('GOOGLE_REDIRECT_URI');
+  const fallback = buildFunctionsRedirectUri();
+  if (envUri) {
+    if (/functions\.supabase\.co/.test(envUri)) {
+      return { uri: envUri, source: 'env' };
+    }
+    if (fallback) {
+      console.warn(
+        'GOOGLE_REDIRECT_URI is not a Supabase Functions URL. Falling back to functions callback.',
+        { envUri, fallback },
+      );
+      return { uri: fallback, source: 'fallback' };
+    }
+    return { uri: envUri, source: 'env' };
+  }
+  return { uri: fallback, source: 'fallback' };
+};
+
 const parseAllowedOrigins = (): string[] => {
   const fromEnv = Deno.env.get('ALLOWED_ORIGINS');
   if (!fromEnv) return DEFAULT_ALLOWED_ORIGINS;
@@ -44,6 +76,35 @@ const redirectResponse = (location: string, origin: string | null) =>
     headers: { Location: location, ...corsHeaders(origin) },
   });
 
+const fetchExistingRefreshToken = async (
+  supabaseUrl: string,
+  serviceRole: string,
+  userId: string,
+): Promise<string | null> => {
+  try {
+    const resp = await fetch(
+      `${supabaseUrl}/rest/v1/user_google_tokens?user_id=eq.${userId}&select=refresh_token&limit=1`,
+      {
+        headers: {
+          apikey: serviceRole,
+          Authorization: `Bearer ${serviceRole}`,
+        },
+      },
+    );
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      console.error("google-oauth-callback failed to load existing refresh_token", resp.status, text);
+      return null;
+    }
+    const data = await resp.json();
+    const record = Array.isArray(data) ? data[0] : null;
+    return record?.refresh_token ?? null;
+  } catch (err) {
+    console.error("google-oauth-callback unexpected fetch error", err);
+    return null;
+  }
+};
+
 console.info('google-oauth-callback ready');
 
 Deno.serve(async (req: Request) => {
@@ -70,7 +131,7 @@ Deno.serve(async (req: Request) => {
 
     const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
-    const redirectUri = Deno.env.get('GOOGLE_REDIRECT_URI');
+    const { uri: redirectUri, source: redirectSource } = resolveRedirectUri();
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRole = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
@@ -82,7 +143,8 @@ Deno.serve(async (req: Request) => {
       `${allowedOrigin}/settings?google_calendar=error`;
 
     if (!clientId || !clientSecret || !redirectUri || !supabaseUrl || !serviceRole) {
-      return jsonResponse({ error: 'server not configured: missing env vars' }, 500, origin);
+      const location = `${redirectNg}&reason=server_not_configured`;
+      return redirectResponse(location, origin);
     }
 
     // Exchange code for tokens
@@ -101,17 +163,29 @@ Deno.serve(async (req: Request) => {
 
     if (!tokenRes.ok) {
       console.error('google-oauth-callback token exchange failed', token);
-      return jsonResponse(token, 400, origin);
+      const location = `${redirectNg}&reason=token_exchange_failed`;
+      return redirectResponse(location, origin);
+    }
+
+    if (redirectSource === 'fallback') {
+      console.warn('Using fallback functions redirect URI for token exchange:', redirectUri);
     }
 
     const expiresIn = typeof token.expires_in === 'number' ? token.expires_in : 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const refreshToken = token.refresh_token ?? await fetchExistingRefreshToken(supabaseUrl, serviceRole, state);
+
+    if (!refreshToken) {
+      console.error('google-oauth-callback missing refresh_token after consent', { userId: state });
+      const location = `${redirectNg}&reason=missing_refresh_token`;
+      return redirectResponse(location, origin);
+    }
 
     const payload = {
       user_id: state,
       provider: 'google',
       access_token: token.access_token,
-      refresh_token: token.refresh_token ?? null,
+      refresh_token: refreshToken,
       expires_at: expiresAt,
       scope: token.scope ?? null,
       token_type: token.token_type ?? 'Bearer',
