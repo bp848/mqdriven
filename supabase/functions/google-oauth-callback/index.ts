@@ -90,6 +90,26 @@ const redirectResponse = (location: string, origin: string | null) =>
     headers: { Location: location, ...corsHeaders(origin) },
   });
 
+const triggerInitialSync = async (userId: string) => {
+  const syncUrl = Deno.env.get('GOOGLE_INITIAL_SYNC_URL');
+  if (!syncUrl) return;
+  try {
+    const resp = await fetch(syncUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      console.warn('google-oauth-callback initial sync failed', resp.status, text);
+    }
+  } catch (err) {
+    console.warn('google-oauth-callback initial sync error', err);
+  }
+};
+
 const fetchExistingRefreshToken = async (
   supabaseUrl: string,
   serviceRole: string,
@@ -234,6 +254,9 @@ Deno.serve(async (req: Request) => {
       const location = `${redirectNg}&reason=store_failed`;
       return redirectResponse(location, origin);
     }
+
+    // Kick off first sync if configured
+    await triggerInitialSync(state);
 
     return redirectResponse(redirectOk, origin);
   } catch (e) {
