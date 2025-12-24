@@ -5,26 +5,37 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5174',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
+  '*',
 ];
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 
-const buildFunctionsRedirectUri = (): string | null => {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  if (!supabaseUrl) return null;
+const deriveProjectRef = (supabaseUrl: string | null, requestHost?: string | null): string | null => {
   try {
-    const host = new URL(supabaseUrl).hostname; // e.g. rwjhpfghhgstvplmggks.supabase.co
-    const projectRef = host.split('.')[0];
-    if (!projectRef) return null;
-    return `https://${projectRef}.functions.supabase.co/google-oauth-callback`;
+    if (supabaseUrl) {
+      const host = new URL(supabaseUrl).hostname; // e.g. rwjhpfghhgstvplmggks.supabase.co
+      const projectRef = host.split('.')[0];
+      if (projectRef) return projectRef;
+    }
   } catch {
-    return null;
+    // ignore
   }
+  if (requestHost && requestHost.includes('.functions.supabase.co')) {
+    return requestHost.split('.')[0];
+  }
+  return null;
 };
 
-const resolveRedirectUri = (): { uri: string | null; source: 'env' | 'fallback' } => {
+const buildFunctionsRedirectUri = (requestHost?: string | null): string | null => {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const projectRef = deriveProjectRef(supabaseUrl ?? null, requestHost);
+  if (!projectRef) return null;
+  return `https://${projectRef}.functions.supabase.co/google-oauth-callback`;
+};
+
+const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; source: 'env' | 'fallback' } => {
   const envUri = Deno.env.get('GOOGLE_REDIRECT_URI');
-  const fallback = buildFunctionsRedirectUri();
+  const fallback = buildFunctionsRedirectUri(requestHost);
   if (envUri) {
     if (/functions\.supabase\.co/.test(envUri)) {
       return { uri: envUri, source: 'env' };
@@ -54,7 +65,10 @@ const parseAllowedOrigins = (): string[] => {
 const ALLOWED_ORIGINS = parseAllowedOrigins();
 
 const corsHeaders = (origin: string | null) => {
-  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const wildcard = ALLOWED_ORIGINS.includes('*');
+  const allowedOrigin = wildcard
+    ? '*'
+    : (origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-requested-with',
@@ -109,6 +123,13 @@ console.info('google-oauth-callback ready');
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin');
+  const requestHost = (() => {
+    try {
+      return new URL(req.url).host;
+    } catch {
+      return null;
+    }
+  })();
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
@@ -122,6 +143,10 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
+    const wildcard = ALLOWED_ORIGINS.includes('*');
+    const redirectBase =
+      (url.origin && (wildcard || ALLOWED_ORIGINS.includes(url.origin)) && url.origin)
+      || (ALLOWED_ORIGINS.find((o) => o !== '*') ?? 'https://erp.b-p.co.jp');
 
     if (!code || !state || !UUID_REGEX.test(state)) {
       return jsonResponse({ error: 'missing or invalid code/state' }, 400, origin);
@@ -131,16 +156,15 @@ Deno.serve(async (req: Request) => {
 
     const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
-    const { uri: redirectUri, source: redirectSource } = resolveRedirectUri();
+    const { uri: redirectUri, source: redirectSource } = resolveRedirectUri(requestHost);
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRole = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
     const redirectOk =
       Deno.env.get('GOOGLE_CALLBACK_REDIRECT_OK') ??
-      `${allowedOrigin}/settings?google_calendar=ok`;
+      `${redirectBase}/settings?google_calendar=ok`;
     const redirectNg =
       Deno.env.get('GOOGLE_CALLBACK_REDIRECT_NG') ??
-      `${allowedOrigin}/settings?google_calendar=error`;
+      `${redirectBase}/settings?google_calendar=error`;
 
     if (!clientId || !clientSecret || !redirectUri || !supabaseUrl || !serviceRole) {
       const location = `${redirectNg}&reason=server_not_configured`;

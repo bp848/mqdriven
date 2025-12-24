@@ -10,22 +10,32 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "*",
 ];
 
-const buildFunctionsRedirectUri = (): string | null => {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  if (!supabaseUrl) return null;
+const deriveProjectRef = (supabaseUrl: string | null, requestHost?: string | null): string | null => {
   try {
-    const host = new URL(supabaseUrl).hostname; // e.g. rwjhpfghhgstvplmggks.supabase.co
-    const projectRef = host.split(".")[0];
-    if (!projectRef) return null;
-    return `https://${projectRef}.functions.supabase.co/google-oauth-callback`;
+    if (supabaseUrl) {
+      const host = new URL(supabaseUrl).hostname; // e.g. rwjhpfghhgstvplmggks.supabase.co
+      const projectRef = host.split(".")[0];
+      if (projectRef) return projectRef;
+    }
   } catch {
-    return null;
+    // ignore
   }
+  if (requestHost && requestHost.includes(".functions.supabase.co")) {
+    return requestHost.split(".")[0]; // host is <projectRef>.functions.supabase.co
+  }
+  return null;
 };
 
-const resolveRedirectUri = (): { uri: string | null; source: "env" | "fallback" } => {
+const buildFunctionsRedirectUri = (requestHost?: string | null): string | null => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const projectRef = deriveProjectRef(supabaseUrl ?? null, requestHost);
+  if (!projectRef) return null;
+  return `https://${projectRef}.functions.supabase.co/google-oauth-callback`;
+};
+
+const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; source: "env" | "fallback" } => {
   const envUri = Deno.env.get("GOOGLE_REDIRECT_URI");
-  const fallback = buildFunctionsRedirectUri();
+  const fallback = buildFunctionsRedirectUri(requestHost);
   // Prefer a functions.* redirect. If env is set but not functions.*, fall back to computed one.
   if (envUri) {
     if (/functions\.supabase\.co/.test(envUri)) {
@@ -90,6 +100,13 @@ console.info("google-oauth-start ready");
 
 serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
+  const requestHost = (() => {
+    try {
+      return new URL(req.url).host;
+    } catch {
+      return null;
+    }
+  })();
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders(origin) });
@@ -114,7 +131,7 @@ serve(async (req: Request) => {
     }
 
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-    const { uri: redirectUri, source: redirectSource } = resolveRedirectUri();
+    const { uri: redirectUri, source: redirectSource } = resolveRedirectUri(requestHost);
     if (!clientId || !redirectUri) {
       return jsonResponse(
         { error: "server not configured: missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI" },
