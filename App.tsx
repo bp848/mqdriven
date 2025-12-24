@@ -488,6 +488,7 @@ const App: React.FC = () => {
         if (!googleCalendarStatus) return;
         const reason = url.searchParams.get('reason');
 
+        console.info('[GoogleAuth] return to app', { googleCalendarStatus, reason });
         if (googleCalendarStatus === 'ok') {
             addToast('Googleカレンダー連携が完了しました。', 'success');
         } else {

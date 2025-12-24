@@ -225,6 +225,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 body: { user_id: currentUser.id },
             });
             if (error) throw error;
+            console.info('[GoogleAuth] status fetched', data);
             setGoogleStatus({
                 connected: !!data?.connected,
                 expiresAt: data?.expires_at ?? null,
@@ -285,6 +286,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             addToast('ローカル環境ではGoogle連携を呼び出しません（CORS制限）。', 'info');
             return;
         }
+        console.info('[GoogleAuth] start clicked', { userId: currentUser?.id, origin: window.location.origin });
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
@@ -293,6 +295,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             });
             if (error) throw error;
             if (data?.authUrl) {
+                console.info('[GoogleAuth] authUrl received', data.authUrl);
                 window.open(data.authUrl, '_blank', 'noopener');
                 addToast('Google認可画面を開きました。完了後この画面に戻ってください。', 'success');
             } else {
@@ -317,6 +320,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             setGoogleStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
+        console.info('[GoogleAuth] disconnect clicked', { userId: currentUser?.id });
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();

@@ -187,6 +187,15 @@ Deno.serve(async (req: Request) => {
       `${redirectBase}/settings?google_calendar=error`;
 
     if (!clientId || !clientSecret || !redirectUri || !supabaseUrl || !serviceRole) {
+      console.error('google-oauth-callback missing config', {
+        clientId: !!clientId,
+        clientSecret: !!clientSecret,
+        redirectUri,
+        supabaseUrl: !!supabaseUrl,
+        serviceRole: !!serviceRole,
+        origin,
+        requestHost,
+      });
       const location = `${redirectNg}&reason=server_not_configured`;
       return redirectResponse(location, origin);
     }
@@ -206,7 +215,12 @@ Deno.serve(async (req: Request) => {
     const token = await tokenRes.json();
 
     if (!tokenRes.ok) {
-      console.error('google-oauth-callback token exchange failed', token);
+      console.error('google-oauth-callback token exchange failed', {
+        status: tokenRes.status,
+        token,
+        origin,
+        requestHost,
+      });
       const location = `${redirectNg}&reason=token_exchange_failed`;
       return redirectResponse(location, origin);
     }
@@ -250,11 +264,19 @@ Deno.serve(async (req: Request) => {
 
     if (!upsertRes.ok) {
       const detail = await upsertRes.text();
-      console.error('google-oauth-callback upsert failed', detail);
+      console.error('google-oauth-callback upsert failed', { status: upsertRes.status, detail, origin, requestHost });
       const location = `${redirectNg}&reason=store_failed`;
       return redirectResponse(location, origin);
     }
 
+    console.info('google-oauth-callback success', {
+      userId: state,
+      redirectSource,
+      redirectUri,
+      origin,
+      requestHost,
+      expiresAt,
+    });
     // Kick off first sync if configured
     await triggerInitialSync(state);
 

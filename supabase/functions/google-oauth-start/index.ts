@@ -127,12 +127,14 @@ serve(async (req: Request) => {
     }
 
     if (!userId || !UUID_REGEX.test(userId)) {
+      console.warn("google-oauth-start invalid user_id", { userId });
       return jsonResponse({ error: "missing or invalid user_id" }, 400, origin);
     }
 
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
     const { uri: redirectUri, source: redirectSource } = resolveRedirectUri(requestHost);
     if (!clientId || !redirectUri) {
+      console.error("google-oauth-start missing config", { clientId: !!clientId, redirectUri });
       return jsonResponse(
         { error: "server not configured: missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI" },
         500,
@@ -154,6 +156,13 @@ serve(async (req: Request) => {
     if (redirectSource === "fallback") {
       console.warn("Using fallback functions redirect URI for Google OAuth:", redirectUri);
     }
+    console.info("google-oauth-start generated url", {
+      userId,
+      redirectUri,
+      redirectSource,
+      origin,
+      requestHost,
+    });
     return new Response(JSON.stringify({ authUrl }), {
       headers: {
         "Content-Type": "application/json",
