@@ -2519,7 +2519,7 @@ const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 
 
 export const getEstimates = async (): Promise<Estimate[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('estimates').select('*');
+    const { data, error } = await supabase.from('estimates_list_view').select('*');
     ensureSupabaseSuccess(error, 'Failed to fetch estimates');
     return (data || []).map(mapEstimateRow);
 };
