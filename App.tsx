@@ -19,6 +19,7 @@ import BugReportChatModal from './components/BugReportChatModal';
 import SettingsPage from './components/SettingsPage';
 import AccountingPage from './components/Accounting';
 import SalesPipelinePage from './components/sales/SalesPipelinePage';
+import ProjectManagementPage from './components/projects/ProjectManagementPage';
 import InventoryManagementPage from './components/inventory/InventoryManagementPage';
 import CreateInventoryItemModal from './components/inventory/CreateInventoryItemModal';
 import ManufacturingPipelinePage from './components/manufacturing/ManufacturingPipelinePage';
@@ -62,7 +63,7 @@ import * as geminiService from './services/geminiService';
 import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill } from './types';
+import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill, Project } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
 import { IS_AI_DISABLED as ENV_SHIM_AI_OFF } from './src/envShim';
 
@@ -124,6 +125,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_pipeline: '進捗管理',
     sales_estimates: '見積管理',
     sales_orders: '予算管理',
+    project_management: 'プロジェクト管理',
     sales_billing: '売上請求（AR）',
     fax_ocr_intake: '何でも取り込み',
     analysis_ranking: '売上ランキング',
@@ -250,6 +252,7 @@ const App: React.FC = () => {
     const [allUsers, setAllUsers] = useState<EmployeeUser[]>([]);
     
     // Data State
+    const [projects, setProjects] = useState<Project[]>([]);
     const [jobs, setJobs] = useState<ProjectBudgetSummary[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -612,6 +615,7 @@ const App: React.FC = () => {
     }, [addToast, currentUser]);
 
     const resetAppData = useCallback(() => {
+        setProjects([]);
         setJobs([]);
         setCustomers([]);
         setJournalEntries([]);
@@ -759,6 +763,7 @@ const App: React.FC = () => {
             }));
             
             const results = await Promise.allSettled([
+                dataService.getProjects(),
                 dataService.getProjectBudgetSummaries(),
                 dataService.getCustomers(),
                 dataService.getJournalEntries(),
@@ -777,6 +782,7 @@ const App: React.FC = () => {
             if (signal.aborted) return;
 
       const [
+        projectsResult,
         jobsResult,
         customersResult,
                 journalResult,
@@ -799,6 +805,7 @@ const App: React.FC = () => {
           return bTime - aTime;
         });
 
+      if (projectsResult.status === 'fulfilled') setProjects(projectsResult.value); else console.error('Failed to load projects:', projectsResult.reason);
       if (jobsResult.status === 'fulfilled') setJobs(jobsResult.value); else console.error('Failed to load jobs:', jobsResult.reason);
       if (customersResult.status === 'fulfilled') {
         const sorted = sortCustomersDesc(customersResult.value);
@@ -1027,8 +1034,12 @@ useEffect(() => {
         addToast('ご報告ありがとうございます。内容を受け付けました。', 'success');
     };
 
-    const handleAddEstimate = async (estimateData: any) => {
-        await dataService.addEstimate(estimateData);
+    const handleAddEstimate = async (estimateData: Partial<Estimate>) => {
+        if (estimateData.id) {
+            await dataService.updateEstimate(estimateData.id, estimateData);
+        } else {
+            await dataService.addEstimate(estimateData);
+        }
         await loadAllData();
     };
     
@@ -1095,6 +1106,14 @@ useEffect(() => {
                         searchTerm={searchTerm}
                         onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }}
                         onNewJob={() => setCreateJobModalOpen(true)}
+                    />
+                );
+            case 'project_management':
+                return (
+                    <ProjectManagementPage
+                        projects={projects}
+                        isLoading={isLoading}
+                        onRefresh={loadAllData}
                     />
                 );
             case 'fax_ocr_intake':

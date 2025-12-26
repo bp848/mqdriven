@@ -1,6 +1,6 @@
 export type Page =
   | 'analysis_dashboard' | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
-  | 'sales_estimates' | 'sales_orders' | 'sales_billing' | 'analysis_ranking'
+  | 'sales_estimates' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
   | 'inventory_management' | 'manufacturing_orders' | 'manufacturing_progress' | 'manufacturing_cost'
   | 'hr_attendance' | 'hr_man_hours' | 'hr_labor_cost'
@@ -100,6 +100,38 @@ export interface Job {
   readyToInvoice?: boolean;
   invoiceId?: string | null;
   manufacturingStatus?: ManufacturingStatus;
+}
+
+export interface Project {
+  id: string;
+  projectCode: string | null;
+  customerCode: string | null;
+  customerId: string | null;
+  salesUserCode: string | null;
+  salesUserId: string | null;
+  estimateId: string | null;
+  estimateCode: string | null;
+  orderId: string | null;
+  orderCode: string | null;
+  projectName: string;
+  projectStatus: string | null;
+  classificationId: string | null;
+  sectionCodeId: string | null;
+  productClassId: string | null;
+  createDate: string | null;
+  createUserId: string | null;
+  createUserCode: string | null;
+  updateDate: string | null;
+  updateUserId: string | null;
+  updateUserCode: string | null;
+  projectId: string | null;
+  updatedAt: string | null;
+  amount: number | null;
+  subamount: number | null;
+  totalCost: number | null;
+  deliveryDate: string | null;
+  quantity: string | number | null;
+  isActive?: boolean | null;
 }
 
 export interface JobCreationPayload {
@@ -421,6 +453,14 @@ export interface Estimate {
     taxTotal?: number;
     grandTotal?: number;
     deliveryTerms?: string;
+    projectId?: string | null;
+    patternNo?: string | null;
+    expirationDate?: string | null;
+    taxRate?: number | null;
+    consumption?: number | null;
+    rawStatusCode?: string | null;
+    copies?: number | null;
+    unitPrice?: number | null;
 }
 
 export interface ScheduleItem {

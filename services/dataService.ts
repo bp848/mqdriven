@@ -6,6 +6,7 @@ import {
     Job,
     JobCreationPayload,
     JobStatus,
+    Project,
     Customer,
     CustomerInfo,
     JournalEntry,
@@ -69,6 +70,49 @@ const mapOrderStatus = (status?: string | null): PurchaseOrderStatus => {
     // Fallback to the standard “発注済” state so UI badges remain consistent.
     return PurchaseOrderStatus.Ordered;
 };
+
+const toNumberOrNull = (value: unknown): number | null => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+};
+
+const toStringOrNull = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    return text.length ? text : null;
+};
+
+const dbProjectToProject = (row: any): Project => ({
+    id: row.id,
+    projectCode: toStringOrNull(row.project_code),
+    customerCode: toStringOrNull(row.customer_code),
+    customerId: toStringOrNull(row.customer_id),
+    salesUserCode: toStringOrNull(row.sales_user_code),
+    salesUserId: toStringOrNull(row.sales_user_id),
+    estimateId: toStringOrNull(row.estimate_id),
+    estimateCode: toStringOrNull(row.estimate_code),
+    orderId: toStringOrNull(row.order_id),
+    orderCode: toStringOrNull(row.order_code),
+    projectName: row.project_name ?? '',
+    projectStatus: toStringOrNull(row.project_status ?? row.status),
+    classificationId: toStringOrNull(row.classification_id),
+    sectionCodeId: toStringOrNull(row.section_code_id),
+    productClassId: toStringOrNull(row.product_class_id),
+    createDate: row.create_date ?? row.created_at ?? null,
+    createUserId: toStringOrNull(row.create_user_id),
+    createUserCode: toStringOrNull(row.create_user_code),
+    updateDate: row.update_date ?? null,
+    updateUserId: toStringOrNull(row.update_user_id),
+    updateUserCode: toStringOrNull(row.update_user_code),
+    projectId: toStringOrNull(row.project_id),
+    updatedAt: row.updated_at ?? null,
+    amount: toNumberOrNull(row.amount),
+    subamount: toNumberOrNull(row.subamount),
+    totalCost: toNumberOrNull(row.total_cost),
+    deliveryDate: row.delivery_date ?? row.due_date ?? null,
+    quantity: row.quantity ?? null,
+    isActive: row.is_active ?? null,
+});
 
 const resolveEnvValue = (key: string): string | undefined => {
     if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -864,6 +908,17 @@ const ensureSupabaseSuccess = (error: PostgrestError | null, context: string): v
 };
 
 // --- Data Service Functions ---
+
+export const getProjects = async (): Promise<Project[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('update_date', { ascending: false, nullsLast: true })
+        .order('project_code', { ascending: false, nullsLast: true });
+    ensureSupabaseSuccess(error, 'Failed to fetch projects');
+    return (data || []).map(dbProjectToProject);
+};
 
 export const getJobs = async (): Promise<Job[]> => {
     const supabase = getSupabase();
@@ -2302,12 +2357,25 @@ export const updateBugReport = async (id: string, updates: Partial<BugReport>): 
     ensureSupabaseSuccess(error, 'Failed to update bug report');
 };
 
-export const getEstimates = async (): Promise<Estimate[]> => {
-    const supabase = getSupabase();
-    const { data, error } = await supabase.from('estimates').select('*');
-    ensureSupabaseSuccess(error, 'Failed to fetch estimates');
-    return data || [];
+const mapEstimateStatus = (code?: string | null): EstimateStatus => {
+    switch ((code ?? '').toString()) {
+        case '2':
+            return EstimateStatus.Ordered;
+        case '9':
+            return EstimateStatus.Lost;
+        default:
+            return EstimateStatus.Draft;
+    }
 };
+
+const estimateStatusToCode = (status?: EstimateStatus | string | null): string => {
+    if (!status) return '0';
+    if (status === EstimateStatus.Ordered || status === '2') return '2';
+    if (status === EstimateStatus.Lost || status === '9') return '9';
+    if (status === EstimateStatus.Draft) return '0';
+    return typeof status === 'string' ? status : '0';
+};
+
 const generateEstimateId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return crypto.randomUUID();
@@ -2315,67 +2383,160 @@ const generateEstimateId = () => {
     return `est-${Date.now()}`;
 };
 
-export const addEstimate = async (estimateData: any): Promise<void> => {
-    const supabase = getSupabase();
+const mapEstimateRow = (row: any): Estimate => {
+    const copies = toNumberOrNull(row.copies);
+    const unitPrice = toNumberOrNull(row.unit_price);
+    const subtotal = toNumberOrNull(row.subtotal) ?? (copies !== null && unitPrice !== null ? copies * unitPrice : null);
+    const taxRate = toNumberOrNull(row.tax_rate);
+    const taxAmount = toNumberOrNull(row.consumption) ?? (subtotal !== null && taxRate !== null ? Math.floor(subtotal * (taxRate / 100)) : null);
+    const total = toNumberOrNull(row.total) ?? (subtotal !== null && taxAmount !== null ? subtotal + taxAmount : subtotal ?? 0);
 
-    const normalizedItems = (estimateData.items ?? []).map((item: any) => {
-        const quantity = Number(item.quantity ?? item.qty ?? 0);
-        const unitPrice = Number(item.unitPrice ?? 0);
-        const subtotal = Number(
-            item.subtotal ??
-            item.price ??
-            (quantity * unitPrice)
-        );
-        const taxAmount = Number(
-            item.taxAmount ??
-            Math.round(subtotal * 0.1)
-        );
-        const total = Number(item.total ?? subtotal + taxAmount);
+    return {
+        id: row.estimates_id ?? row.id ?? generateEstimateId(),
+        estimateNumber: Number(row.pattern_no ?? row.estimates_id ?? 0) || 0,
+        customerName: row.project_id ? `案件${row.project_id}` : '未設定',
+        title: row.pattern_name ?? row.specification ?? '見積',
+        items: [
+            {
+                division: 'その他',
+                content: row.specification ?? row.pattern_name ?? '見積',
+                quantity: copies ?? 0,
+                unit: '式',
+                unitPrice: unitPrice ?? 0,
+                price: subtotal ?? total ?? 0,
+                cost: 0,
+                costRate: 0,
+                subtotal: subtotal ?? total ?? 0,
+            },
+        ],
+        total: total ?? 0,
+        deliveryDate: row.delivery_date ?? row.expiration_date ?? '',
+        paymentTerms: row.transaction_method ?? '',
+        deliveryMethod: row.delivery_place ?? '',
+        notes: row.note ?? '',
+        status: mapEstimateStatus(row.status),
+        version: Number(row.pattern_no ?? 1) || 1,
+        userId: row.create_id ?? '',
+        createdAt: row.create_date ?? new Date().toISOString(),
+        updatedAt: row.update_date ?? row.create_date ?? new Date().toISOString(),
+        subtotal: subtotal ?? undefined,
+        taxTotal: taxAmount ?? undefined,
+        grandTotal: total ?? undefined,
+        deliveryTerms: row.specification ?? undefined,
+        projectId: row.project_id ?? null,
+        patternNo: row.pattern_no ?? null,
+        expirationDate: row.expiration_date ?? null,
+        taxRate: taxRate ?? null,
+        consumption: taxAmount ?? null,
+        rawStatusCode: row.status ?? null,
+        copies: copies ?? null,
+        unitPrice: unitPrice ?? null,
+    };
+};
 
-        return {
-            ...item,
-            name: item.name ?? item.content ?? '',
-            qty: item.qty ?? quantity,
-            subtotal,
-            taxAmount,
-            total,
-        };
-    });
+const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 'update' = 'insert') => {
+    const rawCopies = Number(estimateData.copies ?? estimateData.items?.[0]?.quantity ?? 0);
+    const rawUnitPrice = Number(estimateData.unitPrice ?? estimateData.items?.[0]?.unitPrice ?? 0);
+    const rawTaxRate = estimateData.taxRate ?? 10;
 
-    const subtotal = normalizedItems.reduce((sum: number, item: any) => sum + (item.subtotal ?? 0), 0);
-    const taxTotal = estimateData.taxTotal ?? Math.round(subtotal * 0.1);
-    const grandTotal = estimateData.grandTotal ?? subtotal + taxTotal;
+    const copies = Number.isFinite(rawCopies) ? rawCopies : 0;
+    const unitPrice = Number.isFinite(rawUnitPrice) ? rawUnitPrice : 0;
+    const taxRate = Number.isFinite(rawTaxRate as number) ? Number(rawTaxRate) : 10;
 
-    const { data: latestNumberRows, error: numberError } = await supabase
-        .from('estimates')
-        .select('estimateNumber')
-        .order('estimateNumber', { ascending: false })
-        .limit(1);
-    ensureSupabaseSuccess(numberError, 'Failed to fetch latest estimate number');
-    const latestNumber = latestNumberRows?.[0]?.estimateNumber ?? 23000;
+    const subtotal =
+        typeof estimateData.subtotal === 'number' && Number.isFinite(estimateData.subtotal)
+            ? estimateData.subtotal
+            : copies * unitPrice;
+    const taxAmount =
+        typeof estimateData.consumption === 'number' && Number.isFinite(estimateData.consumption)
+            ? estimateData.consumption
+            : Math.floor(subtotal * (taxRate / 100));
+    const total =
+        typeof estimateData.total === 'number' && Number.isFinite(estimateData.total)
+            ? estimateData.total
+            : typeof estimateData.grandTotal === 'number' && Number.isFinite(estimateData.grandTotal)
+                ? estimateData.grandTotal
+                : subtotal + taxAmount;
 
-    const payload = {
-        ...estimateData,
-        id: estimateData.id ?? generateEstimateId(),
-        estimateNumber: latestNumber + 1,
-        items: normalizedItems,
-        subtotal,
-        taxTotal,
-        grandTotal,
-        total: grandTotal,
-        createdAt: estimateData.createdAt ?? new Date().toISOString(),
-        updatedAt: estimateData.updatedAt ?? new Date().toISOString(),
+    const safeSubtotal = Number.isFinite(subtotal) ? subtotal : 0;
+    const safeTaxAmount = Number.isFinite(taxAmount) ? taxAmount : 0;
+    const safeTotal = Number.isFinite(total) ? total : safeSubtotal + safeTaxAmount;
+
+    const payload: any = {
+        project_id: estimateData.projectId ?? estimateData.customerName ?? null,
+        pattern_no: estimateData.patternNo ?? (estimateData.version ? String(estimateData.version) : null),
+        pattern_name: estimateData.title ?? null,
+        delivery_place: estimateData.deliveryMethod ?? null,
+        transaction_method: estimateData.paymentTerms ?? null,
+        expiration_date: estimateData.expirationDate ?? null,
+        specification: estimateData.deliveryTerms ?? estimateData.notes ?? null,
+        copies: Number.isFinite(copies) ? String(copies) : null,
+        unit_price: Number.isFinite(unitPrice) ? String(unitPrice) : null,
+        tax_rate: Number.isFinite(taxRate) ? String(taxRate) : null,
+        note: estimateData.notes ?? null,
+        fraction: null,
+        approval1: null,
+        approval2: null,
+        approval3: null,
+        approval4: null,
+        approval_status1: null,
+        approval_status2: null,
+        approval_status3: null,
+        approval_status4: null,
+        order_flg: null,
+        consumption: Number.isFinite(safeTaxAmount) ? String(safeTaxAmount) : null,
+        total: Number.isFinite(safeTotal) ? String(safeTotal) : null,
+        repayment_id: null,
+        repayment_comment: null,
+        page_cnt: null,
+        size: null,
+        binding: null,
+        valiable_cost: null,
+        margin: null,
+        margin_rate: null,
+        margin_approval_flag: null,
+        applicant_id: null,
+        estimate_end_date: null,
+        receiving_end_date: null,
+        order_end_date: null,
+        completion_end_date: null,
+        claim_end_date: null,
+        delivery_date: estimateData.deliveryDate ?? null,
+        status: estimateStatusToCode(estimateData.status),
+        subtotal: safeSubtotal,
     };
 
+    if (mode === 'insert') {
+        payload.estimates_id = estimateData.id ?? generateEstimateId();
+        payload.create_id = estimateData.userId ?? null;
+        payload.create_date = estimateData.createdAt ?? new Date().toISOString();
+    }
+    payload.update_id = estimateData.userId ?? null;
+    payload.update_date = estimateData.updatedAt ?? new Date().toISOString();
+
+    return payload;
+};
+
+export const getEstimates = async (): Promise<Estimate[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('estimates').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch estimates');
+    return (data || []).map(mapEstimateRow);
+};
+
+export const addEstimate = async (estimateData: Partial<Estimate>): Promise<void> => {
+    const supabase = getSupabase();
+    const payload = buildEstimatePayload(estimateData, 'insert');
     const { error } = await supabase.from('estimates').insert(payload);
     ensureSupabaseSuccess(error, 'Failed to add estimate');
 };
 
 export const updateEstimate = async (id: string, updates: Partial<Estimate>): Promise<Estimate> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('estimates').update(updates).eq('id', id).select().single();
+    const payload = buildEstimatePayload({ ...updates, id }, 'update');
+    const { data, error } = await supabase.from('estimates').update(payload).eq('estimates_id', id).select().single();
     ensureSupabaseSuccess(error, 'Failed to update estimate');
-    return data;
+    return mapEstimateRow(data);
 };
 
 export const updateInvoice = async (id: string, updates: Partial<Invoice>): Promise<Invoice> => {
