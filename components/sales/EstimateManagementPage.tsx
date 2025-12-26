@@ -296,18 +296,12 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     searchTerm,
     isAIOff: _isAIOff,
 }) => {
-    const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'estimateNumber', direction: 'descending' });
+    const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'deliveryDate', direction: 'descending' });
     const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<TabKey>('list');
-
-    useEffect(() => {
-        if (!selectedEstimate && estimates.length > 0) {
-            setSelectedEstimate(estimates[0]);
-        }
-    }, [estimates, selectedEstimate]);
 
     const filteredEstimates = useMemo(() => {
         if (!searchTerm) return estimates;
@@ -320,12 +314,22 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         );
     }, [estimates, searchTerm]);
 
+    const getSortValue = (estimate: Estimate, key: string) => {
+        if (key === 'deliveryDate' || key === 'createdAt' || key === 'updatedAt') {
+            const raw = (estimate as any)[key] as string | undefined;
+            if (!raw) return null;
+            const ts = new Date(raw).getTime();
+            return Number.isFinite(ts) ? ts : null;
+        }
+        return (estimate as any)[key] ?? null;
+    };
+
     const sortedEstimates = useMemo(() => {
         const sortable = [...filteredEstimates];
         if (sortConfig) {
             sortable.sort((a, b) => {
-                const aVal = (a as any)[sortConfig.key];
-                const bVal = (b as any)[sortConfig.key];
+                const aVal = getSortValue(a, sortConfig.key);
+                const bVal = getSortValue(b, sortConfig.key);
                 if (aVal === undefined || aVal === null) return 1;
                 if (bVal === undefined || bVal === null) return -1;
                 if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
@@ -335,6 +339,12 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
         return sortable;
     }, [filteredEstimates, sortConfig]);
+
+    useEffect(() => {
+        if (!selectedEstimate && sortedEstimates.length > 0) {
+            setSelectedEstimate(sortedEstimates[0]);
+        }
+    }, [sortedEstimates, selectedEstimate]);
 
     const statusSummary = useMemo(() => {
         const base = {
@@ -400,11 +410,36 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const tabButtonClass = (tab: TabKey) =>
         `px-4 py-2 rounded-lg font-semibold ${activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`;
 
-    const AnalysisCard = ({ title, value, sub }: { title: string; value: string; sub?: string }) => (
-        <div className="rounded-xl border border-slate-200 p-4 bg-white shadow-sm">
-            <p className="text-sm text-slate-500">{title}</p>
-            <p className="text-2xl font-bold mt-1">{value}</p>
-            {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+    const AnalysisCard = ({ title, value, sub, tone = 'light' }: { title: string; value: string; sub?: string; tone?: 'light' | 'dark' }) => {
+        const isDark = tone === 'dark';
+        return (
+            <div className={`rounded-2xl border p-4 shadow-sm ${isDark ? 'bg-slate-800/80 border-slate-700 text-slate-50' : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700'}`}>
+                <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600 dark:text-slate-300'}`}>{title}</p>
+                <p className={`text-3xl font-extrabold mt-1 tracking-tight ${isDark ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{value}</p>
+                {sub && <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>{sub}</p>}
+            </div>
+        );
+    };
+
+    const mqSummaryCards = (
+        <div className="rounded-2xl bg-slate-900 text-slate-50 border border-slate-800 shadow-lg mb-6 p-4 md:p-6">
+            <div className="flex flex-col gap-1 mb-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
+                <div className="flex flex-wrap items-baseline gap-3">
+                    <h3 className="text-lg font-semibold">直近の見積概要</h3>
+                    <span className="text-sm text-slate-300">最新順で表示</span>
+                </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <AnalysisCard tone="dark" title="見積件数" value={`${estimates.length} 件`} />
+                <AnalysisCard tone="dark" title="見積総額" value={formatJPY(estimates.reduce((sum, est) => sum + (est.total || 0), 0))} />
+                <AnalysisCard
+                    tone="dark"
+                    title="受注率"
+                    value={`${estimates.length ? Math.round((statusSummary[EstimateStatus.Ordered].count / estimates.length) * 100) : 0}%`}
+                    sub="ステータスが「受注」の件数割合"
+                />
+            </div>
         </div>
     );
 
@@ -432,15 +467,11 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 </div>
 
                 {activeTab === 'list' && (
-                    <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <AnalysisCard title="見積件数" value={`${estimates.length} 件`} />
-                            <AnalysisCard title="見積総額" value={formatJPY(estimates.reduce((sum, est) => sum + (est.total || 0), 0))} />
-                            <AnalysisCard title="受注率" value={`${estimates.length ? Math.round((statusSummary[EstimateStatus.Ordered].count / estimates.length) * 100) : 0}%`} sub="ステータスが「受注」の件数割合" />
-                        </div>
+                    <div className="p-6 space-y-6">
+                        {mqSummaryCards}
                         <div className="overflow-x-auto">
-                            <table className="w-full text-base text-left">
-                                <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-700">
+                            <table className="w-full text-base text-left text-slate-800 dark:text-slate-100">
+                                <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100">
                                     <tr>
                                         <SortableHeader sortKey="estimateNumber" label="パターンNo" sortConfig={sortConfig} requestSort={requestSort} />
                                         <th scope="col" className="px-6 py-3 font-medium">パターン名</th>
@@ -468,7 +499,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                             <td className="px-6 py-4">{est.unitPrice !== undefined && est.unitPrice !== null ? formatJPY(est.unitPrice) : (est.items?.[0]?.unitPrice !== undefined ? formatJPY(est.items[0].unitPrice) : '-')}</td>
                                             <td className="px-6 py-4">{est.subtotal !== undefined && est.subtotal !== null ? formatJPY(est.subtotal) : '-'}</td>
                                             <td className="px-6 py-4 font-semibold">{formatJPY(est.total)}</td>
-                                            <td className="px-6 py-4">{est.deliveryDate ? formatDate(est.deliveryDate) : '-'}</td>
+                                            <td className="px-6 py-4">{est.deliveryDate ? formatDate(est.deliveryDate) : formatDate(est.createdAt)}</td>
                                             <td className="px-6 py-4">{renderStatusBadge(est.status)}</td>
                                             <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
                                                 <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
