@@ -10,6 +10,7 @@ with cleaned as (
         case when trim(e.total::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.total::numeric end as total_num,
         case when trim(e.tax_rate::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.tax_rate::numeric end as tax_rate_num,
         case when trim(e.consumption::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.consumption::numeric end as consumption_num,
+        nullif(trim(e.order_id::text), '') as order_id_clean,
         case
             when coalesce(nullif(trim(e.delivery_date::text), ''), '') ~ '^[0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}$'
                 then to_date(replace(e.delivery_date::text, '/', '-'), 'YYYY-MM-DD')
@@ -18,7 +19,7 @@ with cleaned as (
             else null
         end as delivery_date_clean,
         case
-            when coalesce(e.order_flg, '') = '1' or e.order_id is not null then '2'  -- ordered
+            when coalesce(nullif(trim(e.order_flg::text), ''), '') = '1' or nullif(trim(e.order_id::text), '') is not null then '2'  -- ordered
             when (e.status::text) ~ '^[0-9]+$' then e.status::text                    -- keep numeric code
             else '0'                                                                 -- draft/default
         end as status_clean
@@ -71,10 +72,10 @@ select
     delivery_date_clean as delivery_date,
     status_clean as status,
     note,
+    order_id_clean as order_id,
     create_id,
     create_date,
     update_id,
     update_date,
-    order_flg,
-    order_id
+    order_flg
 from calc;
