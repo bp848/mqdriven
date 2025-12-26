@@ -1,10 +1,24 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Estimate, SortConfig, EmployeeUser, Customer, Toast, EstimateStatus } from '../../types';
 import SortableHeader from '../ui/SortableHeader';
 import EmptyState from '../ui/EmptyState';
 import { FileText, PlusCircle, Pencil, X, Loader, Save } from '../Icons';
 import { formatJPY, formatDate } from '../../utils';
 import EstimateDetailModal from './EstimateDetailModal';
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+} from 'recharts';
+
+type TabKey = 'list' | 'detail' | 'analysis';
 
 type EstimateFormState = {
     id?: string;
@@ -32,6 +46,17 @@ interface EstimateModalProps {
     isSaving: boolean;
 }
 
+interface EstimateManagementPageProps {
+  estimates: Estimate[];
+  customers: Customer[];
+  allUsers: EmployeeUser[];
+  onAddEstimate: (estimate: Partial<Estimate>) => Promise<void>;
+  addToast: (message: string, type: Toast['type']) => void;
+  currentUser: EmployeeUser | null;
+  searchTerm: string;
+  isAIOff: boolean;
+}
+
 const buildDefaultForm = (): EstimateFormState => ({
     projectId: '',
     patternNo: '',
@@ -53,6 +78,14 @@ const statusOptions: { value: EstimateStatus; label: string }[] = [
     { value: EstimateStatus.Ordered, label: '受注' },
     { value: EstimateStatus.Lost, label: '失注' },
 ];
+
+const statusBadgeStyle: Record<EstimateStatus, string> = {
+    [EstimateStatus.Draft]: 'bg-slate-100 text-slate-700',
+    [EstimateStatus.Ordered]: 'bg-green-100 text-green-700',
+    [EstimateStatus.Lost]: 'bg-red-100 text-red-700',
+};
+
+const chartColors = ['#2563eb', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, estimateToEdit, currentUser, isSaving }) => {
     const [form, setForm] = useState<EstimateFormState>(buildDefaultForm());
@@ -253,23 +286,6 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
     );
 };
 
-interface EstimateManagementPageProps {
-  estimates: Estimate[];
-  customers: Customer[];
-  allUsers: EmployeeUser[];
-  onAddEstimate: (estimate: Partial<Estimate>) => Promise<void>;
-  addToast: (message: string, type: Toast['type']) => void;
-  currentUser: EmployeeUser | null;
-  searchTerm: string;
-  isAIOff: boolean;
-}
-
-const statusBadgeStyle: Record<EstimateStatus, string> = {
-    [EstimateStatus.Draft]: 'bg-slate-100 text-slate-700',
-    [EstimateStatus.Ordered]: 'bg-green-100 text-green-700',
-    [EstimateStatus.Lost]: 'bg-red-100 text-red-700',
-};
-
 const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     estimates,
     customers: _customers,
@@ -285,6 +301,13 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [activeTab, setActiveTab] = useState<TabKey>('list');
+
+    useEffect(() => {
+        if (!selectedEstimate && estimates.length > 0) {
+            setSelectedEstimate(estimates[0]);
+        }
+    }, [estimates, selectedEstimate]);
 
     const filteredEstimates = useMemo(() => {
         if (!searchTerm) return estimates;
@@ -313,10 +336,38 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         return sortable;
     }, [filteredEstimates, sortConfig]);
 
-    const requestSort = (key: string) => {
-        const direction = sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
-        setSortConfig({ key, direction });
-    };
+    const statusSummary = useMemo(() => {
+        const base = {
+            [EstimateStatus.Draft]: { count: 0, total: 0 },
+            [EstimateStatus.Ordered]: { count: 0, total: 0 },
+            [EstimateStatus.Lost]: { count: 0, total: 0 },
+        };
+        for (const est of estimates) {
+            const bucket = base[est.status] || base[EstimateStatus.Draft];
+            bucket.count += 1;
+            bucket.total += est.total || 0;
+        }
+        return base;
+    }, [estimates]);
+
+    const monthlyTotals = useMemo(() => {
+        const buckets = new Map<string, { name: string; total: number; count: number }>();
+        for (const est of estimates) {
+            const date = est.deliveryDate || est.createdAt;
+            if (!date) continue;
+            const d = new Date(date);
+            if (Number.isNaN(d.getTime())) continue;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const label = `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, '0')}月`;
+            const bucket = buckets.get(key) ?? { name: label, total: 0, count: 0 };
+            bucket.total += est.total || 0;
+            bucket.count += 1;
+            buckets.set(key, bucket);
+        }
+        return Array.from(buckets.entries())
+            .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+            .map(([, value]) => value);
+    }, [estimates]);
 
     const handleSaveEstimate = async (estimateData: Partial<Estimate>) => {
         setIsSaving(true);
@@ -325,6 +376,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             addToast('見積を保存しました。', 'success');
             setIsModalOpen(false);
             setSelectedEstimate(null);
+            setActiveTab('list');
         } catch (e: any) {
             const message = e?.message || '保存に失敗しました。';
             addToast(message, 'error');
@@ -334,66 +386,261 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
     };
 
+    const requestSort = (key: string) => {
+        const direction = sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
+        setSortConfig({ key, direction });
+    };
+
     const renderStatusBadge = (status: EstimateStatus) => (
         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadgeStyle[status] || 'bg-slate-100 text-slate-700'}`}>
             {status}
         </span>
     );
 
+    const tabButtonClass = (tab: TabKey) =>
+        `px-4 py-2 rounded-lg font-semibold ${activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`;
+
+    const AnalysisCard = ({ title, value, sub }: { title: string; value: string; sub?: string }) => (
+        <div className="rounded-xl border border-slate-200 p-4 bg-white shadow-sm">
+            <p className="text-sm text-slate-500">{title}</p>
+            <p className="text-2xl font-bold mt-1">{value}</p>
+            {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+        </div>
+    );
+
     return (
         <>
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="p-6 flex justify-between items-center">
-                    <div>
-                        <h2 className="text-xl font-semibold">見積一覧</h2>
-                        <p className="text-sm text-slate-500 mt-1">Supabaseのestimatesテーブルの内容を表示しています。</p>
+                <div className="p-6 flex flex-col gap-4 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-xl font-semibold">見積管理</h2>
+                            <p className="text-sm text-slate-500 mt-1">一覧・詳細・分析を切り替えて確認できます。</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => { setSelectedEstimate(null); setIsModalOpen(true); }} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">
+                                <PlusCircle className="w-5 h-5" />
+                                新規見積作成
+                            </button>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => { setSelectedEstimate(null); setIsModalOpen(true); }} className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">
-                            <PlusCircle className="w-5 h-5" />
-                            新規見積作成
-                        </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => setActiveTab('list')} className={tabButtonClass('list')}>一覧</button>
+                        <button onClick={() => setActiveTab('detail')} className={tabButtonClass('detail')}>詳細</button>
+                        <button onClick={() => setActiveTab('analysis')} className={tabButtonClass('analysis')}>分析</button>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-base text-left">
-                        <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-700">
-                            <tr>
-                                <SortableHeader sortKey="estimateNumber" label="パターンNo" sortConfig={sortConfig} requestSort={requestSort} />
-                                <th scope="col" className="px-6 py-3 font-medium">パターン名</th>
-                                <SortableHeader sortKey="projectId" label="案件ID" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="copies" label="部数" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="unitPrice" label="単価" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="subtotal" label="小計" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="total" label="合計" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="deliveryDate" label="納品日" sortConfig={sortConfig} requestSort={requestSort} />
-                                <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
-                                <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                            {sortedEstimates.map(est => (
-                                <tr key={est.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                    <td className="px-6 py-4 font-mono">{est.patternNo ?? est.estimateNumber}</td>
-                                    <td className="px-6 py-4">{est.title}</td>
-                                    <td className="px-6 py-4">{est.projectId ?? '-'}</td>
-                                    <td className="px-6 py-4">{est.copies ?? est.items?.[0]?.quantity ?? '-'}</td>
-                                    <td className="px-6 py-4">{est.unitPrice !== undefined && est.unitPrice !== null ? formatJPY(est.unitPrice) : (est.items?.[0]?.unitPrice !== undefined ? formatJPY(est.items[0].unitPrice) : '-')}</td>
-                                    <td className="px-6 py-4">{est.subtotal !== undefined && est.subtotal !== null ? formatJPY(est.subtotal) : '-'}</td>
-                                    <td className="px-6 py-4 font-semibold">{formatJPY(est.total)}</td>
-                                    <td className="px-6 py-4">{est.deliveryDate ? formatDate(est.deliveryDate) : '-'}</td>
-                                    <td className="px-6 py-4">{renderStatusBadge(est.status)}</td>
-                                    <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
-                                        <button onClick={() => { setSelectedEstimate(est); setIsDetailModalOpen(true); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
-                                        <button onClick={() => { setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {sortedEstimates.length === 0 && <EmptyState icon={FileText} title="見積がありません" message="Supabaseのestimatesテーブルにデータがありません。新規作成してください。" />}
-                </div>
+
+                {activeTab === 'list' && (
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <AnalysisCard title="見積件数" value={`${estimates.length} 件`} />
+                            <AnalysisCard title="見積総額" value={formatJPY(estimates.reduce((sum, est) => sum + (est.total || 0), 0))} />
+                            <AnalysisCard title="受注率" value={`${estimates.length ? Math.round((statusSummary[EstimateStatus.Ordered].count / estimates.length) * 100) : 0}%`} sub="ステータスが「受注」の件数割合" />
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-base text-left">
+                                <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-700">
+                                    <tr>
+                                        <SortableHeader sortKey="estimateNumber" label="パターンNo" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <th scope="col" className="px-6 py-3 font-medium">パターン名</th>
+                                        <SortableHeader sortKey="projectId" label="案件ID" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="copies" label="部数" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="unitPrice" label="単価" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="subtotal" label="小計" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="total" label="合計" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="deliveryDate" label="納品日" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                    {sortedEstimates.map(est => (
+                                        <tr
+                                            key={est.id}
+                                            className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 ${selectedEstimate?.id === est.id ? 'bg-blue-50/60 dark:bg-slate-700/40' : ''}`}
+                                            onClick={() => setSelectedEstimate(est)}
+                                        >
+                                            <td className="px-6 py-4 font-mono">{est.patternNo ?? est.estimateNumber}</td>
+                                            <td className="px-6 py-4">{est.title}</td>
+                                            <td className="px-6 py-4">{est.projectId ?? '-'}</td>
+                                            <td className="px-6 py-4">{est.copies ?? est.items?.[0]?.quantity ?? '-'}</td>
+                                            <td className="px-6 py-4">{est.unitPrice !== undefined && est.unitPrice !== null ? formatJPY(est.unitPrice) : (est.items?.[0]?.unitPrice !== undefined ? formatJPY(est.items[0].unitPrice) : '-')}</td>
+                                            <td className="px-6 py-4">{est.subtotal !== undefined && est.subtotal !== null ? formatJPY(est.subtotal) : '-'}</td>
+                                            <td className="px-6 py-4 font-semibold">{formatJPY(est.total)}</td>
+                                            <td className="px-6 py-4">{est.deliveryDate ? formatDate(est.deliveryDate) : '-'}</td>
+                                            <td className="px-6 py-4">{renderStatusBadge(est.status)}</td>
+                                            <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                                                <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {sortedEstimates.length === 0 && <EmptyState icon={FileText} title="見積がありません" message="Supabaseのestimatesテーブルにデータがありません。新規作成してください。" />}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'detail' && (
+                    <div className="p-6 space-y-4">
+                        {!selectedEstimate && <EmptyState icon={FileText} title="見積が未選択" message="一覧から見積を選択してください。" />}
+                        {selectedEstimate && (
+                            <>
+                                <div className="flex flex-col lg:flex-row gap-4">
+                                    <div className="flex-1 rounded-2xl border border-slate-200 p-4 shadow-sm bg-slate-50">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div>
+                                                <p className="text-sm text-slate-500">パターン名 / 件名</p>
+                                                <h3 className="text-2xl font-bold">{selectedEstimate.title}</h3>
+                                            </div>
+                                            {renderStatusBadge(selectedEstimate.status)}
+                                        </div>
+                                        <p className="text-sm text-slate-600">パターンNo: {selectedEstimate.patternNo ?? selectedEstimate.estimateNumber}</p>
+                                        <p className="text-sm text-slate-600 mt-1">案件ID: {selectedEstimate.projectId ?? '-'}</p>
+                                        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <AnalysisCard title="合計" value={formatJPY(selectedEstimate.total)} />
+                                            <AnalysisCard title="小計" value={formatJPY(selectedEstimate.subtotal ?? selectedEstimate.total)} />
+                                            <AnalysisCard title="消費税" value={formatJPY(selectedEstimate.consumption ?? (selectedEstimate.taxTotal ?? 0))} />
+                                        </div>
+                                        <div className="mt-3 flex gap-2 flex-wrap">
+                                            <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold flex items-center gap-2">
+                                                <Pencil className="w-4 h-4" /> 編集
+                                            </button>
+                                            <button onClick={() => setIsDetailModalOpen(true)} className="px-4 py-2 rounded-lg border border-slate-300 font-semibold flex items-center gap-2">
+                                                <FileText className="w-4 h-4" /> PDF/印刷
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="w-full lg:w-80 rounded-2xl border border-slate-200 p-4 shadow-sm">
+                                        <h4 className="text-sm font-semibold mb-2 text-slate-700">基本情報</h4>
+                                        <dl className="space-y-2 text-sm text-slate-700">
+                                            <div className="flex justify-between"><dt className="text-slate-500">納品日</dt><dd>{selectedEstimate.deliveryDate ? formatDate(selectedEstimate.deliveryDate) : '-'}</dd></div>
+                                            <div className="flex justify-between"><dt className="text-slate-500">有効期限</dt><dd>{selectedEstimate.expirationDate ? formatDate(selectedEstimate.expirationDate) : '-'}</dd></div>
+                                            <div className="flex justify-between"><dt className="text-slate-500">取引条件</dt><dd className="text-right max-w-[60%]">{selectedEstimate.paymentTerms || '-'}</dd></div>
+                                            <div className="flex justify-between"><dt className="text-slate-500">納品場所</dt><dd className="text-right max-w-[60%]">{selectedEstimate.deliveryMethod || '-'}</dd></div>
+                                            <div className="flex justify-between"><dt className="text-slate-500">部数</dt><dd>{selectedEstimate.copies ?? selectedEstimate.items?.[0]?.quantity ?? '-'}</dd></div>
+                                            <div className="flex justify-between"><dt className="text-slate-500">単価</dt><dd>{selectedEstimate.unitPrice ? formatJPY(selectedEstimate.unitPrice) : (selectedEstimate.items?.[0]?.unitPrice ? formatJPY(selectedEstimate.items[0].unitPrice) : '-')}</dd></div>
+                                            <div className="flex justify-between"><dt className="text-slate-500">消費税率</dt><dd>{selectedEstimate.taxRate ?? 10}%</dd></div>
+                                        </dl>
+                                    </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+                                    <h4 className="text-lg font-semibold mb-3">明細</h4>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left">区分</th>
+                                                    <th className="px-3 py-2 text-left">内容</th>
+                                                    <th className="px-3 py-2 text-right">数量</th>
+                                                    <th className="px-3 py-2 text-left">単位</th>
+                                                    <th className="px-3 py-2 text-right">単価</th>
+                                                    <th className="px-3 py-2 text-right">金額</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {selectedEstimate.items?.map((item, idx) => (
+                                                    <tr key={idx} className="border-t border-slate-200">
+                                                        <td className="px-3 py-2">{item.division}</td>
+                                                        <td className="px-3 py-2">{item.content}</td>
+                                                        <td className="px-3 py-2 text-right">{item.quantity?.toLocaleString()}</td>
+                                                        <td className="px-3 py-2">{item.unit}</td>
+                                                        <td className="px-3 py-2 text-right">{formatJPY(item.unitPrice)}</td>
+                                                        <td className="px-3 py-2 text-right">{formatJPY(item.price)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="mt-3">
+                                        <p className="text-sm font-semibold text-slate-700 mb-1">備考</p>
+                                        <p className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 rounded-lg p-3 border border-slate-200">{selectedEstimate.notes || '—'}</p>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'analysis' && (
+                    <div className="p-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <AnalysisCard title="総見積件数" value={`${estimates.length} 件`} />
+                            <AnalysisCard title="受注件数" value={`${statusSummary[EstimateStatus.Ordered].count} 件`} sub="ステータスが「受注」" />
+                            <AnalysisCard title="失注件数" value={`${statusSummary[EstimateStatus.Lost].count} 件`} sub="ステータスが「失注」" />
+                            <AnalysisCard title="平均見積額" value={formatJPY(estimates.length ? Math.round(estimates.reduce((sum, est) => sum + (est.total || 0), 0) / estimates.length) : 0)} />
+                        </div>
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[340px]">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="text-lg font-semibold">ステータス別金額</h4>
+                                </div>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={Object.entries(statusSummary).map(([status, val], idx) => ({
+                                        name: status,
+                                        total: (val as any).total,
+                                        fill: chartColors[idx % chartColors.length],
+                                    }))}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                                        <Tooltip formatter={(value: number) => formatJPY(value)} />
+                                        <Bar dataKey="total">
+                                            {Object.entries(statusSummary).map((_, idx) => (
+                                                <Cell key={idx} fill={chartColors[idx % chartColors.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[340px]">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="text-lg font-semibold">月次推移（合計金額）</h4>
+                                </div>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={monthlyTotals}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                                        <Tooltip formatter={(value: number) => formatJPY(value)} />
+                                        <Bar dataKey="total" fill="#2563eb" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                        <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[360px]">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="text-lg font-semibold">ステータス構成比</h4>
+                                <p className="text-sm text-slate-500">件数ベース</p>
+                            </div>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={Object.entries(statusSummary).map(([status, val]) => ({
+                                            name: status,
+                                            value: (val as any).count,
+                                        }))}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        cx="50%"
+                                        cy="50%"
+                                        outerRadius={110}
+                                        label
+                                    >
+                                        {Object.entries(statusSummary).map((_, idx) => (
+                                            <Cell key={idx} fill={chartColors[idx % chartColors.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                )}
             </div>
+
             {isModalOpen && (
                 <EstimateModal
                     isOpen={isModalOpen}
