@@ -53,6 +53,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_pipeline', name: '進捗管理' },
       { page: 'sales_estimates', name: '見積管理' },
       { page: 'sales_orders', name: '予算管理' },
+      { page: 'project_management', name: 'プロジェクト管理' },
       { page: 'sales_billing', name: '売上請求（AR）' },
     ],
   },
