@@ -2,8 +2,14 @@ create or replace view public.estimates_list_view as
 with detail_costs as (
     select
         nullif(trim(ed.estimate_id::text), '') as estimate_business_id,
-        sum(case when trim(ed.variable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.variable_cost::numeric end) as detail_variable_cost_num,
-        sum(case when trim(ed.amount::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.amount::numeric end) as detail_amount_num
+        sum(case when trim(ed.valiable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.valiable_cost::numeric end) as detail_variable_cost_num,
+        sum(
+            case
+                when trim(ed.quantity::text) ~ '^[0-9]+(\\.[0-9]+)?$'
+                 and trim(ed.unit_price::text) ~ '^[0-9]+(\\.[0-9]+)?$'
+                then ed.quantity::numeric * ed.unit_price::numeric
+            end
+        ) as detail_sales_amount_num
     from public.estimate_details ed
     group by nullif(trim(ed.estimate_id::text), '')
 ),
@@ -11,14 +17,14 @@ cleaned as (
     select
         e.*,
         dc.detail_variable_cost_num,
-        dc.detail_amount_num,
+        dc.detail_sales_amount_num,
         case when trim(e.copies::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.copies::numeric end as copies_num,
         case when trim(e.unit_price::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.unit_price::numeric end as unit_price_num,
         case when trim(e.subtotal::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.subtotal::numeric end as subtotal_num,
         case when trim(e.total::text)    ~ '^[0-9]+(\\.[0-9]+)?$' then e.total::numeric end as total_num,
         case when trim(e.tax_rate::text) ~ '^[0-9]+(\\.[0-9]+)?$' then replace(e.tax_rate::text, '%', '')::numeric end as tax_rate_num,
         case when trim(e.consumption::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.consumption::numeric end as consumption_num,
-        case when trim(e.variable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.variable_cost::numeric end as variable_cost_num,
+        case when trim(e.valiable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.valiable_cost::numeric end as variable_cost_num,
         nullif(trim(e.order_id::text), '') as order_id_clean,
         case
             when coalesce(nullif(trim(e.delivery_date::text), ''), '') ~ '^[0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}$'
@@ -42,7 +48,7 @@ calc as (
         coalesce(
             c.subtotal_num,
             case when c.copies_num is not null and c.unit_price_num is not null then c.copies_num * c.unit_price_num end,
-            c.detail_amount_num
+            c.detail_sales_amount_num
         ) as subtotal_calc,
         coalesce(
             c.consumption_num,
@@ -55,7 +61,7 @@ calc as (
             coalesce(
                 c.subtotal_num,
                 case when c.copies_num is not null and c.unit_price_num is not null then c.copies_num * c.unit_price_num end,
-                c.detail_amount_num
+                c.detail_sales_amount_num
             ) + coalesce(
                 c.consumption_num,
                 case
@@ -127,7 +133,7 @@ select
     consumption_num,
     variable_cost_num,
     detail_variable_cost_num,
-    detail_amount_num,
+    detail_sales_amount_num,
     variable_cost_calc as variable_cost_amount,
     subtotal_calc as sales_amount,
     mq_amount,
@@ -141,17 +147,13 @@ with cleaned as (
         ed.*,
         case when trim(ed.quantity::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.quantity::numeric end as quantity_num,
         case when trim(ed.unit_price::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.unit_price::numeric end as unit_price_num,
-        case when trim(ed.amount::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.amount::numeric end as amount_num,
-        case when trim(ed.variable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.variable_cost::numeric end as variable_cost_num
+        case when trim(ed.valiable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.valiable_cost::numeric end as variable_cost_num
     from public.estimate_details ed
 ),
 calc as (
     select
         c.*,
-        coalesce(
-            c.amount_num,
-            case when c.quantity_num is not null and c.unit_price_num is not null then c.quantity_num * c.unit_price_num end
-        ) as sales_amount,
+        case when c.quantity_num is not null and c.unit_price_num is not null then c.quantity_num * c.unit_price_num end as sales_amount,
         c.variable_cost_num as variable_cost_amount
     from cleaned c
 )
@@ -161,7 +163,7 @@ select
     item_name,
     quantity_num as quantity,
     unit_price_num as unit_price,
-    amount_num as amount,
+    sales_amount as amount,
     variable_cost_num as variable_cost,
     sales_amount,
     variable_cost_amount,

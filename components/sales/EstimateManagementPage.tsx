@@ -48,6 +48,10 @@ interface EstimateModalProps {
 
 interface EstimateManagementPageProps {
   estimates: Estimate[];
+  estimateTotalCount: number;
+  estimatePage: number;
+  estimatePageSize: number;
+  onEstimatePageChange: (page: number) => void | Promise<void>;
   customers: Customer[];
   allUsers: EmployeeUser[];
   onAddEstimate: (estimate: Partial<Estimate>) => Promise<void>;
@@ -288,6 +292,10 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
 
 const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     estimates,
+    estimateTotalCount,
+    estimatePage,
+    estimatePageSize,
+    onEstimatePageChange,
     customers: _customers,
     allUsers: _allUsers,
     onAddEstimate,
@@ -302,6 +310,9 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<TabKey>('list');
+    const totalPages = useMemo(() => Math.max(1, Math.ceil((estimateTotalCount || 0) / estimatePageSize)), [estimateTotalCount, estimatePageSize]);
+    const pageStart = useMemo(() => estimateTotalCount > 0 ? (estimatePageSize * (estimatePage - 1)) + 1 : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
+    const pageEnd = useMemo(() => estimateTotalCount > 0 ? Math.min(estimateTotalCount, estimatePage * estimatePageSize) : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
 
     const filteredEstimates = useMemo(() => {
         if (!searchTerm) return estimates;
@@ -322,6 +333,11 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             return Number.isFinite(ts) ? ts : null;
         }
         return (estimate as any)[key] ?? null;
+    };
+
+    const changePage = (nextPage: number) => {
+        const clamped = Math.max(1, Math.min(totalPages, nextPage));
+        onEstimatePageChange(clamped);
     };
 
     const sortedEstimates = useMemo(() => {
@@ -359,6 +375,8 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
         return base;
     }, [estimates]);
+    const pageTotalAmount = useMemo(() => estimates.reduce((sum, est) => sum + (est.total || 0), 0), [estimates]);
+    const pageOrderedRate = useMemo(() => estimates.length ? Math.round((statusSummary[EstimateStatus.Ordered].count / estimates.length) * 100) : 0, [estimates.length, statusSummary]);
 
     const monthlyTotals = useMemo(() => {
         const buckets = new Map<string, { name: string; total: number; count: number }>();
@@ -431,13 +449,13 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <AnalysisCard tone="dark" title="見積件数" value={`${estimates.length} 件`} />
-                <AnalysisCard tone="dark" title="見積総額" value={formatJPY(estimates.reduce((sum, est) => sum + (est.total || 0), 0))} />
+                <AnalysisCard tone="dark" title="見積件数" value={`${estimateTotalCount} 件`} sub="全件数 (count=exact)" />
+                <AnalysisCard tone="dark" title="見積総額（このページ）" value={formatJPY(pageTotalAmount)} sub={`表示 ${pageStart}–${pageEnd}`} />
                 <AnalysisCard
                     tone="dark"
-                    title="受注率"
-                    value={`${estimates.length ? Math.round((statusSummary[EstimateStatus.Ordered].count / estimates.length) * 100) : 0}%`}
-                    sub="ステータスが「受注」の件数割合"
+                    title="受注率（このページ）"
+                    value={`${pageOrderedRate}%`}
+                    sub="表示中ページの件数割合"
                 />
             </div>
         </div>
@@ -510,6 +528,30 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                 </tbody>
                             </table>
                             {sortedEstimates.length === 0 && <EmptyState icon={FileText} title="見積がありません" message="Supabaseのestimatesテーブルにデータがありません。新規作成してください。" />}
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-slate-700">
+                            <div>
+                                {estimateTotalCount > 0
+                                    ? `表示 ${pageStart} – ${pageEnd} / ${estimateTotalCount} 件`
+                                    : '表示するデータがありません'}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className="px-3 py-1 rounded-md border border-slate-300 disabled:opacity-50"
+                                    onClick={() => changePage(estimatePage - 1)}
+                                    disabled={estimatePage <= 1}
+                                >
+                                    前へ
+                                </button>
+                                <span className="text-xs text-slate-500">Page {estimatePage} / {totalPages}</span>
+                                <button
+                                    className="px-3 py-1 rounded-md border border-slate-300 disabled:opacity-50"
+                                    onClick={() => changePage(estimatePage + 1)}
+                                    disabled={estimatePage >= totalPages}
+                                >
+                                    次へ
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -598,10 +640,10 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 {activeTab === 'analysis' && (
                     <div className="p-6 space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <AnalysisCard title="総見積件数" value={`${estimates.length} 件`} />
-                            <AnalysisCard title="受注件数" value={`${statusSummary[EstimateStatus.Ordered].count} 件`} sub="ステータスが「受注」" />
-                            <AnalysisCard title="失注件数" value={`${statusSummary[EstimateStatus.Lost].count} 件`} sub="ステータスが「失注」" />
-                            <AnalysisCard title="平均見積額" value={formatJPY(estimates.length ? Math.round(estimates.reduce((sum, est) => sum + (est.total || 0), 0) / estimates.length) : 0)} />
+                            <AnalysisCard title="総見積件数" value={`${estimateTotalCount} 件`} sub="全件数 (count=exact)" />
+                            <AnalysisCard title="受注件数（このページ）" value={`${statusSummary[EstimateStatus.Ordered].count} 件`} sub="表示中ページ" />
+                            <AnalysisCard title="失注件数（このページ）" value={`${statusSummary[EstimateStatus.Lost].count} 件`} sub="表示中ページ" />
+                            <AnalysisCard title="平均見積額（このページ）" value={formatJPY(estimates.length ? Math.round(estimates.reduce((sum, est) => sum + (est.total || 0), 0) / estimates.length) : 0)} />
                         </div>
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                             <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[340px]">

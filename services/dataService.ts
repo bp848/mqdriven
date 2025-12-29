@@ -2518,10 +2518,24 @@ const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 
 };
 
 export const getEstimates = async (): Promise<Estimate[]> => {
+    const { rows } = await getEstimatesPage(1, 1000);
+    return rows;
+};
+
+export const getEstimatesPage = async (page: number, pageSize: number): Promise<{ rows: Estimate[]; totalCount: number; }> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('estimates_list_view').select('*');
+    const from = Math.max(0, (page - 1) * pageSize);
+    const to = from + pageSize - 1;
+    const { data, error, count } = await supabase
+        .from('estimates_list_view')
+        .select('*', { count: 'exact' })
+        .order('create_date', { ascending: false })
+        .range(from, to);
     ensureSupabaseSuccess(error, 'Failed to fetch estimates');
-    return (data || []).map(mapEstimateRow);
+    return {
+        rows: (data || []).map(mapEstimateRow),
+        totalCount: count ?? 0,
+    };
 };
 
 export const addEstimate = async (estimateData: Partial<Estimate>): Promise<void> => {

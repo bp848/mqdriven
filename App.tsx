@@ -207,6 +207,8 @@ const PREDICTIVE_SUGGESTION_PAGES: Page[] = [
     'sales_customers',
 ];
 
+const ESTIMATE_PAGE_SIZE = 50;
+
 const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSetup: () => void; }> = ({ error, onRetry, onShowSetup }) => (
     <div className="bg-red-600 text-white p-3 flex items-center justify-between gap-4 flex-shrink-0 z-20">
       <div className="flex items-center gap-3">
@@ -264,6 +266,8 @@ const App: React.FC = () => {
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [estimates, setEstimates] = useState<Estimate[]>([]);
+    const [estimateTotalCount, setEstimateTotalCount] = useState<number>(0);
+    const [estimatePage, setEstimatePage] = useState<number>(1);
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
     const [resumedApplication, setResumedApplication] = useState<ApplicationWithDetails | null>(null);
     const [dailyReportPrefill, setDailyReportPrefill] = useState<DailyReportPrefill | null>(null);
@@ -314,8 +318,18 @@ const App: React.FC = () => {
         return false;
     });
     const abortControllerRef = useRef<AbortController | null>(null);
+    const estimatePageRef = useRef<number>(1);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
+
+    const refreshEstimatesPage = useCallback(async (page: number, signal?: AbortSignal) => {
+        const { rows, totalCount } = await dataService.getEstimatesPage(page, ESTIMATE_PAGE_SIZE);
+        if (signal?.aborted) return;
+        setEstimates(rows);
+        setEstimateTotalCount(totalCount);
+        setEstimatePage(page);
+        estimatePageRef.current = page;
+    }, []);
 
     const isAuthenticated = shouldRequireAuth ? !!supabaseSession : true;
     const isAuthCallbackRoute = shouldRequireAuth && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback');
@@ -718,12 +732,13 @@ const App: React.FC = () => {
         };
     }, [isSupabaseConfigured, shouldRequireAuth, resetAppData]);
 
-  const loadAllData = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
+    const loadAllData = useCallback(async (options?: { estimatesPage?: number }) => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
         const signal = abortControllerRef.current.signal;
+        const targetEstimatesPage = options?.estimatesPage ?? estimatePageRef.current;
 
         try {
             setIsLoading(true);
@@ -772,7 +787,6 @@ const App: React.FC = () => {
                 dataService.getApprovalRoutes(),
                 dataService.getPurchaseOrders(),
                 dataService.getInventoryItems(),
-                dataService.getEstimates(),
                 dataService.getDepartments(),
                 dataService.getPaymentRecipients(),
                 dataService.getAllocationDivisions(),
@@ -791,7 +805,6 @@ const App: React.FC = () => {
                 routesResult,
                 poResult,
                 inventoryResult,
-                estimatesResult,
                 departmentsResult,
                 paymentRecipientsResult,
                 allocationDivisionsResult,
@@ -821,7 +834,7 @@ const App: React.FC = () => {
             if (poResult.status === 'fulfilled') setPurchaseOrders(poResult.value); else console.error('Failed to load purchase orders:', poResult.reason);
             if (inventoryResult.status === 'fulfilled') setInventoryItems(inventoryResult.value); else console.error('Failed to load inventory items:', inventoryResult.reason);
             setEmployees(employeesFromUsers);
-            if (estimatesResult.status === 'fulfilled') setEstimates(estimatesResult.value); else console.error('Failed to load estimates:', estimatesResult.reason);
+            await refreshEstimatesPage(targetEstimatesPage, signal);
             if (departmentsResult.status === 'fulfilled') setDepartments(departmentsResult.value); else console.error('Failed to load departments:', departmentsResult.reason);
             if (paymentRecipientsResult.status === 'fulfilled') setPaymentRecipients(paymentRecipientsResult.value); else console.error('Failed to load payment recipients:', paymentRecipientsResult.reason);
             if (allocationDivisionsResult.status === 'fulfilled') setAllocationDivisions(allocationDivisionsResult.value); else console.error('Failed to load allocation divisions:', allocationDivisionsResult.reason);
@@ -849,7 +862,7 @@ const App: React.FC = () => {
                 setIsLoading(false);
             }
         }
-    }, [currentUser, supabaseUser, addToast]);
+    }, [currentUser, supabaseUser, addToast, refreshEstimatesPage]);
 
 
 useEffect(() => {
@@ -1040,7 +1053,11 @@ useEffect(() => {
         } else {
             await dataService.addEstimate(estimateData);
         }
-        await loadAllData();
+        await loadAllData({ estimatesPage: 1 });
+    };
+
+    const handleEstimatePageChange = async (page: number) => {
+        await refreshEstimatesPage(page);
     };
     
     const onPrimaryAction = () => {
@@ -1192,7 +1209,20 @@ useEffect(() => {
             case 'purchasing_orders':
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders} jobs={jobs} />;
             case 'sales_estimates':
-                return <EstimateManagementPage estimates={estimates} customers={customers} allUsers={allUsers} onAddEstimate={handleAddEstimate} addToast={addToast} currentUser={currentUser} searchTerm={searchTerm} isAIOff={isAIOff} />;
+                return <EstimateManagementPage
+                    estimates={estimates}
+                    estimateTotalCount={estimateTotalCount}
+                    estimatePage={estimatePage}
+                    estimatePageSize={ESTIMATE_PAGE_SIZE}
+                    onEstimatePageChange={handleEstimatePageChange}
+                    customers={customers}
+                    allUsers={allUsers}
+                    onAddEstimate={handleAddEstimate}
+                    addToast={addToast}
+                    currentUser={currentUser}
+                    searchTerm={searchTerm}
+                    isAIOff={isAIOff}
+                />;
             case 'analysis_ranking':
                 return <SalesRanking initialSummaries={jobs} customers={customers} />;
             case 'accounting_business_plan':
