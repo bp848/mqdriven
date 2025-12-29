@@ -64,6 +64,60 @@ const parseAllowedOrigins = (): string[] => {
 
 const ALLOWED_ORIGINS = parseAllowedOrigins();
 
+const normalizeOrigin = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+};
+
+const isSupabaseFunctionsHost = (origin: string | null) => {
+  if (!origin) return false;
+  try {
+    const host = new URL(origin).host;
+    return host.endsWith('.functions.supabase.co');
+  } catch {
+    return false;
+  }
+};
+
+const parseStatePayload = (state: string | null): { userId: string | null; returnTo: string | null } => {
+  if (!state) return { userId: null, returnTo: null };
+  if (UUID_REGEX.test(state)) return { userId: state, returnTo: null };
+  try {
+    const decoded = JSON.parse(atob(state));
+    const userId =
+      typeof decoded?.user_id === 'string' && UUID_REGEX.test(decoded.user_id)
+        ? decoded.user_id
+        : (typeof decoded?.userId === 'string' && UUID_REGEX.test(decoded.userId) ? decoded.userId : null);
+    const returnTo = normalizeOrigin(decoded?.return_to ?? decoded?.returnTo ?? null);
+    return { userId, returnTo };
+  } catch {
+    return { userId: null, returnTo: null };
+  }
+};
+
+const pickRedirectBase = (preferred: string | null, requestOrigin: string | null): string => {
+  const wildcard = ALLOWED_ORIGINS.includes('*');
+  const allowed = ALLOWED_ORIGINS.filter((o) => o !== '*');
+  const isAllowed = (origin: string | null) => {
+    const normalized = normalizeOrigin(origin);
+    if (!normalized || isSupabaseFunctionsHost(normalized)) return false;
+    if (allowed.includes(normalized)) return true;
+    if (wildcard) return true;
+    if (normalized.startsWith('http://localhost:') || normalized.startsWith('http://127.0.0.1:')) return true;
+    return false;
+  };
+
+  if (isAllowed(preferred)) return normalizeOrigin(preferred)!;
+  if (isAllowed(requestOrigin)) return normalizeOrigin(requestOrigin)!;
+  const fallback = allowed.find((o) => !!o);
+  return fallback ?? 'https://erp.b-p.co.jp';
+};
+
 const corsHeaders = (origin: string | null) => {
   const wildcard = ALLOWED_ORIGINS.includes('*');
   const allowedOrigin = wildcard
@@ -163,12 +217,10 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
-    const wildcard = ALLOWED_ORIGINS.includes('*');
-    const redirectBase =
-      (url.origin && (wildcard || ALLOWED_ORIGINS.includes(url.origin)) && url.origin)
-      || (ALLOWED_ORIGINS.find((o) => o !== '*') ?? 'https://erp.b-p.co.jp');
+    const parsedState = parseStatePayload(state);
+    const redirectBase = pickRedirectBase(parsedState.returnTo, url.origin);
 
-    if (!code || !state || !UUID_REGEX.test(state)) {
+    if (!code || !parsedState.userId) {
       return jsonResponse({ error: 'missing or invalid code/state' }, 400, origin);
     }
 
@@ -231,16 +283,16 @@ Deno.serve(async (req: Request) => {
 
     const expiresIn = typeof token.expires_in === 'number' ? token.expires_in : 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-    const refreshToken = token.refresh_token ?? await fetchExistingRefreshToken(supabaseUrl, serviceRole, state);
+    const refreshToken = token.refresh_token ?? await fetchExistingRefreshToken(supabaseUrl, serviceRole, parsedState.userId);
 
     if (!refreshToken) {
-      console.error('google-oauth-callback missing refresh_token after consent', { userId: state });
+      console.error('google-oauth-callback missing refresh_token after consent', { userId: parsedState.userId });
       const location = `${redirectNg}&reason=missing_refresh_token`;
       return redirectResponse(location, origin);
     }
 
     const payload = {
-      user_id: state,
+      user_id: parsedState.userId,
       provider: 'google',
       access_token: token.access_token,
       refresh_token: refreshToken,
@@ -270,7 +322,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.info('google-oauth-callback success', {
-      userId: state,
+      userId: parsedState.userId,
       redirectSource,
       redirectUri,
       origin,
@@ -278,7 +330,7 @@ Deno.serve(async (req: Request) => {
       expiresAt,
     });
     // Kick off first sync if configured
-    await triggerInitialSync(state);
+    await triggerInitialSync(parsedState.userId);
 
     return redirectResponse(redirectOk, origin);
   } catch (e) {

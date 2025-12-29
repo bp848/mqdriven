@@ -65,6 +65,52 @@ const parseAllowedOrigins = (): string[] => {
 
 const ALLOWED_ORIGINS = parseAllowedOrigins();
 
+const normalizeOrigin = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+};
+
+const isSupabaseFunctionsHost = (origin: string | null) => {
+  if (!origin) return false;
+  try {
+    const host = new URL(origin).host;
+    return host.endsWith(".functions.supabase.co");
+  } catch {
+    return false;
+  }
+};
+
+const pickReturnToOrigin = (requested: string | null, requestOrigin: string | null): string | null => {
+  const wildcard = ALLOWED_ORIGINS.includes("*");
+  const normalizedRequestOrigin = normalizeOrigin(requestOrigin);
+  const normalizeAndValidate = (value: string | null): string | null => {
+    const normalized = normalizeOrigin(value);
+    if (!normalized || isSupabaseFunctionsHost(normalized)) return null;
+    if (ALLOWED_ORIGINS.includes(normalized)) return normalized;
+    if (wildcard && normalizedRequestOrigin && normalized === normalizedRequestOrigin) return normalized;
+    if (normalized.startsWith("http://localhost:") || normalized.startsWith("http://127.0.0.1:")) {
+      return normalized;
+    }
+    return null;
+  };
+
+  return normalizeAndValidate(requested) || normalizeAndValidate(normalizedRequestOrigin);
+};
+
+const encodeState = (userId: string, returnTo: string | null): string => {
+  if (!returnTo) return userId;
+  try {
+    return btoa(JSON.stringify({ user_id: userId, return_to: returnTo }));
+  } catch {
+    return userId;
+  }
+};
+
 const corsHeaders = (origin: string | null) => {
   const wildcard = ALLOWED_ORIGINS.includes("*");
   const pickOrigin = () => {
@@ -119,12 +165,11 @@ serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const isJson = (req.headers.get("content-type") || "").includes("application/json");
-    let userId = url.searchParams.get("user_id");
-
-    if (!userId && req.method === "POST" && isJson) {
-      const body = await req.json().catch(() => null) as { user_id?: string; userId?: string } | null;
-      userId = body?.user_id || body?.userId || null;
-    }
+    const body = (req.method === "POST" && isJson)
+      ? await req.json().catch(() => null) as { user_id?: string; userId?: string; return_to?: string; returnTo?: string } | null
+      : null;
+    let userId = url.searchParams.get("user_id") || body?.user_id || body?.userId || null;
+    const requestedReturnTo = url.searchParams.get("return_to") || body?.return_to || body?.returnTo || null;
 
     if (!userId || !UUID_REGEX.test(userId)) {
       console.warn("google-oauth-start invalid user_id", { userId });
@@ -142,13 +187,15 @@ serve(async (req: Request) => {
       );
     }
 
+    const returnTo = pickReturnToOrigin(requestedReturnTo, origin);
+    const stateParam = encodeState(userId, returnTo);
     const authUrl =
       "https://accounts.google.com/o/oauth2/v2/auth?" +
       new URLSearchParams({
         access_type: "offline",
         scope: "https://www.googleapis.com/auth/calendar",
         prompt: "consent",
-        state: userId,
+        state: stateParam,
         response_type: "code",
         client_id: clientId,
         redirect_uri: redirectUri,
@@ -160,6 +207,7 @@ serve(async (req: Request) => {
       userId,
       redirectUri,
       redirectSource,
+      returnTo,
       origin,
       requestHost,
     });
