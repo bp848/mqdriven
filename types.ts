@@ -461,6 +461,28 @@ export interface Estimate {
     rawStatusCode?: string | null;
     copies?: number | null;
     unitPrice?: number | null;
+    salesAmount?: number | null;
+    variableCostAmount?: number | null;
+    mqAmount?: number | null;
+    mqRate?: number | null;
+    mqMissingReason?: 'OK' | 'A' | 'B' | null;
+    detailCount?: number | null;
+    statusLabel?: string | null;
+    raw?: Record<string, any>;
+}
+
+export interface EstimateDetail {
+    id?: string | null;
+    detailId?: string | null;
+    estimateId: string;
+    itemName: string;
+    quantity: number | null;
+    unitPrice: number | null;
+    amount: number | null;
+    variableCost: number | null;
+    mqAmount?: number | null;
+    mqRate?: number | null;
+    note?: string | null;
 }
 
 export interface ScheduleItem {

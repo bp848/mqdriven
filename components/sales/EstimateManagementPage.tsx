@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Estimate, SortConfig, EmployeeUser, Customer, Toast, EstimateStatus } from '../../types';
+import { Estimate, SortConfig, EmployeeUser, Customer, Toast, EstimateStatus, EstimateDetail } from '../../types';
 import SortableHeader from '../ui/SortableHeader';
 import EmptyState from '../ui/EmptyState';
 import { FileText, PlusCircle, Pencil, X, Loader, Save } from '../Icons';
 import { formatJPY, formatDate } from '../../utils';
 import EstimateDetailModal from './EstimateDetailModal';
+import { addEstimateDetail, deleteEstimateDetail, getEstimateDetails, updateEstimateDetail } from '../../services/dataService';
 import {
     BarChart,
     Bar,
@@ -19,6 +20,7 @@ import {
 } from 'recharts';
 
 type TabKey = 'list' | 'detail' | 'analysis';
+type MqFilter = 'all' | 'OK' | 'A' | 'B';
 
 type EstimateFormState = {
     id?: string;
@@ -83,10 +85,14 @@ const statusOptions: { value: EstimateStatus; label: string }[] = [
     { value: EstimateStatus.Lost, label: '失注' },
 ];
 
-const statusBadgeStyle: Record<EstimateStatus, string> = {
+const statusBadgeStyle: Record<string, string> = {
     [EstimateStatus.Draft]: 'bg-slate-100 text-slate-700',
     [EstimateStatus.Ordered]: 'bg-green-100 text-green-700',
     [EstimateStatus.Lost]: 'bg-red-100 text-red-700',
+    ordered: 'bg-green-100 text-green-700',
+    lost: 'bg-red-100 text-red-700',
+    draft: 'bg-slate-100 text-slate-700',
+    submitted: 'bg-blue-100 text-blue-700',
 };
 
 const chartColors = ['#2563eb', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -304,26 +310,91 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     searchTerm,
     isAIOff: _isAIOff,
 }) => {
-    const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'deliveryDate', direction: 'descending' });
+    const [sortConfig, setSortConfig] = useState<SortConfig | null>(null); // respect backend default (納品日 desc -> MQ優先)
+    const [mqFilter, setMqFilter] = useState<MqFilter>('all');
     const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<TabKey>('list');
+    const [detailSubTab, setDetailSubTab] = useState<'overview' | 'details' | 'anomalies'>('overview');
+    const [details, setDetails] = useState<EstimateDetail[]>([]);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [detailError, setDetailError] = useState<string | null>(null);
+    const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
+    const [detailForm, setDetailForm] = useState<Partial<EstimateDetail>>({
+        itemName: '',
+        quantity: null,
+        unitPrice: null,
+        amount: null,
+        variableCost: null,
+        note: '',
+    });
     const totalPages = useMemo(() => Math.max(1, Math.ceil((estimateTotalCount || 0) / estimatePageSize)), [estimateTotalCount, estimatePageSize]);
     const pageStart = useMemo(() => estimateTotalCount > 0 ? (estimatePageSize * (estimatePage - 1)) + 1 : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
     const pageEnd = useMemo(() => estimateTotalCount > 0 ? Math.min(estimateTotalCount, estimatePage * estimatePageSize) : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
 
     const filteredEstimates = useMemo(() => {
-        if (!searchTerm) return estimates;
+        let rows = estimates;
+        if (mqFilter !== 'all') {
+            rows = rows.filter(est => (est.mqMissingReason ?? 'OK') === mqFilter);
+        }
+        if (!searchTerm) return rows;
         const query = searchTerm.toLowerCase();
-        return estimates.filter(est =>
+        return rows.filter(est =>
             (est.title && est.title.toLowerCase().includes(query)) ||
             (est.projectId && est.projectId.toLowerCase().includes(query)) ||
             (est.patternNo && est.patternNo.toLowerCase().includes(query)) ||
             (est.notes && est.notes.toLowerCase().includes(query))
         );
-    }, [estimates, searchTerm]);
+    }, [estimates, searchTerm, mqFilter]);
+
+    const resolveSalesAmount = (est: Estimate): number | null => {
+        const candidates = [est.salesAmount, est.subtotal, est.total];
+        for (const candidate of candidates) {
+            if (candidate === null || candidate === undefined) continue;
+            const num = Number(candidate);
+            if (Number.isFinite(num)) return num;
+        }
+        return null;
+    };
+
+    const resolveVariableCost = (est: Estimate): number | null => {
+        if (est.variableCostAmount === null || est.variableCostAmount === undefined) return null;
+        const num = Number(est.variableCostAmount);
+        return Number.isFinite(num) ? num : null;
+    };
+
+    const resolveMqAmount = (est: Estimate, salesAmount?: number | null, variableCost?: number | null): number | null => {
+        if (est.mqAmount !== undefined && est.mqAmount !== null && Number.isFinite(Number(est.mqAmount))) {
+            return Number(est.mqAmount);
+        }
+        const sales = salesAmount ?? resolveSalesAmount(est);
+        const cost = variableCost ?? resolveVariableCost(est);
+        if (sales !== null && cost !== null) {
+            const mq = sales - cost;
+            return Number.isFinite(mq) ? mq : null;
+        }
+        return null;
+    };
+
+    const resolveMqRate = (est: Estimate, salesAmount?: number | null, mqAmount?: number | null): number | null => {
+        if (est.mqRate !== undefined && est.mqRate !== null && Number.isFinite(Number(est.mqRate))) {
+            return Number(est.mqRate);
+        }
+        const sales = salesAmount ?? resolveSalesAmount(est);
+        const mq = mqAmount ?? resolveMqAmount(est, sales, resolveVariableCost(est));
+        if (sales && sales > 0 && mq !== null) {
+            const rate = mq / sales;
+            return Number.isFinite(rate) ? rate : null;
+        }
+        return null;
+    };
+
+    const formatRate = (rate: number | null | undefined) => {
+        if (rate === null || rate === undefined || !Number.isFinite(rate)) return '—';
+        return `${(rate * 100).toFixed(1)}%`;
+    };
 
     const getSortValue = (estimate: Estimate, key: string) => {
         if (key === 'deliveryDate' || key === 'createdAt' || key === 'updatedAt') {
@@ -331,6 +402,20 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             if (!raw) return null;
             const ts = new Date(raw).getTime();
             return Number.isFinite(ts) ? ts : null;
+        }
+        if (key === 'salesAmount') return resolveSalesAmount(estimate);
+        if (key === 'variableCostAmount') return resolveVariableCost(estimate);
+        if (key === 'mqAmount') return resolveMqAmount(estimate);
+        if (key === 'mqRate') return resolveMqRate(estimate);
+        if (key === 'mqMissingReason') {
+            const priority: Record<string, number> = { OK: 0, A: 1, B: 2 };
+            const reason = (estimate.mqMissingReason ?? 'OK') as string;
+            return priority[reason] ?? 99;
+        }
+        if (key === 'statusLabel') {
+            const priority: Record<string, number> = { ordered: 0, draft: 1, submitted: 2, lost: 3 };
+            const normalized = (estimate.statusLabel ?? estimate.status ?? '').toString().toLowerCase();
+            return priority[normalized] ?? 99;
         }
         return (estimate as any)[key] ?? null;
     };
@@ -362,25 +447,79 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
     }, [sortedEstimates, selectedEstimate]);
 
+    useEffect(() => {
+        const loadDetails = async () => {
+            if (!selectedEstimate?.id) {
+                setDetails([]);
+                return;
+            }
+            setDetailLoading(true);
+            setDetailError(null);
+            try {
+                const rows = await getEstimateDetails(selectedEstimate.id);
+                setDetails(rows);
+            } catch (e: any) {
+                setDetailError(e?.message || '明細の取得に失敗しました。');
+            } finally {
+                setDetailLoading(false);
+            }
+        };
+        loadDetails();
+    }, [selectedEstimate?.id]);
+
     const statusSummary = useMemo(() => {
         const base = {
             [EstimateStatus.Draft]: { count: 0, total: 0 },
             [EstimateStatus.Ordered]: { count: 0, total: 0 },
             [EstimateStatus.Lost]: { count: 0, total: 0 },
         };
-        for (const est of estimates) {
+        for (const est of filteredEstimates) {
             const bucket = base[est.status] || base[EstimateStatus.Draft];
             bucket.count += 1;
             bucket.total += est.total || 0;
         }
         return base;
+    }, [filteredEstimates]);
+    const pageTotalAmount = useMemo(() => filteredEstimates.reduce((sum, est) => sum + (resolveSalesAmount(est) ?? 0), 0), [filteredEstimates]);
+    const mqMissingSummary = useMemo(() => {
+        const base = { OK: 0, A: 0, B: 0 };
+        for (const est of estimates) {
+            const reason = (est.mqMissingReason ?? 'OK') as 'OK' | 'A' | 'B';
+            if (reason === 'OK' || reason === 'A' || reason === 'B') {
+                base[reason] += 1;
+            }
+        }
+        return base;
     }, [estimates]);
-    const pageTotalAmount = useMemo(() => estimates.reduce((sum, est) => sum + (est.total || 0), 0), [estimates]);
-    const pageOrderedRate = useMemo(() => estimates.length ? Math.round((statusSummary[EstimateStatus.Ordered].count / estimates.length) * 100) : 0, [estimates.length, statusSummary]);
+
+    const detailTotals = useMemo(() => {
+        let sales = 0;
+        let variableCost = 0;
+        let hasSales = false;
+        let hasCost = false;
+        for (const row of details) {
+            if (row.amount !== null && row.amount !== undefined) {
+                sales += row.amount || 0;
+                hasSales = true;
+            }
+            if (row.variableCost !== null && row.variableCost !== undefined) {
+                variableCost += row.variableCost || 0;
+                hasCost = true;
+            }
+        }
+        const mq = hasSales && hasCost ? sales - variableCost : null;
+        const rate = mq !== null && sales > 0 ? mq / sales : null;
+        return {
+            sales: hasSales ? sales : null,
+            variableCost: hasCost ? variableCost : null,
+            mq,
+            rate,
+        };
+    }, [details]);
 
     const monthlyTotals = useMemo(() => {
         const buckets = new Map<string, { name: string; total: number; count: number }>();
-        for (const est of estimates) {
+        for (const est of filteredEstimates) {
             const date = est.deliveryDate || est.createdAt;
             if (!date) continue;
             const d = new Date(date);
@@ -388,14 +527,14 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             const label = `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, '0')}月`;
             const bucket = buckets.get(key) ?? { name: label, total: 0, count: 0 };
-            bucket.total += est.total || 0;
+            bucket.total += resolveSalesAmount(est) ?? 0;
             bucket.count += 1;
             buckets.set(key, bucket);
         }
         return Array.from(buckets.entries())
             .sort((a, b) => (a[0] < b[0] ? -1 : 1))
             .map(([, value]) => value);
-    }, [estimates]);
+    }, [filteredEstimates]);
 
     const handleSaveEstimate = async (estimateData: Partial<Estimate>) => {
         setIsSaving(true);
@@ -419,11 +558,203 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         setSortConfig({ key, direction });
     };
 
-    const renderStatusBadge = (status: EstimateStatus) => (
-        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadgeStyle[status] || 'bg-slate-100 text-slate-700'}`}>
-            {status}
-        </span>
+    const renderStatusBadge = (status?: string | EstimateStatus | null) => {
+        const text = (status ?? '').toString();
+        const normalized = text.toLowerCase();
+        const className = statusBadgeStyle[normalized] || statusBadgeStyle[text] || 'bg-slate-100 text-slate-700';
+        const display =
+            normalized === 'ordered' ? '受注'
+            : normalized === 'lost' ? '失注'
+            : normalized === 'draft' ? '見積中'
+            : normalized === 'submitted' ? '提出'
+            : text || '—';
+        return (
+            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${className}`}>
+                {display}
+            </span>
+        );
+    };
+
+    const renderMqMissingBadge = (reason?: string | null) => {
+        const key = (reason ?? 'OK') as 'OK' | 'A' | 'B';
+        const labelMap: Record<'OK' | 'A' | 'B', string> = {
+            OK: 'MQ計算済',
+            A: '明細なし',
+            B: '原価未入力',
+        };
+        const styleMap: Record<'OK' | 'A' | 'B', string> = {
+            OK: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            A: 'bg-rose-50 text-rose-700 border-rose-200',
+            B: 'bg-amber-50 text-amber-800 border-amber-200',
+        };
+        return (
+            <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${styleMap[key]}`}>
+                {labelMap[key]}
+            </span>
+        );
+    };
+
+    const renderMqFilterCard = (reason: 'OK' | 'A' | 'B', title: string, sub: string, accentClass: string) => {
+        const active = mqFilter === reason;
+        const count = mqMissingSummary[reason] ?? 0;
+        return (
+            <button
+                type="button"
+                onClick={() => setMqFilter(active ? 'all' : reason)}
+                className={`text-left rounded-2xl border p-4 shadow-sm transition bg-slate-800/60 border-slate-700 text-slate-50 ${active ? 'ring-2 ring-blue-400 border-blue-300 bg-slate-800/80' : 'hover:border-slate-500'}`}
+            >
+                <p className={`text-xs uppercase tracking-[0.18em] ${accentClass}`}>{title}</p>
+                <p className="text-3xl font-extrabold mt-1 tracking-tight">{count} 件</p>
+                <p className="text-xs mt-1 text-slate-300">{active ? 'フィルタ中（クリックで解除）' : sub}</p>
+            </button>
+        );
+    };
+
+    const formatValue = (value: any) => {
+        if (value === null || value === undefined || value === '') return '—';
+        if (typeof value === 'number') return Number.isFinite(value) ? value.toLocaleString() : '—';
+        if (value instanceof Date) return formatDate(value.toISOString());
+        if (typeof value === 'string') return value;
+        return JSON.stringify(value);
+    };
+
+    const renderFieldGrid = (raw: Record<string, any>, fields: { key: string; label: string; formatter?: (v: any) => string; editable?: boolean; }[]) => (
+        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            {fields.map(field => (
+                <div key={field.key} className="flex justify-between gap-3">
+                    <dt className="text-slate-500 whitespace-nowrap">{field.label}</dt>
+                    <dd className="text-right flex-1 text-slate-800 dark:text-slate-100">
+                        {field.formatter ? field.formatter(raw[field.key]) : formatValue(raw[field.key])}
+                    </dd>
+                </div>
+            ))}
+        </dl>
     );
+
+    const handleDetailInputChange = (field: keyof EstimateDetail, value: string) => {
+        setDetailForm(prev => ({
+            ...prev,
+            [field]: value === '' ? null : value,
+        }));
+    };
+
+    const resetDetailForm = () => {
+        setDetailForm({
+            itemName: '',
+            quantity: null,
+            unitPrice: null,
+            amount: null,
+            variableCost: null,
+            note: '',
+        });
+        setEditingDetailId(null);
+    };
+
+    const normalizeNumber = (val: any): number | null => {
+        const num = Number(val);
+        return Number.isFinite(num) ? num : null;
+    };
+
+    const buildDetailPayload = () => {
+        const quantity = normalizeNumber(detailForm.quantity);
+        const unitPrice = normalizeNumber(detailForm.unitPrice);
+        const amount = normalizeNumber(detailForm.amount) ?? (quantity !== null && unitPrice !== null ? quantity * unitPrice : null);
+        const variableCost = normalizeNumber(detailForm.variableCost);
+        return {
+            itemName: (detailForm.itemName ?? '').toString().trim(),
+            quantity,
+            unitPrice,
+            amount,
+            variableCost,
+            note: detailForm.note ?? '',
+        };
+    };
+
+    const refreshDetails = async (estimateId: string) => {
+        const rows = await getEstimateDetails(estimateId);
+        setDetails(rows);
+    };
+
+    const handleSubmitDetail = async () => {
+        if (!selectedEstimate?.id) return;
+        const payload = buildDetailPayload();
+        if (!payload.itemName) {
+            addToast('明細名を入力してください。', 'error');
+            return;
+        }
+        if (payload.quantity === null || payload.unitPrice === null) {
+            addToast('数量と単価は必須です。', 'error');
+            return;
+        }
+        try {
+            setDetailLoading(true);
+            if (editingDetailId) {
+                await updateEstimateDetail(editingDetailId, payload);
+                addToast('明細を更新しました。', 'success');
+            } else {
+                await addEstimateDetail({
+                    estimateId: selectedEstimate.id,
+                    ...payload,
+                });
+                addToast('明細を追加しました。', 'success');
+            }
+            await refreshDetails(selectedEstimate.id);
+            resetDetailForm();
+        } catch (e: any) {
+            addToast(e?.message || '明細の保存に失敗しました。', 'error');
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const handleEditDetail = (detail: EstimateDetail) => {
+        setEditingDetailId(detail.detailId || detail.id || null);
+        setDetailForm({
+            itemName: detail.itemName,
+            quantity: detail.quantity,
+            unitPrice: detail.unitPrice,
+            amount: detail.amount,
+            variableCost: detail.variableCost,
+            note: detail.note ?? '',
+        });
+        setDetailSubTab('details');
+    };
+
+    const handleDeleteDetail = async (detail: EstimateDetail) => {
+        if (!detail.detailId && !detail.id) {
+            addToast('この明細は削除できません。', 'error');
+            return;
+        }
+        try {
+            setDetailLoading(true);
+            await deleteEstimateDetail(detail.detailId || detail.id!);
+            if (selectedEstimate?.id) {
+                await refreshDetails(selectedEstimate.id);
+            }
+            addToast('明細を削除しました。', 'success');
+        } catch (e: any) {
+            addToast(e?.message || '明細の削除に失敗しました。', 'error');
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const handleDuplicateEstimate = async () => {
+        if (!selectedEstimate) return;
+        const payload: Partial<Estimate> = {
+            ...selectedEstimate,
+            id: undefined,
+            estimateNumber: undefined,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        try {
+            await onAddEstimate(payload);
+            addToast('見積を複製しました。', 'success');
+        } catch (e: any) {
+            addToast(e?.message || '複製に失敗しました。', 'error');
+        }
+    };
 
     const tabButtonClass = (tab: TabKey) =>
         `px-4 py-2 rounded-lg font-semibold ${activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`;
@@ -441,22 +772,33 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
 
     const mqSummaryCards = (
         <div className="rounded-2xl bg-slate-900 text-slate-50 border border-slate-800 shadow-lg mb-6 p-4 md:p-6">
-            <div className="flex flex-col gap-1 mb-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
-                <div className="flex flex-wrap items-baseline gap-3">
-                    <h3 className="text-lg font-semibold">直近の見積概要</h3>
-                    <span className="text-sm text-slate-300">最新順で表示</span>
+            <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
+                <div className="flex flex-col gap-1">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
+                    <div className="flex flex-wrap items-baseline gap-3">
+                        <h3 className="text-lg font-semibold">MQ優先で最新表示</h3>
+                        <span className="text-sm text-slate-300">納品日 desc → MQ計算済 → MQ額 desc</span>
+                    </div>
                 </div>
+                {mqFilter !== 'all' && (
+                    <button
+                        onClick={() => setMqFilter('all')}
+                        className="text-xs px-3 py-1 rounded-lg border border-blue-300 text-blue-100 hover:bg-blue-800/40"
+                    >
+                        MQフィルタ解除
+                    </button>
+                )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <AnalysisCard tone="dark" title="見積件数" value={`${estimateTotalCount} 件`} sub="全件数 (count=exact)" />
-                <AnalysisCard tone="dark" title="見積総額（このページ）" value={formatJPY(pageTotalAmount)} sub={`表示 ${pageStart}–${pageEnd}`} />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <AnalysisCard
                     tone="dark"
-                    title="受注率（このページ）"
-                    value={`${pageOrderedRate}%`}
-                    sub="表示中ページの件数割合"
+                    title="表示件数 / 売上合計"
+                    value={`${filteredEstimates.length} / ${estimateTotalCount} 件`}
+                    sub={`売上合計: ${formatJPY(pageTotalAmount)} （フィルタ後 ${filteredEstimates.length} 件表示）`}
                 />
+                {renderMqFilterCard('OK', 'OK (MQ計上)', 'MQが計算できる見積だけを表示', 'text-emerald-200')}
+                {renderMqFilterCard('B', '原価未入力', '原価を入力してMQを出す', 'text-amber-200')}
+                {renderMqFilterCard('A', '明細なし', '明細を追加してMQを出す', 'text-rose-200')}
             </div>
         </div>
     );
@@ -491,40 +833,50 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                             <table className="w-full text-base text-left text-slate-800 dark:text-slate-100">
                                 <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100">
                                     <tr>
-                                        <SortableHeader sortKey="estimateNumber" label="パターンNo" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <th scope="col" className="px-6 py-3 font-medium">パターン名</th>
+                                        <th scope="col" className="px-6 py-3 font-medium">見積 / パターン</th>
                                         <SortableHeader sortKey="projectId" label="案件ID" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="copies" label="部数" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="unitPrice" label="単価" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="subtotal" label="小計" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="total" label="合計" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="salesAmount" label="売上" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="variableCostAmount" label="原価" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="mqAmount" label="MQ" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="mqRate" label="MQ率" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="mqMissingReason" label="MQステータス" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="statusLabel" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                         <SortableHeader sortKey="deliveryDate" label="納品日" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                         <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    {sortedEstimates.map(est => (
-                                        <tr
-                                            key={est.id}
-                                            className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 ${selectedEstimate?.id === est.id ? 'bg-blue-50/60 dark:bg-slate-700/40' : ''}`}
-                                            onClick={() => setSelectedEstimate(est)}
-                                        >
-                                            <td className="px-6 py-4 font-mono">{est.patternNo ?? est.estimateNumber}</td>
-                                            <td className="px-6 py-4">{est.title}</td>
-                                            <td className="px-6 py-4">{est.projectId ?? '-'}</td>
-                                            <td className="px-6 py-4">{est.copies ?? est.items?.[0]?.quantity ?? '-'}</td>
-                                            <td className="px-6 py-4">{est.unitPrice !== undefined && est.unitPrice !== null ? formatJPY(est.unitPrice) : (est.items?.[0]?.unitPrice !== undefined ? formatJPY(est.items[0].unitPrice) : '-')}</td>
-                                            <td className="px-6 py-4">{est.subtotal !== undefined && est.subtotal !== null ? formatJPY(est.subtotal) : '-'}</td>
-                                            <td className="px-6 py-4 font-semibold">{formatJPY(est.total)}</td>
-                                            <td className="px-6 py-4">{est.deliveryDate ? formatDate(est.deliveryDate) : formatDate(est.createdAt)}</td>
-                                            <td className="px-6 py-4">{renderStatusBadge(est.status)}</td>
-                                            <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
-                                                <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
-                                                <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {sortedEstimates.map(est => {
+                                        const salesAmount = resolveSalesAmount(est);
+                                        const variableCostAmount = resolveVariableCost(est);
+                                        const mqAmount = resolveMqAmount(est, salesAmount, variableCostAmount);
+                                        const mqRateValue = resolveMqRate(est, salesAmount, mqAmount);
+                                        const deliveryText = est.deliveryDate ? formatDate(est.deliveryDate) : (est.createdAt ? formatDate(est.createdAt) : '-');
+                                        return (
+                                            <tr
+                                                key={est.id}
+                                                className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 ${selectedEstimate?.id === est.id ? 'bg-blue-50/60 dark:bg-slate-700/40' : ''}`}
+                                                onClick={() => setSelectedEstimate(est)}
+                                            >
+                                                <td className="px-6 py-4">
+                                                    <div className="font-semibold">{est.title}</div>
+                                                    <div className="text-xs text-slate-500">No. {est.patternNo ?? est.estimateNumber}</div>
+                                                </td>
+                                                <td className="px-6 py-4">{est.projectId ?? '-'}</td>
+                                                <td className="px-6 py-4 text-right">{salesAmount !== null ? formatJPY(salesAmount) : '—'}</td>
+                                                <td className="px-6 py-4 text-right">{variableCostAmount !== null ? formatJPY(variableCostAmount) : '—'}</td>
+                                                <td className="px-6 py-4 text-right font-semibold">{mqAmount !== null ? formatJPY(mqAmount) : '—'}</td>
+                                                <td className="px-6 py-4 text-right">{mqRateValue !== null ? formatRate(mqRateValue) : '—'}</td>
+                                                <td className="px-6 py-4">{renderMqMissingBadge(est.mqMissingReason)}</td>
+                                                <td className="px-6 py-4">{renderStatusBadge(est.statusLabel ?? est.status)}</td>
+                                                <td className="px-6 py-4">{deliveryText}</td>
+                                                <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                             {sortedEstimates.length === 0 && <EmptyState icon={FileText} title="見積がありません" message="Supabaseのestimatesテーブルにデータがありません。新規作成してください。" />}

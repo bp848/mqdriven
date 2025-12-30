@@ -20,6 +20,7 @@ import {
     ConfirmationDialogProps,
     BugReport,
     Estimate,
+    EstimateDetail,
     ApplicationWithDetails,
     Application,
     Invoice,
@@ -2390,6 +2391,13 @@ const mapEstimateRow = (row: any): Estimate => {
     const taxRate = toNumberOrNull(row.tax_rate);
     const taxAmount = toNumberOrNull(row.consumption) ?? (subtotal !== null && taxRate !== null ? Math.floor(subtotal * (taxRate / 100)) : null);
     const total = toNumberOrNull(row.total) ?? (subtotal !== null && taxAmount !== null ? subtotal + taxAmount : subtotal ?? 0);
+    const salesAmount = toNumberOrNull(row.sales_amount) ?? subtotal ?? null;
+    const variableCostAmount = toNumberOrNull(row.variable_cost_amount ?? row.variable_cost_num ?? row.detail_variable_cost_num);
+    const mqAmount = toNumberOrNull(row.mq_amount);
+    const mqRate = toNumberOrNull(row.mq_rate);
+    const detailCount = toNumberOrNull(row.detail_count);
+    const mqMissingReason = toStringOrNull(row.mq_missing_reason);
+    const statusLabel = row.status_label ?? null;
 
     return {
         id: row.estimates_id ?? row.id ?? generateEstimateId(),
@@ -2431,6 +2439,41 @@ const mapEstimateRow = (row: any): Estimate => {
         rawStatusCode: row.status ?? null,
         copies: copies ?? null,
         unitPrice: unitPrice ?? null,
+        salesAmount,
+        variableCostAmount,
+        mqAmount,
+        mqRate,
+        mqMissingReason: (mqMissingReason as 'OK' | 'A' | 'B' | null) ?? null,
+        detailCount,
+        statusLabel,
+        raw: row,
+    };
+};
+
+const mapEstimateDetailRow = (row: any): EstimateDetail => {
+    const quantity = toNumberOrNull(row.quantity ?? row.quantity_num);
+    const unitPrice = toNumberOrNull(row.unit_price ?? row.unit_price_num);
+    const amount = toNumberOrNull(row.amount ?? row.sales_amount);
+    const variableCost = toNumberOrNull(row.variable_cost ?? row.valiable_cost ?? row.variable_cost_amount);
+    const mqAmount =
+        toNumberOrNull(row.mq_amount) ??
+        (amount !== null && variableCost !== null ? amount - variableCost : null);
+    const mqRate =
+        toNumberOrNull(row.mq_rate) ??
+        (amount && amount > 0 && variableCost !== null ? (amount - variableCost) / amount : null);
+
+    return {
+        id: row.id ?? row.detail_id ?? row.detailId ?? null,
+        detailId: row.detail_id ?? row.detailId ?? null,
+        estimateId: row.estimate_id ?? row.estimateId ?? '',
+        itemName: row.item_name ?? row.name ?? '',
+        quantity,
+        unitPrice,
+        amount: amount ?? (quantity !== null && unitPrice !== null ? quantity * unitPrice : null),
+        variableCost,
+        mqAmount,
+        mqRate,
+        note: row.note ?? null,
     };
 };
 
@@ -2529,6 +2572,9 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const { data, error, count } = await supabase
         .from('estimates_list_view')
         .select('*', { count: 'exact' })
+        .order('delivery_date', { ascending: false, nullsFirst: false })
+        .order('mq_missing_reason', { ascending: false })
+        .order('mq_amount', { ascending: false, nullsFirst: false })
         .order('create_date', { ascending: false })
         .range(from, to);
     ensureSupabaseSuccess(error, 'Failed to fetch estimates');
@@ -2536,6 +2582,55 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         rows: (data || []).map(mapEstimateRow),
         totalCount: count ?? 0,
     };
+};
+
+export const getEstimateDetails = async (estimateId: string): Promise<EstimateDetail[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from('estimate_details_list_view')
+        .select('*')
+        .eq('estimate_id', estimateId)
+        .order('detail_id', { ascending: true });
+    ensureSupabaseSuccess(error, 'Failed to fetch estimate details');
+    return (data || []).map(mapEstimateDetailRow);
+};
+
+export const addEstimateDetail = async (detail: Partial<EstimateDetail> & { estimateId: string }): Promise<void> => {
+    const supabase = getSupabase();
+    const payload: any = {
+        estimate_id: detail.estimateId,
+        item_name: detail.itemName,
+        quantity: detail.quantity,
+        unit_price: detail.unitPrice,
+        amount: detail.amount ?? (detail.quantity !== undefined && detail.unitPrice !== undefined ? Number(detail.quantity) * Number(detail.unitPrice) : null),
+        valiable_cost: detail.variableCost ?? detail.variableCost === 0 ? detail.variableCost : null,
+        variable_cost: detail.variableCost ?? detail.variableCost === 0 ? detail.variableCost : null,
+        note: detail.note ?? null,
+    };
+    const { error } = await supabase.from('estimate_details').insert(payload);
+    ensureSupabaseSuccess(error, 'Failed to add estimate detail');
+};
+
+export const updateEstimateDetail = async (detailId: string, updates: Partial<EstimateDetail>): Promise<void> => {
+    const supabase = getSupabase();
+    const payload: any = {};
+    if (updates.itemName !== undefined) payload.item_name = updates.itemName;
+    if (updates.quantity !== undefined) payload.quantity = updates.quantity;
+    if (updates.unitPrice !== undefined) payload.unit_price = updates.unitPrice;
+    if (updates.amount !== undefined) payload.amount = updates.amount;
+    if (updates.variableCost !== undefined) {
+        payload.valiable_cost = updates.variableCost;
+        payload.variable_cost = updates.variableCost;
+    }
+    if (updates.note !== undefined) payload.note = updates.note;
+    const { error } = await supabase.from('estimate_details').update(payload).eq('detail_id', detailId);
+    ensureSupabaseSuccess(error, 'Failed to update estimate detail');
+};
+
+export const deleteEstimateDetail = async (detailId: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('estimate_details').delete().eq('detail_id', detailId);
+    ensureSupabaseSuccess(error, 'Failed to delete estimate detail');
 };
 
 export const addEstimate = async (estimateData: Partial<Estimate>): Promise<void> => {

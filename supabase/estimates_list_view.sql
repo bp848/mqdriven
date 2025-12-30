@@ -2,6 +2,7 @@ create or replace view public.estimates_list_view as
 with detail_costs as (
     select
         nullif(trim(ed.estimate_id::text), '') as estimate_business_id,
+        count(*) as detail_count,
         sum(case when trim(ed.valiable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then ed.valiable_cost::numeric end) as detail_variable_cost_num,
         sum(
             case
@@ -18,6 +19,7 @@ cleaned as (
         e.*,
         dc.detail_variable_cost_num,
         dc.detail_sales_amount_num,
+        dc.detail_count,
         case when trim(e.copies::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.copies::numeric end as copies_num,
         case when trim(e.unit_price::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.unit_price::numeric end as unit_price_num,
         case when trim(e.subtotal::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.subtotal::numeric end as subtotal_num,
@@ -73,7 +75,8 @@ calc as (
         coalesce(
             c.variable_cost_num,
             c.detail_variable_cost_num
-        ) as variable_cost_calc
+        ) as variable_cost_calc,
+        coalesce(c.detail_count, 0) as detail_count_calc
     from cleaned c
 ),
 mq as (
@@ -95,7 +98,13 @@ mq as (
         end as mq_amount,
         case
             when calc.subtotal_calc > 0 and calc.variable_cost_calc is not null then (calc.subtotal_calc - calc.variable_cost_calc) / calc.subtotal_calc
-        end as mq_rate
+        end as mq_rate,
+        case
+            when calc.subtotal_calc is not null and calc.variable_cost_calc is not null then 'OK'
+            when calc.detail_count_calc = 0 then 'A' -- 明細なし
+            when calc.detail_count_calc > 0 and (calc.variable_cost_calc is null or calc.variable_cost_calc = 0) then 'B' -- 原価未入力
+            else 'B'
+        end as mq_missing_reason
     from calc
 )
 select
@@ -134,10 +143,12 @@ select
     variable_cost_num,
     detail_variable_cost_num,
     detail_sales_amount_num,
+    detail_count_calc as detail_count,
     variable_cost_calc as variable_cost_amount,
     subtotal_calc as sales_amount,
     mq_amount,
-    mq_rate
+    mq_rate,
+    mq_missing_reason
 from mq;
 
 -- Display-safe: estimate_details
@@ -276,22 +287,43 @@ from calc;
 -- MQ monthly per project
 create or replace view public.mq_project_monthly_view as
 with base as (
-    select project_id, 'estimate' as source, delivery_date as dt, sales_amount, variable_cost_amount from public.estimates_list_view
+    select project_id, 'estimate' as source, delivery_date as dt, sales_amount, variable_cost_amount, 0::integer as order_count from public.estimates_list_view
     union all
-    select project_id, 'order' as source, order_date, sales_amount, variable_cost_amount from public.orders_list_view
+    select project_id, 'order' as source, order_date, sales_amount, variable_cost_amount, 1::integer as order_count from public.orders_list_view
     union all
-    select project_id, 'invoice' as source, invoice_date, sales_amount, variable_cost_amount from public.invoices_list_view
+    select project_id, 'invoice' as source, invoice_date, sales_amount, variable_cost_amount, 0::integer as order_count from public.invoices_list_view
+),
+project_month_source as (
+    select
+        b.project_id,
+        date_trunc('month', b.dt)::date as month,
+        b.source,
+        sum(b.sales_amount) as sales_amount,
+        sum(b.variable_cost_amount) as variable_cost_amount,
+        sum(b.order_count) as order_count
+    from base b
+    where b.dt is not null
+    group by b.project_id, date_trunc('month', b.dt)::date, b.source
+),
+ranked as (
+    select
+        pms.*,
+        row_number() over (
+            partition by pms.project_id, pms.month
+            order by case pms.source when 'order' then 1 when 'invoice' then 2 else 3 end
+        ) as source_rank
+    from project_month_source pms
 )
 select
-    b.project_id,
-    date_trunc('month', b.dt)::date as month,
-    sum(b.sales_amount) as sales_amount,
-    sum(b.variable_cost_amount) as variable_cost_amount,
-    sum(b.sales_amount) - sum(b.variable_cost_amount) as mq_amount,
-    case when sum(b.sales_amount) > 0 then (sum(b.sales_amount) - sum(b.variable_cost_amount)) / sum(b.sales_amount) end as mq_rate
-from base b
-where b.dt is not null
-group by b.project_id, date_trunc('month', b.dt)::date;
+    project_id,
+    month,
+    sales_amount,
+    variable_cost_amount,
+    case when sales_amount is not null and variable_cost_amount is not null then sales_amount - variable_cost_amount end as mq_amount,
+    case when sales_amount > 0 and variable_cost_amount is not null then (sales_amount - variable_cost_amount) / sales_amount end as mq_rate,
+    order_count
+from ranked
+where source_rank = 1;
 
 -- MQ monthly per customer (joins project -> customer)
 create or replace view public.mq_customer_monthly_view as
@@ -300,34 +332,111 @@ select
     m.month,
     sum(m.sales_amount) as sales_amount,
     sum(m.variable_cost_amount) as variable_cost_amount,
-    sum(m.mq_amount) as mq_amount,
-    case when sum(m.sales_amount) > 0 then sum(m.mq_amount) / sum(m.sales_amount) end as mq_rate
+    sum(m.order_count) as order_count,
+    sum(m.sales_amount) - sum(m.variable_cost_amount) as mq_amount,
+    case when sum(m.sales_amount) > 0 then (sum(m.sales_amount) - sum(m.variable_cost_amount)) / sum(m.sales_amount) end as mq_rate
 from public.mq_project_monthly_view m
 join public.projects p on p.project_id = m.project_id
 group by p.customer_id, m.month;
 
+-- Lifetime KPI per customer (LTV / MQ)
+create or replace view public.mq_customer_ltv_view as
+with base as (
+    select project_id, 'estimate' as source, delivery_date as dt, sales_amount, variable_cost_amount, 0::integer as order_count from public.estimates_list_view
+    union all
+    select project_id, 'order' as source, order_date, sales_amount, variable_cost_amount, 1::integer as order_count from public.orders_list_view
+    union all
+    select project_id, 'invoice' as source, invoice_date, sales_amount, variable_cost_amount, 0::integer as order_count from public.invoices_list_view
+),
+project_source_totals as (
+    select
+        b.project_id,
+        b.source,
+        sum(b.sales_amount) as sales_amount,
+        sum(b.variable_cost_amount) as variable_cost_amount,
+        sum(b.order_count) as order_count,
+        max(b.dt) as last_transaction_date
+    from base b
+    where b.dt is not null
+    group by b.project_id, b.source
+),
+ranked as (
+    select
+        pst.*,
+        row_number() over (
+            partition by pst.project_id
+            order by case pst.source when 'order' then 1 when 'invoice' then 2 else 3 end
+        ) as source_rank
+    from project_source_totals pst
+)
+select
+    p.customer_id,
+    sum(r.sales_amount) as lifetime_sales_amount,
+    sum(r.variable_cost_amount) as lifetime_variable_cost_amount,
+    case
+        when sum(r.variable_cost_amount) is null then null
+        else sum(r.sales_amount) - sum(r.variable_cost_amount)
+    end as lifetime_mq_amount,
+    case
+        when sum(r.sales_amount) > 0 and sum(r.variable_cost_amount) is not null
+            then (sum(r.sales_amount) - sum(r.variable_cost_amount)) / sum(r.sales_amount)
+    end as lifetime_mq_rate,
+    max(r.last_transaction_date) as last_transaction_date,
+    sum(r.order_count) as order_count
+from ranked r
+join public.projects p on p.project_id = r.project_id
+where r.source_rank = 1
+group by p.customer_id;
+
 -- Anomaly detection view
 create or replace view public.mq_anomalies_view as
 select
-  'project_month' as level,
-  project_id,
-  month,
-  sales_amount,
-  variable_cost_amount,
-  mq_amount,
-  mq_rate,
+  'estimate' as level,
+  e.project_id,
+  e.estimates_id as record_id,
+  e.delivery_date as dt,
+  e.sales_amount,
+  e.variable_cost_amount,
+  e.mq_amount,
+  e.mq_rate,
+  e.mq_missing_reason,
   case
-    when sales_amount is null then '売上null'
-    when variable_cost_amount is null then '変動費null'
-    when mq_rate is null then 'MQ率null'
-    when mq_rate < 0 or mq_rate > 1.2 then 'MQ率異常'
-    when sales_amount = 0 and variable_cost_amount > 0 then '売上0で変動費あり'
+    when e.mq_missing_reason = 'A' then '明細なし'
+    when e.mq_missing_reason = 'B' then '原価未入力'
+    when e.mq_rate < 0 then 'MQ率<0'
+    when e.mq_rate > 1.2 then 'MQ率>1.2'
+    when e.sales_amount = 0 and e.variable_cost_amount > 0 then '売上0で変動費あり'
   end as anomaly_reason
-from public.mq_project_monthly_view
+from public.estimates_list_view e
 where
-  sales_amount is null
-  or variable_cost_amount is null
-  or mq_rate is null
-  or mq_rate < 0
-  or mq_rate > 1.2
-  or (sales_amount = 0 and variable_cost_amount > 0);
+  e.mq_missing_reason in ('A', 'B')
+  or e.mq_rate < 0
+  or e.mq_rate > 1.2
+  or (e.sales_amount = 0 and e.variable_cost_amount > 0)
+union all
+select
+  'project_month' as level,
+  m.project_id,
+  null::text as record_id,
+  m.month as dt,
+  m.sales_amount,
+  m.variable_cost_amount,
+  m.mq_amount,
+  m.mq_rate,
+  null::text as mq_missing_reason,
+  case
+    when m.sales_amount is null then '売上null'
+    when m.variable_cost_amount is null then '変動費null'
+    when m.mq_rate is null then 'MQ率null'
+    when m.mq_rate < 0 then 'MQ率<0'
+    when m.mq_rate > 1.2 then 'MQ率>1.2'
+    when m.sales_amount = 0 and m.variable_cost_amount > 0 then '売上0で変動費あり'
+  end as anomaly_reason
+from public.mq_project_monthly_view m
+where
+  m.sales_amount is null
+  or m.variable_cost_amount is null
+  or m.mq_rate is null
+  or m.mq_rate < 0
+  or m.mq_rate > 1.2
+  or (m.sales_amount = 0 and m.variable_cost_amount > 0);
