@@ -20,6 +20,9 @@ cleaned as (
         dc.detail_variable_cost_num,
         dc.detail_sales_amount_num,
         dc.detail_count,
+        p.project_name as project_name_joined,
+        p.customer_id as project_customer_id,
+        cust.customer_name as customer_name_joined,
         case when trim(e.copies::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.copies::numeric end as copies_num,
         case when trim(e.unit_price::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.unit_price::numeric end as unit_price_num,
         case when trim(e.subtotal::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.subtotal::numeric end as subtotal_num,
@@ -43,6 +46,8 @@ cleaned as (
         nullif(trim(e.status::text), '') as status_raw
     from public.estimates e
     left join detail_costs dc on dc.estimate_business_id = nullif(trim(e.estimates_id::text), '')
+    left join public.projects p on nullif(trim(e.project_id::text), '') = nullif(trim(p.project_id::text), '')
+    left join public.customers cust on nullif(trim(p.customer_id::text), '') = cust.id::text
 ),
 calc as (
     select
@@ -82,6 +87,14 @@ calc as (
 mq as (
     select
         calc.*,
+        coalesce(nullif(calc.project_name::text, ''), nullif(calc.project_name_joined::text, '')) as project_name_resolved,
+        coalesce(nullif(calc.customer_name::text, ''), nullif(calc.customer_name_joined::text, '')) as customer_name_resolved,
+        coalesce(
+            coalesce(nullif(calc.project_name::text, ''), nullif(calc.project_name_joined::text, '')),
+            nullif(calc.pattern_name::text, ''),
+            nullif(calc.specification::text, ''),
+            '見積#' || coalesce(nullif(trim(calc.estimates_id::text), ''), calc.id::text)
+        ) as display_name,
         case
             when coalesce(trim(calc.status_raw), '') in ('2', '受注', '受注済') then 'ordered'
             when coalesce(trim(calc.status_raw), '') in ('9', '失注', 'キャンセル') then 'lost'
@@ -108,11 +121,14 @@ mq as (
     from calc
 )
 select
+    display_name,
     estimates_id,
     id,
     pattern_no,
     pattern_name,
     project_id,
+    project_name_resolved as project_name,
+    customer_name_resolved as customer_name,
     specification,
     delivery_place,
     transaction_method,

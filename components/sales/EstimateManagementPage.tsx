@@ -310,7 +310,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     searchTerm,
     isAIOff: _isAIOff,
 }) => {
-    const [sortConfig, setSortConfig] = useState<SortConfig | null>(null); // respect backend default (納品日 desc -> MQ優先)
+    const [sortConfig, setSortConfig] = useState<SortConfig | null>(null); // respect backend default (納品日 desc -> 更新日 desc)
     const [mqFilter, setMqFilter] = useState<MqFilter>('all');
     const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -341,12 +341,23 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
         if (!searchTerm) return rows;
         const query = searchTerm.toLowerCase();
-        return rows.filter(est =>
-            (est.title && est.title.toLowerCase().includes(query)) ||
-            (est.projectId && est.projectId.toLowerCase().includes(query)) ||
-            (est.patternNo && est.patternNo.toLowerCase().includes(query)) ||
-            (est.notes && est.notes.toLowerCase().includes(query))
-        );
+        return rows.filter(est => {
+            const candidates = [
+                est.displayName,
+                est.title,
+                est.customerName,
+                est.projectName,
+                est.projectId,
+                est.id,
+                est.patternNo,
+                est.notes,
+            ];
+            return candidates.some(value =>
+                value !== null &&
+                value !== undefined &&
+                value.toString().toLowerCase().includes(query)
+            );
+        });
     }, [estimates, searchTerm, mqFilter]);
 
     const resolveSalesAmount = (est: Estimate): number | null => {
@@ -773,13 +784,13 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const mqSummaryCards = (
         <div className="rounded-2xl bg-slate-900 text-slate-50 border border-slate-800 shadow-lg mb-6 p-4 md:p-6">
             <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
-                <div className="flex flex-col gap-1">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
-                    <div className="flex flex-wrap items-baseline gap-3">
-                        <h3 className="text-lg font-semibold">MQ優先で最新表示</h3>
-                        <span className="text-sm text-slate-300">納品日 desc → MQ計算済 → MQ額 desc</span>
+                    <div className="flex flex-col gap-1">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
+                        <div className="flex flex-wrap items-baseline gap-3">
+                            <h3 className="text-lg font-semibold">MQ優先で最新表示</h3>
+                            <span className="text-sm text-slate-300">納品日 desc（NULL後方）→ 更新日 desc</span>
+                        </div>
                     </div>
-                </div>
                 {mqFilter !== 'all' && (
                     <button
                         onClick={() => setMqFilter('all')}
@@ -833,15 +844,15 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                             <table className="w-full text-base text-left text-slate-800 dark:text-slate-100">
                                 <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100">
                                     <tr>
-                                        <th scope="col" className="px-6 py-3 font-medium">見積 / パターン</th>
-                                        <SortableHeader sortKey="projectId" label="案件ID" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <th scope="col" className="px-6 py-3 font-medium">表示名</th>
+                                        <SortableHeader sortKey="deliveryDate" label="納品日" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="statusLabel" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                         <SortableHeader sortKey="salesAmount" label="売上" sortConfig={sortConfig} requestSort={requestSort} />
                                         <SortableHeader sortKey="variableCostAmount" label="原価" sortConfig={sortConfig} requestSort={requestSort} />
                                         <SortableHeader sortKey="mqAmount" label="MQ" sortConfig={sortConfig} requestSort={requestSort} />
                                         <SortableHeader sortKey="mqRate" label="MQ率" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="mqMissingReason" label="MQステータス" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="statusLabel" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="deliveryDate" label="納品日" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="mqMissingReason" label="未入力理由" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <SortableHeader sortKey="detailCount" label="明細数" sortConfig={sortConfig} requestSort={requestSort} />
                                         <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
                                     </tr>
                                 </thead>
@@ -859,17 +870,22 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                                 onClick={() => setSelectedEstimate(est)}
                                             >
                                                 <td className="px-6 py-4">
-                                                    <div className="font-semibold">{est.title}</div>
-                                                    <div className="text-xs text-slate-500">No. {est.patternNo ?? est.estimateNumber}</div>
+                                                    <div className="font-semibold text-slate-900 dark:text-white">{est.displayName ?? est.title ?? '見積'}</div>
+                                                    <div className="text-xs text-slate-500 flex flex-wrap gap-2 mt-1">
+                                                        <span>{est.customerName || '取引先不明'}</span>
+                                                        <span className="text-slate-400">案件ID: {est.projectId ?? '—'}</span>
+                                                        <span className="text-slate-400">見積ID: {est.id ?? '—'}</span>
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-400 mt-0.5">No. {est.patternNo ?? est.estimateNumber}</div>
                                                 </td>
-                                                <td className="px-6 py-4">{est.projectId ?? '-'}</td>
+                                                <td className="px-6 py-4">{deliveryText}</td>
+                                                <td className="px-6 py-4">{renderStatusBadge(est.statusLabel ?? est.status)}</td>
                                                 <td className="px-6 py-4 text-right">{salesAmount !== null ? formatJPY(salesAmount) : '—'}</td>
                                                 <td className="px-6 py-4 text-right">{variableCostAmount !== null ? formatJPY(variableCostAmount) : '—'}</td>
                                                 <td className="px-6 py-4 text-right font-semibold">{mqAmount !== null ? formatJPY(mqAmount) : '—'}</td>
                                                 <td className="px-6 py-4 text-right">{mqRateValue !== null ? formatRate(mqRateValue) : '—'}</td>
                                                 <td className="px-6 py-4">{renderMqMissingBadge(est.mqMissingReason)}</td>
-                                                <td className="px-6 py-4">{renderStatusBadge(est.statusLabel ?? est.status)}</td>
-                                                <td className="px-6 py-4">{deliveryText}</td>
+                                                <td className="px-6 py-4 text-center">{est.detailCount !== null && est.detailCount !== undefined ? est.detailCount : '—'}</td>
                                                 <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
                                                     <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
                                                     <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
@@ -917,13 +933,15 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                     <div className="flex-1 rounded-2xl border border-slate-200 p-4 shadow-sm bg-slate-50">
                                         <div className="flex items-center justify-between mb-2">
                                             <div>
-                                                <p className="text-sm text-slate-500">パターン名 / 件名</p>
-                                                <h3 className="text-2xl font-bold">{selectedEstimate.title}</h3>
+                                                <p className="text-sm text-slate-500">表示名 / パターン</p>
+                                                <h3 className="text-2xl font-bold">{selectedEstimate.displayName ?? selectedEstimate.title}</h3>
+                                                <p className="text-sm text-slate-500 mt-1">
+                                                    {selectedEstimate.customerName || '取引先不明'} ・ 案件ID: {selectedEstimate.projectId ?? '-'} ・ 見積ID: {selectedEstimate.id}
+                                                </p>
                                             </div>
-                                            {renderStatusBadge(selectedEstimate.status)}
+                                            {renderStatusBadge(selectedEstimate.statusLabel ?? selectedEstimate.status)}
                                         </div>
                                         <p className="text-sm text-slate-600">パターンNo: {selectedEstimate.patternNo ?? selectedEstimate.estimateNumber}</p>
-                                        <p className="text-sm text-slate-600 mt-1">案件ID: {selectedEstimate.projectId ?? '-'}</p>
                                         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <AnalysisCard title="合計" value={formatJPY(selectedEstimate.total)} />
                                             <AnalysisCard title="小計" value={formatJPY(selectedEstimate.subtotal ?? selectedEstimate.total)} />

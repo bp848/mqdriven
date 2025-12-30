@@ -437,6 +437,8 @@ export interface Estimate {
     estimateNumber: number;
     customerName: string;
     title: string;
+    displayName?: string | null;
+    projectName?: string | null;
     items: EstimateItem[];
     total: number;
     deliveryDate: string;

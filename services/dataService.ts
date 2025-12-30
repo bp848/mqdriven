@@ -2398,12 +2398,24 @@ const mapEstimateRow = (row: any): Estimate => {
     const detailCount = toNumberOrNull(row.detail_count);
     const mqMissingReason = toStringOrNull(row.mq_missing_reason);
     const statusLabel = row.status_label ?? null;
+    const projectName = toStringOrNull(row.project_name);
+    const customerNameResolved =
+        toStringOrNull(row.customer_name) ||
+        (row.project_id ? `案件${row.project_id}` : null);
+    const displayName =
+        toStringOrNull(row.display_name) ||
+        projectName ||
+        toStringOrNull(row.pattern_name) ||
+        toStringOrNull(row.specification) ||
+        (row.estimates_id ? `見積#${row.estimates_id}` : '見積');
 
     return {
         id: row.estimates_id ?? row.id ?? generateEstimateId(),
         estimateNumber: Number(row.pattern_no ?? row.estimates_id ?? 0) || 0,
-        customerName: row.project_id ? `案件${row.project_id}` : '未設定',
+        customerName: customerNameResolved ?? '未設定',
         title: row.pattern_name ?? row.specification ?? '見積',
+        displayName,
+        projectName,
         items: [
             {
                 division: 'その他',
@@ -2573,9 +2585,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         .from('estimates_list_view')
         .select('*', { count: 'exact' })
         .order('delivery_date', { ascending: false, nullsFirst: false })
-        .order('mq_missing_reason', { ascending: false })
-        .order('mq_amount', { ascending: false, nullsFirst: false })
-        .order('create_date', { ascending: false })
+        .order('update_date', { ascending: false, nullsFirst: false })
         .range(from, to);
     ensureSupabaseSuccess(error, 'Failed to fetch estimates');
     return {
