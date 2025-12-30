@@ -97,6 +97,27 @@ const statusBadgeStyle: Record<string, string> = {
 
 const chartColors = ['#2563eb', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+const statusFilterOptions: { value: string; label: string }[] = [
+    { value: 'draft', label: '下書き' },
+    { value: 'submitted', label: '提出' },
+    { value: 'ordered', label: '受注' },
+    { value: 'lost', label: '失注' },
+];
+
+const mqReasonOptions: { value: 'OK' | 'A' | 'B'; label: string }[] = [
+    { value: 'OK', label: 'OK (計算済)' },
+    { value: 'A', label: 'A 明細なし' },
+    { value: 'B', label: 'B 原価未入力' },
+];
+
+const mqRateRangeOptions: { value: 'all' | 'lt20' | '20to40' | '40to60' | 'gt60'; label: string }[] = [
+    { value: 'all', label: '指定なし' },
+    { value: 'lt20', label: '<20%' },
+    { value: '20to40', label: '20–40%' },
+    { value: '40to60', label: '40–60%' },
+    { value: 'gt60', label: '>60%' },
+];
+
 const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, estimateToEdit, currentUser, isSaving }) => {
     const [form, setForm] = useState<EstimateFormState>(buildDefaultForm());
     const [error, setError] = useState('');
@@ -311,7 +332,20 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     isAIOff: _isAIOff,
 }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig | null>(null); // respect backend default (納品日 desc -> 更新日 desc)
-    const [mqFilter, setMqFilter] = useState<MqFilter>('all');
+    const [mqFilter, setMqFilter] = useState<MqFilter>('all'); // legacy quick filter (kept for compatibility)
+    const [deliveryPreset, setDeliveryPreset] = useState<'all' | 'this_month' | 'last_month' | 'this_quarter' | 'last_quarter' | 'custom'>('all');
+    const [customStartDate, setCustomStartDate] = useState<string>('');
+    const [customEndDate, setCustomEndDate] = useState<string>('');
+    const [statusFilter, setStatusFilter] = useState<string[]>([]);
+    const [mqReasonFilter, setMqReasonFilter] = useState<string[]>([]);
+    const [mqRateRange, setMqRateRange] = useState<'all' | 'lt20' | '20to40' | '40to60' | 'gt60'>('all');
+    const [activeQuickTab, setActiveQuickTab] = useState<'none' | 'missing_cost' | 'no_detail' | 'low_mq'>('none');
+    const [mqTargetRate, setMqTargetRate] = useState<number>(0.4); // 40% デフォルト
+    const [summaryScope, setSummaryScope] = useState<'filtered' | 'page'>('filtered');
+    const [quickViewEstimate, setQuickViewEstimate] = useState<Estimate | null>(null);
+    const [quickViewDetails, setQuickViewDetails] = useState<EstimateDetail[]>([]);
+    const [quickViewLoading, setQuickViewLoading] = useState(false);
+    const [quickViewError, setQuickViewError] = useState<string | null>(null);
     const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -333,32 +367,6 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const totalPages = useMemo(() => Math.max(1, Math.ceil((estimateTotalCount || 0) / estimatePageSize)), [estimateTotalCount, estimatePageSize]);
     const pageStart = useMemo(() => estimateTotalCount > 0 ? (estimatePageSize * (estimatePage - 1)) + 1 : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
     const pageEnd = useMemo(() => estimateTotalCount > 0 ? Math.min(estimateTotalCount, estimatePage * estimatePageSize) : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
-
-    const filteredEstimates = useMemo(() => {
-        let rows = estimates;
-        if (mqFilter !== 'all') {
-            rows = rows.filter(est => (est.mqMissingReason ?? 'OK') === mqFilter);
-        }
-        if (!searchTerm) return rows;
-        const query = searchTerm.toLowerCase();
-        return rows.filter(est => {
-            const candidates = [
-                est.displayName,
-                est.title,
-                est.customerName,
-                est.projectName,
-                est.projectId,
-                est.id,
-                est.patternNo,
-                est.notes,
-            ];
-            return candidates.some(value =>
-                value !== null &&
-                value !== undefined &&
-                value.toString().toLowerCase().includes(query)
-            );
-        });
-    }, [estimates, searchTerm, mqFilter]);
 
     const resolveSalesAmount = (est: Estimate): number | null => {
         const candidates = [est.salesAmount, est.subtotal, est.total];
@@ -405,6 +413,154 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const formatRate = (rate: number | null | undefined) => {
         if (rate === null || rate === undefined || !Number.isFinite(rate)) return '—';
         return `${(rate * 100).toFixed(1)}%`;
+    };
+
+    const deliveryRange = useMemo(() => {
+        const now = new Date();
+        const toDate = (value: string) => {
+            const dt = new Date(value);
+            return Number.isNaN(dt.getTime()) ? null : dt;
+        };
+
+        const firstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+        const lastDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        const quarterBounds = (date: Date) => {
+            const quarterIndex = Math.floor(date.getMonth() / 3);
+            const startMonth = quarterIndex * 3;
+            const start = new Date(date.getFullYear(), startMonth, 1);
+            const end = new Date(date.getFullYear(), startMonth + 3, 0);
+            return { start, end };
+        };
+
+        switch (deliveryPreset) {
+            case 'this_month':
+                return { start: firstDayOfMonth(now), end: lastDayOfMonth(now) };
+            case 'last_month': {
+                const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                return { start: firstDayOfMonth(prev), end: lastDayOfMonth(prev) };
+            }
+            case 'this_quarter':
+                return quarterBounds(now);
+            case 'last_quarter': {
+                const prevQuarter = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+                return quarterBounds(prevQuarter);
+            }
+            case 'custom':
+                return { start: customStartDate ? toDate(customStartDate) : null, end: customEndDate ? toDate(customEndDate) : null };
+            default:
+                return { start: null, end: null };
+        }
+    }, [deliveryPreset, customStartDate, customEndDate]);
+
+    const normalizeStatus = (status?: string | EstimateStatus | null) => (status ?? '').toString().toLowerCase();
+
+    const filteredEstimates = useMemo(() => {
+        const { start, end } = deliveryRange;
+        const matchesDate = (value?: string | null) => {
+            if (!start && !end) return true;
+            if (!value) return false;
+            const dt = new Date(value);
+            if (Number.isNaN(dt.getTime())) return false;
+            if (start && dt < start) return false;
+            if (end && dt > end) return false;
+            return true;
+        };
+
+        let rows = estimates.filter(est => {
+            if (!matchesDate(est.deliveryDate)) return false;
+
+            if (mqFilter !== 'all' && (est.mqMissingReason ?? 'OK') !== mqFilter) return false;
+
+            if (statusFilter.length) {
+                const normalizedStatus = normalizeStatus(est.statusLabel ?? est.status);
+                if (!statusFilter.includes(normalizedStatus)) return false;
+            }
+
+            const reason = (est.mqMissingReason ?? 'OK') as string;
+            if (mqReasonFilter.length && !mqReasonFilter.includes(reason)) return false;
+
+            const salesAmount = resolveSalesAmount(est);
+            const mqAmount = resolveMqAmount(est, salesAmount, resolveVariableCost(est));
+            const rate = resolveMqRate(est, salesAmount, mqAmount);
+            if (mqRateRange !== 'all') {
+                if (rate === null || rate === undefined) return false;
+                if (mqRateRange === 'lt20' && !(rate < 0.2)) return false;
+                if (mqRateRange === '20to40' && !(rate >= 0.2 && rate < 0.4)) return false;
+                if (mqRateRange === '40to60' && !(rate >= 0.4 && rate < 0.6)) return false;
+                if (mqRateRange === 'gt60' && !(rate >= 0.6)) return false;
+            }
+
+            if (activeQuickTab === 'missing_cost' && reason !== 'B') return false;
+            if (activeQuickTab === 'no_detail' && reason !== 'A') return false;
+            if (activeQuickTab === 'low_mq') {
+                if (reason !== 'OK') return false;
+                if (rate === null || rate === undefined || rate >= mqTargetRate) return false;
+            }
+
+            return true;
+        });
+
+        if (!searchTerm) return rows;
+        const query = searchTerm.toLowerCase();
+        rows = rows.filter(est => {
+            const candidates = [
+                est.displayName,
+                est.title,
+                est.customerName,
+                est.projectName,
+                est.projectId,
+                est.id,
+                est.patternNo,
+                est.notes,
+            ];
+            return candidates.some(value =>
+                value !== null &&
+                value !== undefined &&
+                value.toString().toLowerCase().includes(query)
+            );
+        });
+        return rows;
+    }, [
+        estimates,
+        searchTerm,
+        mqFilter,
+        deliveryRange,
+        statusFilter,
+        mqReasonFilter,
+        mqRateRange,
+        activeQuickTab,
+        mqTargetRate,
+    ]);
+
+    const toggleStatusFilter = (value: string) => {
+        setStatusFilter(prev => (prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]));
+    };
+
+    const toggleMqReasonFilter = (value: 'OK' | 'A' | 'B') => {
+        setMqReasonFilter(prev => (prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]));
+    };
+
+    const resetFilters = () => {
+        setDeliveryPreset('all');
+        setCustomStartDate('');
+        setCustomEndDate('');
+        setStatusFilter([]);
+        setMqReasonFilter([]);
+        setMqRateRange('all');
+        setActiveQuickTab('none');
+        setMqFilter('all');
+    };
+
+    const toggleQuickTab = (tab: 'missing_cost' | 'no_detail' | 'low_mq') => {
+        setActiveQuickTab(prev => {
+            const next = prev === tab ? 'none' : tab;
+            if (tab === 'missing_cost') {
+                setMqReasonFilter(next === 'missing_cost' ? ['B'] : []);
+            } else if (tab === 'no_detail') {
+                setMqReasonFilter(next === 'no_detail' ? ['A'] : []);
+            }
+            return next;
+        });
     };
 
     const getSortValue = (estimate: Estimate, key: string) => {
@@ -478,6 +634,36 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         loadDetails();
     }, [selectedEstimate?.id]);
 
+    const summaryRows = useMemo(() => (summaryScope === 'filtered' ? filteredEstimates : estimates), [summaryScope, filteredEstimates, estimates]);
+    const summaryMetrics = useMemo(() => {
+        let count = 0;
+        let totalSales = 0;
+        let orderedCount = 0;
+        let mqTotal = 0;
+        let mqSales = 0;
+        for (const est of summaryRows) {
+            count += 1;
+            const salesAmount = resolveSalesAmount(est);
+            if (salesAmount !== null) totalSales += salesAmount;
+            const normalizedStatus = normalizeStatus(est.statusLabel ?? est.status);
+            if (normalizedStatus === 'ordered') orderedCount += 1;
+            const reason = (est.mqMissingReason ?? 'OK') as 'OK' | 'A' | 'B';
+            if (reason === 'OK') {
+                const mqAmount = resolveMqAmount(est, salesAmount, resolveVariableCost(est));
+                if (mqAmount !== null) mqTotal += mqAmount;
+                if (salesAmount !== null) mqSales += salesAmount;
+            }
+        }
+        return {
+            count,
+            totalSales,
+            orderedCount,
+            orderedRate: count > 0 ? orderedCount / count : null,
+            mqTotal,
+            mqRate: mqSales > 0 ? mqTotal / mqSales : null,
+        };
+    }, [summaryRows]);
+
     const statusSummary = useMemo(() => {
         const base = {
             [EstimateStatus.Draft]: { count: 0, total: 0 },
@@ -491,17 +677,25 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
         return base;
     }, [filteredEstimates]);
-    const pageTotalAmount = useMemo(() => filteredEstimates.reduce((sum, est) => sum + (resolveSalesAmount(est) ?? 0), 0), [filteredEstimates]);
     const mqMissingSummary = useMemo(() => {
         const base = { OK: 0, A: 0, B: 0 };
-        for (const est of estimates) {
+        for (const est of summaryRows) {
             const reason = (est.mqMissingReason ?? 'OK') as 'OK' | 'A' | 'B';
             if (reason === 'OK' || reason === 'A' || reason === 'B') {
                 base[reason] += 1;
             }
         }
         return base;
-    }, [estimates]);
+    }, [summaryRows]);
+    const lowMqCount = useMemo(
+        () =>
+            summaryRows.filter(est => {
+                const reason = (est.mqMissingReason ?? 'OK') as 'OK' | 'A' | 'B';
+                const rate = resolveMqRate(est);
+                return reason === 'OK' && rate !== null && rate !== undefined && rate < mqTargetRate;
+            }).length,
+        [summaryRows, mqTargetRate]
+    );
 
     const detailTotals = useMemo(() => {
         let sales = 0;
@@ -564,6 +758,30 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
     };
 
+    const openQuickView = async (est: Estimate) => {
+        setQuickViewEstimate(est);
+        setQuickViewDetails([]);
+        setQuickViewLoading(true);
+        setQuickViewError(null);
+        try {
+            const rows = await getEstimateDetails(est.id);
+            setQuickViewDetails(rows);
+        } catch (e: any) {
+            const message = e?.message || '全項目の読み込みに失敗しました。';
+            setQuickViewError(message);
+            addToast(message, 'error');
+        } finally {
+            setQuickViewLoading(false);
+        }
+    };
+
+    const closeQuickView = () => {
+        setQuickViewEstimate(null);
+        setQuickViewDetails([]);
+        setQuickViewError(null);
+        setQuickViewLoading(false);
+    };
+
     const requestSort = (key: string) => {
         const direction = sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
         setSortConfig({ key, direction });
@@ -605,13 +823,12 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         );
     };
 
-    const renderMqFilterCard = (reason: 'OK' | 'A' | 'B', title: string, sub: string, accentClass: string) => {
-        const active = mqFilter === reason;
-        const count = mqMissingSummary[reason] ?? 0;
+    const renderQuickTabCard = (key: 'missing_cost' | 'no_detail' | 'low_mq', title: string, sub: string, accentClass: string, count: number) => {
+        const active = activeQuickTab === key;
         return (
             <button
                 type="button"
-                onClick={() => setMqFilter(active ? 'all' : reason)}
+                onClick={() => toggleQuickTab(key)}
                 className={`text-left rounded-2xl border p-4 shadow-sm transition bg-slate-800/60 border-slate-700 text-slate-50 ${active ? 'ring-2 ring-blue-400 border-blue-300 bg-slate-800/80' : 'hover:border-slate-500'}`}
             >
                 <p className={`text-xs uppercase tracking-[0.18em] ${accentClass}`}>{title}</p>
@@ -784,32 +1001,66 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const mqSummaryCards = (
         <div className="rounded-2xl bg-slate-900 text-slate-50 border border-slate-800 shadow-lg mb-6 p-4 md:p-6">
             <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
-                    <div className="flex flex-col gap-1">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
-                        <div className="flex flex-wrap items-baseline gap-3">
-                            <h3 className="text-lg font-semibold">MQ優先で最新表示</h3>
-                            <span className="text-sm text-slate-300">納品日 desc（NULL後方）→ 更新日 desc</span>
-                        </div>
+                <div className="flex flex-col gap-1">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">mq会計サマリ</p>
+                    <div className="flex flex-wrap items-baseline gap-3">
+                        <h3 className="text-lg font-semibold">MQ優先で危険度を即判定</h3>
+                        <span className="text-sm text-slate-300">納品日 desc（NULL後方）→ 更新日 desc</span>
                     </div>
-                {mqFilter !== 'all' && (
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                    <div className="flex rounded-lg overflow-hidden border border-blue-400/60">
+                        <button
+                            className={`px-3 py-1 text-xs font-semibold ${summaryScope === 'filtered' ? 'bg-blue-500 text-white' : 'bg-transparent text-blue-100'}`}
+                            onClick={() => setSummaryScope('filtered')}
+                        >
+                            表示中のみ
+                        </button>
+                        <button
+                            className={`px-3 py-1 text-xs font-semibold ${summaryScope === 'page' ? 'bg-blue-500 text-white' : 'bg-transparent text-blue-100'}`}
+                            onClick={() => setSummaryScope('page')}
+                        >
+                            このページ全体
+                        </button>
+                    </div>
                     <button
-                        onClick={() => setMqFilter('all')}
+                        onClick={resetFilters}
                         className="text-xs px-3 py-1 rounded-lg border border-blue-300 text-blue-100 hover:bg-blue-800/40"
                     >
-                        MQフィルタ解除
+                        フィルタリセット
                     </button>
-                )}
+                </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <AnalysisCard
                     tone="dark"
-                    title="表示件数 / 売上合計"
-                    value={`${filteredEstimates.length} / ${estimateTotalCount} 件`}
-                    sub={`売上合計: ${formatJPY(pageTotalAmount)} （フィルタ後 ${filteredEstimates.length} 件表示）`}
+                    title="見積件数"
+                    value={`${summaryMetrics.count} 件`}
+                    sub={`表示中 ${filteredEstimates.length} 件 / ページ ${estimates.length} 件`}
                 />
-                {renderMqFilterCard('OK', 'OK (MQ計上)', 'MQが計算できる見積だけを表示', 'text-emerald-200')}
-                {renderMqFilterCard('B', '原価未入力', '原価を入力してMQを出す', 'text-amber-200')}
-                {renderMqFilterCard('A', '明細なし', '明細を追加してMQを出す', 'text-rose-200')}
+                <AnalysisCard
+                    tone="dark"
+                    title="見積総額"
+                    value={formatJPY(summaryMetrics.totalSales)}
+                    sub="MQ列を基準に集計"
+                />
+                <AnalysisCard
+                    tone="dark"
+                    title="受注率"
+                    value={summaryMetrics.orderedRate !== null ? formatRate(summaryMetrics.orderedRate) : '—'}
+                    sub={`${summaryMetrics.orderedCount} 件 受注`}
+                />
+                <AnalysisCard
+                    tone="dark"
+                    title="MQ合計 / MQ率"
+                    value={`${formatJPY(summaryMetrics.mqTotal)} / ${formatRate(summaryMetrics.mqRate)}`}
+                    sub="OKのみ集計（A/B除外）"
+                />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                {renderQuickTabCard('missing_cost', '原価未入力 (B)', '原価を埋めてMQ計算', 'text-amber-200', mqMissingSummary.B ?? 0)}
+                {renderQuickTabCard('no_detail', '明細なし (A)', '明細を追加してMQ計算', 'text-rose-200', mqMissingSummary.A ?? 0)}
+                {renderQuickTabCard('low_mq', '低MQ（目標未達）', `目標 ${formatRate(mqTargetRate)}`, 'text-sky-200', lowMqCount)}
             </div>
         </div>
     );
@@ -840,6 +1091,115 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 {activeTab === 'list' && (
                     <div className="p-6 space-y-6">
                         {mqSummaryCards}
+                        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">MQドリブンフィルタ</h4>
+                                    <p className="text-xs text-slate-500">納品日・ステータス・MQ未入力理由・MQ率でしぼり込み</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-500 flex items-center gap-1">
+                                        低MQ目標 (%)
+                                        <input
+                                            type="number"
+                                            value={Math.round(mqTargetRate * 100)}
+                                            onChange={(e) => {
+                                                const next = Number(e.target.value) / 100;
+                                                if (!Number.isNaN(next)) setMqTargetRate(next);
+                                            }}
+                                            className="w-16 px-2 py-1 text-sm rounded border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-600"
+                                        />
+                                    </label>
+                                    <button
+                                        onClick={resetFilters}
+                                        className="text-xs px-3 py-1 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    >
+                                        全リセット
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">納品日</p>
+                                    <select
+                                        value={deliveryPreset}
+                                        onChange={(e) => setDeliveryPreset(e.target.value as typeof deliveryPreset)}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                    >
+                                        <option value="all">すべて</option>
+                                        <option value="this_month">今月</option>
+                                        <option value="last_month">先月</option>
+                                        <option value="this_quarter">今四半期</option>
+                                        <option value="last_quarter">前四半期</option>
+                                        <option value="custom">任意範囲</option>
+                                    </select>
+                                    {deliveryPreset === 'custom' && (
+                                        <div className="mt-2 grid grid-cols-2 gap-2">
+                                            <input
+                                                type="date"
+                                                value={customStartDate}
+                                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                                placeholder="開始日"
+                                            />
+                                            <input
+                                                type="date"
+                                                value={customEndDate}
+                                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                                placeholder="終了日"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">ステータス</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {statusFilterOptions.map(opt => {
+                                            const active = statusFilter.includes(opt.value);
+                                            return (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => toggleStatusFilter(opt.value)}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-semibold border ${active ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">MQ未入力理由</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {mqReasonOptions.map(opt => {
+                                            const active = mqReasonFilter.includes(opt.value);
+                                            return (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => toggleMqReasonFilter(opt.value)}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-semibold border ${active ? 'bg-amber-500 text-white border-amber-500' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">MQ率レンジ</p>
+                                    <select
+                                        value={mqRateRange}
+                                        onChange={(e) => setMqRateRange(e.target.value as typeof mqRateRange)}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                    >
+                                        {mqRateRangeOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-base text-left text-slate-800 dark:text-slate-100">
                                 <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100">
@@ -887,6 +1247,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                                 <td className="px-6 py-4">{renderMqMissingBadge(est.mqMissingReason)}</td>
                                                 <td className="px-6 py-4 text-center">{est.detailCount !== null && est.detailCount !== undefined ? est.detailCount : '—'}</td>
                                                 <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                                                    <button onClick={(e) => { e.stopPropagation(); openQuickView(est); }} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white text-lg leading-none">︙</button>
                                                     <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
                                                     <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
                                                 </td>
@@ -1105,6 +1466,83 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                         setIsModalOpen(true);
                     }}
                 />
+            )}
+            {quickViewEstimate && (
+                <div className="fixed inset-0 z-50 flex">
+                    <div className="flex-1 bg-black/50" onClick={closeQuickView}></div>
+                    <div className="w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl p-6 overflow-y-auto">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs text-slate-500">全項目クイック表示</p>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{quickViewEstimate.displayName ?? quickViewEstimate.title}</h3>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {quickViewEstimate.customerName || '取引先不明'}・案件ID: {quickViewEstimate.projectId ?? '—'}・見積ID: {quickViewEstimate.id}
+                                </p>
+                            </div>
+                            <button onClick={closeQuickView} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                            <AnalysisCard title="売上" value={formatJPY(resolveSalesAmount(quickViewEstimate) ?? 0)} />
+                            <AnalysisCard title="原価" value={formatJPY(resolveVariableCost(quickViewEstimate) ?? 0)} />
+                            <AnalysisCard title="MQ" value={formatJPY(resolveMqAmount(quickViewEstimate) ?? 0)} />
+                            <AnalysisCard title="MQ率" value={formatRate(resolveMqRate(quickViewEstimate))} />
+                        </div>
+                        <div className="mt-4 space-y-2">
+                            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">基本情報</h4>
+                            {renderFieldGrid(quickViewEstimate.raw || quickViewEstimate, [
+                                { key: 'delivery_date', label: '納品日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                { key: 'status_label', label: 'ステータス' },
+                                { key: 'project_id', label: '案件ID' },
+                                { key: 'pattern_no', label: 'パターンNo' },
+                                { key: 'pattern_name', label: '件名/パターン名' },
+                                { key: 'specification', label: '仕様/備考' },
+                                { key: 'transaction_method', label: '取引条件' },
+                                { key: 'delivery_place', label: '納品場所' },
+                                { key: 'create_date', label: '作成日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                { key: 'update_date', label: '更新日', formatter: (v) => (v ? formatDate(v) : '—') },
+                            ])}
+                        </div>
+                        <div className="mt-4">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">明細</h4>
+                                {quickViewLoading && <span className="text-xs text-slate-500">読み込み中...</span>}
+                                {quickViewError && <span className="text-xs text-red-500">{quickViewError}</span>}
+                            </div>
+                            <div className="mt-2 max-h-64 overflow-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 dark:bg-slate-800">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left">内容</th>
+                                            <th className="px-3 py-2 text-right">数量</th>
+                                            <th className="px-3 py-2 text-right">単価</th>
+                                            <th className="px-3 py-2 text-right">金額</th>
+                                            <th className="px-3 py-2 text-right">原価</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {quickViewDetails.map((detail, idx) => (
+                                            <tr key={`${detail.detailId ?? detail.id ?? idx}`} className="border-t border-slate-200 dark:border-slate-700">
+                                                <td className="px-3 py-2">{detail.itemName}</td>
+                                                <td className="px-3 py-2 text-right">{detail.quantity ?? '—'}</td>
+                                                <td className="px-3 py-2 text-right">{detail.unitPrice !== null ? formatJPY(detail.unitPrice) : '—'}</td>
+                                                <td className="px-3 py-2 text-right">{detail.amount !== null ? formatJPY(detail.amount) : '—'}</td>
+                                                <td className="px-3 py-2 text-right">{detail.variableCost !== null ? formatJPY(detail.variableCost) : '—'}</td>
+                                            </tr>
+                                        ))}
+                                        {quickViewDetails.length === 0 && !quickViewLoading && (
+                                            <tr>
+                                                <td colSpan={5} className="px-3 py-4 text-center text-slate-500">明細がありません。</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-2">編集は従来の詳細画面から行ってください。</p>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );
