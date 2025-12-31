@@ -341,7 +341,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const [mqRateRange, setMqRateRange] = useState<'all' | 'lt20' | '20to40' | '40to60' | 'gt60'>('all');
     const [activeQuickTab, setActiveQuickTab] = useState<'none' | 'missing_cost' | 'no_detail' | 'low_mq'>('none');
     const [mqTargetRate, setMqTargetRate] = useState<number>(0.4); // 40% デフォルト
-    const [summaryScope, setSummaryScope] = useState<'filtered' | 'page'>('filtered');
+    const [summaryScope, setSummaryScope] = useState<'filtered' | 'all'>('filtered');
     const [quickViewEstimate, setQuickViewEstimate] = useState<Estimate | null>(null);
     const [quickViewDetails, setQuickViewDetails] = useState<EstimateDetail[]>([]);
     const [quickViewLoading, setQuickViewLoading] = useState(false);
@@ -741,6 +741,8 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             .map(([, value]) => value);
     }, [filteredEstimates]);
 
+    const quickViewSource = useMemo(() => buildQuickViewSource(quickViewEstimate), [quickViewEstimate]);
+
     const handleSaveEstimate = async (estimateData: Partial<Estimate>) => {
         setIsSaving(true);
         try {
@@ -787,16 +789,30 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         setSortConfig({ key, direction });
     };
 
+    const formatStatusLabel = (status?: string | EstimateStatus | null) => {
+        const normalized = (status ?? '').toString().toLowerCase();
+        if (normalized === 'ordered') return '受注';
+        if (normalized === 'lost') return '失注';
+        if (normalized === 'draft') return '見積中';
+        if (normalized === 'submitted') return '提出';
+        return (status ?? '').toString() || '—';
+    };
+
+    const formatMqReason = (reason?: string | null) => {
+        const key = (reason ?? 'OK') as 'OK' | 'A' | 'B';
+        const labelMap: Record<'OK' | 'A' | 'B', string> = {
+            OK: 'OK (計算済)',
+            A: 'A 明細なし',
+            B: 'B 原価未入力',
+        };
+        return labelMap[key] ?? '—';
+    };
+
     const renderStatusBadge = (status?: string | EstimateStatus | null) => {
         const text = (status ?? '').toString();
         const normalized = text.toLowerCase();
         const className = statusBadgeStyle[normalized] || statusBadgeStyle[text] || 'bg-slate-100 text-slate-700';
-        const display =
-            normalized === 'ordered' ? '受注'
-            : normalized === 'lost' ? '失注'
-            : normalized === 'draft' ? '見積中'
-            : normalized === 'submitted' ? '提出'
-            : text || '—';
+        const display = formatStatusLabel(status);
         return (
             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${className}`}>
                 {display}
@@ -846,6 +862,13 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         return JSON.stringify(value);
     };
 
+    const formatMoney = (value: any) => {
+        if (value === null || value === undefined || value === '') return '—';
+        const num = Number(value);
+        if (!Number.isFinite(num)) return '—';
+        return formatJPY(num);
+    };
+
     const renderFieldGrid = (raw: Record<string, any>, fields: { key: string; label: string; formatter?: (v: any) => string; editable?: boolean; }[]) => (
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
             {fields.map(field => (
@@ -858,6 +881,32 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             ))}
         </dl>
     );
+
+    const buildQuickViewSource = (est: Estimate | null) => {
+        if (!est) return null;
+        const raw = (est as any)?.raw ?? {};
+        return {
+            ...raw,
+            ...est,
+            delivery_date: est.deliveryDate ?? raw.delivery_date,
+            expiration_date: est.expirationDate ?? raw.expiration_date,
+            status_label: est.statusLabel ?? raw.status_label,
+            mq_missing_reason: est.mqMissingReason ?? raw.mq_missing_reason,
+            sales_amount: resolveSalesAmount(est),
+            variable_cost_amount: resolveVariableCost(est),
+            mq_amount: resolveMqAmount(est),
+            mq_rate: resolveMqRate(est),
+            detail_count: est.detailCount ?? raw.detail_count,
+            customer_name: est.customerName ?? raw.customer_name,
+            project_name: est.projectName ?? raw.project_name,
+            order_id: raw.order_id ?? null,
+            note: est.notes ?? raw.note,
+            create_date: raw.create_date ?? est.createdAt,
+            update_date: raw.update_date ?? est.updatedAt,
+            delivery_place: raw.delivery_place ?? est.deliveryMethod,
+            transaction_method: raw.transaction_method ?? est.paymentTerms,
+        };
+    };
 
     const handleDetailInputChange = (field: keyof EstimateDetail, value: string) => {
         setDetailForm(prev => ({
@@ -1017,12 +1066,13 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                             表示中のみ
                         </button>
                         <button
-                            className={`px-3 py-1 text-xs font-semibold ${summaryScope === 'page' ? 'bg-blue-500 text-white' : 'bg-transparent text-blue-100'}`}
-                            onClick={() => setSummaryScope('page')}
+                            className={`px-3 py-1 text-xs font-semibold ${summaryScope === 'all' ? 'bg-blue-500 text-white' : 'bg-transparent text-blue-100'}`}
+                            onClick={() => setSummaryScope('all')}
                         >
-                            このページ全体
+                            全体
                         </button>
                     </div>
+                    <span className="text-[11px] text-blue-100">全体 = ページ読み込み分</span>
                     <button
                         onClick={resetFilters}
                         className="text-xs px-3 py-1 rounded-lg border border-blue-300 text-blue-100 hover:bg-blue-800/40"
@@ -1036,7 +1086,9 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                     tone="dark"
                     title="見積件数"
                     value={`${summaryMetrics.count} 件`}
-                    sub={`表示中 ${filteredEstimates.length} 件 / ページ ${estimates.length} 件`}
+                    sub={summaryScope === 'filtered'
+                        ? `表示中 ${filteredEstimates.length} 件 / 全体 ${estimates.length} 件`
+                        : `全体 ${estimates.length} 件`}
                 />
                 <AnalysisCard
                     tone="dark"
@@ -1472,12 +1524,17 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                     <div className="flex-1 bg-black/50" onClick={closeQuickView}></div>
                     <div className="w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl p-6 overflow-y-auto">
                         <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <p className="text-xs text-slate-500">全項目クイック表示</p>
+                            <div className="space-y-1">
+                                <p className="text-xs text-slate-500">全項目クイック表示（読み取り専用）</p>
                                 <h3 className="text-xl font-bold text-slate-900 dark:text-white">{quickViewEstimate.displayName ?? quickViewEstimate.title}</h3>
                                 <p className="text-xs text-slate-500 mt-1">
                                     {quickViewEstimate.customerName || '取引先不明'}・案件ID: {quickViewEstimate.projectId ?? '—'}・見積ID: {quickViewEstimate.id}
                                 </p>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {renderStatusBadge(quickViewEstimate.statusLabel ?? quickViewEstimate.status)}
+                                    {renderMqMissingBadge(quickViewEstimate.mqMissingReason)}
+                                </div>
+                                <p className="text-[11px] text-slate-500">編集は従来の詳細画面から行ってください。</p>
                             </div>
                             <button onClick={closeQuickView} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white">
                                 <X className="w-5 h-5" />
@@ -1491,18 +1548,28 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                         </div>
                         <div className="mt-4 space-y-2">
                             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">基本情報</h4>
-                            {renderFieldGrid(quickViewEstimate.raw || quickViewEstimate, [
-                                { key: 'delivery_date', label: '納品日', formatter: (v) => (v ? formatDate(v) : '—') },
-                                { key: 'status_label', label: 'ステータス' },
-                                { key: 'project_id', label: '案件ID' },
-                                { key: 'pattern_no', label: 'パターンNo' },
-                                { key: 'pattern_name', label: '件名/パターン名' },
-                                { key: 'specification', label: '仕様/備考' },
-                                { key: 'transaction_method', label: '取引条件' },
-                                { key: 'delivery_place', label: '納品場所' },
-                                { key: 'create_date', label: '作成日', formatter: (v) => (v ? formatDate(v) : '—') },
-                                { key: 'update_date', label: '更新日', formatter: (v) => (v ? formatDate(v) : '—') },
-                            ])}
+                            {renderFieldGrid(
+                                quickViewSource || (quickViewEstimate.raw || quickViewEstimate),
+                                [
+                                    { key: 'customer_name', label: '顧客' },
+                                    { key: 'project_name', label: '案件名' },
+                                    { key: 'status_label', label: 'ステータス', formatter: (v) => formatStatusLabel(v as any) },
+                                    { key: 'mq_missing_reason', label: 'MQ未入力理由', formatter: (v) => formatMqReason(v as any) },
+                                    { key: 'delivery_date', label: '納品日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                    { key: 'expiration_date', label: '有効期限', formatter: (v) => (v ? formatDate(v) : '—') },
+                                    { key: 'transaction_method', label: '取引条件' },
+                                    { key: 'delivery_place', label: '納品場所' },
+                                    { key: 'sales_amount', label: '売上', formatter: (v) => formatMoney(v) },
+                                    { key: 'variable_cost_amount', label: '原価', formatter: (v) => formatMoney(v) },
+                                    { key: 'mq_amount', label: 'MQ', formatter: (v) => formatMoney(v) },
+                                    { key: 'mq_rate', label: 'MQ率', formatter: (v) => formatRate(Number.isFinite(Number(v)) ? Number(v) : null) },
+                                    { key: 'detail_count', label: '明細数' },
+                                    { key: 'order_id', label: '注文ID' },
+                                    { key: 'note', label: '備考' },
+                                    { key: 'create_date', label: '作成日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                    { key: 'update_date', label: '更新日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                ]
+                            )}
                         </div>
                         <div className="mt-4">
                             <div className="flex items-center justify-between">

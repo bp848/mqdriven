@@ -371,6 +371,55 @@ const mapApplicationToGoogleEvent = (app, attendeeEmail) => {
     };
 };
 
+// Google Calendar list API requires timeMin when ordering by startTime.
+// Derive a reasonable window if the caller didn't provide one to avoid 400s.
+const resolveSyncWindow = (erpEvents, requestedTimeMin, requestedTimeMax) => {
+    const normalizeIso = (value) => {
+        if (!value) return null;
+        const ms = Date.parse(value);
+        return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+    };
+
+    const fallbackPastMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const fallbackFutureMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const bufferMs = 24 * 60 * 60 * 1000; // 1 day padding around ERP events
+    const now = Date.now();
+
+    const normalizedMin = normalizeIso(requestedTimeMin);
+    const normalizedMax = normalizeIso(requestedTimeMax);
+
+    let minTs = null;
+    let maxTs = null;
+    for (const app of erpEvents) {
+        const startIso = parseDateTime(app.form_data?.reportDate, app.form_data?.startTime);
+        const endIso = parseDateTime(app.form_data?.reportDate, app.form_data?.endTime);
+        const startMs = startIso ? Date.parse(startIso) : NaN;
+        const endMs = endIso ? Date.parse(endIso) : NaN;
+        if (!Number.isNaN(startMs)) {
+            minTs = minTs === null ? startMs : Math.min(minTs, startMs);
+            maxTs = maxTs === null ? startMs : Math.max(maxTs, startMs);
+        }
+        if (!Number.isNaN(endMs)) {
+            minTs = minTs === null ? endMs : Math.min(minTs, endMs);
+            maxTs = maxTs === null ? endMs : Math.max(maxTs, endMs);
+        }
+    }
+
+    const resolvedMin = normalizedMin
+        || (minTs !== null ? new Date(minTs - bufferMs).toISOString() : new Date(now - fallbackPastMs).toISOString());
+    const resolvedMax = normalizedMax
+        || (maxTs !== null ? new Date(maxTs + bufferMs).toISOString() : new Date(now + fallbackFutureMs).toISOString());
+
+    if (Date.parse(resolvedMax) < Date.parse(resolvedMin)) {
+        return {
+            timeMin: resolvedMin,
+            timeMax: new Date(Date.parse(resolvedMin) + fallbackFutureMs).toISOString(),
+        };
+    }
+
+    return { timeMin: resolvedMin, timeMax: resolvedMax };
+};
+
 const fetchApplicantEmail = async (userId) => {
     if (!userId || !supabase) return null;
     const { data, error } = await supabase
@@ -388,7 +437,12 @@ const fetchGoogleEventsByErpId = async (accessToken, timeMin, timeMax) => {
         orderBy: 'startTime',
         showDeleted: 'true',
     });
-    if (timeMin) params.append('timeMin', timeMin);
+    if (timeMin) {
+        params.append('timeMin', timeMin);
+    } else {
+        // Safety net; resolveSyncWindow should already provide a value.
+        params.append('timeMin', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    }
     if (timeMax) params.append('timeMax', timeMax);
     // Filter by private extended property if provided
     const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events?${params.toString()}`;
@@ -448,7 +502,8 @@ const syncErpToGoogle = async ({ userId, timeMin, timeMax }) => {
     const accessToken = tokenRecord.access_token;
     const erpEvents = await fetchDlyApplications();
 
-    const googleMap = await fetchGoogleEventsByErpId(accessToken, timeMin, timeMax);
+    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow(erpEvents, timeMin, timeMax);
+    const googleMap = await fetchGoogleEventsByErpId(accessToken, resolvedTimeMin, resolvedTimeMax);
     const summary = { created: 0, updated: 0, skipped: 0, missing: 0 };
 
     for (const app of erpEvents) {
