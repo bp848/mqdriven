@@ -180,9 +180,9 @@ const upsertGoogleToken = async ({ userId, tokens }) => {
 };
 
 // --- Google OAuth Routes ---
-app.get('/api/google/oauth/start', async (req, res) => {
+app.post('/api/google/oauth/start', async (req, res) => {
     const requestId = createRequestId();
-    const userId = req.query.user_id;
+    const userId = req.body?.user_id || req.query.user_id;
     const client = getGoogleOAuthClient();
     if (!client) {
         return res.status(503).json({ error: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI.', requestId });
@@ -201,6 +201,58 @@ app.get('/api/google/oauth/start', async (req, res) => {
     } catch (err) {
         console.error('[google/oauth/start] failed', { requestId, err });
         return res.status(500).json({ error: 'Failed to generate auth url', requestId });
+    }
+});
+
+// Status check (used by dashboard/settings)
+app.post('/api/google/oauth/status', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.body?.user_id || req.query.user_id;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    if (!supabase) {
+        return res.status(503).json({ error: 'Supabase not configured', requestId });
+    }
+    try {
+        const { data, error } = await supabase
+            .from('user_google_tokens')
+            .select('expires_at, scope')
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (error) throw error;
+        return res.status(200).json({
+            connected: !!data,
+            expires_at: data?.expires_at ?? null,
+            scope: data?.scope ?? null,
+            requestId,
+        });
+    } catch (err) {
+        console.error('[google/oauth/status] failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to fetch status', requestId });
+    }
+});
+
+// Disconnect (delete tokens)
+app.post('/api/google/oauth/disconnect', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.body?.user_id || req.query.user_id;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    if (!supabase) {
+        return res.status(503).json({ error: 'Supabase not configured', requestId });
+    }
+    try {
+        const { error } = await supabase
+            .from('user_google_tokens')
+            .delete()
+            .eq('user_id', userId);
+        if (error) throw error;
+        return res.status(200).json({ success: true, requestId });
+    } catch (err) {
+        console.error('[google/oauth/disconnect] failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to disconnect', requestId });
     }
 });
 

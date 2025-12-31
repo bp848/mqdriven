@@ -470,11 +470,13 @@ const App: React.FC = () => {
         }
         setGoogleAuthStatus(prev => ({ ...prev, loading: true }));
         try {
-            const supabase = getSupabase();
-            const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
-                body: { user_id: currentUser.id },
+            const resp = await fetch('/api/google/oauth/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id }),
             });
-            if (error) throw error;
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data?.error || 'status failed');
             setGoogleAuthStatus({
                 connected: !!data?.connected,
                 expiresAt: data?.expires_at ?? null,
@@ -549,12 +551,14 @@ const App: React.FC = () => {
         }
         setIsGoogleAuthLoading(true);
         try {
-            const supabase = getSupabase();
-            const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
-                body: { user_id: currentUser.id },
+            const resp = await fetch('/api/google/oauth/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id }),
             });
-            if (error) {
-                console.error('Google OAuth start failed', error);
+            const data = await resp.json();
+            if (!resp.ok) {
+                console.error('Google OAuth start failed', data);
                 addToast('Googleカレンダー連携の開始に失敗しました。設定を確認してください。', 'error');
                 return;
             }
@@ -584,11 +588,13 @@ const App: React.FC = () => {
         }
         setIsGoogleAuthLoading(true);
         try {
-            const supabase = getSupabase();
-            const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
-                body: { user_id: currentUser.id },
+            const resp = await fetch('/api/google/oauth/disconnect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id }),
             });
-            if (error) throw error;
+            const data = await resp.json();
+            if (!resp.ok || data?.error) throw new Error(data?.error || 'disconnect failed');
             addToast('Googleカレンダー連携を解除しました。', 'success');
             setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
         } catch (err) {

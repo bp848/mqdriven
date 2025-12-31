@@ -223,11 +223,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         }
         setGoogleStatus(prev => ({ ...prev, loading: true }));
         try {
-            const supabase = getSupabase();
-            const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
-                body: { user_id: currentUser.id },
+            const resp = await fetch('/api/google/oauth/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id }),
             });
-            if (error) throw error;
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data?.error || 'status failed');
             console.info('[GoogleAuth] status fetched', data);
             setGoogleStatus({
                 connected: !!data?.connected,
@@ -292,11 +294,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         console.info('[GoogleAuth] start clicked', { userId: currentUser?.id, origin: window.location.origin });
         setIsGoogleActionLoading(true);
         try {
-            const supabase = getSupabase();
-            const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
-                body: { user_id: currentUser.id },
+            const resp = await fetch('/api/google/oauth/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id }),
             });
-            if (error) throw error;
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data?.error || 'failed to start oauth');
             if (data?.authUrl) {
                 console.info('[GoogleAuth] authUrl received', data.authUrl);
                 window.open(data.authUrl, '_blank', 'noopener');
@@ -326,11 +330,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         console.info('[GoogleAuth] disconnect clicked', { userId: currentUser?.id });
         setIsGoogleActionLoading(true);
         try {
-            const supabase = getSupabase();
-            const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
-                body: { user_id: currentUser.id },
+            const resp = await fetch('/api/google/oauth/disconnect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id }),
             });
-            if (error) throw error;
+            const data = await resp.json();
+            if (!resp.ok || data?.error) throw new Error(data?.error || 'disconnect failed');
             addToast('Googleカレンダー連携を解除しました。', 'success');
             setGoogleStatus({ connected: false, expiresAt: null, loading: false });
         } catch (err) {
