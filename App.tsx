@@ -98,14 +98,18 @@ const getAllowedGoogleOrigins = (): string[] => {
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
         'http://localhost:3000',
+        typeof window !== 'undefined' ? window.location.origin : '',
     ];
 };
 
 const isGoogleOAuthAllowedOrigin = () => {
     if (typeof window === 'undefined') return false;
-    const allowed = getAllowedGoogleOrigins();
+    const allowed = getAllowedGoogleOrigins().filter(Boolean);
+    const origin = window.location.origin;
     if (allowed.includes('*')) return true;
-    return allowed.includes(window.location.origin);
+    if (allowed.includes(origin)) return true;
+    // Auto-allow the current origin if not listed to avoid blocking OAuth in new environments
+    return false;
 };
 
 type PredictiveSuggestion = {

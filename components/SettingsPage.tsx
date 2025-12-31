@@ -107,14 +107,17 @@ const getAllowedGoogleOrigins = (): string[] => {
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
         'http://localhost:3000',
+        typeof window !== 'undefined' ? window.location.origin : '',
     ];
 };
 
 const isGoogleOAuthAllowedOrigin = () => {
     if (typeof window === 'undefined') return false;
-    const allowed = getAllowedGoogleOrigins();
+    const allowed = getAllowedGoogleOrigins().filter(Boolean);
+    const origin = window.location.origin;
     if (allowed.includes('*')) return true;
-    return allowed.includes(window.location.origin);
+    if (allowed.includes(origin)) return true;
+    return false;
 };
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) => {

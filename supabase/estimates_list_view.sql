@@ -1,3 +1,14 @@
+-- Cost confirmation flags (projects / orders)
+alter table if exists public.orders
+    add column if not exists cost_confirmed boolean default false,
+    add column if not exists cost_confirmed_at timestamptz,
+    add column if not exists cost_confirmed_by uuid;
+
+alter table if exists public.projects
+    add column if not exists cost_confirmed boolean default false,
+    add column if not exists cost_confirmed_at timestamptz,
+    add column if not exists cost_confirmed_by uuid;
+
 create or replace view public.estimates_list_view as
 with detail_costs as (
     select
@@ -90,7 +101,17 @@ mq as (
         coalesce(nullif(calc.project_name::text, ''), nullif(calc.project_name_joined::text, '')) as project_name_resolved,
         coalesce(nullif(calc.customer_name::text, ''), nullif(calc.customer_name_joined::text, '')) as customer_name_resolved,
         coalesce(
-            coalesce(nullif(calc.project_name::text, ''), nullif(calc.project_name_joined::text, '')),
+            nullif(
+                concat_ws(
+                    '｜',
+                    nullif(coalesce(calc.customer_name::text, calc.customer_name_joined::text, ''), ''),
+                    nullif(coalesce(calc.project_name::text, calc.project_name_joined::text, ''), ''),
+                    concat('見積#', coalesce(nullif(trim(calc.estimates_id::text), ''), calc.id::text))
+                ),
+                ''
+            ),
+            nullif(calc.project_name::text, ''),
+            nullif(calc.project_name_joined::text, ''),
             nullif(calc.pattern_name::text, ''),
             nullif(calc.specification::text, ''),
             '見積#' || coalesce(nullif(trim(calc.estimates_id::text), ''), calc.id::text)
@@ -214,7 +235,10 @@ with cleaned as (
             then to_date(replace(o.order_date::text, '/', '-'), 'YYYY-MM-DD') end as order_date_clean,
         case when coalesce(nullif(trim(o.delivery_date::text), ''), '') ~ '^[0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}$'
             then to_date(replace(o.delivery_date::text, '/', '-'), 'YYYY-MM-DD') end as delivery_date_clean,
-        nullif(trim(o.status::text), '') as status_raw
+        nullif(trim(o.status::text), '') as status_raw,
+        coalesce(o.cost_confirmed, false) as cost_confirmed,
+        o.cost_confirmed_at,
+        o.cost_confirmed_by
     from public.orders o
 ),
 calc as (
@@ -250,7 +274,10 @@ select
     status_raw as status,
     status_label,
     order_amount_num,
-    variable_cost_num
+    variable_cost_num,
+    cost_confirmed,
+    cost_confirmed_at,
+    cost_confirmed_by
 from calc;
 
 -- Display-safe: invoices
