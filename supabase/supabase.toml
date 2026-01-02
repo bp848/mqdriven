@@ -1,0 +1,11 @@
+[functions.google-oauth-start]
+verify_jwt = false
+
+[functions.google-oauth-status]
+verify_jwt = false
+
+[functions.google-oauth-disconnect]
+verify_jwt = false
+
+[functions.google-oauth-callback]
+verify_jwt = false

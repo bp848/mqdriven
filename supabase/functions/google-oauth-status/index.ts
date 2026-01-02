@@ -61,7 +61,11 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { headers: buildCorsHeaders(req) });
   }
 
-  if (req.method !== "GET" && req.method !== "POST") {
+  if (req.method === "GET") {
+    return jsonResponse(req, { ok: true, message: "google-oauth-status alive" }, 200);
+  }
+
+  if (req.method !== "POST") {
     return jsonResponse(req, { error: "method not allowed" }, 405);
   }
 
@@ -70,7 +74,7 @@ Deno.serve(async (req: Request) => {
     const isJson = (req.headers.get("content-type") || "").includes("application/json");
     let userId = url.searchParams.get("user_id");
 
-    if (!userId && req.method === "POST" && isJson) {
+    if (!userId && isJson) {
       const body = await req.json().catch(() => null) as { user_id?: string; userId?: string } | null;
       userId = body?.user_id || body?.userId || null;
     }
