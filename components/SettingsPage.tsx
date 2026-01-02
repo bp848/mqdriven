@@ -222,25 +222,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             return;
         }
         setGoogleStatus(prev => ({ ...prev, loading: true }));
-        const parseJsonSafe = async (resp: Response) => {
-            const text = await resp.text();
-            if (!text) return {};
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                console.error('[GoogleAuth] failed to parse JSON', { status: resp.status, text });
-                return { error: 'invalid_json', raw: text };
-            }
-        };
         try {
-            const resp = await fetch('/api/google/oauth/status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id }),
-                credentials: 'include',
+            const supabase = getSupabase();
+            const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
+                body: { user_id: currentUser.id },
             });
-            const data = await parseJsonSafe(resp);
-            if (!resp.ok) throw new Error(data?.error || `status failed (${resp.status})`);
+            if (error) throw error;
             console.info('[GoogleAuth] status fetched', data);
             setGoogleStatus({
                 connected: !!data?.connected,
@@ -304,25 +291,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         }
         console.info('[GoogleAuth] start clicked', { userId: currentUser?.id, origin: window.location.origin });
         setIsGoogleActionLoading(true);
-        const parseJsonSafe = async (resp: Response) => {
-            const text = await resp.text();
-            if (!text) return {};
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                console.error('[GoogleAuth] failed to parse JSON', { status: resp.status, text });
-                return { error: 'invalid_json', raw: text };
-            }
-        };
         try {
-            const resp = await fetch('/api/google/oauth/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id }),
-                credentials: 'include',
+            const supabase = getSupabase();
+            const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
+                body: { user_id: currentUser.id },
             });
-            const data = await parseJsonSafe(resp);
-            if (!resp.ok) throw new Error(data?.error || `failed to start oauth (${resp.status})`);
+            if (error) throw error;
             if (data?.authUrl) {
                 console.info('[GoogleAuth] authUrl received', data.authUrl);
                 window.open(data.authUrl, '_blank', 'noopener');
@@ -351,25 +325,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         }
         console.info('[GoogleAuth] disconnect clicked', { userId: currentUser?.id });
         setIsGoogleActionLoading(true);
-        const parseJsonSafe = async (resp: Response) => {
-            const text = await resp.text();
-            if (!text) return {};
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                console.error('[GoogleAuth] failed to parse JSON', { status: resp.status, text });
-                return { error: 'invalid_json', raw: text };
-            }
-        };
         try {
-            const resp = await fetch('/api/google/oauth/disconnect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id }),
-                credentials: 'include',
+            const supabase = getSupabase();
+            const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
+                body: { user_id: currentUser.id },
             });
-            const data = await parseJsonSafe(resp);
-            if (!resp.ok || data?.error) throw new Error(data?.error || `disconnect failed (${resp.status})`);
+            if (error) throw error;
             addToast('Googleカレンダー連携を解除しました。', 'success');
             setGoogleStatus({ connected: false, expiresAt: null, loading: false });
         } catch (err) {
