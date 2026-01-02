@@ -227,6 +227,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id: currentUser.id }),
+                credentials: 'include',
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data?.error || 'status failed');
@@ -298,6 +299,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id: currentUser.id }),
+                credentials: 'include',
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data?.error || 'failed to start oauth');
@@ -334,6 +336,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id: currentUser.id }),
+                credentials: 'include',
             });
             const data = await resp.json();
             if (!resp.ok || data?.error) throw new Error(data?.error || 'disconnect failed');
