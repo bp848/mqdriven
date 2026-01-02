@@ -470,13 +470,11 @@ const App: React.FC = () => {
         }
         setGoogleAuthStatus(prev => ({ ...prev, loading: true }));
         try {
-            const resp = await fetch('/api/google/oauth/status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id }),
+            const supabaseClient = getSupabase();
+            const { data, error } = await supabaseClient.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
+                body: { user_id: currentUser.id },
             });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data?.error || 'status failed');
+            if (error) throw error;
             setGoogleAuthStatus({
                 connected: !!data?.connected,
                 expiresAt: data?.expires_at ?? null,
@@ -551,22 +549,13 @@ const App: React.FC = () => {
         }
         setIsGoogleAuthLoading(true);
         try {
-            const resp = await fetch('/api/google/oauth/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id }),
+            const supabaseClient = getSupabase();
+            const { data, error } = await supabaseClient.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
+                body: { user_id: currentUser.id },
             });
-            const data = await resp.json();
-            if (!resp.ok) {
-                console.error('Google OAuth start failed', data);
-                addToast('Googleカレンダー連携の開始に失敗しました。設定を確認してください。', 'error');
-                return;
-            }
-            if (data?.authUrl) {
-                window.open(data.authUrl, '_blank', 'noopener');
-            } else {
-                addToast('認可URLを取得できませんでした。', 'error');
-            }
+            if (error) throw error;
+            if (data?.authUrl) window.open(data.authUrl, '_blank', 'noopener');
+            else addToast('認可URLを取得できませんでした。', 'error');
         } catch (err) {
             console.error('Failed to start Google OAuth', err);
             addToast('Googleカレンダー連携でエラーが発生しました。', 'error');
@@ -588,13 +577,11 @@ const App: React.FC = () => {
         }
         setIsGoogleAuthLoading(true);
         try {
-            const resp = await fetch('/api/google/oauth/disconnect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id }),
+            const supabaseClient = getSupabase();
+            const { error } = await supabaseClient.functions.invoke('google-oauth-disconnect', {
+                body: { user_id: currentUser.id },
             });
-            const data = await resp.json();
-            if (!resp.ok || data?.error) throw new Error(data?.error || 'disconnect failed');
+            if (error) throw error;
             addToast('Googleカレンダー連携を解除しました。', 'success');
             setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
         } catch (err) {
