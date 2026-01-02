@@ -81,10 +81,13 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRole = Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    console.log("DEBUG: env vars", { supabaseUrl: !!supabaseUrl, serviceRole: !!serviceRole });
     if (!supabaseUrl || !serviceRole) {
+      console.log("DEBUG: missing env vars");
       return jsonResponse(req, { error: "server not configured: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }, 500);
     }
 
+    console.log("DEBUG: fetching tokens for userId", userId);
     const resp = await fetch(
       `${supabaseUrl}/rest/v1/user_google_tokens?user_id=eq.${userId}&select=user_id,expires_at,scope&limit=1`,
       {
@@ -94,12 +97,14 @@ Deno.serve(async (req: Request) => {
         },
       },
     );
+    console.log("DEBUG: fetch response", { status: resp.status, ok: resp.ok });
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
       console.error("google-oauth-status fetch failed", resp.status, text);
       return jsonResponse(req, { error: "failed to fetch status" }, 500);
     }
     const data = await resp.json();
+    console.log("DEBUG: token data", data);
     const record = Array.isArray(data) ? data[0] : null;
 
     return jsonResponse(req, {

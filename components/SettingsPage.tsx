@@ -224,8 +224,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setGoogleStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabase = getSupabase();
+            const anonKey = (supabase as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
+            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
             const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
                 body: { user_id: currentUser.id },
+                headers,
             });
             if (error) throw error;
             console.info('[GoogleAuth] status fetched', data);
@@ -293,8 +296,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
+            const anonKey = (supabase as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
+            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
             const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
                 body: { user_id: currentUser.id },
+                headers,
             });
             if (error) throw error;
             if (data?.authUrl) {
@@ -327,8 +333,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
+            const anonKey = (supabase as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
+            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
             const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
                 body: { user_id: currentUser.id },
+                headers,
             });
             if (error) throw error;
             addToast('Googleカレンダー連携を解除しました。', 'success');

@@ -471,8 +471,11 @@ const App: React.FC = () => {
         setGoogleAuthStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabaseClient = getSupabase();
+            const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
+            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
             const { data, error } = await supabaseClient.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
                 body: { user_id: currentUser.id },
+                headers,
             });
             if (error) throw error;
             setGoogleAuthStatus({
@@ -550,8 +553,11 @@ const App: React.FC = () => {
         setIsGoogleAuthLoading(true);
         try {
             const supabaseClient = getSupabase();
+            const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
+            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
             const { data, error } = await supabaseClient.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
                 body: { user_id: currentUser.id },
+                headers,
             });
             if (error) throw error;
             if (data?.authUrl) window.open(data.authUrl, '_blank', 'noopener');
@@ -578,8 +584,11 @@ const App: React.FC = () => {
         setIsGoogleAuthLoading(true);
         try {
             const supabaseClient = getSupabase();
+            const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
+            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
             const { error } = await supabaseClient.functions.invoke('google-oauth-disconnect', {
                 body: { user_id: currentUser.id },
+                headers,
             });
             if (error) throw error;
             addToast('Googleカレンダー連携を解除しました。', 'success');
