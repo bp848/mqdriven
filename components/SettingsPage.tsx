@@ -224,8 +224,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setGoogleStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabase = getSupabase();
-            const anonKey = (supabase as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
-            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
+            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
+            const headers = { Authorization: `Bearer ${anonKey}` };
             const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
                 body: { user_id: currentUser.id },
                 headers,
@@ -296,8 +296,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
-            const anonKey = (supabase as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
-            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
+            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
+            const headers = { Authorization: `Bearer ${anonKey}` };
             const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
                 body: { user_id: currentUser.id },
                 headers,
@@ -333,8 +333,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
-            const anonKey = (supabase as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
-            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
+            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
+            const headers = { Authorization: `Bearer ${anonKey}` };
             const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
                 body: { user_id: currentUser.id },
                 headers,
