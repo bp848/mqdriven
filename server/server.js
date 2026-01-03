@@ -809,7 +809,8 @@ const syncSystemToGoogle = async ({ userId, timeMin, timeMax }) => {
     const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow(systemEvents, timeMin, timeMax);
     const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
     const googleById = new Map(googleEvents.map((g) => [g.id, g]));
-    const summary = { created: 0, updated: 0, skipped: 0 };
+    const summary = { created: 0, updated: 0, skipped: 0, deleted: 0 };
+    const systemGoogleIds = new Set(systemEvents.filter((ev) => ev.google_event_id).map((ev) => ev.google_event_id));
 
     for (const ev of systemEvents) {
         const mapped = mapSystemEventToGoogle(ev);
@@ -831,6 +832,19 @@ const syncSystemToGoogle = async ({ userId, timeMin, timeMax }) => {
         await supabase.from('calendar_events').update({ google_event_id: created.id }).eq('id', ev.id);
         summary.created += 1;
     }
+
+    // Delete Google events that point to system events no longer present
+    for (const g of googleEvents) {
+        const calId = g?.extendedProperties?.private?.calendar_event_id;
+        if (calId && !systemEvents.find((ev) => ev.id === calId)) {
+            try {
+                await deleteGoogleEvent(accessToken, g.id);
+                summary.deleted += 1;
+            } catch (err) {
+                console.warn('[google sync] failed to delete orphan Google event', g.id, err?.response?.data || err?.message);
+            }
+        }
+    }
     return summary;
 };
 
@@ -839,6 +853,9 @@ const syncGoogleToSystem = async ({ userId, timeMin, timeMax }) => {
     const accessToken = tokenRecord.access_token;
     const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow([], timeMin, timeMax);
     const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
+    const systemExisting = await listSystemCalendarEvents({ userId, timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
+    const systemByGoogleId = new Map(systemExisting.filter((ev) => ev.google_event_id).map((ev) => [ev.google_event_id, ev]));
+    const systemById = new Map(systemExisting.map((ev) => [ev.id, ev]));
     const systemEvents = [];
     for (const ev of googleEvents) {
         const mapped = mapGoogleEventToSystem(ev, userId);
@@ -848,7 +865,18 @@ const syncGoogleToSystem = async ({ userId, timeMin, timeMax }) => {
     if (systemEvents.length) {
         await upsertSystemEvents(systemEvents);
     }
-    return { pulled: systemEvents.length };
+    // Delete system events whose google_event_id is missing on Google
+    const googleIds = new Set(googleEvents.map((g) => g.id));
+    const toDelete = [];
+    for (const [gid, ev] of systemByGoogleId.entries()) {
+        if (!googleIds.has(gid)) {
+            toDelete.push(ev.id);
+        }
+    }
+    if (toDelete.length) {
+        await supabase.from('calendar_events').delete().in('id', toDelete);
+    }
+    return { pulled: systemEvents.length, deleted: toDelete.length };
 };
 
 const DEFAULT_SYNC_WINDOW_DAYS = 90;
