@@ -10,7 +10,15 @@ import {
     DailyReportPrefill,
     ScheduleItem,
     Application,
+    CalendarEvent as ApiCalendarEvent,
 } from '../types';
+import {
+    getCalendarEvents as fetchCalendarEventsApi,
+    saveCalendarEvent as saveCalendarEventApi,
+    deleteCalendarEvent as deleteCalendarEventApi,
+    syncSystemCalendarToGoogle,
+    pullGoogleCalendarToSystem,
+} from '../services/dataService';
 
 type CalendarEventType = 'job' | 'purchaseOrder' | 'application' | 'custom';
 type CalendarEventOrigin = 'manual' | 'daily_report_plan';
@@ -180,36 +188,52 @@ const coerceScheduleItems = (items: any): ScheduleItem[] => {
         }));
 };
 
-const buildCustomEventsStorageKey = (userId: string) => `mqdriven_my_schedule_${userId}`;
 const buildActualsStorageKey = (userId: string, date: string) => `mqdriven_my_schedule_actuals_${userId}_${date}`;
 
-const normalizeCustomEvents = (events: any): CalendarEvent[] => {
-    if (!Array.isArray(events)) return [];
-    return events
-        .filter((event) => event?.date && event?.title)
-        .map((event) => ({
-            ...event,
-            type: 'custom' as const,
-            origin: event.origin === 'daily_report_plan' ? 'daily_report_plan' : 'manual',
-            metadata: event.metadata ?? undefined,
-        }));
+const extractTimeFromIso = (iso?: string | null) => {
+    if (!iso) return undefined;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return undefined;
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
 };
 
-const readCustomEventsFromStorage = (userId: string): CalendarEvent[] => {
-    if (typeof window === 'undefined') return [];
-    try {
-        const raw = window.localStorage.getItem(buildCustomEventsStorageKey(userId));
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        return normalizeCustomEvents(parsed);
-    } catch {
-        return [];
-    }
+const mapApiToUiEvent = (ev: ApiCalendarEvent): CalendarEvent => {
+    const date = ev.startAt?.slice(0, 10) || formatDate(new Date());
+    const time = ev.allDay ? undefined : extractTimeFromIso(ev.startAt);
+    return {
+        id: ev.id,
+        date,
+        title: ev.title,
+        type: 'custom',
+        description: ev.description ?? undefined,
+        time,
+        origin: ev.updatedBySource === 'google' ? 'manual' : 'manual',
+        metadata: ev.source ? { source: ev.source } : undefined,
+    };
 };
 
-const persistCustomEventsForUser = (userId: string, events: CalendarEvent[]) => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(buildCustomEventsStorageKey(userId), JSON.stringify(events));
+const toIsoDateTime = (date: string, time?: string) => {
+    const base = time && time.trim() ? `${date}T${time}` : `${date}T09:00`;
+    const d = new Date(base);
+    return Number.isNaN(d.getTime()) ? new Date(date).toISOString() : d.toISOString();
+};
+
+const mapUiToApiPayload = (ev: CalendarEvent, userId: string): Partial<ApiCalendarEvent> & { userId: string } => {
+    const startAt = toIsoDateTime(ev.date, ev.time);
+    const endAt = startAt;
+    return {
+        id: ev.id?.startsWith('custom-') ? undefined : ev.id,
+        userId,
+        title: ev.title,
+        description: ev.description ?? null,
+        startAt,
+        endAt,
+        allDay: !ev.time,
+        source: 'system',
+        updatedBySource: 'system',
+    };
 };
 
 const persistActualItemsForUser = (userId: string, date: string, items: ScheduleItem[]) => {
@@ -601,6 +625,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const [viewMode, setViewMode] = useState<ViewMode>('day');
     const [dailyReportText, setDailyReportText] = useState('');
     const [customEvents, setCustomEvents] = useState<CalendarEvent[]>([]);
+    const [eventsLoading, setEventsLoading] = useState(false);
+    const [eventsLoadedAt, setEventsLoadedAt] = useState<string | null>(null);
+    const [syncMessage, setSyncMessage] = useState<string | null>(null);
+    const [syncRunning, setSyncRunning] = useState(false);
     const [actualItems, setActualItems] = useState<ScheduleItem[]>([]);
     const [newEvent, setNewEvent] = useState({ title: '', date: todayIso, time: '', description: '' });
     const [isDailyOcrLoading, setIsDailyOcrLoading] = useState(false);
@@ -724,26 +752,45 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     );
 
     const canEditCurrentCalendar = (currentUser?.id ?? 'guest') === viewingUserId;
+    const lastLoadedLabel = useMemo(() => {
+        if (!eventsLoadedAt) return null;
+        const d = new Date(eventsLoadedAt);
+        if (Number.isNaN(d.getTime())) return null;
+        return new Intl.DateTimeFormat('ja-JP', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        }).format(d);
+    }, [eventsLoadedAt]);
 
-    const customEventsStorageKey = useMemo(
-        () => buildCustomEventsStorageKey(viewingUserId ?? 'guest'),
-        [viewingUserId],
-    );
-    
     const actualsStorageKey = useMemo(
         () => buildActualsStorageKey(viewingUserId ?? 'guest', selectedDate),
         [viewingUserId, selectedDate],
     );
 
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        setCustomEvents(readCustomEventsFromStorage(viewingUserId ?? 'guest'));
-    }, [customEventsStorageKey, viewingUserId]);
+    const loadRemoteEvents = useCallback(async () => {
+        if (!viewingUserId || viewingUserId === 'guest') {
+            setCustomEvents([]);
+            return;
+        }
+        setEventsLoading(true);
+        try {
+            const events = await fetchCalendarEventsApi(viewingUserId);
+            setCustomEvents(events.map(mapApiToUiEvent));
+            setEventsLoadedAt(new Date().toISOString());
+        } catch (err: any) {
+            addToast?.(err?.message || '予定の取得に失敗しました。', 'error');
+            setCustomEvents([]);
+            setEventsLoadedAt(null);
+        } finally {
+            setEventsLoading(false);
+        }
+    }, [viewingUserId, addToast]);
 
     useEffect(() => {
-        if (typeof window === 'undefined') return;
-        window.localStorage.setItem(customEventsStorageKey, JSON.stringify(customEvents));
-    }, [customEventsStorageKey, customEvents]);
+        loadRemoteEvents();
+    }, [loadRemoteEvents]);
     
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -824,10 +871,18 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         setHasManualNewEventDate(false);
     };
 
-    const handleAddEvent = (event: React.FormEvent) => {
+    const handleAddEvent = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!canEditCurrentCalendar) {
             addToast?.('このユーザーのカレンダーは閲覧専用です。', 'info');
+            return;
+        }
+        if (!viewingUserId || viewingUserId === 'guest') {
+            addToast?.('ユーザー情報がありません。', 'error');
+            return;
+        }
+        if (eventsLoading) {
+            addToast?.('予定を読み込み中です。数秒後に再度お試しください。', 'info');
             return;
         }
         const trimmedTitle = newEvent.title.trim();
@@ -835,7 +890,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         if (!trimmedTitle || !date) return;
 
         const nextEvent: CalendarEvent = {
-            id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            id: `temp-${Date.now()}`,
             date,
             title: trimmedTitle,
             type: 'custom',
@@ -846,50 +901,64 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         setCustomEvents((prev) => [...prev, nextEvent]);
         setNewEvent({ title: '', date: selectedDate, time: '', description: '' });
         setHasManualNewEventDate(false);
-        addToast?.('予定を追加しました。', 'success');
+        try {
+            await saveCalendarEventApi(mapUiToApiPayload(nextEvent, viewingUserId));
+            await loadRemoteEvents();
+            addToast?.('予定を追加しました。', 'success');
+        } catch (err: any) {
+            addToast?.(err?.message || '予定の保存に失敗しました。', 'error');
+            await loadRemoteEvents();
+        }
     };
 
-    const handleDeleteEvent = (id: string) => {
+    const handleDeleteEvent = async (id: string) => {
         if (!canEditCurrentCalendar) {
             addToast?.('このユーザーのカレンダーは閲覧専用です。', 'info');
             return;
         }
         setCustomEvents((prev) => prev.filter((event) => event.id !== id));
-        addToast?.('予定を削除しました。', 'info');
+        try {
+            await deleteCalendarEventApi(id, viewingUserId);
+            addToast?.('予定を削除しました。', 'info');
+        } catch (err: any) {
+            addToast?.(err?.message || '予定の削除に失敗しました。', 'error');
+            await loadRemoteEvents();
+        }
     };
 
     const syncNextDayPlanFromDailyReport = useCallback(
-        (sourceDate: string, planCandidates: ScheduleItem[], options?: { silent?: boolean }) => {
-            setCustomEvents((prev) => {
-                const filtered = prev.filter(
-                    (event) => !(event.origin === 'daily_report_plan' && event.metadata?.sourceDate === sourceDate),
+        async (sourceDate: string, planCandidates: ScheduleItem[], options?: { silent?: boolean }) => {
+            if (!viewingUserId || viewingUserId === 'guest') return;
+            if (!planCandidates.length) return;
+            const targetDate = addDays(sourceDate, 1);
+            const generated = planCandidates.map((item, index) => ({
+                id: `daily-plan-${viewingUserId}-${sourceDate}-${item.id ?? index}`,
+                date: targetDate,
+                title: item.description || `フォローアップ ${index + 1}`,
+                type: 'custom' as const,
+                time: item.start || undefined,
+                description: item.end
+                    ? `${item.start || '未定'}～${item.end} 実績から自動作成`
+                    : '実績から自動作成',
+                origin: 'daily_report_plan' as const,
+                metadata: { sourceDate },
+            }));
+            try {
+                await Promise.all(
+                    generated.map((ev) => saveCalendarEventApi(mapUiToApiPayload(ev, viewingUserId))),
                 );
-                if (!planCandidates.length) {
-                    return filtered;
+                await loadRemoteEvents();
+                if (!options?.silent) {
+                    addToast?.('実績を翌日の予定に反映しました。', 'success');
                 }
-                const targetDate = addDays(sourceDate, 1);
-                const generated = planCandidates.map((item, index) => ({
-                    id: `daily-plan-${viewingUserId}-${sourceDate}-${item.id ?? index}`,
-                    date: targetDate,
-                    title: item.description || `フォローアップ ${index + 1}`,
-                    type: 'custom' as const,
-                    time: item.start || undefined,
-                    description: item.end
-                        ? `${item.start || '未定'}～${item.end} 実績から自動作成`
-                        : '実績から自動作成',
-                    origin: 'daily_report_plan' as const,
-                    metadata: { sourceDate },
-                }));
-                return [...filtered, ...generated];
-            });
-            if (!options?.silent && planCandidates.length) {
-                addToast?.('実績を翌日の予定に反映しました。', 'success');
+            } catch (err: any) {
+                addToast?.(err?.message || '予定の保存に失敗しました。', 'error');
             }
         },
-        [addToast, viewingUserId],
+        [addToast, viewingUserId, loadRemoteEvents],
     );
 
-    const handleImportDailyReport = () => {
+    const handleImportDailyReport = async () => {
         if (!dailyReportText.trim()) {
             addToast?.('日報テキストを入力してください。', 'info');
             return;
@@ -905,7 +974,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         setSelectedDate(parsedDate);
         setActualItems(parsedActuals);
         const planCandidates = nextDayPlanItems.length > 0 ? nextDayPlanItems : parsedActuals;
-        syncNextDayPlanFromDailyReport(parsedDate, planCandidates, { silent: true });
+        await syncNextDayPlanFromDailyReport(parsedDate, planCandidates, { silent: true });
         setViewMode('day');
         setHasManualNewEventDate(false);
         addToast?.(
@@ -988,10 +1057,6 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 persistActualItemsForUser(targetUser.id, reportDate, parsedActuals);
 
                 const planCandidates = nextDayPlanItems.length > 0 ? nextDayPlanItems : parsedActuals;
-                const existingEvents = readCustomEventsFromStorage(targetUser.id);
-                const withoutSource = existingEvents.filter(
-                    (event) => !(event.origin === 'daily_report_plan' && event.metadata?.sourceDate === reportDate),
-                );
                 const nextDate = addDays(reportDate, 1);
                 const generated = planCandidates.map((item, index) => ({
                     id: `daily-plan-${targetUser.id}-${reportDate}-${item.id ?? index}-${Date.now()}`,
@@ -1005,14 +1070,15 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     origin: 'daily_report_plan' as const,
                     metadata: { sourceDate: reportDate },
                 }));
-                const updatedEvents = [...withoutSource, ...generated];
-                persistCustomEventsForUser(targetUser.id, updatedEvents);
+                await Promise.all(
+                    generated.map((ev) => saveCalendarEventApi(mapUiToApiPayload(ev, targetUser.id))),
+                );
 
                 if (targetUser.id === viewingUserId) {
                     if (reportDate === selectedDate) {
                         setActualItems(parsedActuals);
                     }
-                    setCustomEvents(readCustomEventsFromStorage(targetUser.id));
+                    await loadRemoteEvents();
                 }
 
                 imported += 1;
@@ -1152,6 +1218,61 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         });
     };
 
+    const handleSyncToGoogle = async () => {
+        if (!canEditCurrentCalendar) {
+            addToast?.('このユーザーのカレンダーは閲覧専用です。', 'info');
+            return;
+        }
+        if (!viewingUserId || viewingUserId === 'guest') {
+            addToast?.('ユーザーを選択してください。', 'info');
+            return;
+        }
+        setSyncRunning(true);
+        setSyncMessage(null);
+        try {
+            const result = await syncSystemCalendarToGoogle(viewingUserId);
+            setSyncMessage(`Googleへ同期: 作成${result?.summary?.created ?? 0} / 更新${result?.summary?.updated ?? 0} / 削除${result?.summary?.deleted ?? 0}`);
+            addToast?.('Googleへ同期しました。', 'success');
+            await loadRemoteEvents();
+        } catch (err: any) {
+            setSyncMessage(err?.message || 'Googleへの同期に失敗しました。');
+            addToast?.(err?.message || 'Googleへの同期に失敗しました。', 'error');
+        } finally {
+            setSyncRunning(false);
+        }
+    };
+
+    const handlePullFromGoogle = async () => {
+        if (!canEditCurrentCalendar) {
+            addToast?.('このユーザーのカレンダーは閲覧専用です。', 'info');
+            return;
+        }
+        if (!viewingUserId || viewingUserId === 'guest') {
+            addToast?.('ユーザーを選択してください。', 'info');
+            return;
+        }
+        setSyncRunning(true);
+        setSyncMessage(null);
+        try {
+            const result = await pullGoogleCalendarToSystem(viewingUserId);
+            setSyncMessage(`Googleから取り込み: 反映${result?.summary?.pulled ?? 0} / 削除${result?.summary?.deleted ?? 0}`);
+            addToast?.('Googleから予定を取り込みました。', 'success');
+            await loadRemoteEvents();
+        } catch (err: any) {
+            setSyncMessage(err?.message || 'Googleからの取り込みに失敗しました。');
+            addToast?.(err?.message || 'Googleからの取り込みに失敗しました。', 'error');
+        } finally {
+            setSyncRunning(false);
+        }
+    };
+
+    const handleReloadEvents = async () => {
+        await loadRemoteEvents();
+        setSyncMessage('予定を再取得しました。');
+    };
+
+    const syncDisabled = !canEditCurrentCalendar || !viewingUserId || viewingUserId === 'guest' || eventsLoading || syncRunning;
+
     return (
         <div className="space-y-6">
             <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
@@ -1219,7 +1340,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     </div>
                 </div>
 
-                <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex flex-col gap-2">
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             表示期間：<span className="font-semibold text-slate-900 dark:text-white">{viewLabel}</span>
@@ -1241,20 +1362,68 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             ))}
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleCreateDailyReport}
-                        disabled={dailyReportButtonDisabled}
-                        title={dailyReportButtonTitle}
-                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                            dailyReportButtonDisabled
-                                ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-                        }`}
-                    >
-                        <PlusCircle className="w-4 h-4" />
-                        日報作成
-                    </button>
+                    <div className="flex flex-col items-start lg:items-end gap-2 w-full lg:w-auto">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handlePullFromGoogle}
+                                disabled={syncDisabled}
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                    syncDisabled
+                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                Google→システム
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSyncToGoogle}
+                                disabled={syncDisabled}
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                    syncDisabled
+                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                システム→Google
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleReloadEvents}
+                                disabled={eventsLoading}
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                    eventsLoading
+                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                最新を再取得
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-300">
+                            {eventsLoading && <span className="font-semibold">予定を取得中...</span>}
+                            {syncRunning && <span className="font-semibold text-blue-600 dark:text-blue-300">同期中...</span>}
+                            {syncMessage && <span className="text-slate-600 dark:text-slate-200">{syncMessage}</span>}
+                            {lastLoadedLabel && !eventsLoading && (
+                                <span className="text-slate-400 dark:text-slate-500">最終取得 {lastLoadedLabel}</span>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleCreateDailyReport}
+                            disabled={dailyReportButtonDisabled}
+                            title={dailyReportButtonTitle}
+                            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                dailyReportButtonDisabled
+                                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                            }`}
+                        >
+                            <PlusCircle className="w-4 h-4" />
+                            日報作成
+                        </button>
+                    </div>
                 </div>
 
                 {viewMode === 'day' && (
@@ -1601,7 +1770,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                         </p>
                         <ul className="mt-4 text-xs text-slate-300 space-y-1">
                             <li>• カードをクリックすると日付を切り替えられます</li>
-                            <li>• 予定はローカルに保存されるため、ドラフトでも安心です</li>
+                            <li>• 予定はシステムに保存され、必要に応じてGoogleと双方向同期できます</li>
                             <li>• 色で予定の種類を判別できます</li>
                         </ul>
                     </div>
