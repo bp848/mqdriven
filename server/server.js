@@ -256,6 +256,97 @@ app.post('/api/google/oauth/disconnect', async (req, res) => {
     }
 });
 
+// --- System calendar (local) CRUD ---
+app.get('/api/calendar/events', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.query?.user_id;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    if (!supabase) {
+        return res.status(503).json({ error: 'Supabase not configured', requestId });
+    }
+    try {
+        const { data, error } = await supabase
+            .from('calendar_events')
+            .select('*')
+            .eq('user_id', userId)
+            .order('start_at', { ascending: true });
+        if (error) throw error;
+        return res.status(200).json({ events: data ?? [], requestId });
+    } catch (err) {
+        console.error('[calendar/events] list failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to fetch calendar events', requestId });
+    }
+});
+
+app.post('/api/calendar/events', async (req, res) => {
+    const requestId = createRequestId();
+    const payload = req.body || {};
+    const userId = payload.user_id;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    if (!payload.start_at) {
+        return res.status(400).json({ error: 'start_at is required', requestId });
+    }
+    if (!payload.end_at) {
+        payload.end_at = payload.start_at;
+    }
+    if (!supabase) {
+        return res.status(503).json({ error: 'Supabase not configured', requestId });
+    }
+    const record = {
+        id: payload.id,
+        user_id: userId,
+        title: payload.title || '予定',
+        description: payload.description ?? null,
+        start_at: payload.start_at,
+        end_at: payload.end_at,
+        all_day: !!payload.all_day,
+        source: payload.source || 'system',
+        google_event_id: payload.google_event_id ?? null,
+        updated_by_source: payload.updated_by_source || 'system',
+        updated_at: new Date().toISOString(),
+    };
+    try {
+        const { data, error } = await supabase
+            .from('calendar_events')
+            .upsert(record, { onConflict: 'id' })
+            .select()
+            .maybeSingle();
+        if (error) throw error;
+        return res.status(200).json({ event: data, requestId });
+    } catch (err) {
+        console.error('[calendar/events] upsert failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to save calendar event', requestId });
+    }
+});
+
+app.delete('/api/calendar/events/:id', async (req, res) => {
+    const requestId = createRequestId();
+    const id = req.params?.id;
+    const userId = req.query?.user_id;
+    if (!id) {
+        return res.status(400).json({ error: 'id is required', requestId });
+    }
+    if (!supabase) {
+        return res.status(503).json({ error: 'Supabase not configured', requestId });
+    }
+    const query = supabase.from('calendar_events').delete().eq('id', id);
+    if (isUuid(userId)) {
+        query.eq('user_id', userId);
+    }
+    try {
+        const { error } = await query;
+        if (error) throw error;
+        return res.status(200).json({ success: true, requestId });
+    } catch (err) {
+        console.error('[calendar/events] delete failed', { requestId, err });
+        return res.status(500).json({ error: 'Failed to delete calendar event', requestId });
+    }
+});
+
 // POST /api/google/calendar/sync - Sync ERP (DLY) -> Google Calendar for a user
 app.post('/api/google/calendar/sync', async (req, res) => {
     const requestId = createRequestId();
