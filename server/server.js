@@ -365,6 +365,42 @@ app.post('/api/google/calendar/sync', async (req, res) => {
     }
 });
 
+// POST /api/google/calendar/sync-system - Sync system calendar_events -> Google
+app.post('/api/google/calendar/sync-system', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.body?.user_id;
+    const timeMin = req.body?.timeMin;
+    const timeMax = req.body?.timeMax;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    try {
+        const summary = await syncSystemToGoogle({ userId, timeMin, timeMax });
+        return res.status(200).json({ message: 'System->Google sync completed', summary, requestId });
+    } catch (err) {
+        console.error('[google/calendar/sync-system] failed', { requestId, err: err?.message, stack: err?.stack });
+        return res.status(500).json({ error: err?.message || 'System sync failed', requestId });
+    }
+});
+
+// POST /api/google/calendar/pull-system - Sync Google -> system calendar_events
+app.post('/api/google/calendar/pull-system', async (req, res) => {
+    const requestId = createRequestId();
+    const userId = req.body?.user_id;
+    const timeMin = req.body?.timeMin;
+    const timeMax = req.body?.timeMax;
+    if (!isUuid(userId)) {
+        return res.status(400).json({ error: 'user_id (UUID) is required', requestId });
+    }
+    try {
+        const summary = await syncGoogleToSystem({ userId, timeMin, timeMax });
+        return res.status(200).json({ message: 'Google->System sync completed', summary, requestId });
+    } catch (err) {
+        console.error('[google/calendar/pull-system] failed', { requestId, err: err?.message, stack: err?.stack });
+        return res.status(500).json({ error: err?.message || 'Pull failed', requestId });
+    }
+});
+
 // POST /api/google/calendar/watch - create webhook watch channel
 app.post('/api/google/calendar/watch', async (req, res) => {
     const requestId = createRequestId();
@@ -686,6 +722,150 @@ const syncErpToGoogle = async ({ userId, timeMin, timeMax }) => {
     }
 
     return summary;
+};
+
+// --- System calendar <-> Google Calendar sync helpers ---
+const listSystemCalendarEvents = async ({ userId, timeMin, timeMax }) => {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    let query = supabase
+        .from('calendar_events')
+        .select('*')
+        .eq('user_id', userId);
+    if (timeMin) query = query.gte('start_at', timeMin);
+    if (timeMax) query = query.lte('start_at', timeMax);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+};
+
+const mapSystemEventToGoogle = (ev) => {
+    const isAllDay = !!ev.all_day;
+    const start = isAllDay
+        ? { date: ev.start_at.slice(0, 10) }
+        : { dateTime: ev.start_at, timeZone: DEFAULT_TIMEZONE };
+    const end = isAllDay
+        ? { date: ev.end_at.slice(0, 10) }
+        : { dateTime: ev.end_at, timeZone: DEFAULT_TIMEZONE };
+    return {
+        summary: ev.title || '予定',
+        description: ev.description || '',
+        start,
+        end,
+        extendedProperties: {
+            private: {
+                calendar_event_id: ev.id,
+                updated_by_source: ev.updated_by_source || 'system',
+            },
+        },
+    };
+};
+
+const fetchGoogleEventsWindow = async (accessToken, { timeMin, timeMax }) => {
+    const params = new URLSearchParams({
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '250',
+    });
+    if (timeMin) params.set('timeMin', timeMin);
+    if (timeMax) params.set('timeMax', timeMax);
+    const url = `${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events?${params.toString()}`;
+    const { data } = await axios.get(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return data?.items || [];
+};
+
+const mapGoogleEventToSystem = (ev, userId) => {
+    const isAllDay = !!ev.start?.date || !!ev.end?.date;
+    const startIso = ev.start?.dateTime || (ev.start?.date ? `${ev.start.date}T00:00:00.000Z` : null);
+    const endIso = ev.end?.dateTime || (ev.end?.date ? `${ev.end.date}T00:00:00.000Z` : null);
+    const privateProps = ev.extendedProperties?.private || {};
+    return {
+        id: privateProps.calendar_event_id || null,
+        user_id: userId,
+        title: ev.summary || '(無題)',
+        description: ev.description || '',
+        start_at: startIso,
+        end_at: endIso || startIso,
+        all_day: isAllDay,
+        source: 'google',
+        google_event_id: ev.id,
+        updated_by_source: 'google',
+        updated_at: ev.updated || new Date().toISOString(),
+    };
+};
+
+const upsertSystemEvents = async (events) => {
+    if (!events.length) return [];
+    const { data, error } = await supabase.from('calendar_events').upsert(events, { onConflict: 'id' }).select();
+    if (error) throw error;
+    return data || [];
+};
+
+const syncSystemToGoogle = async ({ userId, timeMin, timeMax }) => {
+    const tokenRecord = await refreshGoogleTokenIfNeeded(userId);
+    const accessToken = tokenRecord.access_token;
+    const systemEvents = await listSystemCalendarEvents({ userId, timeMin, timeMax });
+    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow(systemEvents, timeMin, timeMax);
+    const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
+    const googleById = new Map(googleEvents.map((g) => [g.id, g]));
+    const summary = { created: 0, updated: 0, skipped: 0 };
+
+    for (const ev of systemEvents) {
+        const mapped = mapSystemEventToGoogle(ev);
+        const googleId = ev.google_event_id;
+        if (googleId && googleById.has(googleId)) {
+            // compare timestamps
+            const googleUpdated = new Date(googleById.get(googleId).updated || 0).getTime();
+            const sysUpdated = ev.updated_at ? new Date(ev.updated_at).getTime() : 0;
+            if (sysUpdated && sysUpdated > googleUpdated + 1000) {
+                await updateGoogleEvent(accessToken, googleId, mapped);
+                summary.updated += 1;
+            } else {
+                summary.skipped += 1;
+            }
+            continue;
+        }
+        const created = await createGoogleEvent(accessToken, mapped);
+        // persist google_event_id
+        await supabase.from('calendar_events').update({ google_event_id: created.id }).eq('id', ev.id);
+        summary.created += 1;
+    }
+    return summary;
+};
+
+const syncGoogleToSystem = async ({ userId, timeMin, timeMax }) => {
+    const tokenRecord = await refreshGoogleTokenIfNeeded(userId);
+    const accessToken = tokenRecord.access_token;
+    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow([], timeMin, timeMax);
+    const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
+    const systemEvents = [];
+    for (const ev of googleEvents) {
+        const mapped = mapGoogleEventToSystem(ev, userId);
+        if (!mapped.start_at) continue;
+        systemEvents.push(mapped);
+    }
+    if (systemEvents.length) {
+        await upsertSystemEvents(systemEvents);
+    }
+    return { pulled: systemEvents.length };
+};
+
+const DEFAULT_SYNC_WINDOW_DAYS = 90;
+
+const resolveSyncWindow = (events, requestedTimeMin, requestedTimeMax) => {
+    const now = new Date();
+    const defaultMin = new Date(now.getTime() - DEFAULT_SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const defaultMax = new Date(now.getTime() + DEFAULT_SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const normalizeIso = (value) => {
+        if (!value) return null;
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    };
+    return {
+        timeMin: normalizeIso(requestedTimeMin) || normalizeIso(events?.[0]?.start_at) || defaultMin.toISOString(),
+        timeMax: normalizeIso(requestedTimeMax) || defaultMax.toISOString(),
+    };
 };
 
 // --- Application API Routes for Accounting ---
