@@ -232,11 +232,17 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             });
             if (error) throw error;
             console.info('[GoogleAuth] status fetched', data);
+            const isConnected = !!data?.connected;
             setGoogleStatus({
-                connected: !!data?.connected,
+                connected: isConnected,
                 expiresAt: data?.expires_at ?? null,
                 loading: false,
             });
+            
+            // 連携成功時のガイダンス
+            if (isConnected && !googleStatus.connected) {
+                addToast('Googleカレンダー連携が完了しました！カレンダーページで同期機能をお試しください。', 'success');
+            }
         } catch (err) {
             console.error('Failed to fetch Google OAuth status', err);
             setGoogleStatus(prev => ({ ...prev, loading: false }));
@@ -307,6 +313,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                 console.info('[GoogleAuth] authUrl received', data.authUrl);
                 window.open(data.authUrl, '_blank', 'noopener');
                 addToast('Google認可画面を開きました。完了後この画面に戻ってください。', 'success');
+                addToast('認可完了後、「再読み込み」ボタンを押して連携状態を確認してください。', 'info');
             } else {
                 addToast('認可URLを取得できませんでした。', 'error');
             }
