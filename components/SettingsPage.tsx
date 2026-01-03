@@ -77,6 +77,8 @@ const buildDefaultTemplates = (): Record<NotificationTemplateKey, NotificationTe
 interface SettingsPageProps {
     addToast: (message: string, type: Toast['type']) => void;
     currentUser: EmployeeUser | null;
+    googleAuthStatus?: { connected: boolean; expiresAt: string | null; loading: boolean };
+    onRefreshGoogleAuthStatus?: () => void;
 }
 
 const getEnvValue = (key: string): string | undefined => {
@@ -120,7 +122,7 @@ const isGoogleOAuthAllowedOrigin = () => {
     return false;
 };
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, googleAuthStatus, onRefreshGoogleAuthStatus }) => {
     const [smtpSettings, setSmtpSettings] = useState({
         host: 'smtp.example.com',
         port: 587,
@@ -144,11 +146,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const mounted = useRef(true);
-    const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; expiresAt: string | null; loading: boolean }>({
+    // グローバル状態があれば使用し、なければローカル状態を使用
+    const [localGoogleStatus, setLocalGoogleStatus] = useState<{ connected: boolean; expiresAt: string | null; loading: boolean }>({
         connected: false,
         expiresAt: null,
         loading: false,
     });
+    
+    const currentGoogleStatus = googleAuthStatus || localGoogleStatus;
+    const setCurrentGoogleStatus = googleAuthStatus ? () => {} : setLocalGoogleStatus;
     const [googleSyncSettings, setGoogleSyncSettings] = useState({
         importWindowDays: 14,
         targetCalendarId: 'primary',
@@ -214,14 +220,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
 
     const fetchGoogleStatus = useCallback(async () => {
         if (!currentUser) {
-            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+            setCurrentGoogleStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
         if (!isGoogleOAuthAllowedOrigin()) {
-            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+            setCurrentGoogleStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
-        setGoogleStatus(prev => ({ ...prev, loading: true }));
+        setCurrentGoogleStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabase = getSupabase();
             const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
@@ -233,21 +239,21 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             if (error) throw error;
             console.info('[GoogleAuth] status fetched', data);
             const isConnected = !!data?.connected;
-            setGoogleStatus({
+            setCurrentGoogleStatus({
                 connected: isConnected,
                 expiresAt: data?.expires_at ?? null,
                 loading: false,
             });
             
             // 連携成功時のガイダンス
-            if (isConnected && !googleStatus.connected) {
+            if (isConnected && !currentGoogleStatus.connected) {
                 addToast('Googleカレンダー連携が完了しました！カレンダーページで同期機能をお試しください。', 'success');
             }
         } catch (err) {
             console.error('Failed to fetch Google OAuth status', err);
-            setGoogleStatus(prev => ({ ...prev, loading: false }));
+            setCurrentGoogleStatus(prev => ({ ...prev, loading: false }));
         }
-    }, [currentUser]);
+    }, [currentUser, currentGoogleStatus.connected, addToast]);
 
     useEffect(() => {
         fetchGoogleStatus();
@@ -333,7 +339,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
         }
         if (!isGoogleOAuthAllowedOrigin()) {
             addToast('ローカル環境ではGoogle連携を呼び出しません（CORS制限）。', 'info');
-            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+            setCurrentGoogleStatus({ connected: false, expiresAt: null, loading: false });
             return;
         }
         console.info('[GoogleAuth] disconnect clicked', { userId: currentUser?.id });
@@ -348,7 +354,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
             });
             if (error) throw error;
             addToast('Googleカレンダー連携を解除しました。', 'success');
-            setGoogleStatus({ connected: false, expiresAt: null, loading: false });
+            setCurrentGoogleStatus({ connected: false, expiresAt: null, loading: false });
         } catch (err) {
             console.error('Failed to disconnect Google OAuth', err);
             addToast('Googleカレンダー連携の解除に失敗しました。', 'error');
@@ -427,29 +433,29 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser }) =>
                             <p>・この設定画面に戻ると `google_calendar=ok|error` がクエリに付きます。</p>
                         </div>
                         <div className="mt-3 text-sm text-slate-700 dark:text-slate-200 space-y-1">
-                            <p>連携状態: {googleStatus.loading ? '確認中...' : googleStatus.connected ? '連携済み' : '未連携'}</p>
-                            {googleStatus.connected && (
-                                <p>トークン有効期限: {googleStatus.expiresAt ? new Date(googleStatus.expiresAt).toLocaleString('ja-JP') : '取得不可'}</p>
+                            <p>連携状態: {currentGoogleStatus.loading ? '確認中...' : currentGoogleStatus.connected ? '連携済み' : '未連携'}</p>
+                            {currentGoogleStatus.connected && (
+                                <p>トークン有効期限: {currentGoogleStatus.expiresAt ? new Date(currentGoogleStatus.expiresAt).toLocaleString('ja-JP') : '取得不可'}</p>
                             )}
                         </div>
                     </div>
                     <div className="flex flex-col gap-2">
                         <button
                             type="button"
-                            onClick={googleStatus.connected ? disconnectGoogleAuth : startGoogleAuth}
-                            disabled={isGoogleActionLoading || googleStatus.loading}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${isGoogleActionLoading || googleStatus.loading ? 'bg-slate-400 cursor-not-allowed' : googleStatus.connected ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            onClick={currentGoogleStatus.connected ? disconnectGoogleAuth : startGoogleAuth}
+                            disabled={isGoogleActionLoading || currentGoogleStatus.loading}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${isGoogleActionLoading || currentGoogleStatus.loading ? 'bg-slate-400 cursor-not-allowed' : currentGoogleStatus.connected ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                         >
-                            {isGoogleActionLoading || googleStatus.loading
+                            {isGoogleActionLoading || currentGoogleStatus.loading
                                 ? '処理中...'
-                                : googleStatus.connected
+                                : currentGoogleStatus.connected
                                     ? '同期解除'
                                     : 'Google連携を開始'}
                         </button>
                         <button
                             type="button"
-                            onClick={fetchGoogleStatus}
-                            disabled={googleStatus.loading}
+                            onClick={googleAuthStatus ? onRefreshGoogleAuthStatus : fetchGoogleStatus}
+                            disabled={currentGoogleStatus.loading}
                             className="px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:hover:bg-blue-900/30"
                         >
                             再読み込み

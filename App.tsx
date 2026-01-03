@@ -1201,7 +1201,12 @@ useEffect(() => {
                     requestConfirmation={requestConfirmation}
                 />;
             case 'settings':
-                return <SettingsPage addToast={addToast} currentUser={currentUser} />;
+                return <SettingsPage 
+                    addToast={addToast} 
+                    currentUser={currentUser}
+                    googleAuthStatus={googleAuthStatus}
+                    onRefreshGoogleAuthStatus={fetchGoogleAuthStatus}
+                />;
             case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_trial_balance': case 'accounting_period_closing':
                 return <AccountingPage page={currentPage} journalEntries={journalEntries} accountItems={accountItems} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs} applications={applications} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers} employees={employees} onRefreshData={loadAllData} />;
             case 'inventory_management':
