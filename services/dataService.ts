@@ -51,6 +51,7 @@ import {
     CashScheduleData,
     GeneralLedgerEntry,
 } from '../types';
+import type { CalendarEvent } from '../types';
 
 type SupabaseClient = ReturnType<typeof getSupabase>;
 
@@ -2641,6 +2642,103 @@ export const deleteEstimateDetail = async (detailId: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('estimate_details').delete().eq('detail_id', detailId);
     ensureSupabaseSuccess(error, 'Failed to delete estimate detail');
+};
+
+// --- Calendar (system) ---
+const apiFetch = async (path: string, init?: RequestInit) => {
+    const resp = await fetch(path, init);
+    let data: any = null;
+    try {
+        data = await resp.json();
+    } catch {
+        /* noop */
+    }
+    if (!resp.ok) {
+        const message = data?.error || `API request failed (${resp.status})`;
+        throw new Error(message);
+    }
+    return data;
+};
+
+export const getCalendarEvents = async (userId: string): Promise<CalendarEvent[]> => {
+    const data = await apiFetch(`/api/calendar/events?user_id=${encodeURIComponent(userId)}`);
+    const events = data?.events ?? [];
+    return events.map((ev: any) => ({
+        id: ev.id,
+        userId: ev.user_id,
+        title: ev.title,
+        description: ev.description ?? null,
+        startAt: ev.start_at,
+        endAt: ev.end_at,
+        allDay: Boolean(ev.all_day),
+        source: ev.source ?? null,
+        googleEventId: ev.google_event_id ?? null,
+        updatedBySource: ev.updated_by_source ?? null,
+        createdAt: ev.created_at ?? null,
+        updatedAt: ev.updated_at ?? null,
+    }));
+};
+
+export const saveCalendarEvent = async (payload: Partial<CalendarEvent> & { userId: string }): Promise<CalendarEvent> => {
+    const body = {
+        id: payload.id,
+        user_id: payload.userId,
+        title: payload.title ?? '予定',
+        description: payload.description ?? null,
+        start_at: payload.startAt,
+        end_at: payload.endAt ?? payload.startAt,
+        all_day: !!payload.allDay,
+        source: payload.source ?? 'system',
+        google_event_id: payload.googleEventId ?? null,
+        updated_by_source: payload.updatedBySource ?? 'system',
+    };
+    const data = await apiFetch('/api/calendar/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const ev = data?.event;
+    return {
+        id: ev.id,
+        userId: ev.user_id,
+        title: ev.title,
+        description: ev.description ?? null,
+        startAt: ev.start_at,
+        endAt: ev.end_at,
+        allDay: Boolean(ev.all_day),
+        source: ev.source ?? null,
+        googleEventId: ev.google_event_id ?? null,
+        updatedBySource: ev.updated_by_source ?? null,
+        createdAt: ev.created_at ?? null,
+        updatedAt: ev.updated_at ?? null,
+    };
+};
+
+export const deleteCalendarEvent = async (id: string, userId?: string): Promise<void> => {
+    const url = userId ? `/api/calendar/events/${encodeURIComponent(id)}?user_id=${encodeURIComponent(userId)}` : `/api/calendar/events/${encodeURIComponent(id)}`;
+    await apiFetch(url, { method: 'DELETE' });
+};
+
+export const syncSystemCalendarToGoogle = async (userId: string, opts?: { timeMin?: string; timeMax?: string; }) => {
+    const body: any = { user_id: userId };
+    if (opts?.timeMin) body.timeMin = opts.timeMin;
+    if (opts?.timeMax) body.timeMax = opts.timeMax;
+    return apiFetch('/api/google/calendar/sync-system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+};
+
+export const pullGoogleCalendarToSystem = async (userId: string, opts?: { timeMin?: string; timeMax?: string; }) => {
+    const body: any = { user_id: userId };
+    if (opts?.timeMin) body.timeMin = opts.timeMin;
+    if (opts?.timeMax) body.timeMax = opts.timeMax;
+    return apiFetch('/api/google/calendar/pull-system', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 };
 
 export const addEstimate = async (estimateData: Partial<Estimate>): Promise<void> => {

@@ -356,6 +356,21 @@ export interface AISuggestions {
     variableCost: number;
 }
 
+export interface CalendarEvent {
+    id: string;
+    userId: string;
+    title: string;
+    description?: string | null;
+    startAt: string;
+    endAt: string;
+    allDay: boolean;
+    source?: string | null;
+    googleEventId?: string | null;
+    updatedBySource?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
 export interface CompanyAnalysis {
     swot: string;
     painPointsAndNeeds: string;
