@@ -1302,6 +1302,7 @@ useEffect(() => {
                         allUsers={allUsers}
                         addToast={addToast}
                         onCreateDailyReport={handleCreateDailyReport}
+                        onRefreshGoogleAuthStatus={fetchGoogleAuthStatus}
                     />
                 );
             case 'admin_audit_log':

@@ -370,6 +370,7 @@ interface MySchedulePageProps {
     allUsers: EmployeeUser[];
     addToast?: (message: string, type: Toast['type']) => void;
     onCreateDailyReport?: (prefill: DailyReportPrefill) => void;
+    onRefreshGoogleAuthStatus?: () => void;
 }
 
 const extractDatePart = (value?: string | null) => {
@@ -619,6 +620,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     allUsers,
     addToast,
     onCreateDailyReport,
+    onRefreshGoogleAuthStatus,
 }) => {
     const todayIso = useMemo(() => formatDate(new Date()), []);
     const [selectedDate, setSelectedDate] = useState<string>(todayIso);
@@ -1234,6 +1236,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             setSyncMessage(`Googleへ同期: 作成${result?.summary?.created ?? 0} / 更新${result?.summary?.updated ?? 0} / 削除${result?.summary?.deleted ?? 0}`);
             addToast?.('Googleへ同期しました。', 'success');
             await loadRemoteEvents();
+            // 同期完了後にGoogle認証状態を更新
+            onRefreshGoogleAuthStatus?.();
         } catch (err: any) {
             setSyncMessage(err?.message || 'Googleへの同期に失敗しました。');
             addToast?.(err?.message || 'Googleへの同期に失敗しました。', 'error');
@@ -1258,6 +1262,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             setSyncMessage(`Googleから取り込み: 反映${result?.summary?.pulled ?? 0} / 削除${result?.summary?.deleted ?? 0}`);
             addToast?.('Googleから予定を取り込みました。', 'success');
             await loadRemoteEvents();
+            // 同期完了後にGoogle認証状態を更新
+            onRefreshGoogleAuthStatus?.();
         } catch (err: any) {
             setSyncMessage(err?.message || 'Googleからの取り込みに失敗しました。');
             addToast?.(err?.message || 'Googleからの取り込みに失敗しました。', 'error');
