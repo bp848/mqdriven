@@ -916,8 +916,8 @@ export const getProjects = async (): Promise<Project[]> => {
     const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .order('update_date', { ascending: false, nullsLast: true })
-        .order('project_code', { ascending: false, nullsLast: true });
+        .order('update_date', { ascending: false })
+        .order('project_code', { ascending: false });
     ensureSupabaseSuccess(error, 'Failed to fetch projects');
     return (data || []).map(dbProjectToProject);
 };
@@ -1165,7 +1165,7 @@ export const getCustomers = async (): Promise<Customer[]> => {
     const { data, error } = await supabase
         .from('customers')
         .select('*')
-        .order('created_at', { ascending: false, nullsLast: true });
+        .order('created_at', { ascending: false });
     ensureSupabaseSuccess(error, 'Failed to fetch customers');
     const customers = (data || []).map(dbCustomerToCustomer);
     console.log('[dataService] customers fetched', { count: customers.length });

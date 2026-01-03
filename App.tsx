@@ -57,6 +57,7 @@ import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructio
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
+import PromptManagementPage from './components/PromptManagementPage';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -178,6 +179,7 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_bug_reports: 'バグ・改善報告',
     bulletin_board: '議事録/掲示板',
     settings: '設定',
+    prompt_management: 'プロンプト管理',
 };
 
 const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
@@ -1291,6 +1293,10 @@ useEffect(() => {
                 return <DocumentCreationHub />;
             case 'pdf_editing_tools':
                 return <PDFEditingHub />;
+            case 'dtp_tools':
+                return <DTPHub />;
+            case 'prompt_management':
+                return <PromptManagementPage currentUser={currentUser} addToast={addToast} />;
             case 'ai_business_consultant':
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':

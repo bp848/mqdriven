@@ -19,7 +19,8 @@ export type Page =
   | 'document_creation_tools'
   | 'proposal_ai'
   | 'pdf_editing_tools'
-  | 'dtp_tools';
+  | 'dtp_tools'
+  | 'prompt_management';
 
 export enum JobStatus {
   Pending = '保留',

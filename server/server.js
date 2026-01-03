@@ -365,6 +365,13 @@ app.post('/api/google/calendar/sync', async (req, res) => {
     }
 });
 
+// OPTIONS/GET helpers for calendar sync endpoints (health checks / CORS preflight)
+const calendarSyncOk = (res) => res.status(200).json({ ok: true });
+app.options('/api/google/calendar/sync-system', (_, res) => calendarSyncOk(res));
+app.options('/api/google/calendar/pull-system', (_, res) => calendarSyncOk(res));
+app.get('/api/google/calendar/sync-system', (_, res) => calendarSyncOk(res));
+app.get('/api/google/calendar/pull-system', (_, res) => calendarSyncOk(res));
+
 // POST /api/google/calendar/sync-system - Sync system calendar_events -> Google
 app.post('/api/google/calendar/sync-system', async (req, res) => {
     const requestId = createRequestId();

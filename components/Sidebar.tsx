@@ -79,6 +79,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'proposal_ai', name: '提案書作成AI' },
       { page: 'pdf_editing_tools', name: 'PDF編集AI' },
       { page: 'dtp_tools', name: 'DTP自動組版AI' },
+      { page: 'prompt_management', name: 'プロンプト管理' },
     ],
   },
   {
