@@ -303,29 +303,29 @@ const dbJobToJob = (project: any): Job => ({
         ? project.project_code
         : parseInt(project.project_code, 10) || 0,
     projectCode: project.project_code ?? null,
-    clientName: project.customer_name || project.client_name || project.customer_code || '',
+    clientName: project.customer_name || project.customer_code || '未設定',
     customerId: project.customer_id ?? null,
     customerCode: project.customer_code ?? null,
-    title: project.project_name || project.title || '',
+    title: project.project_name || '',
     status: mapProjectStatus(project.project_status || project.status),
-    dueDate: project.delivery_date || project.due_date || '',
+    dueDate: project.delivery_date || '',
     quantity: Number(project.quantity ?? 0),
-    paperType: project.paper_type || '',
-    finishing: project.finishing || '',
-    details: project.details || project.project_summary || '',
+    paperType: '',
+    finishing: '',
+    details: '',
     createdAt: project.create_date || project.created_at || new Date().toISOString(),
-    price: Number(project.amount ?? project.price ?? 0),
-    variableCost: Number(project.variable_cost ?? project.subamount ?? 0),
+    price: Number(project.amount ?? 0),
+    variableCost: Number(project.total_cost ?? 0),
     totalQuantity: Number(project.quantity ?? 0),
-    totalAmount: Number(project.amount ?? project.price ?? 0),
-    totalCost: Number(project.variable_cost ?? project.subamount ?? 0),
-    grossMargin: Number(project.amount ?? project.price ?? 0) - Number(project.variable_cost ?? project.subamount ?? 0),
-    invoiceStatus: project.invoice_status || InvoiceStatus.Uninvoiced,
-    invoicedAt: project.invoiced_at ?? null,
-    paidAt: project.paid_at ?? null,
-    readyToInvoice: Boolean(project.ready_to_invoice),
-    invoiceId: project.invoice_id ?? null,
-    manufacturingStatus: project.manufacturing_status || ManufacturingStatus.OrderReceived,
+    totalAmount: Number(project.amount ?? 0),
+    totalCost: Number(project.total_cost ?? 0),
+    grossMargin: Number(project.amount ?? 0) - Number(project.total_cost ?? 0),
+    invoiceStatus: InvoiceStatus.Uninvoiced,
+    invoicedAt: null,
+    paidAt: null,
+    readyToInvoice: false,
+    invoiceId: null,
+    manufacturingStatus: ManufacturingStatus.OrderReceived,
 });
 
 const jobToDbJob = (job: Partial<Job>): any => {
@@ -928,7 +928,7 @@ export const getJobs = async (): Promise<Job[]> => {
         { data: projectRows, error: projectError },
         { data: customerRows, error: customerError },
     ] = await Promise.all([
-        supabase.from('projects').select('*').order('project_code', { ascending: false }),
+        supabase.from('projects').select('*').order('updated_at', { ascending: false }).limit(100),
         supabase.from('customers').select('id, customer_code, customer_name'),
     ]);
 
@@ -942,7 +942,7 @@ export const getJobs = async (): Promise<Job[]> => {
         const codeKey = normalizeLookupKey(customer.customer_code);
         if (!idKey && !codeKey) return;
         const payload = {
-            customer_name: customer.customer_name,
+            customer_name: customer.customer_name || '未設定',
             customer_code: codeKey,
         };
         if (idKey) {

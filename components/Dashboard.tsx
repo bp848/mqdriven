@@ -8,6 +8,7 @@ import { formatJPY } from '../utils';
 import { AlertTriangle, Inbox } from './Icons';
 import { getBulletinThreads } from '../services/dataService';
 import { getSupabase } from '../services/supabaseClient';
+import DataSeeder from './DataSeeder';
 
 // Integrated Board API service
 const getIntegratedBoardPosts = async (userId?: string) => {
@@ -199,6 +200,7 @@ interface DashboardProps {
   googleAuthStatusLoading?: boolean;
   toastsEnabled: boolean;
   onToggleToasts: () => void;
+  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 const BulletinHighlightsCard: React.FC<{ threads: BulletinThread[]; onNavigate: () => void; isLoading: boolean; }> = ({ threads, onNavigate, isLoading }) => {
@@ -273,6 +275,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     googleAuthStatusLoading,
     toastsEnabled,
     onToggleToasts,
+    addToast,
 }) => {
     const [bulletinThreads, setBulletinThreads] = useState<BulletinThread[]>([]);
     const [isBulletinLoading, setIsBulletinLoading] = useState(true);
@@ -323,6 +326,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
 
     const customerDelta = currentMonthCustomers.length - prevMonthCustomers.length;
+    
+    // 表示用の顧客データ（今月が0件なら先月）
+    const displayCustomers = currentMonthCustomers.length > 0 ? currentMonthCustomers : prevMonthCustomers;
 
     const [expenseBreakdown, setExpenseBreakdown] = useState({ rows: [], total: 0, count: 0 });
 
@@ -347,6 +353,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             const bucket = new Map<string, number>();
             let count = 0;
 
+            // 今月の仕訳データ
             journalEntries.forEach(entry => {
                 if (!isCurrentMonthDate(entry.date)) return;
                 const amount = entry.debit - entry.credit;
@@ -356,6 +363,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 count += 1;
             });
 
+            // 今月の発注データ
             purchaseOrders.forEach(po => {
                 if (!isCurrentMonthDate(po.orderDate)) return;
                 const amount = numeric([
@@ -370,10 +378,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 count += 1;
             });
 
+            // 全期間の申請済データ（経費申請を表示するため）
             applications.forEach(app => {
                 if (!['approved', 'pending_approval'].includes(app.status)) return;
-                const dateCandidate = app.approvedAt || app.submittedAt || app.createdAt;
-                if (!isCurrentMonthDate(dateCandidate)) return;
                 const form = (app.formData ?? {}) as any;
                 const invoice = form.invoice ?? {};
                 const amount = numeric([
@@ -388,7 +395,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     invoice.categoryName ||
                     invoice.supplierName ||
                     form.categoryName ||
-                    (app.applicationCode?.code ? `申請(${app.applicationCode.code})` : '申請');
+                    '経費申請';
                 bucket.set(label, (bucket.get(label) || 0) + amount);
                 count += 1;
             });
@@ -444,19 +451,28 @@ const Dashboard: React.FC<DashboardProps> = ({
     }, [applications, journalEntries, purchaseOrders, currentYear, currentMonth]);
 
     const mqData = useMemo(() => {
+        // 最新のデータを表示（今月が0件なら先月のデータ）
         const currentMonthJobs = jobs.filter(job => {
-            const jobDate = new Date(job.createdAt);
+            const jobDate = new Date(job.createdAt || '');
             return jobDate.getFullYear() === currentYear && jobDate.getMonth() === currentMonth;
         });
+        
+        // 今月のデータがなければ先月のデータを使用
+        const prevMonthJobs = jobs.filter(job => {
+            const jobDate = new Date(job.createdAt || '');
+            return jobDate.getFullYear() === prevMonth.getFullYear() && jobDate.getMonth() === prevMonth.getMonth();
+        });
+        
+        const displayJobs = currentMonthJobs.length > 0 ? currentMonthJobs : prevMonthJobs;
 
         const currentMonthJournalEntries = journalEntries.filter(entry => {
             const entryDate = new Date(entry.date);
             return entryDate.getFullYear() === currentYear && entryDate.getMonth() === currentMonth;
         });
 
-        // --- Overall Metrics (for current month) ---
-        const pq = currentMonthJobs.reduce((sum, job) => sum + job.price, 0);
-        const vq = currentMonthJobs.reduce((sum, job) => sum + job.variableCost, 0);
+        // --- Overall Metrics (for display month) ---
+        const pq = displayJobs.reduce((sum, job) => sum + job.price, 0);
+        const vq = displayJobs.reduce((sum, job) => sum + job.variableCost, 0);
         const mq = pq - vq;
 
         // F (Fixed Cost) Breakdown from actual journal entries for this month
@@ -517,10 +533,10 @@ const Dashboard: React.FC<DashboardProps> = ({
             };
         });
 
-        return { pq, vq, mq, f, g, fBreakdown, chartData };
-    }, [jobs, journalEntries, accountItems]);
+        return { pq, vq, mq, f, g, fBreakdown, chartData, currentMonthJobs, prevMonthJobs };
+    }, [jobs, journalEntries, accountItems, currentYear, currentMonth, prevMonth]);
 
-    const { pq, vq, mq, f, g, fBreakdown, chartData } = mqData;
+    const { pq, vq, mq, f, g, fBreakdown, chartData, currentMonthJobs, prevMonthJobs } = mqData;
     const mRate = pq > 0 ? ((mq / pq) * 100).toFixed(1) : '0.0';
     const fmRatio = mq > 0 ? ((f / mq) * 100).toFixed(1) : '0.0';
 
@@ -600,14 +616,47 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <p>減価償却費: {formatJPY(fBreakdown.f5)}</p>
                     </div>
                 </MQCard>
+
+                {/* 販売状況カード */}
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">販売状況</p>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">今月の実績</h3>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                                見積・受注・失注の状況を表示
+                            </p>
+                        </div>
+                        <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                            <span className="text-emerald-600 dark:text-emerald-300 font-bold">販</span>
+                        </div>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600 dark:text-slate-300">総見積件数</span>
+                            <span className="text-sm font-semibold text-slate-900 dark:text-white">{currentMonthJobs.length > 0 ? currentMonthJobs.length : prevMonthJobs.length} 件</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600 dark:text-slate-300">総売上</span>
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{formatJPY(pq)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600 dark:text-slate-300">MQ率</span>
+                            <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">{mRate}%</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">今月の新規顧客</h3>
-                    <p className="mt-2 text-4xl font-bold text-blue-600 dark:text-blue-300">{currentMonthCustomers.length} 件</p>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                        {currentMonthCustomers.length > 0 ? '今月の新規顧客' : '先月の新規顧客'}
+                    </h3>
+                    <p className="mt-2 text-4xl font-bold text-blue-600 dark:text-blue-300">{displayCustomers.length} 件</p>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                        先月比: <span className={customerDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                        {currentMonthCustomers.length > 0 ? '先月比: ' : '今月は0件、先月実績: '}
+                        <span className={customerDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
                             {customerDelta >= 0 ? '+' : ''}{customerDelta}
                         </span>
                     </p>
@@ -615,14 +664,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">今月の経費内訳</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">カテゴリ別の支出合計（仕訳 + 発注）</p>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">経費申請・支出一覧</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">今月の仕訳・発注 + 全期間の経費申請</p>
                     <p className="mt-1 text-base font-semibold text-slate-800 dark:text-slate-100">合計: {formatJPY(expenseBreakdown.total)} / 件数: {expenseBreakdown.count ?? 0} 件</p>
                     <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
                         {expenseBreakdown.rows.length === 0 ? (
                             <div className="text-sm text-slate-500 dark:text-slate-400">
-                                <p>今月の経費データがありません。</p>
-                                <p>仕訳または発注を登録するとここに集計されます。</p>
+                                <p>経費データがありません。</p>
+                                <p>仕訳、発注、または経費申請を登録するとここに集計されます。</p>
                             </div>
                         ) : (
                             expenseBreakdown.rows.map(row => {
@@ -645,6 +694,8 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="grid grid-cols-1 gap-6">
                 <MonthlyTrendChart data={chartData} />
             </div>
+
+            <DataSeeder addToast={addToast} />
         </div>
     );
 };

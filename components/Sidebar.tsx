@@ -49,7 +49,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     items: [
       { page: 'sales_dashboard', name: '販売状況' },
       { page: 'sales_leads', name: 'リード管理' },
-      { page: 'sales_customers', name: '取引先 / お客様カルテ' },
+      { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
       { page: 'sales_estimates', name: '見積管理' },
       { page: 'sales_orders', name: '予算管理' },

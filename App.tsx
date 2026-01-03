@@ -1120,6 +1120,7 @@ useEffect(() => {
                             googleAuthStatusLoading={googleAuthStatus.loading}
                             toastsEnabled={toastsEnabled}
                             onToggleToasts={toggleToasts}
+                            addToast={addToast}
                         />;
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;

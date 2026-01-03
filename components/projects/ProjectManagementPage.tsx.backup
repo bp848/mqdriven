@@ -380,7 +380,6 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
         </div>
       </div>
     </div>
-  </div>
   );
 };
 

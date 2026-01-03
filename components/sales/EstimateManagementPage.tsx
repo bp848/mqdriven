@@ -6,6 +6,7 @@ import { FileText, PlusCircle, Pencil, X, Loader, Save } from '../Icons';
 import { formatJPY, formatDate } from '../../utils';
 import EstimateDetailModal from './EstimateDetailModal';
 import { addEstimateDetail, deleteEstimateDetail, getEstimateDetails, updateEstimateDetail } from '../../services/dataService';
+import CustomerMQAnalysis from './CustomerMQAnalysis';
 import {
     BarChart,
     Bar,
@@ -19,7 +20,7 @@ import {
     Cell,
 } from 'recharts';
 
-type TabKey = 'list' | 'detail' | 'analysis';
+type TabKey = 'list' | 'detail' | 'analysis' | 'customer_analysis';
 type MqFilter = 'all' | 'OK' | 'A' | 'B';
 
 type EstimateFormState = {
@@ -1137,6 +1138,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                         <button onClick={() => setActiveTab('list')} className={tabButtonClass('list')}>一覧</button>
                         <button onClick={() => setActiveTab('detail')} className={tabButtonClass('detail')}>詳細</button>
                         <button onClick={() => setActiveTab('analysis')} className={tabButtonClass('analysis')}>分析</button>
+                        <button onClick={() => setActiveTab('customer_analysis')} className={tabButtonClass('customer_analysis')}>顧客分析</button>
                     </div>
                 </div>
 
@@ -1606,11 +1608,17 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                     </tbody>
                                 </table>
                             </div>
-                            <p className="text-xs text-slate-500 mt-2">編集は従来の詳細画面から行ってください。</p>
                         </div>
                     </div>
                 </div>
-            )}
+            </div>
+                )}
+
+                {activeTab === 'customer_analysis' && (
+                    <CustomerMQAnalysis estimates={estimates} customers={_customers} />
+                )}
+            </div>
+        </div>
         </>
     );
 };
