@@ -1,143 +1,78 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Project } from '../../types';
-import {
-  Building2,
-  CalendarClock,
-  ClipboardList,
-  Hash,
-  ListTree,
-  Package,
-  RefreshCw,
-  Search,
-  User,
-  Wallet,
-  BarChart3,
-} from 'lucide-react';
+import { getProjects } from '../../services/dataService';
+import { formatCurrency, formatDate } from '../../utils';
+import { Search, RefreshCw, ClipboardList, Hash, User } from '../Icons';
 
-type ProjectManagementPageProps = {
-  projects: Project[];
-  isLoading?: boolean;
+interface ProjectManagementPageProps {
   onRefresh?: () => void;
-};
+  isLoading?: boolean;
+}
 
-const formatCurrency = (value: number | null | undefined) => {
-  if (value === null || value === undefined || Number.isNaN(value)) return '-';
-  return `¥${value.toLocaleString('ja-JP')}`;
-};
-
-const formatDate = (value: string | null | undefined) => {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('ja-JP');
-};
-
-const formatQuantity = (value: string | number | null | undefined) => {
-  if (value === null || value === undefined || value === '') return '-';
-  return typeof value === 'number' ? value.toLocaleString('ja-JP') : value;
-};
-
-const DetailField: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div className="space-y-1">
-    <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
-    <p className="text-sm font-semibold text-slate-800 dark:text-white break-words">{value ?? '-'}</p>
-  </div>
-);
-
-const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects, isLoading, onRefresh }) => {
+const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh, isLoading = false }) => {
+  const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'status' | 'month'>('none');
 
-  const filteredProjects = useMemo(() => {
-    const keyword = searchTerm.trim().toLowerCase();
-    if (!keyword) return projects;
-    return projects.filter(project => {
-      return [
-        project.projectName,
-        project.projectCode,
-        project.customerCode,
-        project.projectStatus,
-        project.salesUserCode,
-        project.salesUserId,
-      ]
-        .filter(Boolean)
-        .some(value => String(value).toLowerCase().includes(keyword));
+  useEffect(() => {
+    getProjects().then(data => {
+      setProjects(data);
     });
+  }, []);
+
+  const filteredProjects = useMemo(() => {
+    if (!searchTerm) return projects;
+    
+    const lowerSearch = searchTerm.toLowerCase();
+    return projects.filter(project => 
+      (project.projectName?.toLowerCase().includes(lowerSearch) || false) ||
+      (project.projectCode?.toString().toLowerCase().includes(lowerSearch) || false) ||
+      (project.customerCode?.toLowerCase().includes(lowerSearch) || false)
+    );
   }, [projects, searchTerm]);
 
-  // 案件別グループ化
   const groupedProjects = useMemo(() => {
-    if (groupBy === 'none') {
-      return { 'すべて': filteredProjects };
-    }
-
-    const groups: Record<string, typeof filteredProjects> = {};
+    if (groupBy === 'none') return { 'すべて': filteredProjects };
+    
+    const grouped: Record<string, Project[]> = {};
     
     filteredProjects.forEach(project => {
-      let key = '';
+      let key = '未分類';
       
-      switch (groupBy) {
-        case 'customer':
-          key = project.customerCode || '未設定';
-          break;
-        case 'status':
-          key = project.projectStatus || '未設定';
-          break;
-        case 'month':
-          if (project.createDate) {
-            const date = new Date(project.createDate);
-            key = `${date.getFullYear()}年${date.getMonth() + 1}月`;
-          } else {
-            key = '未設定';
-          }
-          break;
+      if (groupBy === 'customer') {
+        key = project.customerName || '顧客未設定';
+      } else if (groupBy === 'status') {
+        key = project.projectStatus || 'ステータス未設定';
+      } else if (groupBy === 'month') {
+        if (project.createDate) {
+          const date = new Date(project.createDate);
+          key = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+        }
       }
       
-      if (!groups[key]) {
-        groups[key] = [];
-      }
-      groups[key].push(project);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(project);
     });
-
-    return groups;
+    
+    return grouped;
   }, [filteredProjects, groupBy]);
 
-  // グループ別集計
   const groupStats = useMemo(() => {
-    const stats: Record<string, { count: number; totalAmount: number; totalCost: number; avgMargin: number }> = {};
+    const stats: Record<string, { totalAmount: number; totalCost: number; avgMargin: number }> = {};
     
     Object.entries(groupedProjects).forEach(([groupKey, groupProjects]) => {
-      const validProjects = groupProjects.filter(p => p.amount && !Number.isNaN(p.amount));
-      const totalAmount = validProjects.reduce((sum, p) => sum + (p.amount || 0), 0);
-      const totalCost = validProjects.reduce((sum, p) => sum + (p.totalCost || 0), 0);
-      const avgMargin = validProjects.length > 0 ? (totalAmount - totalCost) / totalAmount * 100 : 0;
+      const totalAmount = groupProjects.reduce((sum, p) => sum + (p.amount || 0), 0);
+      const totalCost = groupProjects.reduce((sum, p) => sum + (p.totalCost || 0), 0);
+      const avgMargin = totalAmount > 0 ? ((totalAmount - totalCost) / totalAmount) * 100 : 0;
       
-      stats[groupKey] = {
-        count: groupProjects.length,
-        totalAmount,
-        totalCost,
-        avgMargin
-      };
+      stats[groupKey] = { totalAmount, totalCost, avgMargin };
     });
-
+    
     return stats;
   }, [groupedProjects]);
 
-  useEffect(() => {
-    if (!filteredProjects.length) {
-      setSelectedId(null);
-      return;
-    }
-    if (!selectedId || !filteredProjects.find(p => p.id === selectedId)) {
-      setSelectedId(filteredProjects[0].id);
-    }
-  }, [filteredProjects, selectedId]);
-
-  const selectedProject =
-    filteredProjects.find(project => project.id === selectedId) ||
-    projects.find(project => project.id === selectedId) ||
-    null;
+  const selectedProject = projects.find(p => p.id === selectedId);
 
   return (
     <div className="space-y-6">
@@ -187,13 +122,12 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
             <div className="flex items-center gap-2 text-slate-700 dark:text-slate-100 font-semibold">
               <ClipboardList className="w-4 h-4" />
               <span>プロジェクト一覧</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">({filteredProjects.length}件)</span>
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {isLoading ? '更新中...' : '最新の順に表示'}
-            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {filteredProjects.length} / {projects.length} 件
+            </span>
           </div>
-
+          
           {filteredProjects.length === 0 && (
             <div className="border border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center text-slate-500 dark:text-slate-400 text-sm">
               条件に一致するプロジェクトがありません
@@ -204,7 +138,6 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
             {Object.entries(groupedProjects).map(([groupKey, groupProjects]) => (
               <div key={groupKey} className="space-y-2">
                 {groupBy !== 'none' && (
-                  <>
                   <div className="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-700 dark:text-slate-100">
@@ -224,67 +157,46 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
                   </div>
                 )}
                 {groupProjects.map(project => {
-              const isActive = project.isActive !== false;
-              return (
-                <button
-                  key={project.id}
-                  onClick={() => setSelectedId(project.id)}
-                  className={`w-full text-left rounded-xl border transition-all ${
-                    project.id === selectedId
-                      ? 'border-blue-500/60 bg-blue-50 dark:bg-blue-900/20 shadow-inner shadow-blue-900/10'
-                      : 'border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 hover:border-slate-400 dark:hover:border-slate-500'
-                  }`}
-                >
-                  <div className="p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-800 to-slate-700 flex items-center justify-center text-slate-50">
-                          <Hash className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{project.projectCode || 'コード未設定'}</p>
-                          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{project.projectName || '名称未設定'}</h3>
-                          <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            <span className="flex items-center gap-1">
-                              <Building2 className="w-3 h-3" /> {project.customerCode || '顧客未設定'}
+                  const isActive = project.isActive !== false;
+                  return (
+                    <button
+                      key={project.id}
+                      onClick={() => setSelectedId(project.id === selectedId ? null : project.id)}
+                      className={`w-full text-left p-3 rounded-lg border transition-all ${
+                        selectedId === project.id
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      } ${!isActive ? 'opacity-60' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                              {project.projectName || '名称未設定'}
                             </span>
-                            <span className="flex items-center gap-1">
-                              <CalendarClock className="w-3 h-3" /> 納期 {formatDate(project.deliveryDate)}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Wallet className="w-3 h-3" /> {formatCurrency(project.amount)}
+                            <span className="px-2 py-0.5 rounded text-xs font-medium border bg-slate-800/10 text-slate-700 dark:text-slate-100 dark:bg-slate-700/60 border-slate-300 dark:border-slate-600">
+                              {project.projectStatus || 'ステータス未設定'}
                             </span>
                           </div>
+                          <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+                            <span>コード: {project.projectCode || '未設定'}</span>
+                            <span>顧客: {project.customerName || '未設定'}</span>
+                            <span>作成: {formatDate(project.createDate)}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="flex items-center gap-1">
+                            <User className="w-3 h-3" /> {project.salesUserCode || '担当未設定'}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${
-                          project.projectStatus
-                            ? 'bg-slate-800/10 text-slate-700 dark:text-slate-100 dark:bg-slate-700/60 border-slate-300 dark:border-slate-600'
-                            : 'bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-700/60 dark:text-slate-300 dark:border-slate-600'
-                        }`}>
-                          {project.projectStatus || 'ステータス未設定'}
-                        </span>
-                        {!isActive && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
-                            非アクティブ
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
-                      <span className="flex items-center gap-1">
-                        <ListTree className="w-3 h-3" /> {project.classificationId || '分類未設定'}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <User className="w-3 h-3" /> {project.salesUserCode || '担当未設定'}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
+        </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm space-y-5">
           {!selectedProject ? (
@@ -307,60 +219,46 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
                       {selectedProject.projectStatus || 'ステータス未設定'}
                     </span>
                     {selectedProject.updatedAt && (
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
                         更新: {formatDate(selectedProject.updatedAt)}
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <CalendarClock className="w-3 h-3" /> 納期 {formatDate(selectedProject.deliveryDate)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Package className="w-3 h-3" /> 数量 {formatQuantity(selectedProject.quantity)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <BarChart3 className="w-3 h-3" /> {selectedProject.classificationId || '分類未設定'} / {selectedProject.sectionCodeId || 'セクション未設定'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    <Wallet className="w-4 h-4 text-emerald-500" /> 金額
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">顧客コード</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.customerCode || '-'}</p>
                   </div>
-                  <DetailField label="案件金額 (amount)" value={formatCurrency(selectedProject.amount)} />
-                  <DetailField label="見積金額 (subamount)" value={formatCurrency(selectedProject.subamount)} />
-                  <DetailField label="原価合計 (total_cost)" value={formatCurrency(selectedProject.totalCost)} />
-                </div>
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    <Building2 className="w-4 h-4 text-blue-500" /> 顧客・担当
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">顧客名</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.customerName || '-'}</p>
                   </div>
-                  <DetailField label="顧客コード" value={selectedProject.customerCode || '未設定'} />
-                  <DetailField label="顧客ID" value={selectedProject.customerId || '未設定'} />
-                  <DetailField label="営業担当" value={selectedProject.salesUserCode || selectedProject.salesUserId || '未設定'} />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    <ListTree className="w-4 h-4 text-indigo-500" /> 見積・受注・分類
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">納期</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{formatDate(selectedProject.deliveryDate)}</p>
                   </div>
-                  <DetailField label="見積 ID / コード" value={`${selectedProject.estimateId ?? '-'} / ${selectedProject.estimateCode ?? '-'}`} />
-                  <DetailField label="受注 ID / コード" value={`${selectedProject.orderId ?? '-'} / ${selectedProject.orderCode ?? '-'}`} />
-                  <DetailField label="分類 / 製品クラス" value={`${selectedProject.classificationId ?? '-'} / ${selectedProject.productClassId ?? '-'}`} />
-                </div>
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    <User className="w-4 h-4 text-amber-500" /> 作成・更新
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">数量</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.quantity?.toLocaleString() || '-'}</p>
                   </div>
-                  <DetailField label="作成日時 / ユーザー" value={`${formatDate(selectedProject.createDate)} / ${selectedProject.createUserCode ?? selectedProject.createUserId ?? '-'}`} />
-                  <DetailField label="更新日時 / ユーザー" value={`${formatDate(selectedProject.updateDate)} / ${selectedProject.updateUserCode ?? selectedProject.updateUserId ?? '-'}`} />
-                  <DetailField label="system updated_at" value={formatDate(selectedProject.updatedAt)} />
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">売上</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{formatCurrency(selectedProject.amount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">原価</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{formatCurrency(selectedProject.totalCost)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">利益率</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {selectedProject.amount && selectedProject.totalCost 
+                        ? `${(((selectedProject.amount - selectedProject.totalCost) / selectedProject.amount) * 100).toFixed(1)}%`
+                        : '-'
+                      }
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -369,10 +267,22 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
                   <Hash className="w-4 h-4 text-slate-500" /> ID / セクション情報
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
-                  <DetailField label="プロジェクトID (project_id)" value={selectedProject.projectId || '-'} />
-                  <DetailField label="内部ID (id)" value={selectedProject.id || '-'} />
-                  <DetailField label="セクションコードID" value={selectedProject.sectionCodeId || '-'} />
-                  <DetailField label="担当者ID (sales_user_id)" value={selectedProject.salesUserId || '-'} />
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">プロジェクトID (project_id)</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.projectId || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">内部ID (id)</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.id || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">セクションコードID</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.sectionCodeId || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">担当者ID (sales_user_id)</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.salesUserId || '-'}</p>
+                  </div>
                 </div>
               </div>
             </>
@@ -380,8 +290,6 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
         </div>
       </div>
     </div>
-  </div>
-  </div>
   );
 };
 

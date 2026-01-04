@@ -167,8 +167,16 @@ export const generateMultipagePdf = async (elementId: string, fileName: string) 
         );
 
         position += pdfHeight;
-        pageCount++;
     }
 
     pdf.save(fileName);
+};
+
+export const formatCurrency = (amount: number | null | undefined): string => {
+    if (amount === null || amount === undefined) return '¥0';
+    return new Intl.NumberFormat('ja-JP', {
+        style: 'currency',
+        currency: 'JPY',
+        minimumFractionDigits: 0
+    }).format(amount);
 };

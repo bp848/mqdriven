@@ -438,10 +438,14 @@ const App: React.FC = () => {
     useEffect(() => {
         const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;
         const seen = typeof window !== 'undefined' ? window.localStorage.getItem(todayKey) : null;
-        if (currentUser && !seen && currentPage === 'my_schedule') {
-            setShowFeatureUpdateModal(true);
-        }
-    }, [currentUser, currentPage]);
+        const shouldShow =
+            currentUser &&
+            !seen &&
+            currentPage === 'my_schedule' &&
+            !googleAuthStatus.loading &&
+            !googleAuthStatus.connected;
+        setShowFeatureUpdateModal(Boolean(shouldShow));
+    }, [currentUser, currentPage, googleAuthStatus.connected, googleAuthStatus.loading]);
 
     const handleDismissFeatureModal = () => {
         const todayKey = `feature_modal_seen_${new Date().toISOString().slice(0, 10)}`;

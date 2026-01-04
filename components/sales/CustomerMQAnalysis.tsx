@@ -46,7 +46,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
 
     estimates.forEach(estimate => {
       const customerName = estimate.customerName || '未設定顧客';
-      const customerId = estimate.customerId || 'unknown';
+      const customerId = estimate.projectId || 'unknown';
 
       if (!customerMap.has(customerId)) {
         customerMap.set(customerId, {
@@ -66,7 +66,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
 
       const analysis = customerMap.get(customerId)!;
       const salesAmount = estimate.total || estimate.subtotal || 0;
-      const costAmount = estimate.totalCost || estimate.variableCost || 0;
+      const costAmount = estimate.variableCostAmount || 0;
       const mqAmount = salesAmount - costAmount;
       const mqRate = salesAmount > 0 ? (mqAmount / salesAmount) * 100 : 0;
 
