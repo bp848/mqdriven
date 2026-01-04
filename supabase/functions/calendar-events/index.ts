@@ -123,11 +123,6 @@ serve(async (req: Request): Promise<Response> => {
   const authHeader = req.headers.get("authorization");
   const authUserId = getUserIdFromToken(authHeader);
 
-  if (!authHeader) {
-    console.warn("[calendar-events] missing auth header", { requestId });
-    return errorResponse(req, "Missing authorization header", 401);
-  }
-
   let rawBody = "";
   let body: Record<string, unknown> = {};
   if (req.method === "POST") {

@@ -479,6 +479,7 @@ serve(async (req: Request) => {
   );
 
   if (!authUserId && !isServiceRequest) {
+    // fall back to anon if configured
     return errorResponse(req, "Missing or invalid authorization header", 401);
   }
 

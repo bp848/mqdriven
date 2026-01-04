@@ -61,6 +61,14 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
     };
     
     const config = statusConfig[status as keyof typeof statusConfig];
+    if (!config) {
+      return (
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+          {status || '不明'}
+        </span>
+      );
+    }
+    
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
         {config.label}
