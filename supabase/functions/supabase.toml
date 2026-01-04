@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.google-oauth-callback]
 verify_jwt = false
+
+[functions.calendar-events]
+verify_jwt = false
