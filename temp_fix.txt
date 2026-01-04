@@ -1,0 +1,2 @@
+// Fix JSX structure in EstimateManagementPage
+// The issue is with JSX fragment closing tag placement

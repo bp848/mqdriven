@@ -204,6 +204,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
             {Object.entries(groupedProjects).map(([groupKey, groupProjects]) => (
               <div key={groupKey} className="space-y-2">
                 {groupBy !== 'none' && (
+                  <>
                   <div className="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-700 dark:text-slate-100">
@@ -284,7 +285,6 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
               );
             })}
           </div>
-        </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm space-y-5">
           {!selectedProject ? (
@@ -380,6 +380,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects,
         </div>
       </div>
     </div>
+  </div>
   </div>
   );
 };

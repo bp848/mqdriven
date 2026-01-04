@@ -1611,14 +1611,11 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                         </div>
                     </div>
                 </div>
-            </div>
                 )}
 
                 {activeTab === 'customer_analysis' && (
                     <CustomerMQAnalysis estimates={estimates} customers={_customers} />
                 )}
-            </div>
-        </div>
         </>
     );
 };
