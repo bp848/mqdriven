@@ -1,16 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlusCircle, Search, Filter, Edit, Trash2, Eye, Download } from 'lucide-react';
-
-interface Estimate {
-  id: string;
-  estimateNumber: string;
-  customerName: string;
-  projectName: string;
-  amount: number;
-  status: 'draft' | 'sent' | 'approved' | 'rejected' | 'expired';
-  createdAt: string;
-  validUntil: string;
-}
+import { getEstimates } from '../services/dataService';
+import { Estimate } from '../types';
 
 interface SimpleEstimatePageProps {
   currentUser: any;
@@ -18,38 +9,25 @@ interface SimpleEstimatePageProps {
 }
 
 const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, addToast }) => {
-  const [estimates, setEstimates] = useState<Estimate[]>([
-    {
-      id: '1',
-      estimateNumber: 'EST-2024-001',
-      customerName: '株式会社ABC',
-      projectName: 'ウェブサイト開発',
-      amount: 500000,
-      status: 'draft',
-      createdAt: '2024-01-15',
-      validUntil: '2024-02-15'
-    },
-    {
-      id: '2',
-      estimateNumber: 'EST-2024-002',
-      customerName: '株式会社XYZ',
-      projectName: 'モバイルアプリ開発',
-      amount: 800000,
-      status: 'sent',
-      createdAt: '2024-01-20',
-      validUntil: '2024-02-20'
-    },
-    {
-      id: '3',
-      estimateNumber: 'EST-2024-003',
-      customerName: '有限会社DEF',
-      projectName: 'システム保守',
-      amount: 300000,
-      status: 'approved',
-      createdAt: '2024-01-25',
-      validUntil: '2024-02-25'
-    }
-  ]);
+  const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchEstimates = async () => {
+      try {
+        setLoading(true);
+        const data = await getEstimates();
+        setEstimates(data);
+      } catch (error: any) {
+        console.error('Failed to fetch estimates:', error);
+        addToast('見積データの読み込みに失敗しました', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEstimates();
+  }, [addToast]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -58,8 +36,8 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
 
   const filteredEstimates = estimates.filter(estimate => {
     const matchesSearch = estimate.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         estimate.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         estimate.estimateNumber.toLowerCase().includes(searchTerm.toLowerCase());
+                         (estimate.projectName && estimate.projectName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         estimate.estimateNumber.toString().includes(searchTerm);
     const matchesStatus = statusFilter === 'all' || estimate.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -117,14 +95,43 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
     } else {
       // 新規作成
       const newEstimate: Estimate = {
-        id: Date.now().toString(),
-        estimateNumber: `EST-2024-${String(estimates.length + 1).padStart(3, '0')}`,
-        customerName: estimateData.customerName || '',
+        id: `est-${Date.now()}`,
+        estimateNumber: Date.now(),
+        customerName: estimateData.customerName || '新規顧客',
+        title: estimateData.title || '新規見積',
+        displayName: estimateData.displayName || estimateData.title || '新規見積',
         projectName: estimateData.projectName || '',
-        amount: estimateData.amount || 0,
-        status: 'draft',
-        createdAt: new Date().toISOString().split('T')[0],
-        validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        items: [],
+        total: estimateData.total || estimateData.grandTotal || 0,
+        deliveryDate: '',
+        paymentTerms: '',
+        deliveryMethod: '',
+        notes: '',
+        status: 'draft' as any,
+        version: 1,
+        userId: currentUser?.id || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        subtotal: 0,
+        taxTotal: 0,
+        grandTotal: estimateData.total || estimateData.grandTotal || 0,
+        deliveryTerms: '',
+        projectId: null,
+        patternNo: null,
+        expirationDate: estimateData.expirationDate || null,
+        taxRate: null,
+        consumption: null,
+        rawStatusCode: null,
+        copies: null,
+        unitPrice: null,
+        salesAmount: null,
+        variableCostAmount: null,
+        mqAmount: null,
+        mqRate: null,
+        mqMissingReason: null,
+        detailCount: null,
+        statusLabel: null,
+        raw: null,
       };
       setEstimates(prev => [...prev, newEstimate]);
       addToast('見積書を作成しました', 'success');
@@ -177,74 +184,82 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
 
       {/* 見積書一覧 */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">見積番号</th>
-              <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">顧客名</th>
-              <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">案件名</th>
-              <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">金額</th>
-              <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">ステータス</th>
-              <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">作成日</th>
-              <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">有効期限</th>
-              <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredEstimates.map((estimate) => (
-              <tr key={estimate.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{estimate.estimateNumber}</td>
-                <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.customerName}</td>
-                <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.projectName}</td>
-                <td className="py-3 px-4 text-right font-medium text-gray-900 dark:text-white">{formatCurrency(estimate.amount)}</td>
-                <td className="py-3 px-4">{getStatusBadge(estimate.status)}</td>
-                <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.createdAt}</td>
-                <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.validUntil}</td>
-                <td className="py-3 px-4">
-                  <div className="flex justify-center gap-2">
-                    <button
-                      onClick={() => handleEditEstimate(estimate)}
-                      className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
-                      title="編集"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                      title="プレビュー"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="p-1 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
-                      title="ダウンロード"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteEstimate(estimate.id)}
-                      className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                      title="削除"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        
-        {filteredEstimates.length === 0 && (
+        {loading ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <p>見積書がありません</p>
-            <button
-              onClick={handleCreateEstimate}
-              className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
-            >
-              最初の見積書を作成する
-            </button>
+            <p>データを読み込み中...</p>
           </div>
+        ) : (
+          <>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">見積番号</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">顧客名</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">案件名</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">金額</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">ステータス</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">作成日</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">有効期限</th>
+                  <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEstimates.map((estimate) => (
+                  <tr key={estimate.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{estimate.estimateNumber}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.customerName}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.projectName || '-'}</td>
+                    <td className="py-3 px-4 text-right font-medium text-gray-900 dark:text-white">{formatCurrency(estimate.total || estimate.grandTotal || 0)}</td>
+                    <td className="py-3 px-4">{getStatusBadge(estimate.status)}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{new Date(estimate.createdAt).toLocaleDateString('ja-JP')}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.expirationDate ? new Date(estimate.expirationDate).toLocaleDateString('ja-JP') : '-'}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleEditEstimate(estimate)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                          title="編集"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                          title="プレビュー"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="p-1 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
+                          title="ダウンロード"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEstimate(estimate.id)}
+                          className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          title="削除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {filteredEstimates.length === 0 && !loading && (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <p>見積書がありません</p>
+                <button
+                  onClick={handleCreateEstimate}
+                  className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  最初の見積書を作成する
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -287,7 +302,7 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
                 </label>
                 <input
                   type="number"
-                  defaultValue={selectedEstimate?.amount}
+                  defaultValue={selectedEstimate?.total || selectedEstimate?.grandTotal}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                   placeholder="500000"
                 />
@@ -299,7 +314,7 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
                 </label>
                 <input
                   type="date"
-                  defaultValue={selectedEstimate?.validUntil}
+                  defaultValue={selectedEstimate?.expirationDate}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                 />
               </div>
@@ -320,8 +335,9 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
                     const estimateData = {
                       customerName: (formData.get('customerName') as string) || selectedEstimate?.customerName || '',
                       projectName: (formData.get('projectName') as string) || selectedEstimate?.projectName || '',
-                      amount: Number(formData.get('amount')) || selectedEstimate?.amount || 0,
-                      validUntil: (formData.get('validUntil') as string) || selectedEstimate?.validUntil || ''
+                      total: Number(formData.get('amount')) || selectedEstimate?.total || selectedEstimate?.grandTotal || 0,
+                      grandTotal: Number(formData.get('amount')) || selectedEstimate?.total || selectedEstimate?.grandTotal || 0,
+                      expirationDate: (formData.get('validUntil') as string) || selectedEstimate?.expirationDate || ''
                     };
                     handleSaveEstimate(estimateData);
                   }
