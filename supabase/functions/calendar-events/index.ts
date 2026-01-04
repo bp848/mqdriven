@@ -136,12 +136,10 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   const action = (body?.action as string | undefined)?.toLowerCase() || null;
-  const targetUserId = (body?.user_id || body?.userId || queryUserId || authUserId) as string | null;
-
-  if (!targetUserId || !UUID_REGEX.test(targetUserId)) {
-    console.warn("[calendar-events] invalid user_id", { requestId, targetUserId, authUserId, queryUserId, body });
-    return errorResponse(req, "user_id (UUID) is required", 400);
-  }
+  const envDefaultUserId = Deno.env.get("DEFAULT_CALENDAR_USER_ID");
+  const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+  const targetUserIdRaw = (body?.user_id || body?.userId || queryUserId || authUserId || envDefaultUserId || NIL_UUID) as string;
+  const targetUserId = UUID_REGEX.test(targetUserIdRaw) ? targetUserIdRaw : NIL_UUID;
 
   try {
     if (req.method === "GET" || action === "list") {

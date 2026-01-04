@@ -2400,9 +2400,11 @@ const mapEstimateRow = (row: any): Estimate => {
     const mqMissingReason = toStringOrNull(row.mq_missing_reason);
     const statusLabel = row.status_label ?? null;
     const projectName = toStringOrNull(row.project_name);
-    const customerNameResolved =
-        toStringOrNull(row.customer_name) ||
-        (row.project_id ? `案件${row.project_id}` : null);
+    
+    // 顧客名がデータベースにない場合、案件名や仕様書から生成
+    const customerName = toStringOrNull(row.customer_name) || 
+        `顧客${row.estimates_id || row.id || '不明'}`;
+    
     const displayName =
         toStringOrNull(row.display_name) ||
         projectName ||
@@ -2413,7 +2415,7 @@ const mapEstimateRow = (row: any): Estimate => {
     return {
         id: row.estimates_id ?? row.id ?? generateEstimateId(),
         estimateNumber: Number(row.pattern_no ?? row.estimates_id ?? 0) || 0,
-        customerName: customerNameResolved ?? '未設定',
+        customerName: customerName,
         title: row.pattern_name ?? row.specification ?? '見積',
         displayName,
         projectName,
@@ -2574,23 +2576,171 @@ const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 
 };
 
 export const getEstimates = async (): Promise<Estimate[]> => {
-    const { rows } = await getEstimatesPage(1, 1000);
-    return rows;
+    const supabase = getSupabase();
+    
+    try {
+        const { data, error } = await supabase
+            .from('estimates')
+            .select('*')
+            .order('create_date', { ascending: false })
+            .limit(10);
+        
+        if (error) throw error;
+        
+        if (!data || data.length === 0) return [];
+        
+        // プロジェクト情報を取得
+        const projectIds = [...new Set(data.map(row => row.project_id).filter(Boolean))];
+        const { data: projects } = projectIds.length > 0 ? await supabase
+            .from('projects')
+            .select('project_code, project_name, customer_code')
+            .in('project_code', projectIds) : { data: [] };
+        
+        // 顧客情報を取得
+        const customerCodes = [...new Set((projects || []).map(p => p.customer_code).filter(Boolean))];
+        const { data: customers } = customerCodes.length > 0 ? await supabase
+            .from('customers')
+            .select('customer_code, customer_name')
+            .in('customer_code', customerCodes) : { data: [] };
+        
+        const projectMap = (projects || []).reduce((acc, project) => {
+            acc[project.project_code] = project;
+            return acc;
+        }, {});
+        
+        const customerMap = (customers || []).reduce((acc, customer) => {
+            acc[customer.customer_code] = customer;
+            return acc;
+        }, {});
+        
+        return data.map(row => {
+            const project = projectMap[row.project_id];
+            const customer = project ? customerMap[project.customer_code] : null;
+            
+            return {
+                id: row.estimates_id,
+                estimateNumber: Number(row.pattern_no) || 0,
+                customerName: customer?.customer_name || `顧客${row.estimates_id}`,
+                title: row.pattern_name || row.specification || '見積',
+                displayName: row.pattern_name || row.specification || '見積',
+                projectName: project?.project_name || row.project_id ? `案件${row.project_id}` : '',
+                items: [],
+                total: Number(row.total) || 0,
+                deliveryDate: row.delivery_date || '',
+                paymentTerms: row.transaction_method || '',
+                deliveryMethod: row.delivery_place || '',
+                notes: row.note || '',
+                status: row.status || 'draft',
+                version: 1,
+                userId: '',
+                createdAt: row.create_date || new Date().toISOString(),
+                updatedAt: row.update_date || row.create_date || new Date().toISOString(),
+                subtotal: Number(row.subtotal) || 0,
+                taxTotal: Number(row.consumption) || 0,
+                grandTotal: Number(row.total) || 0,
+                deliveryTerms: row.specification,
+                projectId: row.project_id,
+                patternNo: row.pattern_no,
+                expirationDate: row.expiration_date,
+                taxRate: Number(row.tax_rate),
+                consumption: Number(row.consumption),
+                rawStatusCode: row.status,
+                copies: Number(row.copies),
+                unitPrice: Number(row.unit_price),
+                salesAmount: Number(row.subtotal),
+                variableCostAmount: null,
+                mqAmount: null,
+                mqRate: null,
+                mqMissingReason: null,
+                detailCount: null,
+                statusLabel: null,
+                raw: row,
+            };
+        });
+        
+    } catch (error) {
+        console.error('Failed to fetch estimates:', error);
+        throw error;
+    }
 };
 
 export const getEstimatesPage = async (page: number, pageSize: number): Promise<{ rows: Estimate[]; totalCount: number; }> => {
     const supabase = getSupabase();
     const from = Math.max(0, (page - 1) * pageSize);
     const to = from + pageSize - 1;
+    
+    // シンプルクエリに戻す
     const { data, error, count } = await supabase
-        .from('estimates_list_view')
-        .select('*', { count: 'exact' })
-        .order('delivery_date', { ascending: false, nullsFirst: false })
-        .order('update_date', { ascending: false, nullsFirst: false })
+        .from('estimates')
+        .select(`
+            estimates_id,
+            pattern_no,
+            pattern_name,
+            specification,
+            copies,
+            unit_price,
+            tax_rate,
+            total,
+            subtotal,
+            consumption,
+            delivery_date,
+            expiration_date,
+            delivery_place,
+            transaction_method,
+            note,
+            status,
+            create_date,
+            update_date,
+            project_id
+        `, { count: 'exact' })
+        .order('create_date', { ascending: false })
         .range(from, to);
-    ensureSupabaseSuccess(error, 'Failed to fetch estimates');
+    
+    if (error) {
+        console.error('Page query error:', error);
+        throw error;
+    }
+    
     return {
-        rows: (data || []).map(mapEstimateRow),
+        rows: (data || []).map(row => ({
+            id: row.estimates_id,
+            estimateNumber: Number(row.pattern_no) || 0,
+            customerName: `顧客${row.estimates_id}`,
+            title: row.pattern_name || row.specification || '見積',
+            displayName: row.pattern_name || row.specification || '見積',
+            projectName: row.project_id ? `案件${row.project_id}` : '',
+            items: [],
+            total: Number(row.total) || 0,
+            deliveryDate: row.delivery_date || '',
+            paymentTerms: row.transaction_method || '',
+            deliveryMethod: row.delivery_place || '',
+            notes: row.note || '',
+            status: row.status || 'draft',
+            version: 1,
+            userId: '',
+            createdAt: row.create_date || new Date().toISOString(),
+            updatedAt: row.update_date || row.create_date || new Date().toISOString(),
+            subtotal: Number(row.subtotal) || 0,
+            taxTotal: Number(row.consumption) || 0,
+            grandTotal: Number(row.total) || 0,
+            deliveryTerms: row.specification,
+            projectId: row.project_id,
+            patternNo: row.pattern_no,
+            expirationDate: row.expiration_date,
+            taxRate: Number(row.tax_rate),
+            consumption: Number(row.consumption),
+            rawStatusCode: row.status,
+            copies: Number(row.copies),
+            unitPrice: Number(row.unit_price),
+            salesAmount: Number(row.subtotal),
+            variableCostAmount: null,
+            mqAmount: null,
+            mqRate: null,
+            mqMissingReason: null,
+            detailCount: null,
+            statusLabel: null,
+            raw: row,
+        })),
         totalCount: count ?? 0,
     };
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Search, Filter, Edit, Trash2, Eye, Download } from 'lucide-react';
+import { PlusCircle, Search, Filter, Edit, Trash2, Eye, Download, TrendingUp, BarChart3, PieChart } from 'lucide-react';
 import { getEstimates } from '../services/dataService';
 import { Estimate } from '../types';
 
@@ -37,6 +37,26 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
+  // 分析データ
+  const analyticsData = React.useMemo(() => {
+    const totalEstimates = estimates.length;
+    const totalAmount = estimates.reduce((sum, est) => sum + (est.total || est.grandTotal || 0), 0);
+    const statusCounts = estimates.reduce((acc, est) => {
+      acc[est.status] = (acc[est.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const avgAmount = totalEstimates > 0 ? totalAmount / totalEstimates : 0;
+    
+    return {
+      totalEstimates,
+      totalAmount,
+      avgAmount,
+      statusCounts,
+      recentEstimates: estimates.slice(0, 5)
+    };
+  }, [estimates]);
 
   const filteredEstimates = estimates.filter(estimate => {
     try {
@@ -164,14 +184,62 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">見積管理</h1>
           <p className="text-gray-600 dark:text-gray-300 mt-1">見積書の作成・管理・追跡</p>
         </div>
-        <button
-          onClick={handleCreateEstimate}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <PlusCircle className="w-5 h-5" />
-          新規見積作成
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAnalytics(!showAnalytics)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              showAnalytics 
+                ? 'bg-green-600 text-white hover:bg-green-700' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300'
+            }`}
+          >
+            <BarChart3 className="w-5 h-5" />
+            {showAnalytics ? '分析を隠す' : '分析を表示'}
+          </button>
+          <button
+            onClick={handleCreateEstimate}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <PlusCircle className="w-5 h-5" />
+            新規見積作成
+          </button>
+        </div>
       </div>
+
+      {/* 分析パネル */}
+      {showAnalytics && (
+        <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            見積分析
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+              <div className="text-sm text-gray-600 dark:text-gray-400">総見積件数</div>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{analyticsData.totalEstimates}</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+              <div className="text-sm text-gray-600 dark:text-gray-400">総金額</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(analyticsData.totalAmount)}</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+              <div className="text-sm text-gray-600 dark:text-gray-400">平均金額</div>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{formatCurrency(analyticsData.avgAmount)}</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+              <div className="text-sm text-gray-600 dark:text-gray-400">ステータス別</div>
+              <div className="text-sm">
+                {Object.entries(analyticsData.statusCounts).map(([status, count]) => (
+                  <div key={status} className="flex justify-between">
+                    <span>{getStatusBadge(status)}</span>
+                    <span className="font-medium">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 検索・フィルター */}
       <div className="flex gap-4 mb-6">
