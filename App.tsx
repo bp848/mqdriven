@@ -272,6 +272,11 @@ const App: React.FC = () => {
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [estimates, setEstimates] = useState<Estimate[]>([]);
+    
+    // デバッグ用：estimatesの状態を監視
+    useEffect(() => {
+        console.log('📊 Estimates state changed:', estimates.length);
+    }, [estimates]);
     const [estimateTotalCount, setEstimateTotalCount] = useState<number>(0);
     const [estimatePage, setEstimatePage] = useState<number>(1);
     const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
@@ -329,8 +334,10 @@ const App: React.FC = () => {
   const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
 
     const refreshEstimatesPage = useCallback(async (page: number, signal?: AbortSignal) => {
+        console.log('🔄 Loading estimates page...', page);
         const { rows, totalCount } = await dataService.getEstimatesPage(page, ESTIMATE_PAGE_SIZE);
         if (signal?.aborted) return;
+        console.log('📊 Estimates loaded:', rows.length, 'Total:', totalCount);
         setEstimates(rows);
         setEstimateTotalCount(totalCount);
         setEstimatePage(page);
@@ -483,14 +490,22 @@ const App: React.FC = () => {
                 body: { user_id: currentUser.id },
                 headers,
             });
-            if (error) throw error;
+            if (error) {
+                console.warn('Google OAuth status fetch failed (function may not be deployed):', error);
+                setGoogleAuthStatus({
+                    connected: false,
+                    expiresAt: null,
+                    loading: false,
+                });
+                return;
+            }
             setGoogleAuthStatus({
                 connected: !!data?.connected,
                 expiresAt: data?.expires_at ?? null,
                 loading: false,
             });
         } catch (err) {
-            console.error('Failed to fetch Google OAuth status', err);
+            console.warn('Failed to fetch Google OAuth status (function may not be deployed):', err);
             setGoogleAuthStatus(prev => ({ ...prev, loading: false }));
         }
     }, [currentUser]);
@@ -1141,7 +1156,6 @@ useEffect(() => {
             case 'project_management':
                 return (
                     <ProjectManagementPage
-                        projects={projects}
                         isLoading={isLoading}
                         onRefresh={loadAllData}
                     />

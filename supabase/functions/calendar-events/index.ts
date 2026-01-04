@@ -8,9 +8,14 @@ const DEFAULT_HEADERS = ["authorization", "x-client-info", "apikey", "content-ty
 
 const buildCorsHeaders = (req: Request) => {
   const origin = req.headers.get("origin") || "*";
+  const requestedHeaders = req.headers.get("access-control-request-headers");
+  const requestedList = requestedHeaders
+    ? requestedHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
+    : [];
+  const allowHeaders = Array.from(new Set([...DEFAULT_HEADERS, ...requestedList])).join(", ");
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Headers": DEFAULT_HEADERS.join(", "),
+    "Access-Control-Allow-Headers": allowHeaders,
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Access-Control-Allow-Credentials": "true",
@@ -26,90 +31,133 @@ const jsonResponse = (req: Request, body: Json, status = 200) =>
 
 const errorResponse = (req: Request, message: string, status = 400) => jsonResponse(req, { error: message }, status);
 
-const getAdminClient = () => {
+const getUserIdFromToken = (authHeader: string | null): string | null => {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+};
+
+const getSupabaseClient = () => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRole = Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRole) return null;
   return createClient(supabaseUrl, serviceRole, { auth: { autoRefreshToken: false, persistSession: false } });
 };
 
-const handler = async (req: Request): Promise<Response> => {
+const listEvents = async (supabase: ReturnType<typeof createClient>, userId: string) => {
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .select("*")
+    .eq("user_id", userId)
+    .order("start_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+};
+
+const upsertEvent = async (supabase: ReturnType<typeof createClient>, userId: string, payload: Record<string, unknown>) => {
+  const startAt = (payload.start_at || payload.startAt) as string | undefined;
+  const endAt = (payload.end_at || payload.endAt || startAt) as string | undefined;
+  if (!startAt) {
+    throw new Error("start_at is required");
+  }
+
+  const record = {
+    id: payload.id as string | undefined,
+    user_id: userId,
+    title: (payload.title as string) || "予定",
+    description: (payload.description as string | null | undefined) ?? null,
+    start_at: startAt,
+    end_at: endAt ?? startAt,
+    all_day: Boolean(payload.all_day ?? payload.allDay),
+    source: (payload.source as string | undefined) || "system",
+    google_event_id: (payload.google_event_id as string | undefined) ?? (payload.googleEventId as string | undefined) ?? null,
+    updated_by_source: (payload.updated_by_source as string | undefined)
+      ?? (payload.updatedBySource as string | undefined)
+      ?? "system",
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .upsert(record, { onConflict: "id" })
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+const deleteEvent = async (supabase: ReturnType<typeof createClient>, userId: string, id: string) => {
+  const { error } = await supabase
+    .from("calendar_events")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+  if (error) throw error;
+};
+
+console.info("calendar-events function ready");
+
+serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: buildCorsHeaders(req) });
   }
 
-  const supabase = getAdminClient();
+  const supabase = getSupabaseClient();
   if (!supabase) {
-    return errorResponse(req, "server not configured: missing SUPABASE_URL or SERVICE_ROLE_KEY", 503);
+    return errorResponse(req, "server not configured: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY", 503);
   }
 
-  if (req.method === "GET") {
-    const url = new URL(req.url);
-    const userId = url.searchParams.get("user_id");
-    if (!userId || !UUID_REGEX.test(userId)) {
-      return errorResponse(req, "user_id (UUID) is required", 400);
-    }
-    const { data, error } = await supabase
-      .from("calendar_events")
-      .select("*")
-      .eq("user_id", userId)
-      .order("start_at", { ascending: true });
-    if (error) {
-      console.error("[calendar-events] list failed", error);
-      return errorResponse(req, "Failed to fetch calendar events", 500);
-    }
-    return jsonResponse(req, { events: data ?? [] }, 200);
+  const url = new URL(req.url);
+  const queryUserId = url.searchParams.get("user_id");
+  const authUserId = getUserIdFromToken(req.headers.get("authorization"));
+
+  if (!authUserId || !UUID_REGEX.test(authUserId)) {
+    return errorResponse(req, "Missing or invalid authorization header", 401);
   }
 
-  if (req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
-    const userId = body?.user_id as string | undefined;
-    if (!userId || !UUID_REGEX.test(userId)) {
-      return errorResponse(req, "user_id (UUID) is required", 400);
-    }
-    if (!body?.start_at) {
-      return errorResponse(req, "start_at is required", 400);
-    }
-    const record = {
-      id: body?.id ?? crypto.randomUUID(),
-      user_id: userId,
-      title: body?.title || "予定",
-      description: body?.description ?? null,
-      start_at: body?.start_at,
-      end_at: body?.end_at ?? body?.start_at,
-      all_day: Boolean(body?.all_day),
-      source: body?.source || "system",
-      google_event_id: body?.google_event_id ?? null,
-      updated_by_source: body?.updated_by_source || "system",
-      updated_at: new Date().toISOString(),
-    };
-    const { data, error } = await supabase.from("calendar_events").upsert(record, { onConflict: "id" }).select().maybeSingle();
-    if (error) {
-      console.error("[calendar-events] upsert failed", error);
-      return errorResponse(req, "Failed to save calendar event", 500);
-    }
-    return jsonResponse(req, { event: data }, 200);
+  const body = req.method === "POST" ? (await req.json().catch(() => ({}))) as Record<string, unknown> : {};
+  const action = (body?.action as string | undefined)?.toLowerCase() || null;
+  const targetUserId = (body?.user_id || body?.userId || queryUserId || authUserId) as string | null;
+
+  if (!targetUserId || targetUserId !== authUserId) {
+    return errorResponse(req, "user_id does not match authenticated user", 403);
   }
 
-  if (req.method === "DELETE") {
-    const url = new URL(req.url);
-    const id = url.pathname.split("/").pop();
-    const userId = url.searchParams.get("user_id");
-    if (!id) return errorResponse(req, "id is required", 400);
-    const query = supabase.from("calendar_events").delete().eq("id", id);
-    if (userId && UUID_REGEX.test(userId)) {
-      query.eq("user_id", userId);
+  try {
+    if (req.method === "GET" || action === "list") {
+      const events = await listEvents(supabase, authUserId);
+      return jsonResponse(req, { events });
     }
-    const { error } = await query;
-    if (error) {
-      console.error("[calendar-events] delete failed", error);
-      return errorResponse(req, "Failed to delete calendar event", 500);
+
+    if (req.method === "DELETE" || action === "delete") {
+      const idFromPath = url.pathname.split("/").pop();
+      const id = (body?.id || body?.event_id || idFromPath) as string | undefined;
+      if (!id) {
+        return errorResponse(req, "id is required", 400);
+      }
+      await deleteEvent(supabase, authUserId, id);
+      return jsonResponse(req, { success: true });
     }
-    return jsonResponse(req, { success: true }, 200);
+
+    if (req.method === "POST") {
+      const event = await upsertEvent(supabase, authUserId, body);
+      return jsonResponse(req, { event });
+    }
+  } catch (err) {
+    console.error("[calendar-events] error", err);
+    const message = err instanceof Error ? err.message : "Unexpected error";
+    return errorResponse(req, message, 500);
   }
 
-  return errorResponse(req, "method not allowed", 405);
-};
-
-console.info("calendar-events function ready");
-serve(handler);
+  return errorResponse(req, "Method not allowed", 405);
+});

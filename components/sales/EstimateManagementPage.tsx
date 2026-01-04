@@ -456,6 +456,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const normalizeStatus = (status?: string | EstimateStatus | null) => (status ?? '').toString().toLowerCase();
 
     const filteredEstimates = useMemo(() => {
+        console.log('🔍 Filtering estimates...', estimates.length, 'input estimates');
         const { start, end } = deliveryRange;
         const matchesDate = (value?: string | null) => {
             if (!start && !end) return true;
@@ -501,6 +502,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             return true;
         });
 
+        console.log('📊 After filtering:', rows.length, 'estimates');
         if (!searchTerm) return rows;
         const query = searchTerm.toLowerCase();
         rows = rows.filter(est => {
@@ -520,6 +522,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 value.toString().toLowerCase().includes(query)
             );
         });
+        console.log('🔍 Final filtered estimates:', rows.length);
         return rows;
     }, [
         estimates,
@@ -1616,6 +1619,115 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 {activeTab === 'customer_analysis' && (
                     <CustomerMQAnalysis estimates={estimates} customers={_customers} />
                 )}
+            </div>
+
+            {isModalOpen && (
+                <EstimateModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    onSave={handleSaveEstimate}
+                    estimateToEdit={selectedEstimate}
+                    currentUser={currentUser}
+                    isSaving={isSaving}
+                />
+            )}
+            {isDetailModalOpen && (
+                <EstimateDetailModal
+                    isOpen={isDetailModalOpen}
+                    onClose={() => setIsDetailModalOpen(false)}
+                    estimate={selectedEstimate}
+                    addToast={addToast}
+                    onEdit={() => {
+                        setIsDetailModalOpen(false);
+                        setIsModalOpen(true);
+                    }}
+                />
+            )}
+            {quickViewEstimate && (
+                <div className="fixed inset-0 z-50 flex">
+                    <div className="flex-1 bg-black/50" onClick={closeQuickView}></div>
+                    <div className="w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl p-6 overflow-y-auto">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <p className="text-xs text-slate-500">全項目クイック表示（読み取り専用）</p>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{quickViewEstimate.displayName ?? quickViewEstimate.title}</h3>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {quickViewEstimate.customerName || '取引先不明'}・案件ID: {quickViewEstimate.projectId ?? '—'}・見積ID: {quickViewEstimate.id}
+                                </p>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {renderStatusBadge(quickViewEstimate.statusLabel ?? quickViewEstimate.status)}
+                                    {renderMqMissingBadge(quickViewEstimate.mqMissingReason)}
+                                </div>
+                                <p className="text-[11px] text-slate-500">編集は従来の詳細画面から行ってください。</p>
+                            </div>
+                            <button onClick={closeQuickView} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                            <AnalysisCard title="売上" value={formatJPY(resolveSalesAmount(quickViewEstimate) ?? 0)} />
+                            <AnalysisCard title="原価" value={formatJPY(resolveVariableCost(quickViewEstimate) ?? 0)} />
+                            <AnalysisCard title="MQ" value={formatJPY(resolveMqAmount(quickViewEstimate) ?? 0)} />
+                            <AnalysisCard title="MQ率" value={formatRate(resolveMqRate(quickViewEstimate))} />
+                        </div>
+                        <div className="mt-4">
+                            {renderFieldGrid(quickViewSource, [
+                                { key: 'customer_name', label: '取引先名' },
+                                { key: 'project_name', label: '案件名' },
+                                { key: 'delivery_date', label: '納品日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                { key: 'expiration_date', label: '有効期限', formatter: (v) => (v ? formatDate(v) : '—') },
+                                { key: 'delivery_place', label: '納品場所' },
+                                { key: 'transaction_method', label: '取引条件' },
+                                { key: 'sales_amount', label: '売上', formatter: (v) => (v !== null ? formatJPY(v) : '—') },
+                                { key: 'variable_cost_amount', label: '原価', formatter: (v) => (v !== null ? formatJPY(v) : '—') },
+                                { key: 'mq_amount', label: 'MQ', formatter: (v) => (v !== null ? formatJPY(v) : '—') },
+                                { key: 'mq_rate', label: 'MQ率', formatter: (v) => formatRate(Number.isFinite(Number(v)) ? Number(v) : null) },
+                                { key: 'detail_count', label: '明細数' },
+                                { key: 'order_id', label: '注文ID' },
+                                { key: 'note', label: '備考' },
+                                { key: 'create_date', label: '作成日', formatter: (v) => (v ? formatDate(v) : '—') },
+                                { key: 'update_date', label: '更新日', formatter: (v) => (v ? formatDate(v) : '—') },
+                            ])}
+                        </div>
+                        <div className="mt-4">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">明細</h4>
+                                {quickViewLoading && <span className="text-xs text-slate-500">読み込み中...</span>}
+                                {quickViewError && <span className="text-xs text-red-500">{quickViewError}</span>}
+                            </div>
+                            <div className="mt-2 max-h-64 overflow-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 dark:bg-slate-800">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left">内容</th>
+                                            <th className="px-3 py-2 text-right">数量</th>
+                                            <th className="px-3 py-2 text-right">単価</th>
+                                            <th className="px-3 py-2 text-right">金額</th>
+                                            <th className="px-3 py-2 text-right">原価</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {quickViewDetails.map((detail, idx) => (
+                                            <tr key={`${detail.detailId ?? detail.id ?? idx}`} className="border-t border-slate-200 dark:border-slate-700">
+                                                <td className="px-3 py-2">{detail.itemName}</td>
+                                                <td className="px-3 py-2 text-right">{detail.quantity ?? '—'}</td>
+                                                <td className="px-3 py-2 text-right">{detail.unitPrice !== null ? formatJPY(detail.unitPrice) : '—'}</td>
+                                                <td className="px-3 py-2 text-right">{detail.amount !== null ? formatJPY(detail.amount) : '—'}</td>
+                                                <td className="px-3 py-2 text-right">{detail.variableCost !== null ? formatJPY(detail.variableCost) : '—'}</td>
+                                            </tr>
+                                        ))}
+                                        {quickViewDetails.length === 0 && !quickViewLoading && (
+                                            <tr>
+                                                <td colSpan={5} className="px-3 py-4 text-center text-slate-500">明細がありません。</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

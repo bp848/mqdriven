@@ -2645,23 +2645,19 @@ export const deleteEstimateDetail = async (detailId: string): Promise<void> => {
 };
 
 // --- Calendar (system) ---
-const apiFetch = async (path: string, init?: RequestInit) => {
-    const resp = await fetch(path, init);
-    let data: any = null;
-    try {
-        data = await resp.json();
-    } catch {
-        /* noop */
+const invokeFunction = async <T = any>(name: string, options?: { body?: any; headers?: Record<string, string> }) => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.functions.invoke<T>(name, options);
+    if (error) {
+        throw new Error(error.message || 'Function invocation failed');
     }
-    if (!resp.ok) {
-        const message = data?.error || `API request failed (${resp.status})`;
-        throw new Error(message);
-    }
-    return data;
+    return data as T;
 };
 
 export const getCalendarEvents = async (userId: string): Promise<CalendarEvent[]> => {
-    const data = await apiFetch(`/api/calendar/events?user_id=${encodeURIComponent(userId)}`);
+    const data = await invokeFunction<{ events?: any[] }>('calendar-events', {
+        body: { action: 'list', user_id: userId },
+    });
     const events = data?.events ?? [];
     return events.map((ev: any) => ({
         id: ev.id,
@@ -2681,6 +2677,7 @@ export const getCalendarEvents = async (userId: string): Promise<CalendarEvent[]
 
 export const saveCalendarEvent = async (payload: Partial<CalendarEvent> & { userId: string }): Promise<CalendarEvent> => {
     const body = {
+        action: 'upsert',
         id: payload.id,
         user_id: payload.userId,
         title: payload.title ?? '予定',
@@ -2692,12 +2689,9 @@ export const saveCalendarEvent = async (payload: Partial<CalendarEvent> & { user
         google_event_id: payload.googleEventId ?? null,
         updated_by_source: payload.updatedBySource ?? 'system',
     };
-    const data = await apiFetch('/api/calendar/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
+    const data = await invokeFunction<{ event: any }>('calendar-events', { body });
     const ev = data?.event;
+    if (!ev) throw new Error('Failed to save calendar event');
     return {
         id: ev.id,
         userId: ev.user_id,
@@ -2715,30 +2709,23 @@ export const saveCalendarEvent = async (payload: Partial<CalendarEvent> & { user
 };
 
 export const deleteCalendarEvent = async (id: string, userId?: string): Promise<void> => {
-    const url = userId ? `/api/calendar/events/${encodeURIComponent(id)}?user_id=${encodeURIComponent(userId)}` : `/api/calendar/events/${encodeURIComponent(id)}`;
-    await apiFetch(url, { method: 'DELETE' });
+    const body: any = { action: 'delete', id };
+    if (userId) body.user_id = userId;
+    await invokeFunction('calendar-events', { body });
 };
 
 export const syncSystemCalendarToGoogle = async (userId: string, opts?: { timeMin?: string; timeMax?: string; }) => {
-    const body: any = { user_id: userId };
+    const body: any = { user_id: userId, action: 'push' };
     if (opts?.timeMin) body.timeMin = opts.timeMin;
     if (opts?.timeMax) body.timeMax = opts.timeMax;
-    return apiFetch('/api/google/calendar/sync-system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
+    return invokeFunction('google-calendar-sync', { body });
 };
 
 export const pullGoogleCalendarToSystem = async (userId: string, opts?: { timeMin?: string; timeMax?: string; }) => {
-    const body: any = { user_id: userId };
+    const body: any = { user_id: userId, action: 'pull' };
     if (opts?.timeMin) body.timeMin = opts.timeMin;
     if (opts?.timeMax) body.timeMax = opts.timeMax;
-    return apiFetch('/api/google/calendar/pull-system', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
+    return invokeFunction('google-calendar-sync', { body });
 };
 
 export const addEstimate = async (estimateData: Partial<Estimate>): Promise<void> => {

@@ -11,4 +11,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.calendar-events]
+verify_jwt = true
+
+[functions.google-calendar-sync]
 verify_jwt = false

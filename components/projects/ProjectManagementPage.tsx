@@ -41,7 +41,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
       let key = '未分類';
       
       if (groupBy === 'customer') {
-        key = project.customerName || '顧客未設定';
+        key = project.customerCode || '顧客未設定';
       } else if (groupBy === 'status') {
         key = project.projectStatus || 'ステータス未設定';
       } else if (groupBy === 'month') {
@@ -180,7 +180,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
                           </div>
                           <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
                             <span>コード: {project.projectCode || '未設定'}</span>
-                            <span>顧客: {project.customerName || '未設定'}</span>
+                            <span>顧客: {project.customerCode || '未設定'}</span>
                             <span>作成: {formatDate(project.createDate)}</span>
                           </div>
                         </div>
@@ -232,7 +232,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">顧客名</p>
-                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.customerName || '-'}</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.customerCode || '-'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">納期</p>

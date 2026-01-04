@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Estimate, Customer } from '../../types';
+import { Estimate, Customer, EstimateStatus } from '../../types';
 import {
   BarChart,
   Bar,
@@ -76,7 +76,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
       analysis.totalMq += mqAmount;
       analysis.estimates.push(estimate);
 
-      if (estimate.status === 'ordered') {
+      if (estimate.status === EstimateStatus.Ordered) {
         analysis.orderedCount += 1;
         analysis.orderedAmount += salesAmount;
       }
@@ -86,14 +86,14 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
     customerMap.forEach(analysis => {
       const validEstimates = analysis.estimates.filter(e => {
         const sales = e.total || e.subtotal || 0;
-        const cost = e.totalCost || e.variableCost || 0;
+        const cost = e.variableCostAmount || 0;
         return sales > 0;
       });
       
       if (validEstimates.length > 0) {
         const totalMq = validEstimates.reduce((sum, e) => {
           const sales = e.total || e.subtotal || 0;
-          const cost = e.totalCost || e.variableCost || 0;
+          const cost = e.variableCostAmount || 0;
           return sum + (sales - cost);
         }, 0);
         const totalSales = validEstimates.reduce((sum, e) => sum + (e.total || e.subtotal || 0), 0);
@@ -272,7 +272,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percentage }) => percentage > 5 ? `${name}: ${percentage.toFixed(1)}%` : ''}
+                label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(1)}%` : ''}
                 outerRadius={80}
                 fill="#888888"
                 dataKey="value"

@@ -813,7 +813,7 @@ const syncSystemToGoogle = async ({ userId, timeMin, timeMax }) => {
     const tokenRecord = await refreshGoogleTokenIfNeeded(userId);
     const accessToken = tokenRecord.access_token;
     const systemEvents = await listSystemCalendarEvents({ userId, timeMin, timeMax });
-    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow(systemEvents, timeMin, timeMax);
+    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindowForSystem(systemEvents, timeMin, timeMax);
     const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
     const googleById = new Map(googleEvents.map((g) => [g.id, g]));
     const summary = { created: 0, updated: 0, skipped: 0, deleted: 0 };
@@ -858,7 +858,7 @@ const syncSystemToGoogle = async ({ userId, timeMin, timeMax }) => {
 const syncGoogleToSystem = async ({ userId, timeMin, timeMax }) => {
     const tokenRecord = await refreshGoogleTokenIfNeeded(userId);
     const accessToken = tokenRecord.access_token;
-    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindow([], timeMin, timeMax);
+    const { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax } = resolveSyncWindowForSystem([], timeMin, timeMax);
     const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
     const systemExisting = await listSystemCalendarEvents({ userId, timeMin: resolvedTimeMin, timeMax: resolvedTimeMax });
     const systemByGoogleId = new Map(systemExisting.filter((ev) => ev.google_event_id).map((ev) => [ev.google_event_id, ev]));
@@ -888,7 +888,7 @@ const syncGoogleToSystem = async ({ userId, timeMin, timeMax }) => {
 
 const DEFAULT_SYNC_WINDOW_DAYS = 90;
 
-const resolveSyncWindow = (events, requestedTimeMin, requestedTimeMax) => {
+const resolveSyncWindowForSystem = (events, requestedTimeMin, requestedTimeMax) => {
     const now = new Date();
     const defaultMin = new Date(now.getTime() - DEFAULT_SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const defaultMax = new Date(now.getTime() + DEFAULT_SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
