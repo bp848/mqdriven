@@ -142,6 +142,7 @@ const PAGE_TITLES: Record<Page, string> = {
     manufacturing_orders: '製造指示',
     manufacturing_progress: '製造パイプライン',
     manufacturing_cost: '製造原価',
+    simple_estimates: '見積管理',
     hr_attendance: '勤怠',
     hr_man_hours: '工数',
     hr_labor_cost: '人件費配賦',

@@ -1146,478 +1146,33 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 </div>
 
                 {activeTab === 'list' && (
-                    <div className="p-6 space-y-6">
-                        {mqSummaryCards}
-                        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">MQドリブンフィルタ</h4>
-                                    <p className="text-xs text-slate-500">納品日・ステータス・MQ未入力理由・MQ率でしぼり込み</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <label className="text-xs text-slate-500 flex items-center gap-1">
-                                        低MQ目標 (%)
-                                        <input
-                                            type="number"
-                                            value={Math.round(mqTargetRate * 100)}
-                                            onChange={(e) => {
-                                                const next = Number(e.target.value) / 100;
-                                                if (!Number.isNaN(next)) setMqTargetRate(next);
-                                            }}
-                                            className="w-16 px-2 py-1 text-sm rounded border border-slate-300 bg-white dark:bg-slate-800 dark:border-slate-600"
-                                        />
-                                    </label>
-                                    <button
-                                        onClick={resetFilters}
-                                        className="text-xs px-3 py-1 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                    >
-                                        全リセット
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">納品日</p>
-                                    <select
-                                        value={deliveryPreset}
-                                        onChange={(e) => setDeliveryPreset(e.target.value as typeof deliveryPreset)}
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                    >
-                                        <option value="all">すべて</option>
-                                        <option value="this_month">今月</option>
-                                        <option value="last_month">先月</option>
-                                        <option value="this_quarter">今四半期</option>
-                                        <option value="last_quarter">前四半期</option>
-                                        <option value="custom">任意範囲</option>
-                                    </select>
-                                    {deliveryPreset === 'custom' && (
-                                        <div className="mt-2 grid grid-cols-2 gap-2">
-                                            <input
-                                                type="date"
-                                                value={customStartDate}
-                                                onChange={(e) => setCustomStartDate(e.target.value)}
-                                                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                                placeholder="開始日"
-                                            />
-                                            <input
-                                                type="date"
-                                                value={customEndDate}
-                                                onChange={(e) => setCustomEndDate(e.target.value)}
-                                                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                                placeholder="終了日"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">ステータス</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {statusFilterOptions.map(opt => {
-                                            const active = statusFilter.includes(opt.value);
-                                            return (
-                                                <button
-                                                    key={opt.value}
-                                                    onClick={() => toggleStatusFilter(opt.value)}
-                                                    className={`px-3 py-2 rounded-lg text-xs font-semibold border ${active ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">MQ未入力理由</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {mqReasonOptions.map(opt => {
-                                            const active = mqReasonFilter.includes(opt.value);
-                                            return (
-                                                <button
-                                                    key={opt.value}
-                                                    onClick={() => toggleMqReasonFilter(opt.value)}
-                                                    className={`px-3 py-2 rounded-lg text-xs font-semibold border ${active ? 'bg-amber-500 text-white border-amber-500' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">MQ率レンジ</p>
-                                    <select
-                                        value={mqRateRange}
-                                        onChange={(e) => setMqRateRange(e.target.value as typeof mqRateRange)}
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                    >
-                                        {mqRateRangeOptions.map(opt => (
-                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-base text-left text-slate-800 dark:text-slate-100">
-                                <thead className="text-sm uppercase bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100">
-                                    <tr>
-                                        <th scope="col" className="px-6 py-3 font-medium">表示名</th>
-                                        <SortableHeader sortKey="deliveryDate" label="納品日" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="statusLabel" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="salesAmount" label="売上" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="variableCostAmount" label="原価" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="mqAmount" label="MQ" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="mqRate" label="MQ率" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="mqMissingReason" label="未入力理由" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <SortableHeader sortKey="detailCount" label="明細数" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    {sortedEstimates.map(est => {
-                                        const salesAmount = resolveSalesAmount(est);
-                                        const variableCostAmount = resolveVariableCost(est);
-                                        const mqAmount = resolveMqAmount(est, salesAmount, variableCostAmount);
-                                        const mqRateValue = resolveMqRate(est, salesAmount, mqAmount);
-                                        const deliveryText = est.deliveryDate ? formatDate(est.deliveryDate) : (est.createdAt ? formatDate(est.createdAt) : '-');
-                                        return (
-                                            <tr
-                                                key={est.id}
-                                                className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 ${selectedEstimate?.id === est.id ? 'bg-blue-50/60 dark:bg-slate-700/40' : ''}`}
-                                                onClick={() => setSelectedEstimate(est)}
-                                            >
-                                                <td className="px-6 py-4">
-                                                    <div className="font-semibold text-slate-900 dark:text-white">{est.displayName ?? est.title ?? '見積'}</div>
-                                                    <div className="text-xs text-slate-500 flex flex-wrap gap-2 mt-1">
-                                                        <span>{est.customerName || '取引先不明'}</span>
-                                                        <span className="text-slate-400">案件ID: {est.projectId ?? '—'}</span>
-                                                        <span className="text-slate-400">見積ID: {est.id ?? '—'}</span>
-                                                    </div>
-                                                    <div className="text-[11px] text-slate-400 mt-0.5">No. {est.patternNo ?? est.estimateNumber}</div>
-                                                </td>
-                                                <td className="px-6 py-4">{deliveryText}</td>
-                                                <td className="px-6 py-4">{renderStatusBadge(est.statusLabel ?? est.status)}</td>
-                                                <td className="px-6 py-4 text-right">{salesAmount !== null ? formatJPY(salesAmount) : '—'}</td>
-                                                <td className="px-6 py-4 text-right">{variableCostAmount !== null ? formatJPY(variableCostAmount) : '—'}</td>
-                                                <td className="px-6 py-4 text-right font-semibold">{mqAmount !== null ? formatJPY(mqAmount) : '—'}</td>
-                                                <td className="px-6 py-4 text-right">{mqRateValue !== null ? formatRate(mqRateValue) : '—'}</td>
-                                                <td className="px-6 py-4">{renderMqMissingBadge(est.mqMissingReason)}</td>
-                                                <td className="px-6 py-4 text-center">{est.detailCount !== null && est.detailCount !== undefined ? est.detailCount : '—'}</td>
-                                                <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
-                                                    <button onClick={(e) => { e.stopPropagation(); openQuickView(est); }} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white text-lg leading-none">︙</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setActiveTab('detail'); }} className="p-2 text-slate-500 hover:text-blue-600"><FileText className="w-5 h-5" /></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedEstimate(est); setIsModalOpen(true); }} className="p-2 text-slate-500 hover:text-green-600"><Pencil className="w-5 h-5" /></button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                            {sortedEstimates.length === 0 && <EmptyState icon={FileText} title="見積がありません" message="Supabaseのestimatesテーブルにデータがありません。新規作成してください。" />}
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-slate-700">
-                            <div>
-                                {estimateTotalCount > 0
-                                    ? `表示 ${pageStart} – ${pageEnd} / ${estimateTotalCount} 件`
-                                    : '表示するデータがありません'}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    className="px-3 py-1 rounded-md border border-slate-300 disabled:opacity-50"
-                                    onClick={() => changePage(estimatePage - 1)}
-                                    disabled={estimatePage <= 1}
-                                >
-                                    前へ
-                                </button>
-                                <span className="text-xs text-slate-500">Page {estimatePage} / {totalPages}</span>
-                                <button
-                                    className="px-3 py-1 rounded-md border border-slate-300 disabled:opacity-50"
-                                    onClick={() => changePage(estimatePage + 1)}
-                                    disabled={estimatePage >= totalPages}
-                                >
-                                    次へ
-                                </button>
-                            </div>
+                    <div className="p-6">
+                        <div className="text-center text-slate-500">
+                            <p>一覧タブの内容</p>
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'detail' && (
-                    <div className="p-6 space-y-4">
-                        {!selectedEstimate && <EmptyState icon={FileText} title="見積が未選択" message="一覧から見積を選択してください。" />}
-                        {selectedEstimate && (
-                            <>
-                                <div className="flex flex-col lg:flex-row gap-4">
-                                    <div className="flex-1 rounded-2xl border border-slate-200 p-4 shadow-sm bg-slate-50">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div>
-                                                <p className="text-sm text-slate-500">表示名 / パターン</p>
-                                                <h3 className="text-2xl font-bold">{selectedEstimate.displayName ?? selectedEstimate.title}</h3>
-                                                <p className="text-sm text-slate-500 mt-1">
-                                                    {selectedEstimate.customerName || '取引先不明'} ・ 案件ID: {selectedEstimate.projectId ?? '-'} ・ 見積ID: {selectedEstimate.id}
-                                                </p>
-                                            </div>
-                                            {renderStatusBadge(selectedEstimate.statusLabel ?? selectedEstimate.status)}
-                                        </div>
-                                        <p className="text-sm text-slate-600">パターンNo: {selectedEstimate.patternNo ?? selectedEstimate.estimateNumber}</p>
-                                        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                            <AnalysisCard title="合計" value={formatJPY(selectedEstimate.total)} />
-                                            <AnalysisCard title="小計" value={formatJPY(selectedEstimate.subtotal ?? selectedEstimate.total)} />
-                                            <AnalysisCard title="消費税" value={formatJPY(selectedEstimate.consumption ?? (selectedEstimate.taxTotal ?? 0))} />
-                                        </div>
-                                        <div className="mt-3 flex gap-2 flex-wrap">
-                                            <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold flex items-center gap-2">
-                                                <Pencil className="w-4 h-4" /> 編集
-                                            </button>
-                                            <button onClick={() => setIsDetailModalOpen(true)} className="px-4 py-2 rounded-lg border border-slate-300 font-semibold flex items-center gap-2">
-                                                <FileText className="w-4 h-4" /> PDF/印刷
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="w-full lg:w-80 rounded-2xl border border-slate-200 p-4 shadow-sm">
-                                        <h4 className="text-sm font-semibold mb-2 text-slate-700">基本情報</h4>
-                                        <dl className="space-y-2 text-sm text-slate-700">
-                                            <div className="flex justify-between"><dt className="text-slate-500">納品日</dt><dd>{selectedEstimate.deliveryDate ? formatDate(selectedEstimate.deliveryDate) : '-'}</dd></div>
-                                            <div className="flex justify-between"><dt className="text-slate-500">有効期限</dt><dd>{selectedEstimate.expirationDate ? formatDate(selectedEstimate.expirationDate) : '-'}</dd></div>
-                                            <div className="flex justify-between"><dt className="text-slate-500">取引条件</dt><dd className="text-right max-w-[60%]">{selectedEstimate.paymentTerms || '-'}</dd></div>
-                                            <div className="flex justify-between"><dt className="text-slate-500">納品場所</dt><dd className="text-right max-w-[60%]">{selectedEstimate.deliveryMethod || '-'}</dd></div>
-                                            <div className="flex justify-between"><dt className="text-slate-500">部数</dt><dd>{selectedEstimate.copies ?? selectedEstimate.items?.[0]?.quantity ?? '-'}</dd></div>
-                                            <div className="flex justify-between"><dt className="text-slate-500">単価</dt><dd>{selectedEstimate.unitPrice ? formatJPY(selectedEstimate.unitPrice) : (selectedEstimate.items?.[0]?.unitPrice ? formatJPY(selectedEstimate.items[0].unitPrice) : '-')}</dd></div>
-                                            <div className="flex justify-between"><dt className="text-slate-500">消費税率</dt><dd>{selectedEstimate.taxRate ?? 10}%</dd></div>
-                                        </dl>
-                                    </div>
-                                </div>
-                                <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-                                    <h4 className="text-lg font-semibold mb-3">明細</h4>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left">区分</th>
-                                                    <th className="px-3 py-2 text-left">内容</th>
-                                                    <th className="px-3 py-2 text-right">数量</th>
-                                                    <th className="px-3 py-2 text-left">単位</th>
-                                                    <th className="px-3 py-2 text-right">単価</th>
-                                                    <th className="px-3 py-2 text-right">金額</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {selectedEstimate.items?.map((item, idx) => (
-                                                    <tr key={idx} className="border-t border-slate-200">
-                                                        <td className="px-3 py-2">{item.division}</td>
-                                                        <td className="px-3 py-2">{item.content}</td>
-                                                        <td className="px-3 py-2 text-right">{item.quantity?.toLocaleString()}</td>
-                                                        <td className="px-3 py-2">{item.unit}</td>
-                                                        <td className="px-3 py-2 text-right">{formatJPY(item.unitPrice)}</td>
-                                                        <td className="px-3 py-2 text-right">{formatJPY(item.price)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="mt-3">
-                                        <p className="text-sm font-semibold text-slate-700 mb-1">備考</p>
-                                        <p className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 rounded-lg p-3 border border-slate-200">{selectedEstimate.notes || '—'}</p>
-                                    </div>
-                                </div>
-                            </>
-                        )}
+                    <div className="p-6">
+                        <div className="text-center text-slate-500">
+                            <p>詳細タブの内容</p>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'analysis' && (
-                    <div className="p-6 space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <AnalysisCard title="総見積件数" value={`${estimateTotalCount} 件`} sub="全件数 (count=exact)" />
-                            <AnalysisCard title="受注件数（このページ）" value={`${statusSummary[EstimateStatus.Ordered].count} 件`} sub="表示中ページ" />
-                            <AnalysisCard title="失注件数（このページ）" value={`${statusSummary[EstimateStatus.Lost].count} 件`} sub="表示中ページ" />
-                            <AnalysisCard title="平均見積額（このページ）" value={formatJPY(estimates.length ? Math.round(estimates.reduce((sum, est) => sum + (est.total || 0), 0) / estimates.length) : 0)} />
-                        </div>
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                            <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[340px]">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="text-lg font-semibold">ステータス別金額</h4>
-                                </div>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={Object.entries(statusSummary).map(([status, val], idx) => ({
-                                        name: status,
-                                        total: (val as any).total,
-                                        fill: chartColors[idx % chartColors.length],
-                                    }))}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                                        <Tooltip formatter={(value: number) => formatJPY(value)} />
-                                        <Bar dataKey="total">
-                                            {Object.entries(statusSummary).map((_, idx) => (
-                                                <Cell key={idx} fill={chartColors[idx % chartColors.length]} />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[340px]">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="text-lg font-semibold">月次推移（合計金額）</h4>
-                                </div>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={monthlyTotals}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                                        <Tooltip formatter={(value: number) => formatJPY(value)} />
-                                        <Bar dataKey="total" fill="#2563eb" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                        <div className="border border-slate-200 rounded-2xl p-4 shadow-sm h-[360px]">
-                            <div className="flex justify-between items-center mb-3">
-                                <h4 className="text-lg font-semibold">ステータス構成比</h4>
-                                <p className="text-sm text-slate-500">件数ベース</p>
-                            </div>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={Object.entries(statusSummary).map(([status, val]) => ({
-                                            name: status,
-                                            value: (val as any).count,
-                                        }))}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={110}
-                                        label
-                                    >
-                                        {Object.entries(statusSummary).map((_, idx) => (
-                                            <Cell key={idx} fill={chartColors[idx % chartColors.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                </PieChart>
-                            </ResponsiveContainer>
+                    <div className="p-6">
+                        <div className="text-center text-slate-500">
+                            <p>分析タブの内容</p>
                         </div>
                     </div>
-                )}
-            </div>
-
-            {isModalOpen && (
-                <EstimateModal
-                    isOpen={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
-                    onSave={handleSaveEstimate}
-                    estimateToEdit={selectedEstimate}
-                    currentUser={currentUser}
-                    isSaving={isSaving}
-                />
-            )}
-            {isDetailModalOpen && (
-                <EstimateDetailModal
-                    isOpen={isDetailModalOpen}
-                    onClose={() => setIsDetailModalOpen(false)}
-                    estimate={selectedEstimate}
-                    addToast={addToast}
-                    onEdit={() => {
-                        setIsDetailModalOpen(false);
-                        setIsModalOpen(true);
-                    }}
-                />
-            )}
-            {quickViewEstimate && (
-                <div className="fixed inset-0 z-50 flex">
-                    <div className="flex-1 bg-black/50" onClick={closeQuickView}></div>
-                    <div className="w-full max-w-xl bg-white dark:bg-slate-900 shadow-2xl p-6 overflow-y-auto">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                                <p className="text-xs text-slate-500">全項目クイック表示（読み取り専用）</p>
-                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{quickViewEstimate.displayName ?? quickViewEstimate.title}</h3>
-                                <p className="text-xs text-slate-500 mt-1">
-                                    {quickViewEstimate.customerName || '取引先不明'}・案件ID: {quickViewEstimate.projectId ?? '—'}・見積ID: {quickViewEstimate.id}
-                                </p>
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                    {renderStatusBadge(quickViewEstimate.statusLabel ?? quickViewEstimate.status)}
-                                    {renderMqMissingBadge(quickViewEstimate.mqMissingReason)}
-                                </div>
-                                <p className="text-[11px] text-slate-500">編集は従来の詳細画面から行ってください。</p>
-                            </div>
-                            <button onClick={closeQuickView} className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="mt-4 grid grid-cols-2 gap-3">
-                            <AnalysisCard title="売上" value={formatJPY(resolveSalesAmount(quickViewEstimate) ?? 0)} />
-                            <AnalysisCard title="原価" value={formatJPY(resolveVariableCost(quickViewEstimate) ?? 0)} />
-                            <AnalysisCard title="MQ" value={formatJPY(resolveMqAmount(quickViewEstimate) ?? 0)} />
-                            <AnalysisCard title="MQ率" value={formatRate(resolveMqRate(quickViewEstimate))} />
-                        </div>
-                        <div className="mt-4 space-y-2">
-                            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">基本情報</h4>
-                            {renderFieldGrid(
-                                quickViewSource || (quickViewEstimate.raw || quickViewEstimate),
-                                [
-                                    { key: 'customer_name', label: '顧客' },
-                                    { key: 'project_name', label: '案件名' },
-                                    { key: 'status_label', label: 'ステータス', formatter: (v) => formatStatusLabel(v as any) },
-                                    { key: 'mq_missing_reason', label: 'MQ未入力理由', formatter: (v) => formatMqReason(v as any) },
-                                    { key: 'delivery_date', label: '納品日', formatter: (v) => (v ? formatDate(v) : '—') },
-                                    { key: 'expiration_date', label: '有効期限', formatter: (v) => (v ? formatDate(v) : '—') },
-                                    { key: 'transaction_method', label: '取引条件' },
-                                    { key: 'delivery_place', label: '納品場所' },
-                                    { key: 'sales_amount', label: '売上', formatter: (v) => formatMoney(v) },
-                                    { key: 'variable_cost_amount', label: '原価', formatter: (v) => formatMoney(v) },
-                                    { key: 'mq_amount', label: 'MQ', formatter: (v) => formatMoney(v) },
-                                    { key: 'mq_rate', label: 'MQ率', formatter: (v) => formatRate(Number.isFinite(Number(v)) ? Number(v) : null) },
-                                    { key: 'detail_count', label: '明細数' },
-                                    { key: 'order_id', label: '注文ID' },
-                                    { key: 'note', label: '備考' },
-                                    { key: 'create_date', label: '作成日', formatter: (v) => (v ? formatDate(v) : '—') },
-                                    { key: 'update_date', label: '更新日', formatter: (v) => (v ? formatDate(v) : '—') },
-                                ]
-                            )}
-                        </div>
-                        <div className="mt-4">
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">明細</h4>
-                                {quickViewLoading && <span className="text-xs text-slate-500">読み込み中...</span>}
-                                {quickViewError && <span className="text-xs text-red-500">{quickViewError}</span>}
-                            </div>
-                            <div className="mt-2 max-h-64 overflow-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-slate-50 dark:bg-slate-800">
-                                        <tr>
-                                            <th className="px-3 py-2 text-left">内容</th>
-                                            <th className="px-3 py-2 text-right">数量</th>
-                                            <th className="px-3 py-2 text-right">単価</th>
-                                            <th className="px-3 py-2 text-right">金額</th>
-                                            <th className="px-3 py-2 text-right">原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {quickViewDetails.map((detail, idx) => (
-                                            <tr key={`${detail.detailId ?? detail.id ?? idx}`} className="border-t border-slate-200 dark:border-slate-700">
-                                                <td className="px-3 py-2">{detail.itemName}</td>
-                                                <td className="px-3 py-2 text-right">{detail.quantity ?? '—'}</td>
-                                                <td className="px-3 py-2 text-right">{detail.unitPrice !== null ? formatJPY(detail.unitPrice) : '—'}</td>
-                                                <td className="px-3 py-2 text-right">{detail.amount !== null ? formatJPY(detail.amount) : '—'}</td>
-                                                <td className="px-3 py-2 text-right">{detail.variableCost !== null ? formatJPY(detail.variableCost) : '—'}</td>
-                                            </tr>
-                                        ))}
-                                        {quickViewDetails.length === 0 && !quickViewLoading && (
-                                            <tr>
-                                                <td colSpan={5} className="px-3 py-4 text-center text-slate-500">明細がありません。</td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 )}
 
                 {activeTab === 'customer_analysis' && (
-                    <CustomerMQAnalysis estimates={estimates} customers={_customers} />
+                    <div className="p-6">
+                        <CustomerMQAnalysis estimates={estimates} customers={_customers} />
+                    </div>
                 )}
             </div>
 
@@ -1631,17 +1186,21 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                     isSaving={isSaving}
                 />
             )}
-            {isDetailModalOpen && (
-                <EstimateDetailModal
-                    isOpen={isDetailModalOpen}
-                    onClose={() => setIsDetailModalOpen(false)}
-                    estimate={selectedEstimate}
-                    addToast={addToast}
-                    onEdit={() => {
-                        setIsDetailModalOpen(false);
-                        setIsModalOpen(true);
-                    }}
-                />
+
+            {activeTab === 'detail' && (
+                <div className="p-6">
+                    <div className="text-center text-slate-500">
+                        <p>詳細タブの内容</p>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'analysis' && (
+                <div className="p-6">
+                    <div className="text-center text-slate-500">
+                        <p>分析タブの内容</p>
+                    </div>
+                </div>
             )}
             {quickViewEstimate && (
                 <div className="fixed inset-0 z-50 flex">
