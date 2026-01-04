@@ -16,11 +16,15 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
     const fetchEstimates = async () => {
       try {
         setLoading(true);
+        console.log('Fetching estimates...');
         const data = await getEstimates();
+        console.log('Fetched estimates:', data);
         setEstimates(data);
       } catch (error: any) {
         console.error('Failed to fetch estimates:', error);
-        addToast('見積データの読み込みに失敗しました', 'error');
+        addToast(`見積データの読み込みに失敗しました: ${error.message || '不明なエラー'}`, 'error');
+        // エラー時は空配列を設定してクラッシュを防ぐ
+        setEstimates([]);
       } finally {
         setLoading(false);
       }
@@ -35,11 +39,16 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
 
   const filteredEstimates = estimates.filter(estimate => {
-    const matchesSearch = estimate.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (estimate.projectName && estimate.projectName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                         estimate.estimateNumber.toString().includes(searchTerm);
-    const matchesStatus = statusFilter === 'all' || estimate.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    try {
+      const matchesSearch = estimate.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (estimate.projectName && estimate.projectName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                           estimate.estimateNumber.toString().includes(searchTerm);
+      const matchesStatus = statusFilter === 'all' || estimate.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    } catch (error) {
+      console.error('Error filtering estimate:', error);
+      return false;
+    }
   });
 
   const getStatusBadge = (status: string) => {
@@ -187,9 +196,15 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
         {loading ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>データを読み込み中...</p>
+            <p className="text-sm mt-2">コンソールで詳細を確認してください</p>
           </div>
         ) : (
           <>
+            <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                見積データ数: {estimates.length}件
+              </p>
+            </div>
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -206,12 +221,12 @@ const SimpleEstimatePage: React.FC<SimpleEstimatePageProps> = ({ currentUser, ad
               <tbody>
                 {filteredEstimates.map((estimate) => (
                   <tr key={estimate.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{estimate.estimateNumber}</td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.customerName}</td>
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{estimate.estimateNumber || '-'}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.customerName || '-'}</td>
                     <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.projectName || '-'}</td>
                     <td className="py-3 px-4 text-right font-medium text-gray-900 dark:text-white">{formatCurrency(estimate.total || estimate.grandTotal || 0)}</td>
                     <td className="py-3 px-4">{getStatusBadge(estimate.status)}</td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{new Date(estimate.createdAt).toLocaleDateString('ja-JP')}</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.createdAt ? new Date(estimate.createdAt).toLocaleDateString('ja-JP') : '-'}</td>
                     <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{estimate.expirationDate ? new Date(estimate.expirationDate).toLocaleDateString('ja-JP') : '-'}</td>
                     <td className="py-3 px-4">
                       <div className="flex justify-center gap-2">

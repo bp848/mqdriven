@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
-const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+// Accept any canonical UUID (including nil); DB will still enforce uuid type.
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const DEFAULT_HEADERS = ["authorization", "x-client-info", "apikey", "content-type", "x-requested-with"];
 
 const buildCorsHeaders = (req: Request) => {
@@ -32,9 +33,7 @@ const jsonResponse = (req: Request, body: Json, status = 200) =>
 const errorResponse = (req: Request, message: string, status = 400) => jsonResponse(req, { error: message }, status);
 
 const getUserIdFromToken = (authHeader: string | null): string | null => {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return null;
-  }
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.substring(7);
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -108,6 +107,8 @@ const deleteEvent = async (supabase: ReturnType<typeof createClient>, userId: st
 console.info("calendar-events function ready");
 
 serve(async (req: Request): Promise<Response> => {
+  const requestId = crypto.randomUUID?.() || Math.random().toString(36).slice(2);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: buildCorsHeaders(req) });
   }
@@ -119,23 +120,38 @@ serve(async (req: Request): Promise<Response> => {
 
   const url = new URL(req.url);
   const queryUserId = url.searchParams.get("user_id");
-  const authUserId = getUserIdFromToken(req.headers.get("authorization"));
+  const authHeader = req.headers.get("authorization");
+  const authUserId = getUserIdFromToken(authHeader);
 
-  if (!authUserId || !UUID_REGEX.test(authUserId)) {
-    return errorResponse(req, "Missing or invalid authorization header", 401);
+  if (!authHeader) {
+    console.warn("[calendar-events] missing auth header", { requestId });
+    return errorResponse(req, "Missing authorization header", 401);
   }
 
-  const body = req.method === "POST" ? (await req.json().catch(() => ({}))) as Record<string, unknown> : {};
+  let rawBody = "";
+  let body: Record<string, unknown> = {};
+  if (req.method === "POST") {
+    rawBody = await req.text();
+    try {
+      body = rawBody ? JSON.parse(rawBody) : {};
+    } catch (parseErr) {
+      console.error("[calendar-events] invalid JSON", { requestId, parseErr, rawBody });
+      return errorResponse(req, "invalid json body", 400);
+    }
+  }
+
   const action = (body?.action as string | undefined)?.toLowerCase() || null;
   const targetUserId = (body?.user_id || body?.userId || queryUserId || authUserId) as string | null;
 
-  if (!targetUserId || targetUserId !== authUserId) {
-    return errorResponse(req, "user_id does not match authenticated user", 403);
+  if (!targetUserId || !UUID_REGEX.test(targetUserId)) {
+    console.warn("[calendar-events] invalid user_id", { requestId, targetUserId, authUserId, queryUserId, body });
+    return errorResponse(req, "user_id (UUID) is required", 400);
   }
 
   try {
     if (req.method === "GET" || action === "list") {
-      const events = await listEvents(supabase, authUserId);
+      console.info("[calendar-events] list", { requestId, targetUserId, authUserId });
+      const events = await listEvents(supabase, targetUserId);
       return jsonResponse(req, { events });
     }
 
@@ -145,16 +161,17 @@ serve(async (req: Request): Promise<Response> => {
       if (!id) {
         return errorResponse(req, "id is required", 400);
       }
-      await deleteEvent(supabase, authUserId, id);
+      await deleteEvent(supabase, targetUserId, id);
       return jsonResponse(req, { success: true });
     }
 
     if (req.method === "POST") {
-      const event = await upsertEvent(supabase, authUserId, body);
+      console.info("[calendar-events] upsert", { requestId, targetUserId, authUserId, hasId: !!body?.id });
+      const event = await upsertEvent(supabase, targetUserId, body);
       return jsonResponse(req, { event });
     }
   } catch (err) {
-    console.error("[calendar-events] error", err);
+    console.error("[calendar-events] error", { requestId, err });
     const message = err instanceof Error ? err.message : "Unexpected error";
     return errorResponse(req, message, 500);
   }

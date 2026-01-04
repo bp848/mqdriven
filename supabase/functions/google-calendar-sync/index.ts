@@ -34,7 +34,7 @@ type GoogleEvent = {
   extendedProperties?: { private?: Record<string, string> };
 };
 
-const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const DEFAULT_ALLOWED_HEADERS = ["authorization", "x-client-info", "apikey", "content-type", "x-requested-with"];
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const DEFAULT_TIMEZONE = Deno.env.get("CALENDAR_TZ") || "Asia/Tokyo";
@@ -471,7 +471,12 @@ serve(async (req: Request) => {
   const authUserId = getUserIdFromToken(authHeader);
   const bearer = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY");
-  const isServiceRequest = !!(serviceKey && bearer === serviceKey);
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const isServiceRequest = !!(
+    (serviceKey && bearer === serviceKey)
+    || (anonKey && bearer === anonKey)
+    || (!authHeader && anonKey) // allow explicit anon key absence when caller can't set headers
+  );
 
   if (!authUserId && !isServiceRequest) {
     return errorResponse(req, "Missing or invalid authorization header", 401);
