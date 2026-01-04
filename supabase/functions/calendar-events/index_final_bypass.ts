@@ -26,22 +26,16 @@ const jsonResponse = (req: Request, body: Json, status = 200) =>
 
 const errorResponse = (req: Request, message: string, status = 400) => jsonResponse(req, { error: message }, status);
 
-// 認証チェック（一時的に緩和）
+// JWTからユーザーIDを取得（認証必須）
 const getUserIdFromToken = (authHeader: string | null): string | null => {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return null;
-  }
-  
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.substring(7);
   const parts = token.split(".");
   if (parts.length !== 3) return null;
-  
   try {
     const payload = JSON.parse(atob(parts[1]));
     return payload.sub || null; // sub = user_id
   } catch {
-    // JWTデコード失敗時は認証スキップ（開発用）
-    console.log("JWT decode failed, skipping auth for development");
     return null;
   }
 };
@@ -52,30 +46,11 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response("ok", { headers: buildCorsHeaders(req) });
   }
 
-  // 認証チェック（一時的に緩和）
+  // 認証チェック（必須）
   const authHeader = req.headers.get("authorization");
-  let userId = null;
-  
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    try {
-      const token = authHeader.substring(7);
-      const parts = token.split(".");
-      if (parts.length === 3) {
-        const payload = JSON.parse(atob(parts[1]));
-        userId = payload.sub || null;
-      }
-    } catch {
-      // JWTデコード失敗時は認証スキップ（開発用）
-      console.log("JWT decode failed, skipping auth for development");
-    }
-  }
-
-  // 認証なしでも一時的に許可（開発用）
-  if (!userId) {
-    console.log("No valid userId found, allowing request for development");
-    // userIdをクエリから取得
-    const url = new URL(req.url);
-    userId = url.searchParams.get("user_id");
+  const userId = getUserIdFromToken(authHeader);
+  if (!userId || !UUID_REGEX.test(userId)) {
+    return errorResponse(req, "Missing or invalid authorization header", 401);
   }
 
   // サービスロールクライアント
@@ -93,13 +68,10 @@ const handler = async (req: Request): Promise<Response> => {
   if (req.method === "GET") {
     const url = new URL(req.url);
     const queryUserId = url.searchParams.get("user_id");
-    
-    if (!userId || !UUID_REGEX.test(userId)) {
-      return errorResponse(req, "user_id (UUID) is required", 400);
+    if (queryUserId && queryUserId !== userId) {
+      return errorResponse(req, "user_id does not match authenticated user", 403);
     }
-
-    // クエリのuser_idを使用
-    const targetUserId = queryUserId || userId;
+    const targetUserId = userId;
     
     const { data, error } = await supabase
       .from("calendar_events")
@@ -122,11 +94,9 @@ const handler = async (req: Request): Promise<Response> => {
   if (req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     const bodyUserId = body?.user_id as string | undefined;
-    
-    if (!userId || !UUID_REGEX.test(userId)) {
-      return errorResponse(req, "user_id (UUID) is required", 400);
+    if (bodyUserId && bodyUserId !== userId) {
+      return errorResponse(req, "user_id does not match authenticated user", 403);
     }
-
     if (!body?.start_at) {
       return errorResponse(req, "start_at is required", 400);
     }
@@ -168,21 +138,18 @@ const handler = async (req: Request): Promise<Response> => {
     const id = url.pathname.split("/").pop();
     const queryUserId = url.searchParams.get("user_id");
     
-    if (!id) {
-      return errorResponse(req, "id is required", 400);
+    if (!id || !UUID_REGEX.test(id)) {
+      return errorResponse(req, "id (UUID) is required", 400);
+    }
+    if (queryUserId && queryUserId !== userId) {
+      return errorResponse(req, "user_id does not match authenticated user", 403);
     }
 
-    if (!userId || !UUID_REGEX.test(userId)) {
-      return errorResponse(req, "user_id (UUID) is required", 400);
-    }
-
-    let query = supabase
+    const { error } = await supabase
       .from("calendar_events")
       .delete()
       .eq("id", id)
-      .eq("user_id", userId); // 認証から取得したuser_idを強制
-
-    const { error } = await query;
+      .eq("user_id", userId);
 
     if (error) {
       console.error("[calendar-events] delete failed", error);

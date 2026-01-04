@@ -36,6 +36,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: PieChart,
     items: [
       { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
+      { page: 'simple_estimates', name: '見積管理', icon: Briefcase },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
       { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
       { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },

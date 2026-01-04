@@ -27,6 +27,7 @@ import ManufacturingOrdersPage from './components/manufacturing/ManufacturingOrd
 import PurchasingManagementPage from './components/purchasing/PurchasingManagementPage';
 import CreatePurchaseOrderModal from './components/purchasing/CreatePurchaseOrderModal';
 import EstimateManagementPage from './components/sales/EstimateManagementPage';
+import SimpleEstimatePage from './components/SimpleEstimatePage';
 import SalesRanking from './components/accounting/SalesRanking';
 import BusinessPlanPage from './components/accounting/BusinessPlanPage';
 import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
@@ -1240,6 +1241,8 @@ useEffect(() => {
                 return <ManufacturingCostManagement jobs={jobs} />;
             case 'purchasing_orders':
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders} jobs={jobs} />;
+            case 'simple_estimates':
+                return <SimpleEstimatePage currentUser={currentUser} addToast={addToast} />;
             case 'sales_estimates':
                 return <EstimateManagementPage
                     estimates={estimates}
