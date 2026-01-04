@@ -357,7 +357,13 @@ const syncSystemToGoogle = async (
   const googleEvents = await fetchGoogleEventsWindow(accessToken, { timeMin: resolvedMin, timeMax: resolvedMax });
   const googleById = new Map(googleEvents.map((g) => [g.id, g]));
 
-  const summary = { created: 0, updated: 0, skipped: 0, deleted: 0 };
+  const summary = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    deleted: 0,
+    stats: { systemEvents: systemEvents.length, googleEvents: googleEvents.length, window: { timeMin: resolvedMin, timeMax: resolvedMax } },
+  };
 
   for (const ev of systemEvents) {
     const mapped = mapSystemEventToGoogle(ev);
@@ -428,7 +434,15 @@ const syncGoogleToSystem = async (
     await deleteSystemEvents(supabase, toDelete);
   }
 
-  return { pulled: mapped.length, deleted: toDelete.length };
+  return {
+    pulled: mapped.length,
+    deleted: toDelete.length,
+    stats: {
+      googleEvents: googleEvents.length,
+      systemExisting: existing.length,
+      window: { timeMin: resolvedMin, timeMax: resolvedMax },
+    },
+  };
 };
 
 console.info("google-calendar-sync ready");
