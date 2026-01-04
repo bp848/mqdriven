@@ -2399,10 +2399,14 @@ const mapEstimateRow = (row: any): Estimate => {
     const detailCount = toNumberOrNull(row.detail_count);
     const mqMissingReason = toStringOrNull(row.mq_missing_reason);
     const statusLabel = row.status_label ?? null;
-    const projectName = toStringOrNull(row.project_name);
+    const projectName =
+        toStringOrNull(row.project_name) ??
+        toStringOrNull(row.project_name_resolved);
     
     // 顧客名がデータベースにない場合、案件名や仕様書から生成
-    const customerName = toStringOrNull(row.customer_name) || 
+    const customerName =
+        toStringOrNull(row.customer_name) ??
+        toStringOrNull(row.customer_name_resolved) ??
         `顧客${row.estimates_id || row.id || '不明'}`;
     
     const displayName =
@@ -2577,91 +2581,80 @@ const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 
 
 export const getEstimates = async (): Promise<Estimate[]> => {
     const supabase = getSupabase();
-    
-    try {
-        const { data, error } = await supabase
-            .from('estimates')
-            .select('*')
-            .order('create_date', { ascending: false })
-            .limit(10);
-        
-        if (error) throw error;
-        
-        if (!data || data.length === 0) return [];
-        
-        // プロジェクト情報を取得
-        const projectIds = [...new Set(data.map(row => row.project_id).filter(Boolean))];
-        const { data: projects } = projectIds.length > 0 ? await supabase
-            .from('projects')
-            .select('project_code, project_name, customer_code')
-            .in('project_code', projectIds) : { data: [] };
-        
-        // 顧客情報を取得
-        const customerCodes = [...new Set((projects || []).map(p => p.customer_code).filter(Boolean))];
-        const { data: customers } = customerCodes.length > 0 ? await supabase
-            .from('customers')
-            .select('customer_code, customer_name')
-            .in('customer_code', customerCodes) : { data: [] };
-        
-        const projectMap = (projects || []).reduce((acc, project) => {
-            acc[project.project_code] = project;
-            return acc;
-        }, {});
-        
-        const customerMap = (customers || []).reduce((acc, customer) => {
-            acc[customer.customer_code] = customer;
-            return acc;
-        }, {});
-        
-        return data.map(row => {
-            const project = projectMap[row.project_id];
-            const customer = project ? customerMap[project.customer_code] : null;
-            
-            return {
-                id: row.estimates_id,
-                estimateNumber: Number(row.pattern_no) || 0,
-                customerName: customer?.customer_name || `顧客${row.estimates_id}`,
-                title: row.pattern_name || row.specification || '見積',
-                displayName: row.pattern_name || row.specification || '見積',
-                projectName: project?.project_name || row.project_id ? `案件${row.project_id}` : '',
-                items: [],
-                total: Number(row.total) || 0,
-                deliveryDate: row.delivery_date || '',
-                paymentTerms: row.transaction_method || '',
-                deliveryMethod: row.delivery_place || '',
-                notes: row.note || '',
-                status: row.status || 'draft',
-                version: 1,
-                userId: '',
-                createdAt: row.create_date || new Date().toISOString(),
-                updatedAt: row.update_date || row.create_date || new Date().toISOString(),
-                subtotal: Number(row.subtotal) || 0,
-                taxTotal: Number(row.consumption) || 0,
-                grandTotal: Number(row.total) || 0,
-                deliveryTerms: row.specification,
-                projectId: row.project_id,
-                patternNo: row.pattern_no,
-                expirationDate: row.expiration_date,
-                taxRate: Number(row.tax_rate),
-                consumption: Number(row.consumption),
-                rawStatusCode: row.status,
-                copies: Number(row.copies),
-                unitPrice: Number(row.unit_price),
-                salesAmount: Number(row.subtotal),
-                variableCostAmount: null,
-                mqAmount: null,
-                mqRate: null,
-                mqMissingReason: null,
-                detailCount: null,
-                statusLabel: null,
-                raw: row,
-            };
-        });
-        
-    } catch (error) {
-        console.error('Failed to fetch estimates:', error);
-        throw error;
+
+    // 最優先: 名前が解決済みのビューを参照
+    const { data, error } = await supabase
+        .from('estimates_list_view')
+        .select('*')
+        .order('create_date', { ascending: false })
+        .limit(10);
+
+    if (!error && data) {
+        if (data.length === 0) return [];
+        return data.map(mapEstimateRow);
     }
+
+    if (error) {
+        console.warn('estimates_list_view query failed, falling back to raw tables:', error);
+    }
+
+    // フォールバック: テーブルを直接参照して顧客名/案件名を解決
+    const { data: estimates, error: estimatesError } = await supabase
+        .from('estimates')
+        .select('*')
+        .order('create_date', { ascending: false })
+        .limit(10);
+
+    if (estimatesError) throw estimatesError;
+    if (!estimates || estimates.length === 0) return [];
+
+    const projectIds = collectUniqueIds(estimates.map(row => normalizeLookupKey(row.project_id)));
+    let projectMap: Record<string, any> = {};
+    if (projectIds.length > 0) {
+        const { data: projects, error: projectError } = await supabase
+            .from('projects')
+            .select('project_id, project_name, customer_id')
+            .in('project_id', projectIds);
+
+        if (projectError) {
+            console.error('プロジェクト検索エラー:', projectError);
+        } else {
+            projectMap = (projects || []).reduce((acc, project) => {
+                const key = normalizeLookupKey(project.project_id);
+                if (key) acc[key] = project;
+                return acc;
+            }, {} as Record<string, any>);
+        }
+    }
+
+    const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
+    let customerMap: Record<string, any> = {};
+    if (customerIds.length > 0) {
+        const { data: customers, error: customerError } = await supabase
+            .from('customers')
+            .select('id, customer_name')
+            .in('id', customerIds);
+
+        if (customerError) {
+            console.error('顧客検索エラー:', customerError);
+        } else {
+            customerMap = (customers || []).reduce((acc, customer) => {
+                const key = normalizeLookupKey(customer.id);
+                if (key) acc[key] = customer;
+                return acc;
+            }, {} as Record<string, any>);
+        }
+    }
+
+    return estimates.map(row => {
+        const project = projectMap[normalizeLookupKey(row.project_id) ?? ''];
+        const customer = project ? customerMap[normalizeLookupKey(project?.customer_id) ?? ''] : undefined;
+        return mapEstimateRow({
+            ...row,
+            project_name: row.project_name ?? project?.project_name,
+            customer_name: row.customer_name ?? customer?.customer_name,
+        });
+    });
 };
 
 export const getEstimatesPage = async (page: number, pageSize: number): Promise<{ rows: Estimate[]; totalCount: number; }> => {
@@ -2669,8 +2662,23 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const from = Math.max(0, (page - 1) * pageSize);
     const to = from + pageSize - 1;
     
-    // シンプルクエリに戻す
+    // 優先: 顧客名/案件名が解決済みのビューを利用
     const { data, error, count } = await supabase
+        .from('estimates_list_view')
+        .select('*', { count: 'exact' })
+        .order('create_date', { ascending: false })
+        .range(from, to);
+
+    if (!error) {
+        return {
+            rows: (data || []).map(mapEstimateRow),
+            totalCount: count ?? 0,
+        };
+    }
+
+    console.warn('Page query on estimates_list_view failed, falling back:', error);
+
+    const { data: fallbackRows, error: fallbackError, count: fallbackCount } = await supabase
         .from('estimates')
         .select(`
             estimates_id,
@@ -2695,53 +2703,63 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         `, { count: 'exact' })
         .order('create_date', { ascending: false })
         .range(from, to);
-    
-    if (error) {
-        console.error('Page query error:', error);
-        throw error;
+
+    if (fallbackError) {
+        console.error('Page query fallback error:', fallbackError);
+        throw fallbackError;
     }
-    
+
+    const projectIds = collectUniqueIds((fallbackRows || []).map(row => normalizeLookupKey(row.project_id)));
+    let projectMap: Record<string, any> = {};
+    if (projectIds.length > 0) {
+        const { data: projects, error: projectError } = await supabase
+            .from('projects')
+            .select('project_id, project_name, customer_id')
+            .in('project_id', projectIds);
+
+        if (projectError) {
+            console.error('プロジェクト検索エラー:', projectError);
+        } else {
+            projectMap = (projects || []).reduce((acc, project) => {
+                const key = normalizeLookupKey(project.project_id);
+                if (key) acc[key] = project;
+                return acc;
+            }, {} as Record<string, any>);
+        }
+    }
+
+    const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
+    let customerMap: Record<string, any> = {};
+    if (customerIds.length > 0) {
+        const { data: customers, error: customerError } = await supabase
+            .from('customers')
+            .select('id, customer_name')
+            .in('id', customerIds);
+
+        if (customerError) {
+            console.error('顧客検索エラー:', customerError);
+        } else {
+            customerMap = (customers || []).reduce((acc, customer) => {
+                const key = normalizeLookupKey(customer.id);
+                if (key) acc[key] = customer;
+                return acc;
+            }, {} as Record<string, any>);
+        }
+    }
+
+    const enrichedRows = (fallbackRows || []).map(row => {
+        const project = projectMap[normalizeLookupKey(row.project_id) ?? ''];
+        const customer = project ? customerMap[normalizeLookupKey(project?.customer_id) ?? ''] : undefined;
+        return {
+            ...row,
+            project_name: row.project_name ?? project?.project_name,
+            customer_name: row.customer_name ?? customer?.customer_name,
+        };
+    });
+
     return {
-        rows: (data || []).map(row => ({
-            id: row.estimates_id,
-            estimateNumber: Number(row.pattern_no) || 0,
-            customerName: `顧客${row.estimates_id}`,
-            title: row.pattern_name || row.specification || '見積',
-            displayName: row.pattern_name || row.specification || '見積',
-            projectName: row.project_id ? `案件${row.project_id}` : '',
-            items: [],
-            total: Number(row.total) || 0,
-            deliveryDate: row.delivery_date || '',
-            paymentTerms: row.transaction_method || '',
-            deliveryMethod: row.delivery_place || '',
-            notes: row.note || '',
-            status: row.status || 'draft',
-            version: 1,
-            userId: '',
-            createdAt: row.create_date || new Date().toISOString(),
-            updatedAt: row.update_date || row.create_date || new Date().toISOString(),
-            subtotal: Number(row.subtotal) || 0,
-            taxTotal: Number(row.consumption) || 0,
-            grandTotal: Number(row.total) || 0,
-            deliveryTerms: row.specification,
-            projectId: row.project_id,
-            patternNo: row.pattern_no,
-            expirationDate: row.expiration_date,
-            taxRate: Number(row.tax_rate),
-            consumption: Number(row.consumption),
-            rawStatusCode: row.status,
-            copies: Number(row.copies),
-            unitPrice: Number(row.unit_price),
-            salesAmount: Number(row.subtotal),
-            variableCostAmount: null,
-            mqAmount: null,
-            mqRate: null,
-            mqMissingReason: null,
-            detailCount: null,
-            statusLabel: null,
-            raw: row,
-        })),
-        totalCount: count ?? 0,
+        rows: enrichedRows.map(mapEstimateRow),
+        totalCount: fallbackCount ?? 0,
     };
 };
 

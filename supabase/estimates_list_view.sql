@@ -1,3 +1,13 @@
+-- Drop dependent views first to avoid column-mismatch errors during recreate
+drop view if exists public.mq_anomalies_view;
+drop view if exists public.mq_customer_ltv_view;
+drop view if exists public.mq_customer_monthly_view;
+drop view if exists public.mq_project_monthly_view;
+drop view if exists public.invoices_list_view;
+drop view if exists public.orders_list_view;
+drop view if exists public.estimate_details_list_view;
+drop view if exists public.estimates_list_view;
+
 -- Cost confirmation flags (projects / orders)
 alter table if exists public.orders
     add column if not exists cost_confirmed boolean default false,
@@ -41,7 +51,7 @@ cleaned as (
         case when trim(e.tax_rate::text) ~ '^[0-9]+(\\.[0-9]+)?$' then replace(e.tax_rate::text, '%', '')::numeric end as tax_rate_num,
         case when trim(e.consumption::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.consumption::numeric end as consumption_num,
         case when trim(e.valiable_cost::text) ~ '^[0-9]+(\\.[0-9]+)?$' then e.valiable_cost::numeric end as variable_cost_num,
-        nullif(trim(e.order_id::text), '') as order_id_clean,
+        nullif(trim(p.order_id::text), '') as order_id_clean,
         case
             when coalesce(nullif(trim(e.delivery_date::text), ''), '') ~ '^[0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2}$'
                 then to_date(replace(e.delivery_date::text, '/', '-'), 'YYYY-MM-DD')
@@ -50,7 +60,7 @@ cleaned as (
             else null
         end as delivery_date_clean,
         case
-            when coalesce(nullif(trim(e.order_flg::text), ''), '') = '1' or nullif(trim(e.order_id::text), '') is not null then '2'  -- ordered
+            when coalesce(nullif(trim(e.order_flg::text), ''), '') = '1' or nullif(trim(p.order_id::text), '') is not null then '2'  -- ordered
             when (e.status::text) ~ '^[0-9]+$' then e.status::text                    -- keep numeric code
             else '0'                                                                 -- draft/default
         end as status_clean,
@@ -98,19 +108,18 @@ calc as (
 mq as (
     select
         calc.*,
-        coalesce(nullif(calc.project_name::text, ''), nullif(calc.project_name_joined::text, '')) as project_name_resolved,
-        coalesce(nullif(calc.customer_name::text, ''), nullif(calc.customer_name_joined::text, '')) as customer_name_resolved,
+        coalesce(nullif(calc.project_name_joined::text, ''), nullif(calc.pattern_name::text, '')) as project_name_resolved,
+        coalesce(nullif(calc.customer_name_joined::text, ''), nullif(calc.pattern_name::text, '')) as customer_name_resolved,
         coalesce(
             nullif(
                 concat_ws(
                     '｜',
-                    nullif(coalesce(calc.customer_name::text, calc.customer_name_joined::text, ''), ''),
-                    nullif(coalesce(calc.project_name::text, calc.project_name_joined::text, ''), ''),
+                    nullif(coalesce(calc.customer_name_joined::text, ''), ''),
+                    nullif(coalesce(calc.project_name_joined::text, ''), ''),
                     concat('見積#', coalesce(nullif(trim(calc.estimates_id::text), ''), calc.id::text))
                 ),
                 ''
             ),
-            nullif(calc.project_name::text, ''),
             nullif(calc.project_name_joined::text, ''),
             nullif(calc.pattern_name::text, ''),
             nullif(calc.specification::text, ''),
@@ -142,7 +151,6 @@ mq as (
     from calc
 )
 select
-    display_name,
     estimates_id,
     id,
     pattern_no,
@@ -150,6 +158,7 @@ select
     project_id,
     project_name_resolved as project_name,
     customer_name_resolved as customer_name,
+    display_name,
     specification,
     delivery_place,
     transaction_method,
@@ -207,7 +216,7 @@ calc as (
 )
 select
     estimate_id,
-    detail_id,
+    details_id as detail_id,
     item_name,
     quantity_num as quantity,
     unit_price_num as unit_price,

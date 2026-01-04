@@ -36,7 +36,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: PieChart,
     items: [
       { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
-      { page: 'simple_estimates', name: '見積管理', icon: Briefcase, adminOnly: false },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
       { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
       { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },
@@ -52,7 +51,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_leads', name: 'リード管理' },
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
-      { page: 'sales_estimates', name: '見積管理' },
+      { page: 'simple_estimates', name: '見積管理', adminOnly: false },
       { page: 'sales_orders', name: '予算管理' },
       { page: 'project_management', name: 'プロジェクト管理' },
       { page: 'sales_billing', name: '売上請求（AR）' },

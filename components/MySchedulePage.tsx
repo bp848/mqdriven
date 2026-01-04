@@ -21,7 +21,7 @@ import {
 } from '../services/dataService';
 
 type CalendarEventType = 'job' | 'purchaseOrder' | 'application' | 'custom';
-type CalendarEventOrigin = 'manual' | 'daily_report_plan';
+type CalendarEventOrigin = 'manual' | 'daily_report_plan' | 'system' | 'google';
 
 interface CalendarEvent {
     id: string;
@@ -202,6 +202,9 @@ const extractTimeFromIso = (iso?: string | null) => {
 const mapApiToUiEvent = (ev: ApiCalendarEvent): CalendarEvent => {
     const date = ev.startAt?.slice(0, 10) || formatDate(new Date());
     const time = ev.allDay ? undefined : extractTimeFromIso(ev.startAt);
+    const origin: CalendarEventOrigin = (ev.source === 'google' || ev.updatedBySource === 'google')
+        ? 'google'
+        : 'system';
     return {
         id: ev.id,
         date,
@@ -209,8 +212,11 @@ const mapApiToUiEvent = (ev: ApiCalendarEvent): CalendarEvent => {
         type: 'custom',
         description: ev.description ?? undefined,
         time,
-        origin: ev.updatedBySource === 'google' ? 'manual' : 'manual',
-        metadata: ev.source ? { source: ev.source } : undefined,
+        origin,
+        metadata: {
+            source: ev.source ?? null,
+            updatedBy: ev.updatedBySource ?? null,
+        },
     };
 };
 
@@ -542,20 +548,38 @@ const WeekView: React.FC<{
                                 : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
                         }`}
                     >
-                        <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-300">{dayLabel}</div>
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{dayNumber}</div>
-                        <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                            <div className="text-[12px] font-semibold text-slate-500 dark:text-slate-300">{dayLabel}</div>
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white">{dayNumber}</div>
+                        </div>
+                        <div className="mt-2 space-y-2">
                             {events.length === 0 && (
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">予定なし</p>
+                                <p className="text-[12px] text-slate-500 dark:text-slate-400">予定なし</p>
                             )}
-                            {events.slice(0, 2).map((event) => (
-                                <div key={event.id} className="rounded-lg bg-slate-50/70 dark:bg-slate-900/60 p-2 text-[11px] text-slate-700 dark:text-slate-200">
-                                    <p className="font-semibold text-[12px] text-slate-900 dark:text-white">{event.title}</p>
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{event.time ? `${event.time} ` : ''}{event.description ?? ''}</p>
+                            {events.slice(0, 3).map((event) => (
+                                <div
+                                    key={event.id}
+                                    className="rounded-lg bg-slate-50/70 dark:bg-slate-900/60 p-2 text-[12px] text-slate-700 dark:text-slate-200 border border-slate-100 dark:border-slate-800"
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="font-semibold text-[13px] text-slate-900 dark:text-white line-clamp-2">{event.title}</p>
+                                        <span
+                                            className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                                event.origin === 'google'
+                                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
+                                                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                            }`}
+                                        >
+                                            {event.origin === 'google' ? 'Google' : 'システム'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                        {event.time ? `${event.time} ` : '終日'} {event.description ?? ''}
+                                    </p>
                                 </div>
                             ))}
-                            {events.length > 2 && (
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">{events.length} 件の予定</p>
+                            {events.length > 3 && (
+                                <p className="text-[12px] text-slate-500 dark:text-slate-400">{events.length} 件の予定</p>
                             )}
                         </div>
                     </button>
@@ -573,24 +597,25 @@ const MonthView: React.FC<{
     onSelectDate: (date: string) => void;
 }> = ({ days, eventsByDate, selectedDate, onSelectDate }) => (
     <div className="mt-4">
-        <div className="grid grid-cols-7 text-[11px] font-semibold uppercase text-slate-400 dark:text-slate-500">
+        <div className="grid grid-cols-7 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
             {calendarWeekdayLabels.map((label) => (
                 <div key={label} className="text-center">
                     {label}
                 </div>
             ))}
         </div>
-        <div className="mt-2 grid grid-cols-7 gap-1">
+        <div className="mt-2 grid grid-cols-7 gap-1.5">
             {days.map(({ date, inMonth }) => {
                 const events = eventsByDate[date] ?? [];
                 const dayNumber = new Date(date).getDate();
                 const isSelected = date === selectedDate;
+                const topEvent = events[0];
                 return (
                     <button
                         type="button"
                         key={date}
                         onClick={() => onSelectDate(date)}
-                        className={`flex h-full flex-col items-start gap-1 rounded-xl border p-2 text-left text-[11px] transition ${
+                        className={`flex h-full flex-col items-start gap-1.5 rounded-xl border p-3 text-left text-[13px] transition ${
                             isSelected
                                 ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
                                 : inMonth
@@ -598,12 +623,20 @@ const MonthView: React.FC<{
                                     : 'border-transparent bg-slate-100/60 dark:bg-slate-900/40'
                         }`}
                     >
-                        <span className={`text-sm font-semibold ${inMonth ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+                        <span className={`text-base font-semibold ${inMonth ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
                             {dayNumber}
                         </span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {events.length > 0 ? `${events.length}件` : '予定なし'}
+                        <span className="text-[12px] font-medium text-slate-600 dark:text-slate-300">
+                            {events.length > 0 ? `${events.length} 件` : '予定なし'}
                         </span>
+                        {topEvent && (
+                            <div className="w-full rounded-lg bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-2 text-left">
+                                <p className="text-[12px] font-semibold text-slate-900 dark:text-white line-clamp-1">{topEvent.title}</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                    {topEvent.time ? topEvent.time : '終日'} {topEvent.origin === 'google' ? '・Google' : ''}
+                                </p>
+                            </div>
+                        )}
                     </button>
                 );
             })}
@@ -1106,29 +1139,31 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const aggregatedEvents = useMemo(() => {
         const entries: CalendarEvent[] = [];
 
-        jobs.forEach((job) => {
-            const plannedDate = extractDatePart(job.dueDate || job.createdAt);
-            if (!plannedDate) return;
-            entries.push({
-                id: `job-${job.id}`,
-                date: plannedDate,
-                title: job.title,
-                type: 'job',
-                description: job.details || job.clientName || undefined,
-            });
+    jobs.forEach((job) => {
+        const plannedDate = extractDatePart(job.dueDate || job.createdAt);
+        if (!plannedDate) return;
+        entries.push({
+            id: `job-${job.id}`,
+            date: plannedDate,
+            title: job.title,
+            type: 'job',
+            description: job.details || job.clientName || undefined,
+            origin: 'system',
         });
+    });
 
         purchaseOrders.forEach((order) => {
             const orderDate = extractDatePart(order.orderDate);
             if (!orderDate) return;
             entries.push({
-                id: `po-${order.id}`,
-                date: orderDate,
-                title: `発注：${order.itemName}`,
-                type: 'purchaseOrder',
-                description: order.supplierName || undefined,
-            });
+            id: `po-${order.id}`,
+            date: orderDate,
+            title: `発注：${order.itemName}`,
+            type: 'purchaseOrder',
+            description: order.supplierName || undefined,
+            origin: 'system',
         });
+    });
 
         applications.forEach((application) => {
             const applicationDate = extractDatePart(application.submittedAt ?? application.createdAt);
@@ -1138,28 +1173,36 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 application.applicationCode?.code ||
                 '社内申請';
             entries.push({
-                id: `application-${application.id}`,
-                date: applicationDate,
-                title: `申請：${label}`,
-                type: 'application',
-                description: application.applicant?.name || undefined,
-            });
+            id: `application-${application.id}`,
+            date: applicationDate,
+            title: `申請：${label}`,
+            type: 'application',
+            description: application.applicant?.name || undefined,
+            origin: 'system',
         });
+    });
 
         entries.push(...customEvents);
         return entries.sort((a, b) => a.date.localeCompare(b.date));
     }, [applications, customEvents, jobs, purchaseOrders]);
 
-    const eventsByDate = useMemo(() => {
+    const [sourceFilter, setSourceFilter] = useState<'all' | 'system' | 'google'>('all');
+    const filteredEvents = useMemo(() => {
+        if (sourceFilter === 'all') return aggregatedEvents;
+        if (sourceFilter === 'google') return aggregatedEvents.filter((ev) => ev.origin === 'google');
+        return aggregatedEvents.filter((ev) => ev.origin !== 'google');
+    }, [aggregatedEvents, sourceFilter]);
+
+const eventsByDate = useMemo(() => {
         const map: Record<string, CalendarEvent[]> = {};
-        aggregatedEvents.forEach((event) => {
+        filteredEvents.forEach((event) => {
             if (!map[event.date]) {
                 map[event.date] = [];
             }
             map[event.date].push(event);
         });
         return map;
-    }, [aggregatedEvents]);
+    }, [filteredEvents]);
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const monthCalendar = useMemo(() => buildMonthCalendar(selectedDate), [selectedDate]);
@@ -1188,6 +1231,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         topCustomers,
         latestReports,
     } = dailyReportStats;
+    const filteredEventsCount = filteredEvents.length;
 
     const handleCreateDailyReport = () => {
         if (!onCreateDailyReport) return;
@@ -1317,6 +1361,31 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     </option>
                                 ))}
                             </select>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-200">
+                            <span>表示</span>
+                            <button
+                                type="button"
+                                onClick={() => setSourceFilter('all')}
+                                className={`px-3 py-1 rounded-full border ${sourceFilter === 'all' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 dark:border-blue-400 text-blue-700 dark:text-blue-200' : 'border-slate-200 dark:border-slate-600'}`}
+                            >
+                                すべて
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSourceFilter('system')}
+                                className={`px-3 py-1 rounded-full border ${sourceFilter === 'system' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/40 dark:border-emerald-400 text-emerald-700 dark:text-emerald-200' : 'border-slate-200 dark:border-slate-600'}`}
+                            >
+                                システム
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSourceFilter('google')}
+                                className={`px-3 py-1 rounded-full border ${sourceFilter === 'google' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 dark:border-blue-400 text-blue-700 dark:text-blue-200' : 'border-slate-200 dark:border-slate-600'}`}
+                            >
+                                Google
+                            </button>
+                            <span className="ml-2 text-[11px] text-slate-500 dark:text-slate-400">{filteredEventsCount} 件</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <button
