@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { SUPABASE_URL as CREDENTIAL_SUPABASE_URL } from '../supabaseCredentials';
 import { getEnvValue } from '../utils.ts';
+import { GEMINI_DEFAULT_MODEL, isGeminiAIDisabled, requireGeminiClient } from './Gemini';
 
 export interface EmailPayload {
   to: string[];
@@ -15,6 +16,20 @@ export interface EmailDispatchResult {
   id: string;
   sentAt: string;
 }
+
+export type EmailAIDraftRequest = {
+  topic: string;
+  recipient?: string;
+  context?: string;
+  tone?: string;
+  language?: 'ja' | 'en' | string;
+  senderName?: string;
+};
+
+export type EmailAIDraft = {
+  subject: string;
+  body: string;
+};
 
 const resolveEndpoint = (): string | undefined => {
   const directKeys = [
@@ -100,6 +115,68 @@ const loadSMTPConfig = (): any => {
     console.warn('[email] Failed to parse SMTP config', error);
     return null;
   }
+};
+
+const sanitizeAiOutput = (text: string): string => {
+  if (!text) return '';
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('```')) return trimmed;
+  const withoutFence = trimmed.replace(/^```[a-zA-Z0-9_-]*\s*/, '');
+  return withoutFence.endsWith('```') ? withoutFence.slice(0, -3).trim() : withoutFence.trim();
+};
+
+export const generateEmailDraftWithAI = async (input: EmailAIDraftRequest): Promise<EmailAIDraft> => {
+  if (isGeminiAIDisabled) {
+    throw new EmailDispatchError('AI機能が無効化されています。VITE_AI_OFF=0 で再度お試しください。');
+  }
+  if (!input.topic || !input.topic.trim()) {
+    throw new EmailDispatchError('AIで生成するにはテーマ（topic）が必要です。');
+  }
+
+  const ai = requireGeminiClient();
+  const lang = input.language || 'ja';
+  const audience = input.recipient ? `宛先: ${input.recipient}` : '宛先: 不明';
+  const tone = input.tone ? `トーン: ${input.tone}` : 'トーン: 丁寧で簡潔';
+  const sender = input.senderName ? `送信者: ${input.senderName}` : '';
+  const extra = input.context ? `補足: ${input.context}` : '';
+
+  const prompt = [
+    '以下の条件でメール本文と件名を作成してください。',
+    `言語: ${lang}`,
+    audience,
+    tone,
+    sender,
+    extra,
+    `テーマ: ${input.topic}`,
+    '',
+    '出力フォーマット:',
+    '件名: <件名>',
+    '本文:',
+    '<本文>',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const response = await ai.models.generateContent({
+    model: GEMINI_DEFAULT_MODEL,
+    contents: prompt,
+  });
+
+  const raw = sanitizeAiOutput(response.text ?? '');
+  const subjectMatch = raw.match(/件名[:：]\s*(.+)/);
+  const bodyMatch = raw.match(/本文[:：]\s*([\s\S]*)/);
+
+  const subject = subjectMatch ? subjectMatch[1].trim() : 'ご連絡の件';
+  const body = bodyMatch ? bodyMatch[1].trim() : raw;
+
+  if (!body) {
+    throw new EmailDispatchError('AIから本文を取得できませんでした。');
+  }
+
+  return {
+    subject,
+    body,
+  };
 };
 
 export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchResult> => {

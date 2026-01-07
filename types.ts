@@ -573,6 +573,8 @@ export interface Lead {
     aiAnalysisReport?: string;
     aiDraftProposal?: string;
     aiInvestigation?: CompanyInvestigation;
+    assignedTo?: string | null; // 対応した人
+    statusUpdatedAt?: string | null; // ステータス更新日時
 }
 
 export interface ApprovalRoute {

@@ -85,6 +85,8 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                 infoSalesActivity: updatedInfo, 
                 status: LeadStatus.Contacted,
                 updatedAt: new Date().toISOString(),
+                statusUpdatedAt: new Date().toISOString(),
+                assignedTo: currentUser.name,
             });
             addToast('Gmailの下書きを作成しました。', 'success');
         } catch (error) {
@@ -106,6 +108,8 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                 status: LeadStatus.Contacted,
                 infoSalesActivity: updatedInfo,
                 updatedAt: new Date().toISOString(),
+                statusUpdatedAt: new Date().toISOString(),
+                assignedTo: currentUser?.name || null,
             });
             addToast('ステータスを「コンタクト済」に更新しました。', 'success');
         } catch (error) {
@@ -184,6 +188,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                     <SortableHeader sortKey="updatedAt" label="最終更新日時" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="company" label="会社名 / 担当者" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
+                                    <SortableHeader sortKey="assignedTo" label="対応した人" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="inquiryTypes" label="問い合わせ種別" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="email" label="メール" sortConfig={sortConfig} requestSort={requestSort} />
                                     <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
@@ -208,7 +213,18 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                     value={lead.status}
                                                     onChange={(e) => {
                                                         const newStatus = e.target.value as LeadStatus;
-                                                        onUpdateLead(lead.id, { status: newStatus, updatedAt: new Date().toISOString() });
+                                                        const updateData: Partial<Lead> = { 
+                                                            status: newStatus, 
+                                                            updatedAt: new Date().toISOString(),
+                                                            statusUpdatedAt: new Date().toISOString()
+                                                        };
+                                                        
+                                                        // ステータスが「未対応」から変更された場合、対応者を設定
+                                                        if (lead.status === LeadStatus.Untouched && newStatus !== LeadStatus.Untouched && currentUser) {
+                                                            updateData.assignedTo = currentUser.name;
+                                                        }
+                                                        
+                                                        onUpdateLead(lead.id, updateData);
                                                         setEditingStatusLeadId(null);
                                                     }}
                                                     onBlur={() => setEditingStatusLeadId(null)}
@@ -227,6 +243,18 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                     <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/status:opacity-100 transition-opacity" />
                                                 </button>
                                             )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-slate-700 dark:text-slate-300">
+                                                    {lead.assignedTo || '-'}
+                                                </span>
+                                                {lead.statusUpdatedAt && (
+                                                    <span className="text-xs text-slate-400">
+                                                        ({formatDate(lead.statusUpdatedAt)})
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {lead.inquiryTypes && lead.inquiryTypes.length > 0
@@ -259,7 +287,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                 ))}
                                  {sortedLeads.length === 0 && (
                                     <tr>
-                                        <td colSpan={6}>
+                                        <td colSpan={7}>
                                             <EmptyState 
                                                 icon={Lightbulb}
                                                 title={searchTerm ? '検索結果がありません' : 'リードがありません'}
