@@ -12,7 +12,7 @@ export type Page =
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
   | 'admin_master_management' | 'admin_bug_reports' | 'admin_action_console' | 'settings'
-  | 'bulletin_board' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
+  | 'bulletin_board' | 'knowledge_base' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
   | 'accounting_dashboard' | 'accounting_journal_review'
   | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
   | 'accounting_approved_applications'
@@ -21,6 +21,7 @@ export type Page =
   | 'pdf_editing_tools'
   | 'dtp_tools'
   | 'prompt_management'
+  | 'newsletter'
   | 'simple_estimates';
 
 export enum JobStatus {
@@ -716,6 +717,20 @@ export interface BulletinThread {
     dueDate?: string;
     isTask?: boolean;
     completed?: boolean;
+}
+
+export interface KnowledgeArticle {
+    id: string;
+    title: string;
+    summary: string;
+    category: string;
+    tags: string[];
+    body: string;
+    createdAt: string;
+    updatedAt: string;
+    authorId?: string | null;
+    authorName?: string | null;
+    pinned?: boolean;
 }
 
 export interface Toast {

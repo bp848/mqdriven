@@ -28,9 +28,11 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+    const [responseFilter, setResponseFilter] = useState<'all' | 'handled' | 'unhandled'>('all');
     const [editingStatusLeadId, setEditingStatusLeadId] = useState<string | null>(null);
     const [isReplyingTo, setIsReplyingTo] = useState<string | null>(null);
     const [isMarkingContacted, setIsMarkingContacted] = useState<string | null>(null);
+    const [togglingHandledId, setTogglingHandledId] = useState<string | null>(null);
 
     const handleRowClick = (lead: Lead) => {
         setSelectedLead(lead);
@@ -129,16 +131,24 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         }
     };
 
+    const isHandled = (lead: Lead) => lead.status !== LeadStatus.Untouched;
+
     const filteredLeads = useMemo(() => {
-        if (!searchTerm) return leads;
+        let filtered = leads;
+        if (responseFilter === 'handled') {
+            filtered = filtered.filter(isHandled);
+        } else if (responseFilter === 'unhandled') {
+            filtered = filtered.filter(lead => !isHandled(lead));
+        }
+        if (!searchTerm) return filtered;
         const lower = searchTerm.toLowerCase();
-        return leads.filter(l => 
+        return filtered.filter(l => 
             l.name.toLowerCase().includes(lower) ||
             l.company.toLowerCase().includes(lower) ||
             l.status.toLowerCase().includes(lower) ||
             (l.source && l.source.toLowerCase().includes(lower))
         );
-    }, [leads, searchTerm]);
+    }, [leads, searchTerm, responseFilter]);
 
     const sortedLeads = useMemo(() => {
         let sortableItems = [...filteredLeads];
@@ -176,10 +186,47 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         setSortConfig({ key, direction });
     };
 
+    const handleToggleHandled = async (e: React.MouseEvent, lead: Lead) => {
+        e.stopPropagation();
+        const currentlyHandled = isHandled(lead);
+        const nextStatus = currentlyHandled ? LeadStatus.Untouched : LeadStatus.Contacted;
+        setTogglingHandledId(lead.id);
+        try {
+            const timestamp = new Date().toISOString();
+            await onUpdateLead(lead.id, { status: nextStatus, updatedAt: timestamp });
+            addToast(currentlyHandled ? '未対応に戻しました。' : '対応済みに設定しました。', 'success');
+        } catch (error) {
+            console.error('Failed to toggle handled flag', error);
+            addToast('対応フラグの更新に失敗しました。', 'error');
+        } finally {
+            setTogglingHandledId(null);
+        }
+    };
+
     return (
         <>
-            <div className="flex justify-end mb-4">
-                <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setResponseFilter('all')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${responseFilter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'}`}
+                    >
+                        全て
+                    </button>
+                    <button
+                        onClick={() => setResponseFilter('unhandled')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${responseFilter === 'unhandled' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'}`}
+                    >
+                        未対応
+                    </button>
+                    <button
+                        onClick={() => setResponseFilter('handled')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${responseFilter === 'handled' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'}`}
+                    >
+                        対応済
+                    </button>
+                </div>
+                <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg self-end md:self-auto">
                     <button onClick={() => setViewMode('list')} className={`px-3 py-1 rounded-md text-sm font-semibold flex items-center gap-2 ${viewMode === 'list' ? 'bg-white dark:bg-slate-800 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}>
                         <List className="w-4 h-4" /> リスト
                     </button>
@@ -197,6 +244,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                 <tr>
                                     <SortableHeader sortKey="updatedAt" label="最終更新日時" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="company" label="会社名 / 担当者" sortConfig={sortConfig} requestSort={requestSort} />
+                                    <th scope="col" className="px-6 py-3 font-medium text-left">対応フラグ</th>
                                     <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="inquiryTypes" label="問い合わせ種別" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="email" label="メール" sortConfig={sortConfig} requestSort={requestSort} />
@@ -215,6 +263,24 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                             <div className="font-semibold text-slate-800 dark:text-slate-200">
                                                 {lead.company} <span className="font-normal text-slate-500">/ {lead.name}</span>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                onClick={(e) => handleToggleHandled(e, lead)}
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                                                    isHandled(lead)
+                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100'
+                                                        : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-100'
+                                                }`}
+                                                disabled={togglingHandledId === lead.id}
+                                            >
+                                                {togglingHandledId === lead.id ? (
+                                                    <Loader className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <CheckCircle className="w-4 h-4" />
+                                                )}
+                                                {isHandled(lead) ? '対応済' : '未対応'}
+                                            </button>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                                             {editingStatusLeadId === lead.id ? (
@@ -273,7 +339,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                 ))}
                                  {sortedLeads.length === 0 && (
                                     <tr>
-                                        <td colSpan={6}>
+                                        <td colSpan={7}>
                                             <EmptyState 
                                                 icon={Lightbulb}
                                                 title={searchTerm ? '検索結果がありません' : 'リードがありません'}

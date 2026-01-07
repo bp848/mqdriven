@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight } from './Icons';
+import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight, Mail } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -36,6 +36,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: PieChart,
     items: [
       { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
+      { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
       { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
       { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },
@@ -55,6 +56,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_orders', name: '予算管理' },
       { page: 'project_management', name: 'プロジェクト管理' },
       { page: 'sales_billing', name: '売上請求（AR）' },
+      { page: 'newsletter', name: 'メールマガジン', icon: Mail },
     ],
   },
   {

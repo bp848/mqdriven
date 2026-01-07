@@ -73,10 +73,23 @@ const mapOrderStatus = (status?: string | null): PurchaseOrderStatus => {
     return PurchaseOrderStatus.Ordered;
 };
 
-const toNumberOrNull = (value: unknown): number | null => {
-    const num = Number(value);
+const parseNumericValue = (value: unknown): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+    }
+    const cleaned = String(value)
+        .trim()
+        .replace(/[¥￥円,]/g, '')
+        .replace(/\s+/g, '')
+        .replace(/[^\d.\-]/g, '');
+    if (!cleaned || cleaned === '-' || cleaned === '.' || cleaned === '-.') return null;
+    const num = Number(cleaned);
     return Number.isFinite(num) ? num : null;
 };
+
+const toNumberOrNull = (value: unknown): number | null => parseNumericValue(value);
+const toNumberOrZero = (value: unknown): number => parseNumericValue(value) ?? 0;
 
 const toStringOrNull = (value: unknown): string | null => {
     if (value === null || value === undefined) return null;
@@ -297,36 +310,42 @@ const buildLegacyPaymentRecipientPayload = (item: Partial<PaymentRecipient>) => 
 });
 
 // Mappers from snake_case (DB) to camelCase (JS)
-const dbJobToJob = (project: any): Job => ({
-    id: project.id,
-    jobNumber: typeof project.project_code === 'number'
-        ? project.project_code
-        : parseInt(project.project_code, 10) || 0,
-    projectCode: project.project_code ?? null,
-    clientName: project.customer_name || project.customer_code || '未設定',
-    customerId: project.customer_id ?? null,
-    customerCode: project.customer_code ?? null,
-    title: project.project_name || '',
-    status: mapProjectStatus(project.project_status || project.status),
-    dueDate: project.delivery_date || '',
-    quantity: Number(project.quantity ?? 0),
-    paperType: '',
-    finishing: '',
-    details: '',
-    createdAt: project.create_date || project.created_at || new Date().toISOString(),
-    price: Number(project.amount ?? 0),
-    variableCost: Number(project.total_cost ?? 0),
-    totalQuantity: Number(project.quantity ?? 0),
-    totalAmount: Number(project.amount ?? 0),
-    totalCost: Number(project.total_cost ?? 0),
-    grossMargin: Number(project.amount ?? 0) - Number(project.total_cost ?? 0),
-    invoiceStatus: InvoiceStatus.Uninvoiced,
-    invoicedAt: null,
-    paidAt: null,
-    readyToInvoice: false,
-    invoiceId: null,
-    manufacturingStatus: ManufacturingStatus.OrderReceived,
-});
+const dbJobToJob = (project: any): Job => {
+    const quantity = toNumberOrNull(project.quantity) ?? 0;
+    const amount = toNumberOrNull(project.amount) ?? 0;
+    const totalCost = toNumberOrNull(project.total_cost) ?? 0;
+
+    return {
+        id: project.id,
+        jobNumber: typeof project.project_code === 'number'
+            ? project.project_code
+            : parseInt(project.project_code, 10) || 0,
+        projectCode: project.project_code ?? null,
+        clientName: project.customer_name || project.customer_code || '未設定',
+        customerId: project.customer_id ?? null,
+        customerCode: project.customer_code ?? null,
+        title: project.project_name || '',
+        status: mapProjectStatus(project.project_status || project.status),
+        dueDate: project.delivery_date || '',
+        quantity,
+        paperType: '',
+        finishing: '',
+        details: '',
+        createdAt: project.create_date || project.created_at || new Date().toISOString(),
+        price: amount,
+        variableCost: totalCost,
+        totalQuantity: quantity,
+        totalAmount: amount,
+        totalCost,
+        grossMargin: amount - totalCost,
+        invoiceStatus: InvoiceStatus.Uninvoiced,
+        invoicedAt: null,
+        paidAt: null,
+        readyToInvoice: false,
+        invoiceId: null,
+        manufacturingStatus: ManufacturingStatus.OrderReceived,
+    };
+};
 
 const jobToDbJob = (job: Partial<Job>): any => {
     const row: Record<string, any> = {};
@@ -395,19 +414,22 @@ const insertInitialOrder = async (
 };
 
 const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
-    const quantity = Number(order.quantity ?? order.copies ?? 0);
-    const rawAmount = order.amount ?? order.subamount ?? order.total_amount ?? 0;
-    const totalAmount = Number(rawAmount);
-    const unitPrice = quantity > 0 ? totalAmount / quantity : totalAmount;
-    const projectCode = order.project_code || order.order_code || '';
-    const normalizeNumber = (value: any): number | null => {
-        if (value === null || value === undefined || value === '') return null;
-        const parsed = Number(value);
-        return Number.isNaN(parsed) ? null : parsed;
-    };
+    const quantity = toNumberOrZero(order.quantity ?? order.quantity_num ?? order.copies ?? 0);
+    const salesAmount = toNumberOrNull(
+        order.sales_amount ?? order.sales_amount_num ?? order.order_amount_num ?? order.amount ?? order.subamount ?? order.total_amount,
+    );
+    const unitPriceExplicit = toNumberOrNull(order.unit_price ?? order.unit_price_num);
+    const rawAmount = salesAmount ?? toNumberOrNull(order.amount ?? order.subamount ?? order.total_amount);
+    const computedAmount = rawAmount ?? (unitPriceExplicit !== null ? unitPriceExplicit * quantity : null);
+    const unitPrice =
+        unitPriceExplicit ?? (quantity > 0 && computedAmount !== null ? computedAmount / quantity : computedAmount ?? null);
+    const costAmount = toNumberOrNull(
+        order.variable_cost_amount ?? order.variable_cost_num ?? order.total_cost ?? order.subamount ?? order.amount,
+    );
+    const projectCode = order.project_code || order.order_code || order.project_id || '';
 
     return {
-        id: order.id,
+        id: order.id ?? order.order_id,
         supplierName: order.client_custmer || order.customer_name || '',
         paymentRecipientId: order.payment_recipient_id ?? null,
         itemName: projectCode,
@@ -416,12 +438,12 @@ const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
         orderCode: order.order_code ?? null,
         orderDate: order.order_date || order.create_date || '',
         quantity,
-        unitPrice: Number(unitPrice ?? 0),
-        amount: Number.isFinite(totalAmount) ? totalAmount : null,
-        subamount: normalizeNumber(order.subamount ?? order.total_amount),
-        copies: normalizeNumber(order.copies),
-        totalCost: normalizeNumber(order.total_cost),
-        status: mapOrderStatus(order.approval_status1 || order.status),
+        unitPrice: unitPrice ?? 0,
+        amount: computedAmount ?? 0,
+        subamount: toNumberOrNull(order.subamount ?? order.total_amount),
+        copies: toNumberOrNull(order.copies),
+        totalCost: costAmount ?? 0,
+        status: mapOrderStatus(order.approval_status1 || order.status || order.status_label),
         raw: order,
     };
 };
@@ -972,19 +994,30 @@ export const getJobs = async (): Promise<Job[]> => {
 
 const fetchPurchaseOrdersWithFilters = async (filters: ProjectBudgetFilter = {}): Promise<PurchaseOrder[]> => {
     const supabase = getSupabase();
-    let query = supabase
-        .from('orders')
-        .select('*')
-        .order('order_date', { ascending: false });
 
-    if (filters.startDate) {
-        query = query.gte('order_date', filters.startDate);
-    }
-    if (filters.endDate) {
-        query = query.lte('order_date', filters.endDate);
+    // Prefer orders_list_view for cleaned numeric fields; fallback to raw table if unavailable.
+    const tryView = async () => {
+        let viewQuery = supabase.from('orders_list_view').select('*').order('order_date', { ascending: false });
+        if (filters.startDate) viewQuery = viewQuery.gte('order_date', filters.startDate);
+        if (filters.endDate) viewQuery = viewQuery.lte('order_date', filters.endDate);
+        const { data, error } = await viewQuery;
+        if (error) {
+            console.warn('[fetchPurchaseOrdersWithFilters] orders_list_view unavailable, falling back to orders table', error.message);
+            return null;
+        }
+        return data;
+    };
+
+    const viewRows = await tryView();
+    if (viewRows) {
+        return viewRows.map(dbOrderToPurchaseOrder);
     }
 
-    const { data, error } = await query;
+    let tableQuery = supabase.from('orders').select('*').order('order_date', { ascending: false });
+    if (filters.startDate) tableQuery = tableQuery.gte('order_date', filters.startDate);
+    if (filters.endDate) tableQuery = tableQuery.lte('order_date', filters.endDate);
+
+    const { data, error } = await tableQuery;
     ensureSupabaseSuccess(error, 'Failed to fetch purchase orders');
     return (data || []).map(dbOrderToPurchaseOrder);
 };
@@ -993,11 +1026,6 @@ const normalizeProjectKey = (job: Job): string | null => {
     if (job.projectCode) return String(job.projectCode);
     if (job.jobNumber) return String(job.jobNumber);
     return null;
-};
-
-const toNumberOrZero = (value: unknown): number => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const refreshProjectFinancialTotals = async (
@@ -1035,10 +1063,84 @@ const refreshProjectFinancialTotals = async (
     ensureSupabaseSuccess(projectUpdateError, 'Failed to sync project financial totals');
 };
 
+const fetchProjectFinancialView = async (): Promise<any[] | null> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('project_financials_view').select('*');
+    if (error) {
+        console.warn('[getProjectBudgetSummaries] project_financials_view unavailable, falling back to legacy aggregation', error.message);
+        return null;
+    }
+    return data || [];
+};
+
+const mapFinancialRowToSummary = (
+    row: any,
+    relatedOrders: PurchaseOrder[],
+): ProjectBudgetSummary => {
+    const projectCodeText = toStringOrNull(row.project_code);
+    const projectId = toStringOrNull(row.project_id);
+    const totals = relatedOrders.reduce(
+        (agg, order) => {
+            const quantity = toNumberOrZero(order.quantity);
+            const unitPrice = toNumberOrZero(order.unitPrice);
+            const revenueSource = toNumberOrZero(order.amount ?? order.subamount ?? unitPrice * quantity);
+            const costSource = toNumberOrZero(order.totalCost ?? order.subamount ?? order.amount);
+            agg.quantity += quantity;
+            agg.revenue += revenueSource;
+            agg.cost += costSource;
+            return agg;
+        },
+        { quantity: 0, revenue: 0, cost: 0 }
+    );
+
+    const salesActual = toNumberOrZero(row.sales_actual ?? row.sales_amount);
+    const costActual = toNumberOrZero(row.cost_actual ?? row.variable_cost_amount);
+    const totalAmount = salesActual || totals.revenue;
+    const totalCost = costActual || totals.cost;
+    const jobNumber =
+        typeof row.project_code === 'number'
+            ? row.project_code
+            : parseInt(projectCodeText || '', 10) || 0;
+
+    return {
+        id: projectId ?? row.id ?? projectCodeText ?? String(jobNumber),
+        jobNumber,
+        projectCode: projectCodeText,
+        clientName: row.customer_name ?? row.customer_id ?? '未設定',
+        customerId: row.customer_id ?? null,
+        customerCode: row.customer_code ?? null,
+        title: row.project_name ?? '',
+        status: mapProjectStatus(row.status),
+        dueDate: row.due_date || row.estimated_delivery_date || '',
+        quantity: totals.quantity,
+        paperType: '',
+        finishing: '',
+        details: '',
+        createdAt: row.created_at || new Date().toISOString(),
+        price: totalAmount,
+        variableCost: totalCost,
+        totalQuantity: totals.quantity,
+        totalAmount,
+        totalCost,
+        grossMargin: totalAmount - totalCost,
+        invoiceStatus: InvoiceStatus.Uninvoiced,
+        invoicedAt: null,
+        paidAt: null,
+        readyToInvoice: false,
+        invoiceId: null,
+        manufacturingStatus: ManufacturingStatus.OrderReceived,
+        orderCount: relatedOrders.length,
+        orderTotalQuantity: totals.quantity,
+        orderTotalAmount: totals.revenue,
+        orderTotalCost: totals.cost,
+        orders: relatedOrders,
+    };
+};
+
 export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {}): Promise<ProjectBudgetSummary[]> => {
     const supabase = getSupabase();
-    const [jobs, purchaseOrders] = await Promise.all([
-        getJobs(),
+    const [financialRows, purchaseOrders] = await Promise.all([
+        fetchProjectFinancialView(),
         fetchPurchaseOrdersWithFilters(filters),
     ]);
 
@@ -1053,6 +1155,16 @@ export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {
         return acc;
     }, new Map());
 
+    if (financialRows) {
+        return financialRows.map(row => {
+            const projectKey = normalizeLookupKey(row.project_code) || normalizeLookupKey(row.project_id);
+            const relatedOrders = projectKey ? ordersByProject.get(projectKey) ?? [] : [];
+            return mapFinancialRowToSummary(row, relatedOrders);
+        });
+    }
+
+    // Legacy fallback: aggregate from projects + orders
+    const jobs = await getJobs();
     const summaries: ProjectBudgetSummary[] = [];
     const syncPayloads: Array<{ id: string; data: Record<string, any> }> = [];
 
@@ -2752,8 +2864,8 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         const customer = project ? customerMap[normalizeLookupKey(project?.customer_id) ?? ''] : undefined;
         return {
             ...row,
-            project_name: row.project_name ?? project?.project_name,
-            customer_name: row.customer_name ?? customer?.customer_name,
+            project_name: project?.project_name ?? null,
+            customer_name: customer?.customer_name ?? null,
         };
     });
 

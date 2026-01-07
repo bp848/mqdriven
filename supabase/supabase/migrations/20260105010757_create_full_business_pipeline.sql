@@ -10,8 +10,6 @@ drop view if exists public.customer_estimate_analysis_view;
 drop view if exists public.customer_revenue_analytics_view;
 drop view if exists public.customer_ar_status_view;
 drop view if exists public.project_cash_status_view;
-drop view if exists public.work_orders_calendar_view;
-drop view if exists public.work_orders_daily_view;
 drop view if exists public.lead_to_cash_view;
 drop view if exists public.project_financials_view;
 drop view if exists public.pl_monthly_view;
@@ -251,37 +249,6 @@ create table if not exists public.disbursements_v2 (
 create index if not exists idx_disbursements_v2_payable on public.disbursements_v2(payable_id);
 create index if not exists idx_disbursements_v2_date on public.disbursements_v2(payment_date);
 
--- Work orders (production instructions)
-create table if not exists public.work_orders (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid not null references public.projects_v2(id) on delete cascade,
-    order_id uuid references public.orders_v2(id) on delete set null,
-    title text not null,
-    assignee_id uuid references public.users(id) on delete set null,
-    start_date date,
-    due_date date,
-    status text not null default 'not_started' check (status in ('not_started','in_progress','done','blocked','cancelled')),
-    notes text,
-    google_event_id text,
-    created_by uuid references public.users(id) on delete set null,
-    created_at timestamptz not null default timezone('utc', now()),
-    updated_at timestamptz not null default timezone('utc', now())
-);
-create index if not exists idx_work_orders_project on public.work_orders(project_id);
-create index if not exists idx_work_orders_assignee on public.work_orders(assignee_id);
-create index if not exists idx_work_orders_due on public.work_orders(due_date);
-
--- Calendar sync queue for work orders
-create table if not exists public.calendar_sync_queue (
-    id uuid primary key default gen_random_uuid(),
-    work_order_id uuid not null references public.work_orders(id) on delete cascade,
-    action text not null check (action in ('create','update','delete')),
-    scheduled_at timestamptz not null default timezone('utc', now()),
-    processed_at timestamptz,
-    error_message text
-);
-create index if not exists idx_calendar_sync_queue_status on public.calendar_sync_queue(processed_at);
-
 -- RPCs / helpers
 create or replace function public.generate_lead_code()
 returns text
@@ -366,8 +333,8 @@ alter table if exists public.invoices_v2
 
 -- Create lead with generated code
 create or replace function public.create_lead_v2(
-    p_customer_id uuid default null,
     p_title text,
+    p_customer_id uuid default null,
     p_status text default 'new',
     p_source text default null,
     p_owner_id uuid default null,
@@ -577,8 +544,8 @@ $$;
 -- Create order with generated code
 create or replace function public.create_order_v2(
     p_project_id uuid,
-    p_estimate_id uuid default null,
     p_order_type text,
+    p_estimate_id uuid default null,
     p_order_date date default current_date,
     p_delivery_date date default null,
     p_quantity numeric default 1,
@@ -637,10 +604,10 @@ $$;
 -- Create invoice with generated code
 create or replace function public.create_invoice_v2(
     p_project_id uuid,
-    p_order_id uuid default null,
     p_invoice_date date,
-    p_due_date date default null,
     p_subtotal numeric,
+    p_order_id uuid default null,
+    p_due_date date default null,
     p_tax_amount numeric default 0,
     p_status text default 'draft',
     p_created_by uuid default null
@@ -755,10 +722,10 @@ $$;
 -- Create payable (e.g., from purchase/subcontract order)
 create or replace function public.create_payable_v2(
     p_project_id uuid,
-    p_supplier_id uuid default null,
-    p_order_id uuid default null,
     p_due_date date,
     p_amount numeric,
+    p_supplier_id uuid default null,
+    p_order_id uuid default null,
     p_description text default null,
     p_status text default 'outstanding',
     p_created_by uuid default null
@@ -839,168 +806,6 @@ begin
         end,
         updated_at = timezone('utc', now())
     where id = v_payable.id;
-
-    return v_row;
-end;
-$$;
-
--- Finalize sale: create project (if missing), estimate+items, order, invoice, receivable, work order in one call
-create or replace function public.finalize_sale_v2(
-    p_customer_id uuid,
-    p_project_name text,
-    p_order_type text default 'sales',
-    p_quantity numeric default 1,
-    p_unit_price numeric default 0,
-    p_variable_cost numeric default 0,
-    p_tax_rate numeric default 0.1,
-    p_delivery_date date default null,
-    p_invoice_date date default current_date,
-    p_due_date date default null,
-    p_work_assignee_id uuid default null,
-    p_work_lead_days integer default 5,
-    p_notes text default null,
-    p_items jsonb default '[]'::jsonb,
-    p_created_by uuid default null
-)
-returns jsonb
-language plpgsql
-as $$
-declare
-    v_project public.projects_v2;
-    v_est public.estimates_v2;
-    v_order public.orders_v2;
-    v_invoice public.invoices_v2;
-    v_receivable public.receivables_v2;
-    v_work public.work_orders;
-    v_amount numeric;
-    v_subtotal numeric;
-begin
-    -- Project
-    v_project := public.create_project_v2(
-        null, -- lead_id
-        p_customer_id,
-        p_project_name,
-        p_quantity * p_unit_price,
-        p_variable_cost,
-        p_delivery_date,
-        'planning',
-        'not_started',
-        p_created_by
-    );
-
-    -- Estimate + items
-    v_subtotal := coalesce(p_quantity,1) * coalesce(p_unit_price,0);
-    v_est := public.create_estimate_with_items_v2(
-        v_project.id,
-        null,
-        null,
-        1,
-        'accepted',
-        p_tax_rate,
-        p_delivery_date,
-        p_delivery_date,
-        p_notes,
-        'JPY',
-        case when jsonb_array_length(p_items) > 0 then p_items else jsonb_build_array(
-            jsonb_build_object(
-                'item_name', coalesce(p_project_name, '受注'),
-                'category', 'other',
-                'quantity', coalesce(p_quantity,1),
-                'unit_price', coalesce(p_unit_price,0),
-                'variable_cost', coalesce(p_variable_cost,0)
-            )
-        ) end,
-        p_created_by
-    );
-
-    -- Order
-    v_order := public.create_order_v2(
-        v_project.id,
-        v_est.id,
-        p_order_type,
-        current_date,
-        p_delivery_date,
-        coalesce(p_quantity,1),
-        coalesce(p_unit_price,0),
-        coalesce(p_variable_cost,0),
-        'ordered',
-        p_created_by
-    );
-
-    -- Invoice
-    v_amount := coalesce(p_quantity,1) * coalesce(p_unit_price,0);
-    v_invoice := public.create_invoice_v2(
-        v_project.id,
-        v_order.id,
-        coalesce(p_invoice_date, current_date),
-        coalesce(p_due_date, p_invoice_date),
-        v_amount,
-        round(v_amount * coalesce(p_tax_rate,0), 2),
-        'issued',
-        p_created_by
-    );
-
-    -- Receivable
-    v_receivable := public.create_receivable_from_invoice_v2(
-        v_invoice.id,
-        p_due_date,
-        v_invoice.total,
-        p_created_by
-    );
-
-    -- Work order
-    v_work := public.create_work_order_v2(
-        v_project.id,
-        v_order.id,
-        concat('作業指示: ', p_project_name),
-        p_work_assignee_id,
-        p_delivery_date,
-        p_work_lead_days,
-        p_notes,
-        p_created_by
-    );
-
-    return jsonb_build_object(
-        'project', to_jsonb(v_project),
-        'estimate', to_jsonb(v_est),
-        'order', to_jsonb(v_order),
-        'invoice', to_jsonb(v_invoice),
-        'receivable', to_jsonb(v_receivable),
-        'work_order', to_jsonb(v_work)
-    );
-end;
-$$;
-
--- Create work order (instruction) from project/order with backward scheduling
-create or replace function public.create_work_order_v2(
-    p_project_id uuid,
-    p_order_id uuid default null,
-    p_title text default '作業指示',
-    p_assignee_id uuid default null,
-    p_due_date date default null,
-    p_lead_days integer default 5,
-    p_notes text default null,
-    p_created_by uuid default null
-)
-returns public.work_orders
-language plpgsql
-as $$
-declare
-    v_row public.work_orders;
-    v_due date;
-    v_start date;
-begin
-    v_due := coalesce(p_due_date, (select delivery_date from public.orders_v2 where id = p_order_id), current_date + interval '7 days');
-    v_start := v_due - coalesce(p_lead_days, 5);
-
-    insert into public.work_orders (
-        project_id, order_id, title, assignee_id, start_date, due_date, status, notes, created_by
-    ) values (
-        p_project_id, p_order_id, coalesce(p_title, '作業指示'), p_assignee_id, v_start, v_due, 'not_started', p_notes, p_created_by
-    )
-    returning * into v_row;
-
-    insert into public.calendar_sync_queue (work_order_id, action) values (v_row.id, 'create');
 
     return v_row;
 end;
@@ -1465,47 +1270,6 @@ left join lateral (
     where pa.project_id = p.id
 ) ap on true;
 
--- Work orders calendar-friendly view
-create or replace view public.work_orders_calendar_view as
-select
-    wo.id as work_order_id,
-    wo.project_id,
-    p.project_code,
-    p.project_name,
-    wo.order_id,
-    wo.title,
-    wo.assignee_id,
-    wo.start_date,
-    wo.due_date,
-    wo.status,
-    wo.google_event_id,
-    wo.created_by,
-    wo.created_at,
-    wo.updated_at
-from public.work_orders wo
-join public.projects_v2 p on p.id = wo.project_id;
-
--- Work orders daily aggregation for reporting/daily logs
-create or replace view public.work_orders_daily_view as
-select
-    wo.assignee_id,
-    coalesce(wo.start_date, wo.due_date) as target_date,
-    count(*) filter (where wo.status = 'not_started') as todo_count,
-    count(*) filter (where wo.status = 'in_progress') as in_progress_count,
-    count(*) filter (where wo.status = 'done') as done_count,
-    array_agg(jsonb_build_object(
-        'work_order_id', wo.id,
-        'project_id', wo.project_id,
-        'project_code', p.project_code,
-        'title', wo.title,
-        'status', wo.status,
-        'start_date', wo.start_date,
-        'due_date', wo.due_date
-    ) order by coalesce(wo.due_date, wo.start_date)) as tasks
-from public.work_orders wo
-join public.projects_v2 p on p.id = wo.project_id
-group by wo.assignee_id, coalesce(wo.start_date, wo.due_date);
-
 -- Accounting rollups (P/L)
 create or replace view public.pl_monthly_view as
 select
@@ -1558,7 +1322,7 @@ create or replace view public.mq_anomalies_view as
 select
   'estimate' as level,
   e.project_id,
-  e.estimate_id as record_id,
+  e.estimate_id::text as record_id,
   e.delivery_date as dt,
   e.subtotal as sales_amount,
   e.variable_cost_amount as variable_cost_amount,

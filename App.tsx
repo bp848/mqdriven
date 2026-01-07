@@ -54,7 +54,9 @@ import AuditLogPage from './components/admin/AuditLogPage';
 import JournalQueuePage from './components/admin/JournalQueuePage';
 import MasterManagementPage from './components/admin/MasterManagementPage';
 import ActionConsolePage from './components/admin/ActionConsolePage';
+import KnowledgeBasePage from './components/KnowledgeBasePage';
 import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructionsModal';
+import NewsletterPage from './components/NewsletterPage';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
@@ -180,8 +182,10 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_action_console: 'アクションコンソール',
     admin_bug_reports: 'バグ・改善報告',
     bulletin_board: '議事録/掲示板',
+    knowledge_base: 'ナレッジベース',
     settings: '設定',
     prompt_management: 'プロンプト管理',
+    newsletter: 'メールマガジン',
 };
 
 const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
@@ -1195,6 +1199,8 @@ useEffect(() => {
                     }}
                     isAIOff={isAIOff}
                 />;
+            case 'newsletter':
+                return <NewsletterPage customers={customers} addToast={addToast} />;
             case 'sales_leads':
                 return <LeadManagementPage leads={leads} searchTerm={searchTerm} onRefresh={loadAllData} onUpdateLead={handleUpdateLead} onDeleteLead={handleDeleteLead} addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} isAIOff={isAIOff} onAddEstimate={handleAddEstimate} />;
             case 'sales_pipeline':
@@ -1289,6 +1295,8 @@ useEffect(() => {
                 return <ApprovedApplications notify={addToast} />;
             case 'bulletin_board':
                 return <BulletinBoardPage currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
+            case 'knowledge_base':
+                return <KnowledgeBasePage currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
             case 'approval_list':
                 return <ApprovalWorkflowPage currentUser={currentUser} view="list" addToast={addToast} searchTerm={searchTerm} onResumeDraft={handleResumeApplicationDraft} />;
             case 'approval_form_expense': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="EXP" addToast={addToast} customers={customers} accountItems={accountItems} jobs={jobs} purchaseOrders={purchaseOrders} departments={departments} isAIOff={isAIOff} allocationDivisions={allocationDivisions} paymentRecipients={paymentRecipients} onCreatePaymentRecipient={handleCreatePaymentRecipientInline} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;

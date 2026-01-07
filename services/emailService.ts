@@ -4,9 +4,10 @@ import { getEnvValue } from '../utils.ts';
 export interface EmailPayload {
   to: string[];
   subject: string;
-  body: string;
+  body?: string;
   cc?: string[];
   bcc?: string[];
+  html?: string;
 }
 
 export interface EmailDispatchResult {
@@ -24,7 +25,8 @@ const resolveEndpoint = (): string | undefined => {
     return undefined;
   }
   const normalized = supabaseUrl.replace(/\/$/, '');
-  return `${normalized}/functions/v1/send-application-email`;
+  // Try Resend endpoint first, fallback to send-application-email
+  return `${normalized}/functions/v1/resend`;
 };
 
 const EMAIL_ENDPOINT = resolveEndpoint();
@@ -33,6 +35,20 @@ const EMAIL_API_KEY = getEnvValue('APPLICATION_EMAIL_API_KEY') ?? getEnvValue('E
 const isValidAddress = (value: string | null | undefined): value is string => {
   if (!value) return false;
   return /.+@.+\..+/.test(value);
+};
+
+const htmlToText = (html: string): string => {
+  // Simple HTML to text conversion for fallback
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
+    .replace(/&amp;/g, '&') // Replace HTML entities
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
 };
 
 export class EmailDispatchError extends Error {
@@ -55,19 +71,40 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     throw new EmailDispatchError('メール送信エンドポイントが構成されていません。');
   }
 
+  if (!payload.subject || !payload.subject.trim()) {
+    throw new EmailDispatchError('件名を入力してください。');
+  }
+
+  const hasHtml = payload.html && payload.html.trim();
+  const hasText = payload.body && payload.body.trim();
+
+  if (!hasHtml && !hasText) {
+    throw new EmailDispatchError('本文またはHTML本文を入力してください。');
+  }
+
+  // Prepare email payload
+  const emailPayload: any = {
+    to,
+    cc,
+    bcc,
+    subject: payload.subject,
+  };
+
+  if (hasHtml) {
+    emailPayload.html = payload.html;
+    // Generate text fallback from HTML if no text provided
+    emailPayload.body = hasText ? payload.body : htmlToText(payload.html);
+  } else {
+    emailPayload.body = payload.body;
+  }
+
   const response = await fetch(EMAIL_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(EMAIL_API_KEY ? { Authorization: `Bearer ${EMAIL_API_KEY}` } : {}),
     },
-    body: JSON.stringify({
-      to,
-      cc,
-      bcc,
-      subject: payload.subject,
-      body: payload.body,
-    }),
+    body: JSON.stringify(emailPayload),
   });
 
   const text = await response.text();

@@ -179,6 +179,9 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
           detail: 'AI機能OFFのため、アップロードされた名刺を解析できませんでした。',
           ...actorInfo,
         });
+        if (inputRef.current) {
+          inputRef.current.value = '';
+        }
         return;
       }
       Array.from(files).forEach(file => {
@@ -324,13 +327,13 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
               multiple
               className="sr-only"
               onChange={e => handleFiles(e.target.files)}
-              disabled={isAIOff}
             />
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              disabled={isAIOff}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
+              className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold ${
+                isAIOff ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
             >
               <Upload className="w-4 h-4" />
               ファイルを選択
