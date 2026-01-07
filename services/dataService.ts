@@ -1344,22 +1344,56 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
 };
 
 const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUser[]> => {
-    const [
-        { data: userRows, error: userError },
-        { data: departmentRows, error: departmentError },
-        { data: titleRows, error: titleError },
-    ] = await Promise.all([
-        supabase
+    // Try sequential queries instead of parallel to avoid network congestion
+    console.log('[dataService] Fetching users data...');
+    
+    let userRows, departmentRows, titleRows;
+    let userError, departmentError, titleError;
+    
+    try {
+        // First fetch users
+        console.log('[dataService] Fetching users...');
+        const result = await supabase
             .from('users')
             .select('id, name, email, role, created_at, department_id, position_id, is_active')
-            .order('name', { ascending: true }),
-        supabase.from('departments').select('id, name'),
-        supabase.from('employee_titles').select('id, name'),
-    ]);
-
-    if (userError) throw formatSupabaseError('Failed to fetch users', userError);
-    if (departmentError) console.warn('Failed to fetch departments for user mapping:', departmentError.message);
-    if (titleError) console.warn('Failed to fetch titles for user mapping:', titleError.message);
+            .order('name', { ascending: true });
+        userRows = result.data;
+        userError = result.error;
+        
+        if (userError) {
+            console.error('[dataService] Users query failed:', userError);
+            throw formatSupabaseError('Failed to fetch users', userError);
+        }
+        console.log(`[dataService] Successfully fetched ${userRows?.length || 0} users`);
+        
+        // Then fetch departments
+        console.log('[dataService] Fetching departments...');
+        const deptResult = await supabase.from('departments').select('id, name');
+        departmentRows = deptResult.data;
+        departmentError = deptResult.error;
+        
+        if (departmentError) {
+            console.warn('[dataService] Failed to fetch departments for user mapping:', departmentError.message);
+        } else {
+            console.log(`[dataService] Successfully fetched ${departmentRows?.length || 0} departments`);
+        }
+        
+        // Finally fetch titles
+        console.log('[dataService] Fetching employee titles...');
+        const titleResult = await supabase.from('employee_titles').select('id, name');
+        titleRows = titleResult.data;
+        titleError = titleResult.error;
+        
+        if (titleError) {
+            console.warn('[dataService] Failed to fetch titles for user mapping:', titleError.message);
+        } else {
+            console.log(`[dataService] Successfully fetched ${titleRows?.length || 0} titles`);
+        }
+        
+    } catch (error) {
+        console.error('[dataService] Database query failed:', error);
+        throw error;
+    }
 
     const departmentMap = new Map<string, string>();
     (departmentRows || []).forEach((dept: any) => {
@@ -1395,14 +1429,36 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
 
 export async function getUsers(): Promise<EmployeeUser[]> {
     const supabase = getSupabase();
-    try {
-        return await fetchUsersDirectly(supabase);
-    } catch (error: any) {
-        if (isSupabaseUnavailableError(error)) {
-            throw new Error('Failed to fetch users: network error communicating with the database.');
+    
+    // Add retry logic with exponential backoff
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 second
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            console.log(`[dataService] Attempting to fetch users (attempt ${attempt}/${maxRetries})`);
+            return await fetchUsersDirectly(supabase);
+        } catch (error: any) {
+            console.error(`[dataService] Attempt ${attempt} failed:`, error);
+            
+            // Check if it's a network error that might be retryable
+            if (isSupabaseUnavailableError(error) && attempt < maxRetries) {
+                const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+                console.log(`[dataService] Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            
+            // If it's the last attempt or not a retryable error, throw the appropriate error
+            if (isSupabaseUnavailableError(error)) {
+                throw new Error('Failed to fetch users: network error communicating with the database.');
+            }
+            throw error;
         }
-        throw error;
     }
+    
+    // This should never be reached, but TypeScript needs it
+    throw new Error('Failed to fetch users: maximum retries exceeded');
 }
 
 export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean }): Promise<void> => {

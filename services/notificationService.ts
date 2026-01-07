@@ -257,8 +257,39 @@ const buildEmailContent = async (
     return applyTemplateOverrides(payload.type, subject, defaultBody, placeholderValues);
 };
 
+const loadNotificationSettings = (): { enableNotifications: boolean; notificationTypes: Record<ApprovalNotificationType, boolean> } => {
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+        return { enableNotifications: true, notificationTypes: { submitted: true, approved: true, rejected: true, step_forward: true } };
+    }
+    try {
+        const raw = window.localStorage.getItem('emailNotificationSettings');
+        const settings = raw ? JSON.parse(raw) : null;
+        return {
+            enableNotifications: settings?.enableNotifications ?? true,
+            notificationTypes: settings?.notificationTypes ?? { submitted: true, approved: true, rejected: true, step_forward: true }
+        };
+    } catch (error) {
+        console.warn('[notification] Failed to parse notification settings', error);
+        return { enableNotifications: true, notificationTypes: { submitted: true, approved: true, rejected: true, step_forward: true } };
+    }
+};
+
 export async function sendApprovalNotification(payload: ApprovalNotificationPayload): Promise<void> {
     try {
+        const settings = loadNotificationSettings();
+        
+        // Check if notifications are enabled
+        if (!settings.enableNotifications) {
+            console.log('[notification] Email notifications are disabled, skipping');
+            return;
+        }
+        
+        // Check if this specific notification type is enabled
+        if (!settings.notificationTypes[payload.type]) {
+            console.log(`[notification] ${payload.type} notifications are disabled, skipping`);
+            return;
+        }
+
         const supabase = getSupabase();
         const recipients = await resolveRecipients(supabase, payload);
         if (recipients.length === 0) {

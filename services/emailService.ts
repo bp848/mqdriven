@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { SUPABASE_URL as CREDENTIAL_SUPABASE_URL } from '../supabaseCredentials';
 import { getEnvValue } from '../utils.ts';
 
 export interface EmailPayload {
@@ -16,21 +17,50 @@ export interface EmailDispatchResult {
 }
 
 const resolveEndpoint = (): string | undefined => {
-  const direct = getEnvValue('APPLICATION_EMAIL_ENDPOINT') ?? getEnvValue('EMAIL_DISPATCH_ENDPOINT');
-  if (direct && direct.trim()) {
-    return direct.trim();
+  const directKeys = [
+    'APPLICATION_EMAIL_ENDPOINT',
+    'EMAIL_DISPATCH_ENDPOINT',
+    'VITE_APPLICATION_EMAIL_ENDPOINT',
+    'VITE_EMAIL_DISPATCH_ENDPOINT',
+    'NEXT_PUBLIC_EMAIL_DISPATCH_ENDPOINT',
+  ];
+  for (const key of directKeys) {
+    const value = getEnvValue(key);
+    if (value && value.trim()) return value.trim();
   }
-  const supabaseUrl = getEnvValue('SUPABASE_URL') ?? getEnvValue('SUPABASE_PROJECT_URL');
-  if (!supabaseUrl) {
-    return undefined;
+
+  const supabaseUrlCandidates = [
+    getEnvValue('SUPABASE_URL'),
+    getEnvValue('SUPABASE_PROJECT_URL'),
+    getEnvValue('VITE_SUPABASE_URL'),
+    getEnvValue('VITE_SUPABASE_PROJECT_URL'),
+    getEnvValue('NEXT_PUBLIC_SUPABASE_URL'),
+    CREDENTIAL_SUPABASE_URL,
+  ];
+  for (const url of supabaseUrlCandidates) {
+    if (url && url.trim()) {
+      const normalized = url.replace(/\/$/, '');
+      return `${normalized}/functions/v1/send-application-email`;
+    }
   }
-  const normalized = supabaseUrl.replace(/\/$/, '');
-  // Try Resend endpoint first, fallback to send-application-email
-  return `${normalized}/functions/v1/resend`;
+
+  const supabaseRef =
+    getEnvValue('SUPABASE_PROJECT_REFERENCE') ||
+    getEnvValue('SUPABASE_REF') ||
+    getEnvValue('VITE_SUPABASE_PROJECT_REFERENCE');
+  if (supabaseRef && supabaseRef.trim()) {
+    return `https://${supabaseRef.trim()}.supabase.co/functions/v1/send-application-email`;
+  }
+
+  return undefined;
 };
 
 const EMAIL_ENDPOINT = resolveEndpoint();
-const EMAIL_API_KEY = getEnvValue('APPLICATION_EMAIL_API_KEY') ?? getEnvValue('EMAIL_DISPATCH_API_KEY');
+const EMAIL_API_KEY =
+  getEnvValue('APPLICATION_EMAIL_API_KEY') ??
+  getEnvValue('EMAIL_DISPATCH_API_KEY') ??
+  getEnvValue('VITE_APPLICATION_EMAIL_API_KEY') ??
+  getEnvValue('VITE_EMAIL_DISPATCH_API_KEY');
 
 const isValidAddress = (value: string | null | undefined): value is string => {
   if (!value) return false;
@@ -58,6 +88,20 @@ export class EmailDispatchError extends Error {
   }
 }
 
+const loadSMTPConfig = (): any => {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem('emailNotificationSettings');
+    const settings = raw ? JSON.parse(raw) : null;
+    return settings?.smtp || null;
+  } catch (error) {
+    console.warn('[email] Failed to parse SMTP config', error);
+    return null;
+  }
+};
+
 export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchResult> => {
   const to = (payload.to ?? []).filter(isValidAddress);
   const cc = (payload.cc ?? []).filter(isValidAddress);
@@ -67,9 +111,70 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     throw new EmailDispatchError('送信先のメールアドレスが設定されていません。');
   }
 
-  if (!EMAIL_ENDPOINT) {
-    throw new EmailDispatchError('メール送信エンドポイントが構成されていません。');
+  // Check for custom SMTP configuration first
+  const smtpConfig = loadSMTPConfig();
+  
+  if (smtpConfig && smtpConfig.host && smtpConfig.username && smtpConfig.password && smtpConfig.fromEmail) {
+    // Use custom SMTP configuration
+    console.log('[email] Using custom SMTP configuration');
+    
+    if (!payload.subject || !payload.subject.trim()) {
+      throw new EmailDispatchError('件名を入力してください。');
+    }
+
+    const hasHtml = payload.html && payload.html.trim();
+    const hasText = payload.body && payload.body.trim();
+
+    if (!hasHtml && !hasText) {
+      throw new EmailDispatchError('本文またはHTML本文を入力してください。');
+    }
+
+    // Create email payload for custom SMTP
+    const emailPayload = {
+      host: smtpConfig.host,
+      port: smtpConfig.port || 587,
+      secure: smtpConfig.secure || false,
+      auth: {
+        user: smtpConfig.username,
+        pass: smtpConfig.password
+      },
+      from: `${smtpConfig.fromName || 'システム'} <${smtpConfig.fromEmail}>`,
+      to: to.join(', '),
+      cc: cc.length > 0 ? cc.join(', ') : undefined,
+      bcc: bcc.length > 0 ? bcc.join(', ') : undefined,
+      subject: payload.subject,
+      text: hasText ? payload.body : htmlToText(payload.html || ''),
+      html: hasHtml ? payload.html : undefined
+    };
+
+    // Send via custom SMTP endpoint (you'll need to create this endpoint)
+    const customEndpoint = getEnvValue('CUSTOM_SMTP_ENDPOINT') || '/api/send-email';
+    
+    const response = await fetch(customEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailPayload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new EmailDispatchError('カスタムSMTPでのメール送信に失敗しました。', response.status, errorText);
+    }
+
+    const result = await response.json();
+    return {
+      id: result.id || uuidv4(),
+      sentAt: result.sentAt || new Date().toISOString(),
+    };
   }
+
+  // Fallback to Edge Function (Resendラッパー)
+  if (!EMAIL_ENDPOINT) {
+    throw new EmailDispatchError('メール送信エンドポイントが構成されていません。APPLICATION_EMAIL_ENDPOINT または SUPABASE_URL を設定してください。');
+  }
+  const endpoint = EMAIL_ENDPOINT;
 
   if (!payload.subject || !payload.subject.trim()) {
     throw new EmailDispatchError('件名を入力してください。');
@@ -98,7 +203,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     emailPayload.body = payload.body;
   }
 
-  const response = await fetch(EMAIL_ENDPOINT, {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

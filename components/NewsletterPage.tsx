@@ -32,8 +32,29 @@ const toPlainText = (html: string): string => {
 };
 
 const NewsletterPage: React.FC<NewsletterPageProps> = ({ customers, addToast }) => {
-    const [subject, setSubject] = useState('');
-    const [htmlBody, setHtmlBody] = useState('<p>いつもお世話になっております。</p>');
+    const [subject, setSubject] = useState('【ご案内】春のキャンペーンのお知らせ');
+    const [htmlBody, setHtmlBody] = useState(`<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2 style="color: #333;">【ご案内】春のキャンペーンのお知らせ</h2>
+
+<p>いつもお世話になっております。</p>
+
+<p>この度、春のキャンペーンを実施することとなりましたので、ご案内申し上げます。</p>
+
+<h3 style="color: #666; margin-top: 30px;">キャンペーン内容</h3>
+<ul>
+    <li>期間：4月1日～4月30日</li>
+    <li>対象：全サービス</li>
+    <li>特典：通常価格から10%OFF</li>
+</ul>
+
+<p>詳細は以下のURLをご確認ください。</p>
+<p><a href="#" style="color: #007bff;">キャンペーン詳細はこちら</a></p>
+
+<p>ご不明な点がございましたら、お気軽にお問い合わせください。</p>
+
+<hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+<p style="font-size: 12px; color: #999;">このメールはシステムにより自動送信されています。</p>
+</div>`);
     const [testEmail, setTestEmail] = useState('');
     const [excludedEmails, setExcludedEmails] = useState<Set<string>>(new Set());
     const [isSending, setIsSending] = useState(false);
