@@ -164,6 +164,9 @@ const normalizeLookupKey = (value: unknown): string | null => {
     return key.length > 0 ? key : null;
 };
 
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+const filterUuidValues = (values: string[]): string[] => values.filter(v => UUID_REGEX.test(v));
+
 const collectUniqueIds = (values: Array<string | null | undefined>): string[] => {
     const ids = new Set<string>();
     for (const value of values) {
@@ -2564,7 +2567,9 @@ const mapEstimateRow = (row: any): Estimate => {
     const unitPrice = toNumberOrNull(row.unit_price);
     const subtotal = toNumberOrNull(row.subtotal) ?? (copies !== null && unitPrice !== null ? copies * unitPrice : null);
     const taxRate = toNumberOrNull(row.tax_rate);
-    const taxAmount = toNumberOrNull(row.consumption) ?? (subtotal !== null && taxRate !== null ? Math.floor(subtotal * (taxRate / 100)) : null);
+    const taxAmount =
+        toNumberOrNull(row.tax_amount ?? row.consumption) ??
+        (subtotal !== null && taxRate !== null ? Math.floor(subtotal * (taxRate / 100)) : null);
     const total = toNumberOrNull(row.total) ?? (subtotal !== null && taxAmount !== null ? subtotal + taxAmount : subtotal ?? 0);
     const salesAmount = toNumberOrNull(row.sales_amount) ?? subtotal ?? null;
     const variableCostAmount = toNumberOrNull(row.variable_cost_amount ?? row.variable_cost_num ?? row.detail_variable_cost_num);
@@ -2589,10 +2594,12 @@ const mapEstimateRow = (row: any): Estimate => {
         toStringOrNull(row.pattern_name) ||
         toStringOrNull(row.specification) ||
         (row.estimates_id ? `見積#${row.estimates_id}` : '見積');
+    const createdAt = row.created_at ?? row.create_date ?? null;
+    const updatedAt = row.updated_at ?? row.update_date ?? createdAt ?? null;
 
     return {
         id: row.estimates_id ?? row.id ?? generateEstimateId(),
-        estimateNumber: Number(row.pattern_no ?? row.estimates_id ?? 0) || 0,
+        estimateNumber: Number(row.estimate_number ?? row.pattern_no ?? row.estimates_id ?? 0) || 0,
         customerName: customerName,
         title: row.pattern_name ?? row.specification ?? '見積',
         displayName,
@@ -2611,15 +2618,15 @@ const mapEstimateRow = (row: any): Estimate => {
             },
         ],
         total: total ?? 0,
-        deliveryDate: row.delivery_date ?? row.expiration_date ?? '',
+        deliveryDate: row.delivery_date ?? row.valid_until ?? row.expiration_date ?? '',
         paymentTerms: row.transaction_method ?? '',
         deliveryMethod: row.delivery_place ?? '',
         notes: row.note ?? '',
         status: mapEstimateStatus(row.status),
-        version: Number(row.pattern_no ?? 1) || 1,
-        userId: row.create_id ?? '',
-        createdAt: row.create_date ?? new Date().toISOString(),
-        updatedAt: row.update_date ?? row.create_date ?? new Date().toISOString(),
+        version: Number(row.version ?? row.pattern_no ?? 1) || 1,
+        userId: row.create_id ?? row.created_by ?? '',
+        createdAt: createdAt ?? new Date().toISOString(),
+        updatedAt: updatedAt ?? new Date().toISOString(),
         subtotal: subtotal ?? undefined,
         taxTotal: taxAmount ?? undefined,
         grandTotal: total ?? undefined,
@@ -2760,7 +2767,7 @@ export const getEstimates = async (): Promise<Estimate[]> => {
     const { data, error } = await supabase
         .from('estimates_list_view')
         .select('*')
-        .order('create_date', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(10);
 
     if (!error && data) {
@@ -2783,18 +2790,19 @@ export const getEstimates = async (): Promise<Estimate[]> => {
     if (!estimates || estimates.length === 0) return [];
 
     const projectIds = collectUniqueIds(estimates.map(row => normalizeLookupKey(row.project_id)));
+    const projectUuidIds = filterUuidValues(projectIds);
     let projectMap: Record<string, any> = {};
-    if (projectIds.length > 0) {
+    if (projectUuidIds.length > 0) {
         const { data: projects, error: projectError } = await supabase
             .from('projects')
-            .select('project_id, project_name, customer_id')
-            .in('project_id', projectIds);
+            .select('id, project_id, project_name, customer_id, project_code')
+            .in('id', projectUuidIds);
 
         if (projectError) {
             console.error('プロジェクト検索エラー:', projectError);
         } else {
             projectMap = (projects || []).reduce((acc, project) => {
-                const key = normalizeLookupKey(project.project_id);
+                const key = normalizeLookupKey(project.id) ?? normalizeLookupKey(project.project_id);
                 if (key) acc[key] = project;
                 return acc;
             }, {} as Record<string, any>);
@@ -2802,12 +2810,13 @@ export const getEstimates = async (): Promise<Estimate[]> => {
     }
 
     const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
+    const customerUuidIds = filterUuidValues(customerIds);
     let customerMap: Record<string, any> = {};
-    if (customerIds.length > 0) {
+    if (customerUuidIds.length > 0) {
         const { data: customers, error: customerError } = await supabase
             .from('customers')
             .select('id, customer_name')
-            .in('id', customerIds);
+            .in('id', customerUuidIds);
 
         if (customerError) {
             console.error('顧客検索エラー:', customerError);
@@ -2840,7 +2849,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const { data, error, count } = await supabase
         .from('estimates_list_view')
         .select('*', { count: 'exact' })
-        .order('create_date', { ascending: false })
+        .order('created_at', { ascending: false })
         .range(from, to);
 
     if (!error) {
@@ -2884,18 +2893,19 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     }
 
     const projectIds = collectUniqueIds((fallbackRows || []).map(row => normalizeLookupKey(row.project_id)));
+    const projectUuidIds = filterUuidValues(projectIds);
     let projectMap: Record<string, any> = {};
-    if (projectIds.length > 0) {
+    if (projectUuidIds.length > 0) {
         const { data: projects, error: projectError } = await supabase
             .from('projects')
-            .select('project_id, project_name, customer_id')
-            .in('project_id', projectIds);
+            .select('id, project_id, project_name, customer_id, project_code')
+            .in('id', projectUuidIds);
 
         if (projectError) {
             console.error('プロジェクト検索エラー:', projectError);
         } else {
             projectMap = (projects || []).reduce((acc, project) => {
-                const key = normalizeLookupKey(project.project_id);
+                const key = normalizeLookupKey(project.id) ?? normalizeLookupKey(project.project_id);
                 if (key) acc[key] = project;
                 return acc;
             }, {} as Record<string, any>);
@@ -2903,12 +2913,13 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     }
 
     const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
+    const customerUuidIds = filterUuidValues(customerIds);
     let customerMap: Record<string, any> = {};
-    if (customerIds.length > 0) {
+    if (customerUuidIds.length > 0) {
         const { data: customers, error: customerError } = await supabase
             .from('customers')
             .select('id, customer_name')
-            .in('id', customerIds);
+            .in('id', customerUuidIds);
 
         if (customerError) {
             console.error('顧客検索エラー:', customerError);
