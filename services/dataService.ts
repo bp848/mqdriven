@@ -152,6 +152,12 @@ const FAX_STORAGE_BUCKET =
     || resolveEnvValue('FAX_INTAKE_BUCKET')
     || 'fax-intakes';
 
+const DEFAULT_RINGI_BUCKET =
+    resolveEnvValue('VITE_RINGI_BUCKET')
+    || resolveEnvValue('NEXT_PUBLIC_RINGI_BUCKET')
+    || resolveEnvValue('RINGI_BUCKET')
+    || 'ringi';
+
 const normalizeLookupKey = (value: unknown): string | null => {
     if (value === null || value === undefined) return null;
     const key = String(value).trim();
@@ -3309,6 +3315,65 @@ export const requestFaxOcr = async (intake: FaxIntake): Promise<void> => {
             throw err;
         }
         throw new Error('Failed to trigger fax OCR workflow');
+    }
+};
+
+const parseStorageObjectRef = (rawUrl?: string | null): { bucket: string; path: string } | null => {
+    if (!rawUrl) return null;
+    try {
+        const { pathname } = new URL(rawUrl);
+        const segments = pathname.split('/').filter(Boolean);
+        const objectIndex = segments.indexOf('object');
+        if (objectIndex === -1 || segments.length <= objectIndex + 1) return null;
+
+        let bucket = segments[objectIndex + 1];
+        let pathStart = objectIndex + 2;
+
+        if (['public', 'sign', 'auth', 'authenticated'].includes(bucket)) {
+            bucket = segments[objectIndex + 2];
+            pathStart = objectIndex + 3;
+        }
+
+        if (!bucket) return null;
+        const path = segments.slice(pathStart).join('/');
+        if (!path) return null;
+        return { bucket, path };
+    } catch {
+        return null;
+    }
+};
+
+export const resolveAttachmentUrl = async (
+    publicUrl?: string | null,
+    storagePath?: string | null,
+    options?: { expiresIn?: number; fallbackBucket?: string },
+): Promise<string | null> => {
+    const trimmedUrl = publicUrl?.trim() || null;
+    const trimmedPath = storagePath?.trim() || null;
+
+    const parsed = parseStorageObjectRef(trimmedUrl);
+    const bucket = parsed?.bucket || (trimmedPath ? (options?.fallbackBucket || DEFAULT_RINGI_BUCKET) : null);
+    const path = parsed?.path || trimmedPath;
+
+    if (!bucket || !path) {
+        return trimmedUrl;
+    }
+
+    try {
+        const { data, error } = await getSupabase()
+            .storage
+            .from(bucket)
+            .createSignedUrl(path, options?.expiresIn ?? 3600);
+
+        if (error) {
+            console.warn('[storage] Failed to create signed URL', error);
+            return trimmedUrl;
+        }
+
+        return data?.signedUrl || trimmedUrl;
+    } catch (err) {
+        console.warn('[storage] Unexpected error while resolving attachment URL', err);
+        return trimmedUrl;
     }
 };
 

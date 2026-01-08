@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Customer, Toast } from '../types';
-import { Mail, Send, Loader, Calendar, AlertTriangle, CheckCircle, Trash2 } from './Icons';
+import { Mail, Send, Loader, Calendar, AlertTriangle, CheckCircle, Trash2, Copy, FileText } from './Icons';
 import { sendEmail } from '../services/emailService';
 
-type Recipient = { email: string; label: string };
+type Recipient = { email: string; label: string; customerName?: string; representative?: string };
 
 interface NewsletterPageProps {
     customers: Customer[];
@@ -73,17 +73,24 @@ const NewsletterPage: React.FC<NewsletterPageProps> = ({ customers, addToast }) 
                 if (seen.has(email)) return;
                 seen.add(email);
                 const label = `${customer.customerName}${customer.representative ? ` (${customer.representative})` : ''} <${email}>`;
-                list.push({ email, label });
+                list.push({
+                    email,
+                    label,
+                    customerName: customer.customerName,
+                    representative: customer.representative,
+                });
             });
         });
         return list;
     }, [customers]);
 
-    const targetEmails = useMemo(() => {
-        return recipients
-            .map(r => r.email)
-            .filter(email => !excludedEmails.has(email));
+    const selectedRecipients = useMemo(() => {
+        return recipients.filter(r => !excludedEmails.has(r.email));
     }, [recipients, excludedEmails]);
+
+    const targetEmails = useMemo(() => {
+        return selectedRecipients.map(r => r.email);
+    }, [selectedRecipients]);
 
     const clearSchedule = () => {
         if (timerRef.current) {
@@ -204,6 +211,55 @@ const NewsletterPage: React.FC<NewsletterPageProps> = ({ customers, addToast }) 
 
     const handleIncludeAll = () => {
         setExcludedEmails(new Set());
+    };
+
+    const handleCopyRecipients = async () => {
+        if (selectedRecipients.length === 0) {
+            addToast('出力する送信先がありません。', 'error');
+            return;
+        }
+        const lines = selectedRecipients.map(r => {
+            const name = [r.customerName, r.representative].filter(Boolean).join(' ').trim();
+            if (name) {
+                return `${name} <${r.email}>`;
+            }
+            return r.label || r.email;
+        });
+        try {
+            await navigator.clipboard.writeText(lines.join('\n'));
+            addToast('送信先リストをクリップボードにコピーしました。', 'success');
+        } catch (error) {
+            console.error('[newsletter] Failed to copy recipients', error);
+            addToast('クリップボードへのコピーに失敗しました。', 'error');
+        }
+    };
+
+    const handleExportCsv = () => {
+        if (selectedRecipients.length === 0) {
+            addToast('出力する送信先がありません。', 'error');
+            return;
+        }
+        const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+        const lines = [
+            ['customer', 'representative', 'email'].join(','),
+            ...selectedRecipients.map(r => {
+                const row = [
+                    r.customerName || '',
+                    r.representative || '',
+                    r.email,
+                ];
+                return row.map(v => escapeCsv(v)).join(',');
+            }),
+        ];
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const today = new Date().toISOString().slice(0, 10);
+        a.download = `newsletter_recipients_${today}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        addToast('送信先リストをCSV出力しました。', 'success');
     };
 
     return (
@@ -373,9 +429,28 @@ const NewsletterPage: React.FC<NewsletterPageProps> = ({ customers, addToast }) 
             </div>
 
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    <span className="text-sm font-semibold text-slate-800 dark:text-white">送信先リスト</span>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <div>
+                            <span className="text-sm font-semibold text-slate-800 dark:text-white">送信先リスト</span>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-300">表示: {recipients.length}件 / 出力対象: {selectedRecipients.length}件</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={handleCopyRecipients}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700"
+                        >
+                            <Copy className="w-4 h-4" /> コピー
+                        </button>
+                        <button
+                            onClick={handleExportCsv}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm"
+                        >
+                            <FileText className="w-4 h-4" /> CSV出力
+                        </button>
+                    </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs text-slate-700 dark:text-slate-200">
                     {recipients.slice(0, 60).map(recipient => (

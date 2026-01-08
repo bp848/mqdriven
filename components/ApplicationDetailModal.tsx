@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ApplicationWithDetails, User } from '../types';
 import { X, CheckCircle, Send, Loader, FileText } from './Icons';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
-import { getUsers, updateApplication } from '../services/dataService';
+import { getUsers, resolveAttachmentUrl, updateApplication } from '../services/dataService';
 import { useSubmitWithConfirmation } from '../hooks/useSubmitWithConfirmation';
 
 type SummaryHighlight = {
@@ -306,6 +306,8 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [selectedApplicantId, setSelectedApplicantId] = useState('');
     const [isUpdatingApplicant, setIsUpdatingApplicant] = useState(false);
+    const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
+    const [isDownloadingAttachment, setIsDownloadingAttachment] = useState(false);
     const mounted = useRef(true);
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
@@ -408,14 +410,66 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const documentUrl: string | null = application.documentUrl || formData.documentUrl || formData.receiptUrl || null;
     const documentName = formData.documentName || formData.receiptName || formData.invoice?.sourceFile?.name || '添付ファイル';
     const documentMimeType = formData.documentMimeType || formData.invoice?.sourceFile?.type || '';
+    const documentStoragePath =
+        formData.documentStoragePath ||
+        formData.document_storage_path ||
+        formData.invoice?.sourceFile?.path ||
+        null;
+
+    useEffect(() => {
+        let isActive = true;
+        const resolveUrl = async () => {
+            setResolvedAttachmentUrl(documentUrl || null);
+            if (!documentUrl && !documentStoragePath) {
+                if (isActive) setResolvedAttachmentUrl(null);
+                return;
+            }
+            try {
+                const resolved = await resolveAttachmentUrl(documentUrl, documentStoragePath);
+                if (isActive) {
+                    setResolvedAttachmentUrl(resolved || documentUrl || null);
+                }
+            } catch (err) {
+                console.warn('[application] Failed to resolve attachment URL', err);
+                if (isActive) setResolvedAttachmentUrl(documentUrl || null);
+            }
+        };
+        resolveUrl();
+        return () => {
+            isActive = false;
+        };
+    }, [documentUrl, documentStoragePath]);
+
+    const attachmentUrl = resolvedAttachmentUrl || documentUrl;
+    const attachmentUrlForCheck = attachmentUrl ? attachmentUrl.split('?')[0] : '';
     const isImageAttachment =
-        !!documentUrl &&
-        ((typeof documentMimeType === 'string' && documentMimeType.startsWith('image/')) || /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(documentUrl));
-    const hasAttachments = Boolean(documentUrl);
+        !!attachmentUrl &&
+        ((typeof documentMimeType === 'string' && documentMimeType.startsWith('image/')) ||
+            /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(attachmentUrlForCheck));
+    const hasAttachments = Boolean(attachmentUrl);
     const showRejectionReason = application.status === 'rejected' && application.rejectionReason;
 
     const usersById = new Map(allUsers.map(u => [u.id, u.name]));
     const routeSteps = approvalRoute?.routeData.steps || [];
+
+    const handleAttachmentDownload = () => {
+        if (!attachmentUrl) return;
+        setIsDownloadingAttachment(true);
+        try {
+            const link = document.createElement('a');
+            link.href = attachmentUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.download = documentName || 'attachment';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err) {
+            console.error('[application] Failed to trigger attachment download', err);
+        } finally {
+            setIsDownloadingAttachment(false);
+        }
+    };
 
     const renderValue = (value: any) => {
         if (React.isValidElement(value)) return value;
@@ -636,13 +690,13 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                 )}
 
                                 
-                                {hasAttachments && documentUrl && (
+                                {hasAttachments && attachmentUrl && (
                                     <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6 space-y-4">
                                         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">添付ファイル</h3>
                                         {isImageAttachment ? (
-                                            <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex">
+                                            <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex">
                                                 <img
-                                                    src={documentUrl}
+                                                    src={attachmentUrl}
                                                     alt={documentName}
                                                     className="max-h-[280px] w-auto rounded-xl border border-slate-200 dark:border-slate-700 object-contain"
                                                 />
@@ -658,15 +712,28 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                                         <p className="text-xs text-slate-500 dark:text-slate-400">{documentMimeType || '添付ファイル'}</p>
                                                     </div>
                                                 </div>
-                                                <div>
+                                                <div className="flex flex-wrap items-center gap-3">
                                                     <a
-                                                        href={documentUrl}
+                                                        href={attachmentUrl}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 dark:text-blue-400"
                                                     >
                                                         ファイルを開く
                                                     </a>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAttachmentDownload}
+                                                        disabled={isDownloadingAttachment}
+                                                        className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {isDownloadingAttachment ? (
+                                                            <Loader className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <FileText className="w-4 h-4" />
+                                                        )}
+                                                        ダウンロード
+                                                    </button>
                                                 </div>
                                             </div>
                                         )}
