@@ -377,6 +377,12 @@ interface MySchedulePageProps {
     addToast?: (message: string, type: Toast['type']) => void;
     onCreateDailyReport?: (prefill: DailyReportPrefill) => void;
     onRefreshGoogleAuthStatus?: () => void;
+    onStartGoogleCalendarAuth?: () => void;
+    onDisconnectGoogleCalendar?: () => void;
+    googleAuthConnected?: boolean;
+    googleAuthExpiresAt?: string | null;
+    isGoogleAuthLoading?: boolean;
+    googleAuthStatusLoading?: boolean;
 }
 
 const extractDatePart = (value?: string | null) => {
@@ -654,6 +660,12 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     addToast,
     onCreateDailyReport,
     onRefreshGoogleAuthStatus,
+    onStartGoogleCalendarAuth,
+    onDisconnectGoogleCalendar,
+    googleAuthConnected = false,
+    googleAuthExpiresAt = null,
+    isGoogleAuthLoading = false,
+    googleAuthStatusLoading = false,
 }) => {
     const todayIso = useMemo(() => formatDate(new Date()), []);
     const [selectedDate, setSelectedDate] = useState<string>(todayIso);
@@ -677,6 +689,11 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         unmatched: number;
         perUser: Record<string, number>;
     } | null>(null);
+    const googleExpiresLabel = useMemo(
+        () => (googleAuthExpiresAt ? new Date(googleAuthExpiresAt).toLocaleString('ja-JP') : null),
+        [googleAuthExpiresAt],
+    );
+    const googleActionInFlight = isGoogleAuthLoading || googleAuthStatusLoading;
     const currentUserId = currentUser?.id ?? null;
     const dailyReportEntries = useMemo<DailyReportEntrySummary[]>(() => {
         if (!currentUserId) return [];
@@ -1321,7 +1338,17 @@ const eventsByDate = useMemo(() => {
         setSyncMessage('予定を再取得しました。');
     };
 
+    const handleGoogleAuthAction = () => {
+        if (googleAuthConnected) {
+            onDisconnectGoogleCalendar?.();
+        } else {
+            onStartGoogleCalendarAuth?.();
+        }
+    };
+
     const syncDisabled = !canEditCurrentCalendar || !viewingUserId || viewingUserId === 'guest' || eventsLoading || syncRunning;
+    const googleActionUnavailable = googleAuthConnected ? !onDisconnectGoogleCalendar : !onStartGoogleCalendarAuth;
+    const googleActionDisabled = googleActionUnavailable || googleActionInFlight;
 
     return (
         <div className="space-y-6">
@@ -1410,6 +1437,54 @@ const eventsByDate = useMemo(() => {
                             >
                                 次の日
                                 <ArrowRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-blue-700 dark:text-blue-200">Googleカレンダー連携</p>
+                            <p className="text-xs text-blue-800 dark:text-blue-100">
+                                {googleAuthStatusLoading
+                                    ? 'ステータス確認中です...'
+                                    : googleAuthConnected
+                                        ? '連携済みです。この画面から同期解除や状態確認ができます。'
+                                        : '未連携です。ここから認可を開始してください。'}
+                            </p>
+                            {googleAuthConnected && (
+                                <p className="text-[11px] text-blue-800 dark:text-blue-100 mt-1">
+                                    {googleExpiresLabel ? `トークン有効期限: ${googleExpiresLabel}` : 'トークン有効期限を取得できませんでした'}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleGoogleAuthAction}
+                                disabled={googleActionDisabled}
+                                className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${
+                                    googleActionDisabled
+                                        ? 'bg-slate-400 cursor-not-allowed'
+                                        : googleAuthConnected
+                                            ? 'bg-red-600 hover:bg-red-700'
+                                            : 'bg-blue-600 hover:bg-blue-700'
+                                }`}
+                            >
+                                {googleActionInFlight
+                                    ? '処理中...'
+                                    : googleAuthConnected
+                                        ? '同期解除'
+                                        : 'Google連携を開始'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onRefreshGoogleAuthStatus}
+                                disabled={googleAuthStatusLoading}
+                                className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-blue-700 border border-blue-200 hover:bg-blue-100 dark:text-blue-200 dark:border-blue-700 dark:hover:bg-blue-800/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                状態を再取得
                             </button>
                         </div>
                     </div>

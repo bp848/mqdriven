@@ -1344,6 +1344,12 @@ useEffect(() => {
                         addToast={addToast}
                         onCreateDailyReport={handleCreateDailyReport}
                         onRefreshGoogleAuthStatus={fetchGoogleAuthStatus}
+                        onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
+                        onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
+                        googleAuthConnected={googleAuthStatus.connected}
+                        googleAuthExpiresAt={googleAuthStatus.expiresAt}
+                        isGoogleAuthLoading={isGoogleAuthLoading}
+                        googleAuthStatusLoading={googleAuthStatus.loading}
                     />
                 );
             case 'admin_audit_log':
