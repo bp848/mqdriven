@@ -13,7 +13,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'status' | 'month'>('none');
+  const groupBy: 'customer' = 'customer';
 
   useEffect(() => {
     getProjects().then(data => {
@@ -33,23 +33,10 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
   }, [projects, searchTerm]);
 
   const groupedProjects = useMemo(() => {
-    if (groupBy === 'none') return { 'すべて': filteredProjects };
-    
     const grouped: Record<string, Project[]> = {};
     
     filteredProjects.forEach(project => {
-      let key = '未分類';
-      
-      if (groupBy === 'customer') {
-        key = project.customerCode || '顧客未設定';
-      } else if (groupBy === 'status') {
-        key = project.projectStatus || 'ステータス未設定';
-      } else if (groupBy === 'month') {
-        if (project.createDate) {
-          const date = new Date(project.createDate);
-          key = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
-        }
-      }
+      const key = project.customerName || project.customerCode || '顧客未設定';
       
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(project);
@@ -81,7 +68,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
           <p className="text-xs uppercase tracking-[0.2em] text-blue-500">Projects</p>
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">プロジェクト管理</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            プロジェクトの一覧と詳細を同じ画面で確認できます。
+            顧客別にプロジェクトをまとめて表示しています。
           </p>
         </div>
         <div className="flex items-center gap-3 w-full lg:w-auto">
@@ -94,16 +81,6 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
               className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pl-10 pr-4 py-2 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as any)}
-            className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-          >
-            <option value="none">グループ化なし</option>
-            <option value="customer">顧客別</option>
-            <option value="status">ステータス別</option>
-            <option value="month">月別</option>
-          </select>
           <button
             type="button"
             onClick={() => onRefresh?.()}
@@ -137,27 +114,26 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
           <div className="space-y-3 max-h-[720px] overflow-y-auto pr-1">
             {Object.entries(groupedProjects).map(([groupKey, groupProjects]) => (
               <div key={groupKey} className="space-y-2">
-                {groupBy !== 'none' && (
-                  <div className="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-100">
-                        {groupKey}
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        ({groupProjects.length}件)
-                      </span>
-                    </div>
-                    {groupStats[groupKey] && (
-                      <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-300">
-                        <span>売上: {formatCurrency(groupStats[groupKey].totalAmount)}</span>
-                        <span>原価: {formatCurrency(groupStats[groupKey].totalCost)}</span>
-                        <span>利益率: {groupStats[groupKey].avgMargin.toFixed(1)}%</span>
-                      </div>
-                    )}
+                <div className="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-100">
+                      {groupKey}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      ({groupProjects.length}件)
+                    </span>
                   </div>
-                )}
+                  {groupStats[groupKey] && (
+                    <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-300">
+                      <span>売上: {formatCurrency(groupStats[groupKey].totalAmount)}</span>
+                      <span>原価: {formatCurrency(groupStats[groupKey].totalCost)}</span>
+                      <span>利益率: {groupStats[groupKey].avgMargin.toFixed(1)}%</span>
+                    </div>
+                  )}
+                </div>
                 {groupProjects.map(project => {
                   const isActive = project.isActive !== false;
+                  const customerLabel = project.customerName || project.customerCode || '未設定';
                   return (
                     <button
                       key={project.id}
@@ -180,7 +156,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
                           </div>
                           <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
                             <span>コード: {project.projectCode || '未設定'}</span>
-                            <span>顧客: {project.customerCode || '未設定'}</span>
+                            <span>顧客: {customerLabel}</span>
                             <span>作成: {formatDate(project.createDate)}</span>
                           </div>
                         </div>
@@ -232,7 +208,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">顧客名</p>
-                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.customerCode || '-'}</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{selectedProject.customerName || '-'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">納期</p>
@@ -282,6 +258,46 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">担当者ID (sales_user_id)</p>
                     <p className="font-medium text-slate-900 dark:text-white">{selectedProject.salesUserId || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  <Hash className="w-4 h-4 text-slate-500" /> 関連コード / 作成・更新履歴
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">見積ID / コード</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {selectedProject.estimateId || '-'} / {selectedProject.estimateCode || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">受注ID / コード</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {selectedProject.orderId || '-'} / {selectedProject.orderCode || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">分類 / 製品クラス</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {selectedProject.classificationId || '-'} / {selectedProject.productClassId || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">作成者 / 更新者 (コード)</p>
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {selectedProject.createUserCode || '-'} / {selectedProject.updateUserCode || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">作成日時</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{formatDate(selectedProject.createDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">更新日時</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{formatDate(selectedProject.updateDate || selectedProject.updatedAt)}</p>
                   </div>
                 </div>
               </div>

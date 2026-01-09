@@ -100,7 +100,8 @@ const toStringOrNull = (value: unknown): string | null => {
 const dbProjectToProject = (row: any): Project => ({
     id: row.id,
     projectCode: toStringOrNull(row.project_code),
-    customerCode: toStringOrNull(row.customer_code),
+    customerCode: toStringOrNull(row.customer_code ?? row.customer?.customer_code),
+    customerName: toStringOrNull(row.customer_name ?? row.customer?.customer_name),
     customerId: toStringOrNull(row.customer_id),
     salesUserCode: toStringOrNull(row.sales_user_code),
     salesUserId: toStringOrNull(row.sales_user_id),
@@ -946,7 +947,14 @@ export const getProjects = async (): Promise<Project[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+            *,
+            customer:customer_id (
+                id,
+                customer_name,
+                customer_code
+            )
+        `)
         .order('update_date', { ascending: false })
         .order('project_code', { ascending: false });
     ensureSupabaseSuccess(error, 'Failed to fetch projects');
@@ -2770,8 +2778,7 @@ export const getEstimates = async (): Promise<Estimate[]> => {
         .order('created_at', { ascending: false })
         .limit(10);
 
-    if (!error && data) {
-        if (data.length === 0) return [];
+    if (!error && data && data.length > 0) {
         return data.map(mapEstimateRow);
     }
 
@@ -2852,7 +2859,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         .order('created_at', { ascending: false })
         .range(from, to);
 
-    if (!error) {
+    if (!error && data && data.length > 0) {
         return {
             rows: (data || []).map(mapEstimateRow),
             totalCount: count ?? 0,

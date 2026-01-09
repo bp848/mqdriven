@@ -109,6 +109,7 @@ export interface Project {
   id: string;
   projectCode: string | null;
   customerCode: string | null;
+  customerName?: string | null;
   customerId: string | null;
   salesUserCode: string | null;
   salesUserId: string | null;
