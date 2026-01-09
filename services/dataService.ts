@@ -967,7 +967,7 @@ export const getJobs = async (): Promise<Job[]> => {
         { data: projectRows, error: projectError },
         { data: customerRows, error: customerError },
     ] = await Promise.all([
-        supabase.from('projects').select('*').order('updated_at', { ascending: false }).limit(100),
+        supabase.from('projects').select('*').order('updated_at', { ascending: false }),
         supabase.from('customers').select('id, customer_code, customer_name'),
     ]);
 
@@ -1093,6 +1093,7 @@ const fetchProjectFinancialView = async (): Promise<any[] | null> => {
 const mapFinancialRowToSummary = (
     row: any,
     relatedOrders: PurchaseOrder[],
+    customerLookup?: Map<string, { name: string; code: string | null }>,
 ): ProjectBudgetSummary => {
     const projectCodeText = toStringOrNull(row.project_code);
     const projectId = toStringOrNull(row.project_id);
@@ -1119,13 +1120,22 @@ const mapFinancialRowToSummary = (
             ? row.project_code
             : parseInt(projectCodeText || '', 10) || 0;
 
+    const customerId = row.customer_id ?? null;
+    const customerCode = row.customer_code ?? null;
+    const customerName =
+        (customerId && customerLookup?.get(String(customerId))?.name) ||
+        (customerCode && customerLookup?.get(String(customerCode))?.name) ||
+        row.customer_name ||
+        row.customer_id ||
+        '未設定';
+
     return {
         id: projectId ?? row.id ?? projectCodeText ?? String(jobNumber),
         jobNumber,
         projectCode: projectCodeText,
-        clientName: row.customer_name ?? row.customer_id ?? '未設定',
-        customerId: row.customer_id ?? null,
-        customerCode: row.customer_code ?? null,
+        clientName: customerName,
+        customerId,
+        customerCode,
         title: row.project_name ?? '',
         status: mapProjectStatus(row.status),
         dueDate: row.due_date || row.estimated_delivery_date || '',
@@ -1156,10 +1166,28 @@ const mapFinancialRowToSummary = (
 
 export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {}): Promise<ProjectBudgetSummary[]> => {
     const supabase = getSupabase();
-    const [financialRows, purchaseOrders] = await Promise.all([
+    const [
+        financialRows,
+        purchaseOrders,
+        customersData,
+    ] = await Promise.all([
         fetchProjectFinancialView(),
         fetchPurchaseOrdersWithFilters(filters),
+        supabase.from('customers').select('id, customer_code, customer_name'),
     ]);
+
+    const customerLookup = new Map<string, { name: string; code: string | null }>();
+    if (!customersData.error && Array.isArray(customersData.data)) {
+        customersData.data.forEach((row: any) => {
+            const idKey = normalizeLookupKey(row.id);
+            const codeKey = normalizeLookupKey(row.customer_code);
+            const value = { name: row.customer_name || '未設定', code: row.customer_code ?? null };
+            if (idKey) customerLookup.set(idKey, value);
+            if (codeKey) customerLookup.set(codeKey, value);
+        });
+    } else if (customersData.error) {
+        console.warn('[getProjectBudgetSummaries] failed to fetch customers for lookup', customersData.error);
+    }
 
     const ordersByProject = purchaseOrders.reduce<Map<string, PurchaseOrder[]>>((acc, order) => {
         if (order.status === PurchaseOrderStatus.Cancelled) return acc;
@@ -1176,7 +1204,7 @@ export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {
         return financialRows.map(row => {
             const projectKey = normalizeLookupKey(row.project_code) || normalizeLookupKey(row.project_id);
             const relatedOrders = projectKey ? ordersByProject.get(projectKey) ?? [] : [];
-            return mapFinancialRowToSummary(row, relatedOrders);
+            return mapFinancialRowToSummary(row, relatedOrders, customerLookup);
         });
     }
 
@@ -2861,7 +2889,7 @@ export const getEstimates = async (): Promise<Estimate[]> => {
         .from('estimates_list_view')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(200);
 
     if (!error && data && data.length > 0) {
         return data.map(mapEstimateRow);
@@ -2881,41 +2909,45 @@ export const getEstimates = async (): Promise<Estimate[]> => {
     if (estimatesError) throw estimatesError;
     if (!estimates || estimates.length === 0) return [];
 
-    const projectIds = collectUniqueIds(estimates.map(row => normalizeLookupKey(row.project_id)));
-    const projectUuidIds = filterUuidValues(projectIds);
+    // プロジェクト/顧客は project_id をキーにフル取得して紐付け（UUID以外も考慮）
     let projectMap: Record<string, any> = {};
-    if (projectUuidIds.length > 0) {
+    {
         const { data: projects, error: projectError } = await supabase
             .from('projects')
-            .select('id, project_id, project_name, customer_id, project_code')
-            .in('id', projectUuidIds);
+            .select('id, project_id, project_name, customer_id, customer_code, project_code');
 
         if (projectError) {
             console.error('プロジェクト検索エラー:', projectError);
         } else {
             projectMap = (projects || []).reduce((acc, project) => {
-                const key = normalizeLookupKey(project.id) ?? normalizeLookupKey(project.project_id);
-                if (key) acc[key] = project;
+                const keys = [
+                    normalizeLookupKey(project.project_id),
+                    normalizeLookupKey(project.id),
+                    normalizeLookupKey(project.project_code),
+                ].filter(Boolean) as string[];
+                keys.forEach((k) => { if (k) acc[k] = project; });
                 return acc;
             }, {} as Record<string, any>);
         }
     }
 
     const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
-    const customerUuidIds = filterUuidValues(customerIds);
+    const customerCodes = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_code)));
     let customerMap: Record<string, any> = {};
-    if (customerUuidIds.length > 0) {
+    {
         const { data: customers, error: customerError } = await supabase
             .from('customers')
-            .select('id, customer_name')
-            .in('id', customerUuidIds);
+            .select('id, customer_name, customer_code');
 
         if (customerError) {
             console.error('顧客検索エラー:', customerError);
         } else {
             customerMap = (customers || []).reduce((acc, customer) => {
-                const key = normalizeLookupKey(customer.id);
-                if (key) acc[key] = customer;
+                const keys = [
+                    normalizeLookupKey(customer.id),
+                    normalizeLookupKey(customer.customer_code),
+                ].filter(Boolean) as string[];
+                keys.forEach((k) => { if (k) acc[k] = customer; });
                 return acc;
             }, {} as Record<string, any>);
         }
@@ -2984,41 +3016,43 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         throw fallbackError;
     }
 
-    const projectIds = collectUniqueIds((fallbackRows || []).map(row => normalizeLookupKey(row.project_id)));
-    const projectUuidIds = filterUuidValues(projectIds);
+    // プロジェクト/顧客は全件ロードして project_id / project_code / id で紐付け（UUID制約なし）
     let projectMap: Record<string, any> = {};
-    if (projectUuidIds.length > 0) {
+    {
         const { data: projects, error: projectError } = await supabase
             .from('projects')
-            .select('id, project_id, project_name, customer_id, project_code')
-            .in('id', projectUuidIds);
+            .select('id, project_id, project_name, customer_id, customer_code, project_code');
 
         if (projectError) {
             console.error('プロジェクト検索エラー:', projectError);
         } else {
             projectMap = (projects || []).reduce((acc, project) => {
-                const key = normalizeLookupKey(project.id) ?? normalizeLookupKey(project.project_id);
-                if (key) acc[key] = project;
+                const keys = [
+                    normalizeLookupKey(project.project_id),
+                    normalizeLookupKey(project.id),
+                    normalizeLookupKey(project.project_code),
+                ].filter(Boolean) as string[];
+                keys.forEach((k) => { if (k) acc[k] = project; });
                 return acc;
             }, {} as Record<string, any>);
         }
     }
 
-    const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
-    const customerUuidIds = filterUuidValues(customerIds);
     let customerMap: Record<string, any> = {};
-    if (customerUuidIds.length > 0) {
+    {
         const { data: customers, error: customerError } = await supabase
             .from('customers')
-            .select('id, customer_name')
-            .in('id', customerUuidIds);
+            .select('id, customer_name, customer_code');
 
         if (customerError) {
             console.error('顧客検索エラー:', customerError);
         } else {
             customerMap = (customers || []).reduce((acc, customer) => {
-                const key = normalizeLookupKey(customer.id);
-                if (key) acc[key] = customer;
+                const keys = [
+                    normalizeLookupKey(customer.id),
+                    normalizeLookupKey(customer.customer_code),
+                ].filter(Boolean) as string[];
+                keys.forEach((k) => { if (k) acc[k] = customer; });
                 return acc;
             }, {} as Record<string, any>);
         }
