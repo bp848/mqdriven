@@ -195,6 +195,22 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   const isTestMode = payload.mode === 'test';
   const testModeBehavior = (EMAIL_TEST_MODE || '').toLowerCase(); // '', 'log', 'send'
 
+  // 本番送信の安全対策
+  const isProductionMode = !isTestMode;
+  const PRODUCTION_SAFE_MODE = getEnvValue('EMAIL_PRODUCTION_SAFE_MODE') === 'true';
+  
+  if (isProductionMode && PRODUCTION_SAFE_MODE) {
+    throw new EmailDispatchError('本番送信は安全モードにより無効化されています。EMAIL_PRODUCTION_SAFE_MODE=false で無効化できます。');
+  }
+
+  // 本番送信時の確認（開発環境のみ）
+  if (isProductionMode && !PRODUCTION_SAFE_MODE) {
+    const isDevelopment = getEnvValue('NODE_ENV') === 'development' || getEnvValue('VITE_NODE_ENV') === 'development';
+    if (isDevelopment) {
+      console.warn('[email][PRODUCTION WARNING] 本番送信を実行します。送信先:', { to, cc, bcc, subject: payload.subject });
+    }
+  }
+
   if (to.length === 0 && cc.length === 0 && bcc.length === 0) {
     throw new EmailDispatchError('送信先のメールアドレスが設定されていません。');
   }
@@ -292,8 +308,8 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     throw new EmailDispatchError('本文またはHTML本文を入力してください。');
   }
 
-  // In test mode, default to logging only unless explicitly forced to send
-  if (isTestMode && testModeBehavior !== 'send') {
+  // In test mode, always send unless explicitly set to 'log' mode
+  if (isTestMode && testModeBehavior === 'log') {
     console.info('[email][test-mode] Not sending. Payload preview:', {
       to,
       subject: payload.subject,
