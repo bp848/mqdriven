@@ -193,6 +193,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   const cc = (payload.cc ?? []).filter(isValidAddress);
   const bcc = (payload.bcc ?? []).filter(isValidAddress);
   const isTestMode = payload.mode === 'test';
+  const testModeBehavior = (EMAIL_TEST_MODE || '').toLowerCase(); // '', 'log', 'send'
 
   if (to.length === 0 && cc.length === 0 && bcc.length === 0) {
     throw new EmailDispatchError('送信先のメールアドレスが設定されていません。');
@@ -289,6 +290,20 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
 
   if (!hasHtml && !hasText) {
     throw new EmailDispatchError('本文またはHTML本文を入力してください。');
+  }
+
+  // In test mode, default to logging only unless explicitly forced to send
+  if (isTestMode && testModeBehavior !== 'send') {
+    console.info('[email][test-mode] Not sending. Payload preview:', {
+      to,
+      subject: payload.subject,
+      hasHtml: !!payload.html,
+      hasBody: !!payload.body,
+    });
+    return {
+      id: uuidv4(),
+      sentAt: new Date().toISOString(),
+    };
   }
 
   // Prepare email payload

@@ -93,24 +93,51 @@ serve(async (req) => {
     for (const app of applications as Application[]) {
         const { id: applicationId, applicant_id, form_data, application_code } = app;
 
-        // Simple logic: only process expense reports for now
-        if (application_code?.code !== 'EXP') {
-            console.log(`Skipping application ${applicationId} of type ${application_code?.code}.`);
+        const code = application_code?.code;
+        if (!code) {
+            console.log(`Skipping application ${applicationId} without code.`);
             continue;
         }
 
-        const amount = form_data?.total_amount ?? form_data?.amount ?? 0;
-        if (amount <= 0) {
+        let amount = 0;
+        let entryDate: string | null = null;
+        let description = '承認済み申請';
+
+        if (code === 'EXP') {
+            amount = form_data?.total_amount ?? form_data?.amount ?? 0;
+            entryDate = form_data?.date ?? null;
+            description = form_data?.description || '経費精算';
+        } else if (code === 'TRP') {
+            if (Array.isArray(form_data?.details)) {
+                amount = form_data.details.reduce((sum: number, row: any) => {
+                    const v = Number(row?.amount ?? 0);
+                    return Number.isFinite(v) ? sum + v : sum;
+                }, 0);
+                entryDate = form_data.details[0]?.travelDate ?? form_data.details[0]?.paymentDate ?? null;
+            } else {
+                amount = Number(form_data?.amount ?? 0);
+                entryDate = form_data?.travelDate ?? form_data?.paymentDate ?? null;
+            }
+            description = form_data?.notes || '交通費精算';
+        } else {
+            console.log(`Skipping application ${applicationId} of unsupported type ${code}.`);
+            continue;
+        }
+
+        if (!entryDate) {
+            entryDate = new Date().toISOString().split('T')[0];
+        }
+
+        if (!Number.isFinite(amount) || amount <= 0) {
             console.log(`Skipping application ${applicationId} due to zero or invalid amount.`);
             continue;
         }
 
-        // Use Supabase Edge Function's RPC to run a transaction
         const { error: rpcError } = await supabaseAdmin.rpc('create_journal_from_application', {
             p_application_id: applicationId,
             p_applicant_id: applicant_id,
-            p_entry_date: form_data?.date || new Date().toISOString().split('T')[0],
-            p_description: form_data?.description || '経費精算',
+            p_entry_date: entryDate,
+            p_description: description,
             p_debit_account_id: expenseAccountId,
             p_credit_account_id: cashAccountId,
             p_amount: amount
@@ -118,7 +145,6 @@ serve(async (req) => {
 
         if (rpcError) {
             console.error(`Failed to process application ${applicationId}:`, rpcError);
-            // Decide if you want to stop or continue on error
         } else {
             processedCount++;
         }

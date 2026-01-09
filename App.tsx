@@ -168,6 +168,12 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_receivables: '売掛金管理',
     accounting_cash_schedule: '資金繰り表',
     accounting_approved_applications: '承認済み申請',
+    accounting_approved_expense: '承認済み（経費）',
+    accounting_approved_transport: '承認済み（交通費）',
+    accounting_approved_leave: '承認済み（休暇）',
+    accounting_approved_apl: '承認済み（稟議）',
+    accounting_approved_dly: '承認済み（日報）',
+    accounting_approved_wkr: '承認済み（週報）',
     document_creation_tools: '資料作成',
     proposal_ai: '提案書作成AI',
     pdf_editing_tools: 'PDF編集AI',
@@ -1350,6 +1356,66 @@ useEffect(() => {
                         googleAuthExpiresAt={googleAuthStatus.expiresAt}
                         isGoogleAuthLoading={isGoogleAuthLoading}
                         googleAuthStatusLoading={googleAuthStatus.loading}
+                    />
+                );
+            case 'accounting_approved_expense':
+                return (
+                    <ApprovedApplications
+                        notify={addToast}
+                        codes={['EXP']}
+                        title="承認済み（経費精算）"
+                        description="経費精算（EXP）の承認済み申請です。"
+                        showLeaveSync={false}
+                    />
+                );
+            case 'accounting_approved_transport':
+                return (
+                    <ApprovedApplications
+                        notify={addToast}
+                        codes={['TRP']}
+                        title="承認済み（交通費）"
+                        description="交通費申請（TRP）の承認済みデータです。"
+                        showLeaveSync={false}
+                    />
+                );
+            case 'accounting_approved_leave':
+                return (
+                    <ApprovedApplications
+                        notify={addToast}
+                        codes={['LEV']}
+                        title="承認済み（休暇）"
+                        description="休暇申請（LEV）の承認済みデータです。全員カレンダー同期ボタンを使えます。"
+                        showLeaveSync
+                    />
+                );
+            case 'accounting_approved_apl':
+                return (
+                    <ApprovedApplications
+                        notify={addToast}
+                        codes={['APL']}
+                        title="承認済み（稟議）"
+                        description="稟議申請（APL）の承認済みデータです。"
+                        showLeaveSync={false}
+                    />
+                );
+            case 'accounting_approved_dly':
+                return (
+                    <ApprovedApplications
+                        notify={addToast}
+                        codes={['DLY']}
+                        title="承認済み（日報）"
+                        description="日報（DLY）の承認済みデータです。"
+                        showLeaveSync={false}
+                    />
+                );
+            case 'accounting_approved_wkr':
+                return (
+                    <ApprovedApplications
+                        notify={addToast}
+                        codes={['WKR']}
+                        title="承認済み（週報）"
+                        description="週報（WKR）の承認済みデータです。"
+                        showLeaveSync={false}
                     />
                 );
             case 'admin_audit_log':

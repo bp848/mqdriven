@@ -1585,13 +1585,17 @@ export const deleteApprovalRoute = async (id: string): Promise<void> => {
     ensureSupabaseSuccess(error, 'Failed to delete approval route');
 };
 
-export const getApprovedApplications = async (): Promise<ApplicationWithDetails[]> => {
+export const getApprovedApplications = async (codes?: string[]): Promise<ApplicationWithDetails[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase
+    const query = supabase
         .from('applications')
         .select(`*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`)
         .eq('status', 'approved')
         .order('approved_at', { ascending: false });
+    if (codes && codes.length) {
+        query.in('application_code.code', codes);
+    }
+    const { data, error } = await query;
         
     ensureSupabaseSuccess(error, 'Failed to fetch approved applications');
     return (data || []).map(app => ({
@@ -1600,6 +1604,87 @@ export const getApprovedApplications = async (): Promise<ApplicationWithDetails[
         applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
         approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
     }));
+};
+
+export const syncApprovedLeaveToCalendars = async (): Promise<{ created: number; skipped: number; }> => {
+    const supabase = getSupabase();
+
+    const [{ data: users, error: usersError }, { data: applications, error: appsError }] = await Promise.all([
+        supabase.from('employee_users').select('id, name, email'),
+        supabase
+            .from('applications')
+            .select('id, applicant_id, applicant:applicant_id(name), form_data, application_code:application_code_id(code)')
+            .eq('status', 'approved')
+            .eq('application_code.code', 'LEV'),
+    ]);
+
+    ensureSupabaseSuccess(usersError, 'Failed to fetch users for calendar sync');
+    ensureSupabaseSuccess(appsError, 'Failed to fetch approved leave applications');
+
+    const safeUsers = (users || []).filter(u => u.id);
+    const leaveApps = (applications || []).filter(app => app.id);
+    if (!safeUsers.length || !leaveApps.length) {
+        return { created: 0, skipped: 0 };
+    }
+
+    const toKey = (appId: string, userId: string) => `leave-${appId}-${userId}`;
+    const keys = leaveApps.flatMap(app => safeUsers.map(u => toKey(app.id, u.id)));
+
+    const { data: existing, error: existingError } = await supabase
+        .from('calendar_events')
+        .select('id, user_id, google_event_id')
+        .in('google_event_id', keys);
+    ensureSupabaseSuccess(existingError, 'Failed to fetch existing leave events');
+
+    const existingSet = new Set<string>();
+    (existing || []).forEach(row => {
+        if (row.google_event_id) existingSet.add(row.google_event_id);
+    });
+
+    const buildDateIso = (value: string | null | undefined) => {
+        if (!value) return null;
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return null;
+        return d.toISOString().slice(0, 10);
+    };
+
+    const rows: any[] = [];
+    for (const app of leaveApps) {
+        const start = buildDateIso(app.form_data?.startDate);
+        const end = buildDateIso(app.form_data?.endDate ?? app.form_data?.startDate);
+        if (!start || !end) continue;
+        const startDate = new Date(`${start}T00:00:00.000Z`);
+        const endDate = new Date(`${end}T00:00:00.000Z`);
+        endDate.setUTCDate(endDate.getUTCDate() + 1); // all-day end is exclusive
+
+        const leaveType = app.form_data?.leaveType || '休暇';
+        const applicantName = app.applicant?.name || '申請者不明';
+
+        for (const user of safeUsers) {
+            const key = toKey(app.id, user.id);
+            if (existingSet.has(key)) continue;
+            rows.push({
+                user_id: user.id,
+                title: `【休暇】${applicantName} (${leaveType})`,
+                description: `application_id=${app.id}`,
+                start_at: startDate.toISOString(),
+                end_at: endDate.toISOString(),
+                all_day: true,
+                source: 'system',
+                updated_by_source: 'system',
+                google_event_id: key, // reuse to dedupe
+            });
+        }
+    }
+
+    if (!rows.length) {
+        return { created: 0, skipped: leaveApps.length };
+    }
+
+    const { error: insertError } = await supabase.from('calendar_events').insert(rows);
+    ensureSupabaseSuccess(insertError, 'Failed to insert leave events into calendar');
+
+    return { created: rows.length, skipped: leaveApps.length * safeUsers.length - rows.length };
 };
 
 

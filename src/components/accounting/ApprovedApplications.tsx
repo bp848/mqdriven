@@ -6,9 +6,19 @@ import * as dataService from '../../../services/dataService';
 
 interface ApprovedApplicationsProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
+  codes?: string[];
+  title?: string;
+  description?: string;
+  showLeaveSync?: boolean;
 }
 
-export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({ notify }) => {
+export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
+  notify,
+  codes,
+  title = '承認済申請一覧',
+  description = '会計処理の元となる、承認が完了した申請データです（status=approved）。',
+  showLeaveSync = codes ? codes.includes('LEV') : true,
+}) => {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,12 +26,13 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({ noti
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<'approvedAt' | 'amount' | 'title'>('approvedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [isSyncingLeave, setIsSyncingLeave] = useState(false);
 
   const loadApprovedApplications = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await dataService.getApprovedApplications();
+      const data = await dataService.getApprovedApplications(codes);
       setApplications(data);
     } catch (err) {
       setError('承認済み申請の読み込みに失敗しました。');
@@ -29,7 +40,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({ noti
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [codes]);
 
   useEffect(() => {
     loadApprovedApplications();
@@ -91,16 +102,32 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({ noti
     }
   };
 
+  const handleSyncLeaveToCalendars = async () => {
+    setIsSyncingLeave(true);
+    try {
+      const result = await dataService.syncApprovedLeaveToCalendars();
+      notify?.(
+        `休暇予定をカレンダーへ登録: 作成 ${result.created} / スキップ ${result.skipped}`,
+        'success'
+      );
+    } catch (err: any) {
+      console.error('[ApprovedApplications] sync leave failed', err);
+      notify?.(err?.message || '休暇予定の登録に失敗しました。', 'error');
+    } finally {
+      setIsSyncingLeave(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
              <FileCheck className="w-6 h-6 text-indigo-600" />
-             承認済申請一覧
+             {title}
            </h2>
            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-             会計処理の元となる、承認が完了した申請データです（status=approved）。
+             {description}
             </p>
         </div>
         <div className="flex gap-3 text-sm text-slate-600 dark:text-slate-300">
@@ -110,6 +137,18 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({ noti
           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700/50">
             金額合計 ¥{formatCurrency(totals.amountSum)}
           </span>
+          {showLeaveSync && (
+            <button
+              type="button"
+              onClick={handleSyncLeaveToCalendars}
+              disabled={isSyncingLeave}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+              title="承認済み休暇(L﻿EV)を全員のカレンダーに終日予定として書き込みます"
+            >
+              <Calendar className="w-4 h-4" />
+              {isSyncingLeave ? '同期中…' : '休暇をカレンダーへ'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -199,7 +238,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({ noti
                         ))}
                         {filteredApps.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+                                <td colSpan={6} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
                                     該当する承認済み申請データが見つかりません。
                                 </td>
                             </tr>
