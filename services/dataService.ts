@@ -972,20 +972,51 @@ const ensureSupabaseSuccess = (error: PostgrestError | null, context: string): v
 
 export const getProjects = async (): Promise<Project[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase
-        .from('projects')
-        .select(`
-            *,
-            customer:customer_id (
-                id,
-                customer_name,
-                customer_code
-            )
-        `)
-        .order('update_date', { ascending: false })
-        .order('project_code', { ascending: false });
-    ensureSupabaseSuccess(error, 'Failed to fetch projects');
-    return (data || []).map(dbProjectToProject);
+    const [
+        { data: projectRows, error: projectError },
+        { data: customerRows, error: customerError },
+    ] = await Promise.all([
+        supabase
+            .from('projects')
+            .select('*')
+            .order('update_date', { ascending: false })
+            .order('project_code', { ascending: false }),
+        supabase.from('customers').select('id, customer_code, customer_name'),
+    ]);
+
+    if (projectError) throw formatSupabaseError('Failed to fetch projects', projectError);
+    if (customerError) console.warn('Failed to fetch customers for project mapping:', customerError.message);
+
+    const customerById = new Map<string, { customer_name: string; customer_code: string | null }>();
+    const customerByCode = new Map<string, { customer_name: string; customer_code: string | null }>();
+    (customerRows || []).forEach(customer => {
+        const idKey = normalizeLookupKey(customer.id);
+        const codeKey = normalizeLookupKey(customer.customer_code);
+        if (!idKey && !codeKey) return;
+        const payload = {
+            customer_name: customer.customer_name || '未設定',
+            customer_code: codeKey,
+        };
+        if (idKey) customerById.set(idKey, payload);
+        if (codeKey) customerByCode.set(codeKey, payload);
+    });
+
+    return (projectRows || []).map(project => {
+        const projectCustomerId = normalizeLookupKey(project.customer_id);
+        const projectCustomerCode = normalizeLookupKey(project.customer_code);
+        const customerInfo =
+            (projectCustomerId && customerById.get(projectCustomerId)) ||
+            (projectCustomerCode && customerByCode.get(projectCustomerCode)) ||
+            null;
+
+        const merged = {
+            ...project,
+            customer_name: customerInfo?.customer_name ?? project.customer_name ?? null,
+            customer_code: customerInfo?.customer_code ?? project.customer_code ?? null,
+        };
+
+        return dbProjectToProject(merged);
+    });
 };
 
 export const getJobs = async (): Promise<Job[]> => {
