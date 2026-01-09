@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Lead, LeadStatus, SortConfig, Toast, ConfirmationDialogProps, EmployeeUser, Estimate } from '../../types';
+import { Lead, LeadStatus, SortConfig, Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
 import { Loader, Pencil, Trash2, Mail, Eye, CheckCircle, Lightbulb, List, KanbanSquare } from '../Icons';
 import { LeadDetailModal } from './LeadDetailModal';
 import LeadStatusBadge from './LeadStatusBadge';
 import LeadKanbanView from './LeadKanbanView';
 import { generateLeadReplyEmail } from '../../services/geminiService';
-import { formatDate } from '../../utils';
+import { formatDateTime } from '../../utils';
 import EmptyState from '../ui/EmptyState';
 import SortableHeader from '../ui/SortableHeader';
 import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu';
@@ -27,6 +27,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
     const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+    const [initialAiTab, setInitialAiTab] = useState<'investigation' | 'proposal' | 'email' | undefined>(undefined);
     const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
     const [responseFilter, setResponseFilter] = useState<'all' | 'handled' | 'unhandled'>('all');
     const [editingStatusLeadId, setEditingStatusLeadId] = useState<string | null>(null);
@@ -35,6 +36,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
     const [togglingHandledId, setTogglingHandledId] = useState<string | null>(null);
 
     const handleRowClick = (lead: Lead) => {
+        setInitialAiTab(undefined);
         setSelectedLead(lead);
         setIsModalOpen(true);
     };
@@ -97,10 +99,13 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
             const logMessage = `[${timestamp}] AI返信メールを作成しました。`;
             const updatedInfo = `${logMessage}\n${lead.infoSalesActivity || ''}`.trim();
             
+            const statusTimestamp = new Date().toISOString();
             await onUpdateLead(lead.id, { 
                 infoSalesActivity: updatedInfo, 
                 status: LeadStatus.Contacted,
-                updatedAt: new Date().toISOString(),
+                updatedAt: statusTimestamp,
+                statusUpdatedAt: statusTimestamp,
+                assignedTo: currentUser?.name || null,
             });
             addToast('Gmailの下書きを作成しました。', 'success');
         } catch (error) {
@@ -115,13 +120,16 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         setIsMarkingContacted(lead.id);
         try {
             const timestamp = new Date().toLocaleString('ja-JP');
+            const statusTimestamp = new Date().toISOString();
             const logMessage = `[${timestamp}] ステータスを「${lead.status}」から「${LeadStatus.Contacted}」に変更しました。`;
             const updatedInfo = `${logMessage}\n${lead.infoSalesActivity || ''}`.trim();
 
             await onUpdateLead(lead.id, {
                 status: LeadStatus.Contacted,
                 infoSalesActivity: updatedInfo,
-                updatedAt: new Date().toISOString(),
+                updatedAt: statusTimestamp,
+                statusUpdatedAt: statusTimestamp,
+                assignedTo: currentUser?.name || null,
             });
             addToast('ステータスを「コンタクト済」に更新しました。', 'success');
         } catch (error) {
@@ -193,7 +201,15 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         setTogglingHandledId(lead.id);
         try {
             const timestamp = new Date().toISOString();
-            await onUpdateLead(lead.id, { status: nextStatus, updatedAt: timestamp });
+            const updates: Partial<Lead> = { status: nextStatus, updatedAt: timestamp };
+            if (nextStatus === LeadStatus.Untouched) {
+                updates.assignedTo = null;
+                updates.statusUpdatedAt = null;
+            } else {
+                updates.statusUpdatedAt = timestamp;
+                updates.assignedTo = currentUser?.name || lead.assignedTo || null;
+            }
+            await onUpdateLead(lead.id, updates);
             addToast(currentlyHandled ? '未対応に戻しました。' : '対応済みに設定しました。', 'success');
         } catch (error) {
             console.error('Failed to toggle handled flag', error);
@@ -201,6 +217,66 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         } finally {
             setTogglingHandledId(null);
         }
+    };
+
+    const renderInvestigationBadge = (lead: Lead) => (
+        <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                lead.aiInvestigation?.summary
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200'
+                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+            }`}
+        >
+            {lead.aiInvestigation?.summary ? '調査済' : '未'}
+        </span>
+    );
+
+    const renderEstimateBadge = (lead: Lead) => {
+        const hasDraft = Boolean(lead.aiDraftProposal && String(lead.aiDraftProposal).trim());
+        const isSent = Boolean(lead.estimateSentAt);
+        const label = isSent ? '送信済' : hasDraft ? '作成済' : '未';
+        const style = isSent
+            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200'
+            : hasDraft
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+                : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+        return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${style}`}>{label}</span>;
+    };
+
+    const extractEstimateSentTimestampFromLog = (lead: Lead): string | null => {
+        const raw = lead.infoSalesActivity || '';
+        const match = raw.match(/\[([^\]]+)\]\s*見積メールを送信しました。?/);
+        return match?.[1] ?? null;
+    };
+
+    const extractReplyTimestampFromLog = (lead: Lead): string | null => {
+        const raw = lead.infoSalesActivity || '';
+        const match = raw.match(/\[([^\]]+)\]\s*AI返信メールを作成しました。?/);
+        return match?.[1] ?? null;
+    };
+
+    const getNextAction = (lead: Lead): { label: string; disabled?: boolean; onClick?: () => void } => {
+        const estimateSentAtLabel = lead.estimateSentAt ? formatDateTime(lead.estimateSentAt) : extractEstimateSentTimestampFromLog(lead);
+        const hasEstimateDraft = Boolean(lead.aiDraftProposal && String(lead.aiDraftProposal).trim());
+        const hasReply = lead.status !== LeadStatus.Untouched || Boolean(extractReplyTimestampFromLog(lead));
+
+        if (estimateSentAtLabel) {
+            return { label: '完了', disabled: true };
+        }
+        if (hasEstimateDraft || hasReply) {
+            return {
+                label: hasEstimateDraft ? '見積送信' : '見積作成',
+                onClick: () => {
+                    setInitialAiTab('proposal');
+                    setSelectedLead(lead);
+                    setIsModalOpen(true);
+                },
+            };
+        }
+        return {
+            label: '返信作成',
+            onClick: () => handleGenerateReply(lead),
+        };
     };
 
     return (
@@ -244,10 +320,13 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                 <tr>
                                     <SortableHeader sortKey="updatedAt" label="最終更新日時" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="company" label="会社名 / 担当者" sortConfig={sortConfig} requestSort={requestSort} />
+                                    <SortableHeader sortKey="assignedTo" label="対応者" sortConfig={sortConfig} requestSort={requestSort} />
                                     <th scope="col" className="px-6 py-3 font-medium text-left">対応フラグ</th>
+                                    <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">企業調査</th>
+                                    <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">見積</th>
                                     <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="inquiryTypes" label="問い合わせ種別" sortConfig={sortConfig} requestSort={requestSort} />
-                                    <SortableHeader sortKey="email" label="メール" sortConfig={sortConfig} requestSort={requestSort} />
+                                    <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">次のアクション</th>
                                     <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
                                 </tr>
                             </thead>
@@ -258,10 +337,18 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                       className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50"
                                       onClick={() => handleRowClick(lead)}
                                     >
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDate(lead.updatedAt || lead.createdAt)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateTime(lead.updatedAt || lead.createdAt)}</td>
                                         <td className="px-6 py-4">
                                             <div className="font-semibold text-slate-800 dark:text-slate-200">
                                                 {lead.company} <span className="font-normal text-slate-500">/ {lead.name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-slate-700 dark:text-slate-300">{lead.assignedTo || '-'}</span>
+                                                {lead.statusUpdatedAt && (
+                                                    <span className="text-xs text-slate-400 whitespace-nowrap">({formatDateTime(lead.statusUpdatedAt)})</span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -282,13 +369,39 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                 {isHandled(lead) ? '対応済' : '未対応'}
                                             </button>
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            {renderInvestigationBadge(lead)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <div className="flex flex-col items-center gap-1">
+                                                {renderEstimateBadge(lead)}
+                                                {(() => {
+                                                    const sentAtLabel = lead.estimateSentAt ? formatDateTime(lead.estimateSentAt) : extractEstimateSentTimestampFromLog(lead);
+                                                    if (!sentAtLabel) return null;
+                                                    return (
+                                                        <span className="text-xs text-slate-400 whitespace-nowrap">
+                                                            {sentAtLabel}{lead.estimateSentBy ? ` (${lead.estimateSentBy})` : ''}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                                             {editingStatusLeadId === lead.id ? (
                                                 <select
                                                     value={lead.status}
                                                     onChange={(e) => {
                                                         const newStatus = e.target.value as LeadStatus;
-                                                        onUpdateLead(lead.id, { status: newStatus, updatedAt: new Date().toISOString() });
+                                                        const statusTimestamp = new Date().toISOString();
+                                                        const updateData: Partial<Lead> = { status: newStatus, updatedAt: statusTimestamp };
+                                                        if (newStatus === LeadStatus.Untouched) {
+                                                            updateData.assignedTo = null;
+                                                            updateData.statusUpdatedAt = null;
+                                                        } else {
+                                                            updateData.statusUpdatedAt = statusTimestamp;
+                                                            if (!lead.assignedTo && currentUser?.name) updateData.assignedTo = currentUser.name;
+                                                        }
+                                                        onUpdateLead(lead.id, updateData);
                                                         setEditingStatusLeadId(null);
                                                     }}
                                                     onBlur={() => setEditingStatusLeadId(null)}
@@ -314,7 +427,25 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                 : (lead.inquiryType || '-')
                                             }
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{lead.email || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                                            {(() => {
+                                                const action = getNextAction(lead);
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        disabled={Boolean(action.disabled) || isReplyingTo === lead.id}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            action.onClick?.();
+                                                        }}
+                                                        className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600"
+                                                    >
+                                                        {isReplyingTo === lead.id ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                                                        {action.label}
+                                                    </button>
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="px-6 py-4 text-center">
                                             <div className="flex justify-center items-center opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100" onClick={e => e.stopPropagation()}>
                                                 <DropdownMenu>
@@ -339,7 +470,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                 ))}
                                  {sortedLeads.length === 0 && (
                                     <tr>
-                                        <td colSpan={7}>
+                                        <td colSpan={10}>
                                             <EmptyState 
                                                 icon={Lightbulb}
                                                 title={searchTerm ? '検索結果がありません' : 'リードがありません'}
@@ -368,6 +499,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                 isAIOff={isAIOff}
                 // FIX: Pass the onAddEstimate prop to satisfy the LeadDetailModalProps interface.
                 onAddEstimate={onAddEstimate}
+                initialAiTab={initialAiTab}
             />
         </>
     );

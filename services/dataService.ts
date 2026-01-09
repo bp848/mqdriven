@@ -735,6 +735,10 @@ const dbLeadToLead = (dbLead: any): Lead => {
         tags: dbLead.tags,
         message: dbLead.message,
         updatedAt: dbLead.updated_at,
+        assignedTo: dbLead.assigned_to ?? null,
+        statusUpdatedAt: dbLead.status_updated_at ?? null,
+        estimateSentAt: dbLead.estimate_sent_at ?? null,
+        estimateSentBy: dbLead.estimate_sent_by ?? null,
         referrer: dbLead.referrer,
         referrerUrl: dbLead.referrer_url,
         landingPageUrl: dbLead.landing_page_url,
@@ -773,6 +777,29 @@ const leadToDbLead = (lead: Partial<Lead>): any => {
         dbData[snakeKey] = lead[camelKey];
     }
     return dbData;
+};
+
+const extractMissingColumnName = (message: string | undefined | null): string | null => {
+    if (!message) return null;
+    const candidates = [
+        /Could not find the '([^']+)' column/i,
+        /column "([^"]+)" of relation/i,
+        /column ([a-zA-Z0-9_]+) does not exist/i,
+        /column "([^"]+)" does not exist/i,
+    ];
+    for (const pattern of candidates) {
+        const match = message.match(pattern);
+        if (match?.[1]) return match[1];
+    }
+    return null;
+};
+
+const stripMissingColumns = (payload: Record<string, any>, error: PostgrestError): boolean => {
+    const missing = extractMissingColumnName(error.message);
+    if (!missing) return false;
+    if (!(missing in payload)) return false;
+    delete payload[missing];
+    return true;
 };
 
 const dbBugReportToBugReport = (dbReport: any): BugReport => ({
@@ -1561,17 +1588,41 @@ export const getLeads = async (): Promise<Lead[]> => {
 
 export const addLead = async (leadData: Partial<Lead>): Promise<Lead> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('leads').insert(leadToDbLead(leadData)).select().single();
-    ensureSupabaseSuccess(error, 'Failed to add lead');
-    return dbLeadToLead(data);
+    const payload = leadToDbLead(leadData) as Record<string, any>;
+    let lastError: PostgrestError | null = null;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const { data, error } = await supabase.from('leads').insert(payload).select().single();
+        if (!error) return dbLeadToLead(data);
+
+        lastError = error;
+        if (isMissingColumnError(error) && stripMissingColumns(payload, error)) {
+            continue;
+        }
+        throw formatSupabaseError('Failed to add lead', error);
+    }
+
+    throw formatSupabaseError('Failed to add lead', lastError);
 };
 
 export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Lead> => {
     const supabase = getSupabase();
     const { updatedAt, ...restOfUpdates } = updates;
-    const { data, error } = await supabase.from('leads').update(leadToDbLead(restOfUpdates)).eq('id', id).select().single();
-    ensureSupabaseSuccess(error, 'Failed to update lead');
-    return dbLeadToLead(data);
+    const payload = leadToDbLead(restOfUpdates) as Record<string, any>;
+    let lastError: PostgrestError | null = null;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const { data, error } = await supabase.from('leads').update(payload).eq('id', id).select().single();
+        if (!error) return dbLeadToLead(data);
+
+        lastError = error;
+        if (isMissingColumnError(error) && stripMissingColumns(payload, error)) {
+            continue;
+        }
+        throw formatSupabaseError('Failed to update lead', error);
+    }
+
+    throw formatSupabaseError('Failed to update lead', lastError);
 };
 
 export const deleteLead = async (id: string): Promise<void> => {
@@ -1686,7 +1737,9 @@ export const syncApprovedLeaveToCalendars = async (): Promise<{ created: number;
         endDate.setUTCDate(endDate.getUTCDate() + 1); // all-day end is exclusive
 
         const leaveType = app.form_data?.leaveType || '休暇';
-        const applicantName = app.applicant?.name || '申請者不明';
+        const applicantField: any = (app as any).applicant;
+        const applicantName =
+            (!Array.isArray(applicantField) ? applicantField?.name : applicantField?.[0]?.name) || '申請者不明';
 
         for (const user of safeUsers) {
             const key = toKey(app.id, user.id);
@@ -2884,84 +2937,72 @@ const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 
 export const getEstimates = async (): Promise<Estimate[]> => {
     const supabase = getSupabase();
 
-    // 最優先: 名前が解決済みのビューを参照
+    // 強制JOIN: estimates→projects→customers
     const { data, error } = await supabase
-        .from('estimates_list_view')
-        .select('*')
-        .order('created_at', { ascending: false })
+        .from('estimates')
+        .select(`
+            *,
+            project:projects(id, project_code, project_name, customer_id, customer_code),
+            customer:customers!inner(id, customer_name, customer_code)
+        `)
+        .order('create_date', { ascending: false })
         .limit(200);
 
-    if (!error && data && data.length > 0) {
-        return data.map(mapEstimateRow);
-    }
-
     if (error) {
-        console.warn('estimates_list_view query failed, falling back to raw tables:', error);
-    }
+        console.warn('Direct JOIN failed, trying fallback:', error);
+        
+        // フォールバック: 個別取得
+        const { data: estimates, error: estimatesError } = await supabase
+            .from('estimates')
+            .select('*')
+            .order('create_date', { ascending: false })
+            .limit(200);
 
-    // フォールバック: テーブルを直接参照して顧客名/案件名を解決
-    const { data: estimates, error: estimatesError } = await supabase
-        .from('estimates')
-        .select('*')
-        .order('create_date', { ascending: false })
-        .limit(10);
+        if (estimatesError) throw estimatesError;
+        if (!estimates || estimates.length === 0) return [];
 
-    if (estimatesError) throw estimatesError;
-    if (!estimates || estimates.length === 0) return [];
-
-    // プロジェクト/顧客は project_id をキーにフル取得して紐付け（UUID以外も考慮）
-    let projectMap: Record<string, any> = {};
-    {
-        const { data: projects, error: projectError } = await supabase
+        // 全プロジェクト取得
+        const { data: projects } = await supabase
             .from('projects')
-            .select('id, project_id, project_name, customer_id, customer_code, project_code');
+            .select('id, project_code, project_name, customer_id, customer_code');
 
-        if (projectError) {
-            console.error('プロジェクト検索エラー:', projectError);
-        } else {
-            projectMap = (projects || []).reduce((acc, project) => {
-                const keys = [
-                    normalizeLookupKey(project.project_id),
-                    normalizeLookupKey(project.id),
-                    normalizeLookupKey(project.project_code),
-                ].filter(Boolean) as string[];
-                keys.forEach((k) => { if (k) acc[k] = project; });
-                return acc;
-            }, {} as Record<string, any>);
-        }
-    }
-
-    const customerIds = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_id)));
-    const customerCodes = collectUniqueIds(Object.values(projectMap).map((p: any) => normalizeLookupKey(p.customer_code)));
-    let customerMap: Record<string, any> = {};
-    {
-        const { data: customers, error: customerError } = await supabase
+        // 全顧客取得
+        const { data: customers } = await supabase
             .from('customers')
             .select('id, customer_name, customer_code');
 
-        if (customerError) {
-            console.error('顧客検索エラー:', customerError);
-        } else {
-            customerMap = (customers || []).reduce((acc, customer) => {
-                const keys = [
-                    normalizeLookupKey(customer.id),
-                    normalizeLookupKey(customer.customer_code),
-                ].filter(Boolean) as string[];
-                keys.forEach((k) => { if (k) acc[k] = customer; });
-                return acc;
-            }, {} as Record<string, any>);
-        }
+        const projectMap = (projects || []).reduce((acc, project) => {
+            acc[project.id] = project;
+            if (project.project_code) acc[project.project_code] = project;
+            return acc;
+        }, {} as Record<string, any>);
+
+        const customerMap = (customers || []).reduce((acc, customer) => {
+            acc[customer.id] = customer;
+            if (customer.customer_code) acc[customer.customer_code] = customer;
+            return acc;
+        }, {} as Record<string, any>);
+
+        return estimates.map(estimate => {
+            const project = projectMap[estimate.project_id] || projectMap[estimate.project_code];
+            const customer = project ? 
+                customerMap[project.customer_id] || customerMap[project.customer_code] : 
+                null;
+            
+            return mapEstimateRow({
+                ...estimate,
+                project_name: estimate.project_name || project?.project_name,
+                customer_name: estimate.customer_name || customer?.customer_name,
+            });
+        });
     }
 
-    return estimates.map(row => {
-        const project = projectMap[normalizeLookupKey(row.project_id) ?? ''];
-        const customer = project ? customerMap[normalizeLookupKey(project?.customer_id) ?? ''] : undefined;
-        return mapEstimateRow({
-            ...row,
-            project_name: row.project_name ?? project?.project_name,
-            customer_name: row.customer_name ?? customer?.customer_name,
-        });
-    });
+    // JOIN成功時の処理
+    return (data || []).map(row => ({
+        ...row,
+        project_name: row.project?.project_name,
+        customer_name: row.customer?.customer_name || '未設定',
+    }));
 };
 
 export const getEstimatesPage = async (page: number, pageSize: number): Promise<{ rows: Estimate[]; totalCount: number; }> => {

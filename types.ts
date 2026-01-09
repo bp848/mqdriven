@@ -582,6 +582,8 @@ export interface Lead {
     aiInvestigation?: CompanyInvestigation;
     assignedTo?: string | null; // 対応した人
     statusUpdatedAt?: string | null; // ステータス更新日時
+    estimateSentAt?: string | null; // 見積メール送信日時
+    estimateSentBy?: string | null; // 見積メール送信者
 }
 
 export interface ApprovalRoute {

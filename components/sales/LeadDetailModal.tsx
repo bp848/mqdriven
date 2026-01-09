@@ -6,8 +6,9 @@ import { INQUIRY_TYPES } from '../../constants';
 import LeadScoreBadge from '../ui/LeadScoreBadge';
 import { createLeadProposalPackage, investigateLeadCompany } from '../../services/geminiService';
 import ProposalPdfContent from './ProposalPdfContent';
-import { generateMultipagePdf } from '../../utils';
+import { formatDateTime, formatJPY, generateMultipagePdf } from '../../utils';
 import InvestigationReportPdfContent from '../reports/InvestigationReportPdfContent';
+import { sendEmail } from '../../services/emailService';
 
 interface LeadDetailModalProps {
     isOpen: boolean;
@@ -21,6 +22,7 @@ interface LeadDetailModalProps {
     onGenerateReply: (lead: Lead) => void;
     isAIOff: boolean;
     onAddEstimate: (estimate: any) => Promise<void>;
+    initialAiTab?: 'investigation' | 'proposal' | 'email';
 }
 
 const DetailSection: React.FC<{ title: string; children: React.ReactNode, className?: string }> = ({ title, children, className }) => (
@@ -107,7 +109,7 @@ const renderInvestigationSummary = (text: string) => {
     );
 };
 
-export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate }) => {
+export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate, initialAiTab }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<Lead>>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -116,7 +118,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     const [proposalPackage, setProposalPackage] = useState<LeadProposalPackage | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isSavingEstimate, setIsSavingEstimate] = useState(false);
-    const [activeAiTab, setActiveAiTab] = useState<'investigation' | 'proposal' | 'email'>('investigation');
+    const [isSendingEstimateEmail, setIsSendingEstimateEmail] = useState(false);
+    const [activeAiTab, setActiveAiTab] = useState<'investigation' | 'proposal' | 'email'>(initialAiTab ?? 'investigation');
     
     const mounted = useRef(true);
 
@@ -141,6 +144,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
             }
         }
     }, [lead]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!initialAiTab) return;
+        setActiveAiTab(initialAiTab);
+    }, [isOpen, initialAiTab]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -241,6 +250,164 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         }
     };
 
+    const escapeHtml = (value: string): string =>
+        value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+    const buildEstimateEmail = () => {
+        const estimate = proposalPackage?.estimate ?? [];
+        const subject = `【見積】${lead.company}`;
+        const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
+        const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
+        const total = estimate.reduce((sum, item) => {
+            const line = item.subtotal ?? item.price ?? Math.round((item.quantity || 0) * (item.unitPrice || 0));
+            return sum + (Number.isFinite(line) ? line : 0);
+        }, 0);
+
+        const rows = estimate
+            .map(item => {
+                const qty = Number.isFinite(item.quantity) ? item.quantity : 0;
+                const unitPrice = Number.isFinite(item.unitPrice) ? item.unitPrice : 0;
+                const line = item.subtotal ?? item.price ?? Math.round(qty * unitPrice);
+                return `
+                  <tr>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.division || '')}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.content || '')}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(String(qty))}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.unit || '')}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatJPY(unitPrice))}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatJPY(line))}</td>
+                  </tr>
+                `;
+            })
+            .join('');
+
+        const html = `
+          <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; line-height: 1.6; color: #111827;">
+            <p>${escapeHtml(lead.company)} ${escapeHtml(recipientName)}</p>
+            <p>お世話になっております。${escapeHtml(senderName)}です。</p>
+            <p>概算のお見積りをお送りします。内容のご確認をお願いいたします。</p>
+            <table style="width:100%; border-collapse: collapse; margin: 12px 0; font-size: 14px;">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #111827;">区分</th>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #111827;">内容</th>
+                  <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #111827;">数量</th>
+                  <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #111827;">単位</th>
+                  <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #111827;">単価</th>
+                  <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #111827;">金額</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="5" style="padding:8px;border-top:2px solid #111827;text-align:right;font-weight:700;">合計</td>
+                  <td style="padding:8px;border-top:2px solid #111827;text-align:right;font-weight:700;">${escapeHtml(formatJPY(total))}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <p style="color:#6b7280;font-size:12px;">※本メールはシステムから送信されています。</p>
+          </div>
+        `.trim();
+
+        const body =
+            `${lead.company} ${recipientName}\n\n` +
+            `お世話になっております。${senderName}です。\n` +
+            `概算のお見積りをお送りします。内容のご確認をお願いいたします。\n\n` +
+            `合計: ${formatJPY(total)}\n\n` +
+            `※本メールはシステムから送信されています。`;
+
+        return { subject, html, body };
+    };
+
+    const handleSendEstimateEmail = async () => {
+        if (!lead.email) {
+            addToast('送信先メールアドレスが登録されていません。', 'error');
+            return;
+        }
+        if (!proposalPackage?.estimate || proposalPackage.estimate.length === 0) {
+            addToast('送信する見積がありません。先に「AI提案パッケージ作成」してください。', 'error');
+            return;
+        }
+        setIsSendingEstimateEmail(true);
+        try {
+            const { subject, html, body } = buildEstimateEmail();
+            const result = await sendEmail({ to: [lead.email], subject, html, body, mode: 'scheduled' });
+            const sentAt = result?.sentAt || new Date().toISOString();
+
+            const timestamp = new Date(sentAt).toLocaleString('ja-JP');
+            const logMessage = `[${timestamp}] 見積メールを送信しました。`;
+            const updatedInfo = `${logMessage}\n${formData.infoSalesActivity || ''}`.trim();
+
+            try {
+                await onSave(lead.id, {
+                    estimateSentAt: sentAt,
+                    estimateSentBy: currentUser?.name || null,
+                    infoSalesActivity: updatedInfo,
+                });
+            } catch (saveError) {
+                // Fallback: at least persist the activity log even if the dedicated columns don't exist.
+                await onSave(lead.id, { infoSalesActivity: updatedInfo });
+                throw saveError;
+            }
+
+            setFormData(prev => ({
+                ...prev,
+                estimateSentAt: sentAt,
+                estimateSentBy: currentUser?.name || null,
+                infoSalesActivity: updatedInfo,
+            }));
+            addToast('見積メールを送信しました。', 'success');
+        } catch (e) {
+            addToast(e instanceof Error ? `見積送信エラー: ${e.message}` : '見積メールの送信に失敗しました。', 'error');
+        } finally {
+            if (mounted.current) setIsSendingEstimateEmail(false);
+        }
+    };
+
+    const getNextAction = (): { label: string; disabled?: boolean; onClick?: () => void } => {
+        const hasEstimateSent = Boolean(formData.estimateSentAt) || /\[[^\]]+\]\s*見積メールを送信しました。?/.test(formData.infoSalesActivity || '');
+        const hasEstimateDraft = Boolean(formData.aiDraftProposal && String(formData.aiDraftProposal).trim());
+        const hasReply = formData.status !== LeadStatus.Untouched || /\[[^\]]+\]\s*AI返信メールを作成しました。?/.test(formData.infoSalesActivity || '');
+
+        if (hasEstimateSent) {
+            return { label: '完了', disabled: true };
+        }
+        if (hasEstimateDraft || proposalPackage?.estimate?.length) {
+            return {
+                label: '見積をメール送信',
+                onClick: () => {
+                    setActiveAiTab('proposal');
+                    handleSendEstimateEmail();
+                },
+            };
+        }
+        if (hasReply) {
+            return {
+                label: '見積を作成',
+                disabled: Boolean(isAIOff),
+                onClick: () => {
+                    setActiveAiTab('proposal');
+                    handleCreateProposalPackage();
+                },
+            };
+        }
+        return {
+            label: '返信を作成',
+            disabled: Boolean(isAIOff),
+            onClick: () => {
+                setActiveAiTab('email');
+                onGenerateReply(lead);
+            },
+        };
+    };
+
     return (
       <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
@@ -262,12 +429,62 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                 <Field label="ステータス" name="status" value={formData.status} isEditing={isEditing} onChange={handleChange} type="select" options={Object.values(LeadStatus)} />
                                 <Field label="ソース" name="source" value={formData.source} isEditing={isEditing} onChange={handleChange} />
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">対応者</div>
+                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
+                                        {formData.assignedTo || '-'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">対応日時</div>
+                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
+                                        {formData.statusUpdatedAt ? formatDateTime(formData.statusUpdatedAt) : '-'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">見積送信者</div>
+                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
+                                        {formData.estimateSentBy || '-'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">見積送信日時</div>
+                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
+                                        {(() => {
+                                            if (formData.estimateSentAt) return formatDateTime(formData.estimateSentAt);
+                                            const raw = formData.infoSalesActivity || '';
+                                            const match = raw.match(/\[([^\]]+)\]\s*見積メールを送信しました。?/);
+                                            return match?.[1] ?? '-';
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
                             <Field label="問い合わせ内容" name="message" value={formData.message} isEditing={isEditing} onChange={handleChange} type="textarea" />
                             <Field label="活動履歴" name="infoSalesActivity" value={formData.infoSalesActivity} isEditing={isEditing} onChange={handleChange} type="textarea" />
                         </div>
 
                         {/* Right Column */}
                         <div className="space-y-6">
+                            <DetailSection title="次のアクション" className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg">
+                                {(() => {
+                                    const action = getNextAction();
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={action.onClick}
+                                            disabled={Boolean(action.disabled) || isSendingEstimateEmail || isGeneratingPackage}
+                                            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
+                                        >
+                                            {(isSendingEstimateEmail || isGeneratingPackage) ? <Loader className="w-5 h-5 animate-spin" /> : null}
+                                            {action.label}
+                                        </button>
+                                    );
+                                })()}
+                                {isAIOff && (
+                                    <p className="text-xs text-slate-500 mt-2">※AIが無効の場合、返信/見積作成は利用できません（見積のメール送信は利用可能です）。</p>
+                                )}
+                            </DetailSection>
                             <DetailSection title="AIアシスタント" className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg">
                                 {/* AIタブ切り替え */}
                                 <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
@@ -349,6 +566,14 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                                                  {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} 見積を保存
                                                             </button>
                                                         </div>
+                                                        <button
+                                                            onClick={handleSendEstimateEmail}
+                                                            disabled={isSendingEstimateEmail || !lead.email || !proposalPackage?.estimate || proposalPackage.estimate.length === 0}
+                                                            className="w-full text-sm flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50"
+                                                        >
+                                                            {isSendingEstimateEmail ? <Loader className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4" />}
+                                                            見積をメール送信
+                                                        </button>
                                                     </>
                                                 )}
                                             </div>
