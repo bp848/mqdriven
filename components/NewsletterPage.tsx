@@ -142,6 +142,7 @@ const NewsletterPage: React.FC<NewsletterPageProps> = ({ customers, addToast }) 
                 subject,
                 html: htmlBody,
                 body: toPlainText(htmlBody),
+                mode,
             });
             const label =
                 mode === 'test' ? 'テスト送信' : mode === 'scheduled' ? '予約送信' : '本番送信';

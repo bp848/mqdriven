@@ -10,6 +10,7 @@ export interface EmailPayload {
   cc?: string[];
   bcc?: string[];
   html?: string;
+  mode?: 'test' | 'bulk' | 'scheduled';
 }
 
 export interface EmailDispatchResult {
@@ -71,11 +72,19 @@ const resolveEndpoint = (): string | undefined => {
 };
 
 const EMAIL_ENDPOINT = resolveEndpoint();
+const EMAIL_TEST_ENDPOINT =
+  getEnvValue('APPLICATION_EMAIL_TEST_ENDPOINT') ??
+  getEnvValue('EMAIL_DISPATCH_TEST_ENDPOINT') ??
+  getEnvValue('VITE_APPLICATION_EMAIL_TEST_ENDPOINT') ??
+  getEnvValue('VITE_EMAIL_DISPATCH_TEST_ENDPOINT');
 const EMAIL_API_KEY =
   getEnvValue('APPLICATION_EMAIL_API_KEY') ??
   getEnvValue('EMAIL_DISPATCH_API_KEY') ??
   getEnvValue('VITE_APPLICATION_EMAIL_API_KEY') ??
   getEnvValue('VITE_EMAIL_DISPATCH_API_KEY');
+const EMAIL_TEST_MODE =
+  getEnvValue('EMAIL_TEST_MODE') ??
+  getEnvValue('VITE_EMAIL_TEST_MODE');
 
 const isValidAddress = (value: string | null | undefined): value is string => {
   if (!value) return false;
@@ -183,6 +192,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   const to = (payload.to ?? []).filter(isValidAddress);
   const cc = (payload.cc ?? []).filter(isValidAddress);
   const bcc = (payload.bcc ?? []).filter(isValidAddress);
+  const isTestMode = payload.mode === 'test';
 
   if (to.length === 0 && cc.length === 0 && bcc.length === 0) {
     throw new EmailDispatchError('送信先のメールアドレスが設定されていません。');
@@ -248,10 +258,27 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   }
 
   // Fallback to Edge Function (Resendラッパー)
-  if (!EMAIL_ENDPOINT) {
+  const endpoint = isTestMode
+    ? (EMAIL_TEST_ENDPOINT || EMAIL_ENDPOINT)
+    : EMAIL_ENDPOINT;
+
+  // 「テスト送信のみログで確認」モード or エンドポイント未設定時は実送信を避ける
+  if (isTestMode && (!endpoint || EMAIL_TEST_MODE === 'log')) {
+    console.info('[email][test-mode] Skipping real send. Payload preview:', {
+      to,
+      subject: payload.subject,
+      hasHtml: !!payload.html,
+      hasBody: !!payload.body,
+    });
+    return {
+      id: uuidv4(),
+      sentAt: new Date().toISOString(),
+    };
+  }
+
+  if (!endpoint) {
     throw new EmailDispatchError('メール送信エンドポイントが構成されていません。APPLICATION_EMAIL_ENDPOINT または SUPABASE_URL を設定してください。');
   }
-  const endpoint = EMAIL_ENDPOINT;
 
   if (!payload.subject || !payload.subject.trim()) {
     throw new EmailDispatchError('件名を入力してください。');
@@ -269,7 +296,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     to,
     cc,
     bcc,
-    subject: payload.subject,
+    subject: isTestMode ? `[テスト送信] ${payload.subject}` : payload.subject,
   };
 
   if (hasHtml) {
@@ -285,6 +312,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     headers: {
       'Content-Type': 'application/json',
       ...(EMAIL_API_KEY ? { Authorization: `Bearer ${EMAIL_API_KEY}` } : {}),
+      ...(isTestMode ? { 'X-MQ-Test-Email': 'true' } : {}),
     },
     body: JSON.stringify(emailPayload),
   });
