@@ -62,7 +62,6 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     return title.includes(term) || applicantName.includes(term) || codeName.includes(term);
   });
 
-  const selectedApplication = filteredApps.find((app) => app.id === selectedApplicationId) ?? null;
   const buildTitle = (app: ApplicationWithDetails) =>
     app.formData?.title || app.formData?.subject || app.applicationCode?.name || '件名未入力';
 
@@ -87,10 +86,14 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     return safe;
   }, [filteredApps, sortDir, sortKey]);
 
+  const selectedApplication =
+    [...sortedApps, ...filteredApps].find((app) => app.id === selectedApplicationId) ?? null;
+
   const totals = React.useMemo(() => {
     const count = filteredApps.length;
     const amountSum = filteredApps.reduce((sum, app) => sum + (Number(app.formData?.amount) || 0), 0);
-    return { count, amountSum };
+    const avg = count > 0 ? Math.round(amountSum / count) : 0;
+    return { count, amountSum, avg };
   }, [filteredApps]);
 
   const toggleSort = (key: typeof sortKey) => {
@@ -130,12 +133,15 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
              {description}
             </p>
         </div>
-        <div className="flex gap-3 text-sm text-slate-600 dark:text-slate-300">
+        <div className="flex flex-wrap gap-3 text-sm text-slate-600 dark:text-slate-300">
           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700/50">
             件数 {totals.count}
           </span>
           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700/50">
-            金額合計 ¥{formatCurrency(totals.amountSum)}
+            合計 ¥{formatCurrency(totals.amountSum)}
+          </span>
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700/50">
+            平均 ¥{formatCurrency(totals.avg)}
           </span>
           {showLeaveSync && (
             <button
@@ -202,7 +208,14 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                         {sortedApps.map((app) => (
-                            <tr key={app.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40 transition">
+                            <tr
+                                key={app.id}
+                                className={`transition ${
+                                    selectedApplicationId === app.id
+                                        ? 'bg-indigo-50/50 dark:bg-indigo-900/30 border-l-4 border-indigo-400'
+                                        : 'hover:bg-slate-50/50 dark:hover:bg-slate-900/40'
+                                }`}
+                            >
                                 <td className="px-6 py-4">
                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
                                         {app.applicationCode?.name || 'N/A'}
@@ -216,7 +229,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                                 <td className="px-6 py-4">
                                     <div className="text-slate-700 dark:text-slate-200">{app.applicant?.name}</div>
                                 </td>
-                                <td className="px-6 py-4 text-right font-mono font-medium text-slate-700">
+                                <td className="px-6 py-4 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300">
                                     {app.formData?.amount ? `¥${formatCurrency(app.formData.amount)}` : '-'}
                                 </td>
                                 <td className="px-6 py-4 text-xs font-mono text-slate-500 dark:text-slate-400">
