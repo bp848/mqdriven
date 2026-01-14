@@ -601,6 +601,7 @@ export interface Application {
     applicationCodeId: string;
     formData: any;
     status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
+    accountingStatus?: 'none' | 'drafted' | 'posted' | (string & {});
     submittedAt: string | null;
     approvedAt: string | null;
     rejectedAt: string | null;
