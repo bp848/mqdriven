@@ -1412,6 +1412,132 @@ export const deleteJob = async (id: string): Promise<void> => {
     ensureSupabaseSuccess(error, 'Failed to delete job');
 };
 
+export const getCustomerBudgetSummaries = async (): Promise<CustomerBudgetSummary[]> => {
+    const supabase = getSupabase();
+    
+    try {
+        // 方案1: 顧客別予算ビューを使用
+        const { data, error } = await supabase
+            .from('customer_budget_summary_view')
+            .select('*')
+            .order('total_budget', { ascending: false });
+        
+        if (!error && data && data.length > 0) {
+            return data.map(mapCustomerBudgetSummary);
+        }
+    } catch (err) {
+        console.warn('Customer budget view not available, using fallback:', err.message);
+    }
+    
+    // 方案2: 手動集計
+    return await calculateCustomerBudgetsManually();
+};
+
+const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary[]> => {
+    const supabase = getSupabase();
+    
+    // プロジェクトと顧客データを取得
+    const [projects, customers] = await Promise.all([
+        supabase.from('projects').select('*'),
+        supabase.from('customers').select('*')
+    ]);
+    
+    // 注文データを取得
+    const { data: orders } = await supabase
+        .from('orders')
+        .select('*')
+        .in('project_id', projects.map(p => p.id));
+    
+    // 顧客別にデータを集計
+    const customerMap = new Map();
+    customers.forEach(customer => {
+        customerMap.set(customer.id, customer);
+        if (customer.customer_code) {
+            customerMap.set(customer.customer_code, customer);
+        }
+    });
+    
+    const projectByCustomer = new Map();
+    projects.forEach(project => {
+        const customerKey = project.customer_id || project.customer_code;
+        if (!customerKey) return;
+        
+        if (!projectByCustomer.has(customerKey)) {
+            projectByCustomer.set(customerKey, []);
+        }
+        projectByCustomer.get(customerKey).push(project);
+    });
+    
+    const ordersByProject = new Map();
+    orders.forEach(order => {
+        if (!ordersByProject.has(order.project_id)) {
+            ordersByProject.set(order.project_id, []);
+        }
+        ordersByProject.get(order.project_id).push(order);
+    });
+    
+    // 顧客別集計を作成
+    const customerBudgets: CustomerBudgetSummary[] = [];
+    
+    for (const [customerKey, customerProjects] of projectByCustomer) {
+        const customer = customerMap.get(customerKey);
+        if (!customer) continue;
+        
+        let totalBudget = 0;
+        let totalActual = 0;
+        let totalCost = 0;
+        let projectCount = customerProjects.length;
+        
+        customerProjects.forEach(project => {
+            totalBudget += project.amount || 0;
+            totalCost += project.total_cost || 0;
+            
+            const projectOrders = ordersByProject.get(project.id) || [];
+            projectOrders.forEach(order => {
+                totalActual += order.amount || 0;
+            });
+        });
+        
+        const profitMargin = totalBudget > 0 ? ((totalBudget - totalCost) / totalBudget) * 100 : 0;
+        const achievementRate = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
+        
+        customerBudgets.push({
+            customerId: customer.id,
+            customerCode: customer.customer_code,
+            customerName: customer.customer_name,
+            totalBudget,
+            totalActual,
+            totalCost,
+            profitMargin,
+            achievementRate,
+            projectCount,
+            projects: customerProjects.map(p => ({
+                id: p.id,
+                projectCode: p.project_code,
+                projectName: p.project_name,
+                budget: p.amount,
+                actualCost: totalCost,
+                orders: ordersByProject.get(p.id) || []
+            }))
+        });
+    }
+    
+    return customerBudgets.sort((a, b) => b.totalBudget - a.totalBudget);
+};
+
+const mapCustomerBudgetSummary = (row: any): CustomerBudgetSummary => ({
+    customerId: row.customer_id,
+    customerCode: row.customer_code,
+    customerName: row.customer_name,
+    totalBudget: row.total_budget,
+    totalActual: row.total_actual,
+    totalCost: row.total_cost,
+    profitMargin: row.profit_margin,
+    achievementRate: row.achievement_rate,
+    projectCount: row.project_count,
+    projects: row.projects || []
+});
+
 export const getCustomers = async (): Promise<Customer[]> => {
     const supabase = getSupabase();
     // 新しいものを上に表示するため created_at 降順で取得

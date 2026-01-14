@@ -1027,6 +1027,30 @@ export interface ProposalPresentation {
   slides: ProposalSlide[];
 }
 
+export interface CustomerBudgetSummary {
+    customerId: string;
+    customerCode: string | null;
+    customerName: string;
+    totalBudget: number;
+    totalActual: number;
+    totalCost: number;
+    profitMargin: number;
+    achievementRate: number;
+    projectCount: number;
+    projects: Array<{
+        id: string;
+        projectCode: string;
+        projectName: string;
+        budget: number;
+        actualCost: number;
+        orders: Array<{
+            id: string;
+            amount: number;
+            orderDate: string;
+        }>;
+    }>;
+}
+
 export interface ProposalSource {
   title: string;
   uri: string;
