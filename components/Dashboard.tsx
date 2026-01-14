@@ -380,22 +380,23 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             // 全期間の申請済データ（経費申請を表示するため）
             applications.forEach(app => {
+                const requestType = getExpenseRequestType(app.request_type);
+                
                 if (!['approved', 'pending_approval'].includes(app.status)) return;
-                const form = (app.formData ?? {}) as any;
+                
+                const form = app.formData ?? {};
                 const invoice = form.invoice ?? {};
                 const amount = numeric([
                     invoice.totalGross,
                     invoice.totalAmount,
                     invoice.totalNet,
                     form.totalAmount,
-                    form.amount,
+                    form.amount
                 ]);
+                
                 if (!amount || amount <= 0) return;
-                const label =
-                    invoice.categoryName ||
-                    invoice.supplierName ||
-                    form.categoryName ||
-                    '経費申請';
+                
+                const label = requestType;
                 bucket.set(label, (bucket.get(label) || 0) + amount);
                 count += 1;
             });
