@@ -94,8 +94,8 @@ customer_summary AS (
         achievement_rate
         
         -- 進捗状況
-        SUM(CASE WHEN pwc.project_name LIKE '%完了%' OR pwc.project_name LIKE '%done%' THEN 1 END) as completed_count,
-        SUM(CASE WHEN pwc.project_name LIKE '%進行中%' OR pwc.project_name LIKE '%progress%' THEN 1 END) as in_progress_count,
+        completed_count,
+        in_progress_count,
         
         -- 最終更新日
         MAX(pwc.update_date) as last_updated
