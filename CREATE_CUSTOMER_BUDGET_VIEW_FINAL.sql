@@ -90,17 +90,8 @@ customer_summary AS (
         COALESCE(po.total_order_cost, 0) as total_order_cost,
         
         -- 計算指標
-        CASE 
-            WHEN COALESCE(SUM(pwc.project_budget), 0) > 0 
-            THEN ROUND(((COALESCE(SUM(pwc.project_budget), 0) - COALESCE(SUM(pwc.project_cost), 0)) / COALESCE(SUM(pwc.project_budget), 0) * 100, 2)
-            ELSE 0 
-        END as profit_margin,
-        
-        CASE 
-            WHEN COALESCE(SUM(pwc.project_budget), 0) > 0 
-            THEN ROUND((COALESCE(po.total_orders, 0) / COALESCE(SUM(pwc.project_budget), 0)) * 100, 2)
-            ELSE 0 
-        END as achievement_rate,
+        profit_margin,
+        achievement_rate
         
         -- 進捗状況
         COUNT(CASE WHEN pwc.project_name LIKE '%完了%' OR pwc.project_name LIKE '%done%' THEN 1 END) as completed_count,
