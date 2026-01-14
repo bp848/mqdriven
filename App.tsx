@@ -28,7 +28,6 @@ import ManufacturingOrdersPage from './components/manufacturing/ManufacturingOrd
 import PurchasingManagementPage from './components/purchasing/PurchasingManagementPage';
 import CreatePurchaseOrderModal from './components/purchasing/CreatePurchaseOrderModal';
 import EstimateManagementPage from './components/sales/EstimateManagementPage';
-import SimpleEstimatePage from './components/SimpleEstimatePage';
 import SalesRanking from './components/accounting/SalesRanking';
 import BusinessPlanPage from './components/accounting/BusinessPlanPage';
 import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
@@ -211,6 +210,7 @@ const PRIMARY_ACTION_ENABLED_PAGES: Page[] = [
     'purchasing_orders',
     'inventory_management',
     'sales_estimates',
+    'simple_estimates',
 ];
 
 const SEARCH_ENABLED_PAGES: Page[] = [
@@ -218,6 +218,7 @@ const SEARCH_ENABLED_PAGES: Page[] = [
     'sales_customers',
     'sales_leads',
     'sales_estimates',
+    'simple_estimates',
     'approval_list',
 ];
 
@@ -1162,6 +1163,8 @@ useEffect(() => {
                         projectSummaries={jobs}
                         orders={purchaseOrders}
                         searchTerm={searchTerm}
+                        isLoading={isLoading}
+                        onRefresh={loadAllData}
                         onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }}
                         onNewJob={() => setCreateJobModalOpen(true)}
                     />
@@ -1169,6 +1172,7 @@ useEffect(() => {
             case 'project_management':
                 return (
                     <ProjectManagementPage
+                        projects={projects}
                         isLoading={isLoading}
                         onRefresh={loadAllData}
                     />
@@ -1254,7 +1258,6 @@ useEffect(() => {
             case 'purchasing_orders':
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders} jobs={jobs} />;
             case 'simple_estimates':
-                return <SimpleEstimatePage currentUser={currentUser} addToast={addToast} />;
             case 'sales_estimates':
                 return <EstimateManagementPage
                     estimates={estimates}
@@ -1297,7 +1300,7 @@ useEffect(() => {
             case 'accounting_cash_schedule':
                 return <CashSchedulePage />;
             case 'accounting_approved_applications':
-                return <ApprovedApplications notify={addToast} />;
+                return <ApprovedApplications notify={addToast} currentUserId={currentUser?.id} onNavigate={handleNavigate} />;
             case 'bulletin_board':
                 return <BulletinBoardPage currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
             case 'knowledge_base':
@@ -1366,6 +1369,8 @@ useEffect(() => {
                         title="承認済み（経費精算）"
                         description="経費精算（EXP）の承認済み申請です。"
                         showLeaveSync={false}
+                        currentUserId={currentUser?.id}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'accounting_approved_transport':
@@ -1376,6 +1381,8 @@ useEffect(() => {
                         title="承認済み（交通費）"
                         description="交通費申請（TRP）の承認済みデータです。"
                         showLeaveSync={false}
+                        currentUserId={currentUser?.id}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'accounting_approved_leave':
@@ -1386,6 +1393,8 @@ useEffect(() => {
                         title="承認済み（休暇）"
                         description="休暇申請（LEV）の承認済みデータです。全員カレンダー同期ボタンを使えます。"
                         showLeaveSync
+                        currentUserId={currentUser?.id}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'accounting_approved_apl':
@@ -1396,6 +1405,8 @@ useEffect(() => {
                         title="承認済み（稟議）"
                         description="稟議申請（APL）の承認済みデータです。"
                         showLeaveSync={false}
+                        currentUserId={currentUser?.id}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'accounting_approved_dly':
@@ -1406,6 +1417,8 @@ useEffect(() => {
                         title="承認済み（日報）"
                         description="日報（DLY）の承認済みデータです。"
                         showLeaveSync={false}
+                        currentUserId={currentUser?.id}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'accounting_approved_wkr':
@@ -1416,6 +1429,8 @@ useEffect(() => {
                         title="承認済み（週報）"
                         description="週報（WKR）の承認済みデータです。"
                         showLeaveSync={false}
+                        currentUserId={currentUser?.id}
+                        onNavigate={handleNavigate}
                     />
                 );
             case 'admin_audit_log':

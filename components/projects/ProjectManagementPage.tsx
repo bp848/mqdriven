@@ -5,32 +5,47 @@ import { formatCurrency, formatDate } from '../../utils';
 import { Search, RefreshCw, ClipboardList, Hash, User } from '../Icons';
 
 interface ProjectManagementPageProps {
-  onRefresh?: () => void;
+  projects?: Project[];
+  onRefresh?: () => void | Promise<void>;
   isLoading?: boolean;
 }
 
-const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh, isLoading = false }) => {
-  const [projects, setProjects] = useState<Project[]>([]);
+const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects = [], onRefresh, isLoading = false }) => {
+  const [projectList, setProjectList] = useState<Project[]>(projects);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const groupBy: 'customer' = 'customer';
 
   useEffect(() => {
-    getProjects().then(data => {
-      setProjects(data);
-    });
-  }, []);
+    setProjectList(projects);
+  }, [projects]);
+
+  useEffect(() => {
+    if (projects.length > 0 || onRefresh) return;
+    getProjects()
+      .then(data => setProjectList(data))
+      .catch(error => console.error('Failed to fetch projects', error));
+  }, [projects.length, onRefresh]);
+
+  const handleRefresh = async () => {
+    if (onRefresh) {
+      await onRefresh();
+      return;
+    }
+    const latest = await getProjects();
+    setProjectList(latest);
+  };
 
   const filteredProjects = useMemo(() => {
-    if (!searchTerm) return projects;
+    if (!searchTerm) return projectList;
     
     const lowerSearch = searchTerm.toLowerCase();
-    return projects.filter(project => 
+    return projectList.filter(project => 
       (project.projectName?.toLowerCase().includes(lowerSearch) || false) ||
       (project.projectCode?.toString().toLowerCase().includes(lowerSearch) || false) ||
       (project.customerCode?.toLowerCase().includes(lowerSearch) || false)
     );
-  }, [projects, searchTerm]);
+  }, [projectList, searchTerm]);
 
   const groupedProjects = useMemo(() => {
     const grouped: Record<string, Project[]> = {};
@@ -59,7 +74,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
     return stats;
   }, [groupedProjects]);
 
-  const selectedProject = projects.find(p => p.id === selectedId);
+  const selectedProject = projectList.find(p => p.id === selectedId);
 
   return (
     <div className="space-y-6">
@@ -83,7 +98,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
           </div>
           <button
             type="button"
-            onClick={() => onRefresh?.()}
+            onClick={handleRefresh}
             disabled={isLoading}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-700 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-60"
           >
@@ -101,7 +116,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ onRefresh
               <span>プロジェクト一覧</span>
             </div>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {filteredProjects.length} / {projects.length} 件
+              {filteredProjects.length} / {projectList.length} 件
             </span>
           </div>
           

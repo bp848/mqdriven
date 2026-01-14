@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { LeadStatus } from '../types';
 
-const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5174'; // Fallback for local testing
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:8080'; // Fallback for local testing
 
 test('APP_URL に単純アクセスできるか', async ({ page }) => {
   await page.goto(APP_URL);

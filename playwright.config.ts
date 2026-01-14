@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const DEFAULT_APP_URL = process.env.APP_URL || 'http://127.0.0.1:5174';
+// Keep in sync with `npm run dev` (package.json uses port 8080).
+const DEFAULT_APP_URL = process.env.APP_URL || 'http://127.0.0.1:8080';
 process.env.APP_URL = DEFAULT_APP_URL;
 
 export default defineConfig({

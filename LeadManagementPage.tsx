@@ -5,7 +5,7 @@ import { LeadDetailModal } from './components/sales/LeadDetailModal';
 import LeadStatusBadge from './components/sales/LeadStatusBadge';
 import LeadKanbanView from './components/sales/LeadKanbanView';
 import { generateLeadReplyEmail } from './services/geminiService';
-import { formatDate } from './utils';
+import { formatDateTime } from './utils';
 import EmptyState from './components/ui/EmptyState';
 import SortableHeader from './components/ui/SortableHeader';
 import { DropdownMenu, DropdownMenuItem } from './components/ui/DropdownMenu';
@@ -16,13 +16,14 @@ interface LeadManagementPageProps {
   onRefresh: () => void;
   onUpdateLead: (leadId: string, updatedData: Partial<Lead>) => Promise<void>;
   onDeleteLead: (leadId: string) => Promise<void>;
+  onAddEstimate: (estimate: any) => Promise<void>;
   addToast: (message: string, type: Toast['type']) => void;
   requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
   currentUser: EmployeeUser | null;
   isAIOff: boolean;
 }
 
-const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff }) => {
+const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, onAddEstimate, addToast, requestConfirmation, currentUser, isAIOff }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -166,6 +167,28 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         setSortConfig({ key, direction });
     };
 
+    const renderInvestigationBadge = (lead: Lead) => (
+        <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                lead.aiInvestigation?.summary ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+            }`}
+        >
+            {lead.aiInvestigation?.summary ? '調査済' : '未'}
+        </span>
+    );
+
+    const renderEstimateBadge = (lead: Lead) => {
+        const hasDraft = Boolean(lead.aiDraftProposal && String(lead.aiDraftProposal).trim());
+        const isSent = Boolean(lead.estimateSentAt);
+        const label = isSent ? '送信済' : hasDraft ? '作成済' : '未';
+        const style = isSent
+            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200'
+            : hasDraft
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+                : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+        return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${style}`}>{label}</span>;
+    };
+
     return (
         <>
             <div className="flex justify-end mb-4">
@@ -189,6 +212,8 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                     <SortableHeader sortKey="company" label="会社名 / 担当者" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="assignedTo" label="対応した人" sortConfig={sortConfig} requestSort={requestSort} />
+                                    <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">企業調査</th>
+                                    <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">見積</th>
                                     <SortableHeader sortKey="inquiryTypes" label="問い合わせ種別" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="email" label="メール" sortConfig={sortConfig} requestSort={requestSort} />
                                     <th scope="col" className="px-6 py-3 font-medium text-center">操作</th>
@@ -201,7 +226,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                       className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50"
                                       onClick={() => handleRowClick(lead)}
                                     >
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDate(lead.updatedAt || lead.createdAt)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateTime(lead.updatedAt || lead.createdAt)}</td>
                                         <td className="px-6 py-4">
                                             <div className="font-semibold text-slate-800 dark:text-slate-200">
                                                 {lead.company} <span className="font-normal text-slate-500">/ {lead.name}</span>
@@ -251,7 +276,20 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                 </span>
                                                 {lead.statusUpdatedAt && (
                                                     <span className="text-xs text-slate-400">
-                                                        ({formatDate(lead.statusUpdatedAt)})
+                                                        ({formatDateTime(lead.statusUpdatedAt)})
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            {renderInvestigationBadge(lead)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <div className="flex flex-col items-center gap-1">
+                                                {renderEstimateBadge(lead)}
+                                                {lead.estimateSentAt && (
+                                                    <span className="text-xs text-slate-400 whitespace-nowrap">
+                                                        {formatDateTime(lead.estimateSentAt)}{lead.estimateSentBy ? ` (${lead.estimateSentBy})` : ''}
                                                     </span>
                                                 )}
                                             </div>
@@ -285,9 +323,9 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                         </td>
                                     </tr>
                                 ))}
-                                 {sortedLeads.length === 0 && (
+                                {sortedLeads.length === 0 && (
                                     <tr>
-                                        <td colSpan={7}>
+                                        <td colSpan={9}>
                                             <EmptyState 
                                                 icon={Lightbulb}
                                                 title={searchTerm ? '検索結果がありません' : 'リードがありません'}
@@ -314,6 +352,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                 currentUser={currentUser}
                 onGenerateReply={handleGenerateReply}
                 isAIOff={isAIOff}
+                onAddEstimate={onAddEstimate}
             />
         </>
     );

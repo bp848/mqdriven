@@ -12,6 +12,8 @@ interface SalesOrdersPageProps {
   searchTerm: string;
   onSelectJob: (job: ProjectBudgetSummary) => void;
   onNewJob: () => void;
+  onRefresh?: () => void | Promise<void>;
+  isLoading?: boolean;
 }
 
 type OrderRow = PurchaseOrder & {
@@ -157,9 +159,29 @@ const OrdersSection: React.FC<{ orders: PurchaseOrder[]; projects: ProjectBudget
   );
 };
 
-const SalesOrdersPage: React.FC<SalesOrdersPageProps> = ({ projectSummaries, orders, searchTerm, onSelectJob, onNewJob }) => {
+const SalesOrdersPage: React.FC<SalesOrdersPageProps> = ({
+  projectSummaries,
+  orders,
+  searchTerm,
+  onSelectJob,
+  onNewJob,
+  onRefresh,
+  isLoading = false,
+}) => {
   return (
     <div className="space-y-10">
+      {onRefresh && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => onRefresh()}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-700 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-60"
+          >
+            再読み込み
+          </button>
+        </div>
+      )}
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white">案件 / プロジェクト一覧</h2>
