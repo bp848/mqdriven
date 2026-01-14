@@ -117,9 +117,17 @@ const loadSMTPConfig = (): any => {
     return null;
   }
   try {
-    const raw = window.localStorage.getItem('emailNotificationSettings');
-    const settings = raw ? JSON.parse(raw) : null;
-    return settings?.smtp || null;
+    const rawNotification = window.localStorage.getItem('emailNotificationSettings');
+    const notificationSettings = rawNotification ? JSON.parse(rawNotification) : null;
+    const smtpFromNotification = notificationSettings?.smtp || null;
+
+    // Back-compat: SettingsPage stores SMTP settings under `smtpSettings`
+    const rawSmtp = window.localStorage.getItem('smtpSettings');
+    const smtpFromSettingsPage = rawSmtp ? JSON.parse(rawSmtp) : null;
+
+    if (smtpFromNotification && typeof smtpFromNotification === 'object') return smtpFromNotification;
+    if (smtpFromSettingsPage && typeof smtpFromSettingsPage === 'object') return smtpFromSettingsPage;
+    return null;
   } catch (error) {
     console.warn('[email] Failed to parse SMTP config', error);
     return null;

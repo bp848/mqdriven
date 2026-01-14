@@ -65,6 +65,17 @@ const EmailNotificationSettings: React.FC = () => {
         }));
         return;
       }
+
+      // Back-compat: SettingsPage stores SMTP settings separately.
+      const smtpSettingsRaw = localStorage.getItem('smtpSettings');
+      if (smtpSettingsRaw) {
+        const parsedSmtp = JSON.parse(smtpSettingsRaw);
+        setSettings(prev => ({
+          ...prev,
+          smtp: { ...prev.smtp, ...(parsedSmtp || {}) },
+        }));
+        return;
+      }
       
       // Load from environment variables as defaults
       const envSmtp: Partial<SMTPConfig> = {};
@@ -97,6 +108,8 @@ const EmailNotificationSettings: React.FC = () => {
   const saveSettings = () => {
     try {
       localStorage.setItem('emailNotificationSettings', JSON.stringify(settings));
+      // Keep SettingsPage-compatible key in sync (SMTP only).
+      localStorage.setItem('smtpSettings', JSON.stringify(settings.smtp));
       setMessage('設定を保存しました。');
       setMessageType('success');
     } catch (error) {

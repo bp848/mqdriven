@@ -50,6 +50,7 @@ import {
     ReceivableItem,
     CashScheduleData,
     GeneralLedgerEntry,
+    CustomerBudgetSummary,
 } from '../types';
 import type { CalendarEvent } from '../types';
 
@@ -1437,28 +1438,40 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
     const supabase = getSupabase();
     
     // プロジェクトと顧客データを取得
-    const [projects, customers] = await Promise.all([
+    const [
+        { data: projectRows, error: projectsError },
+        { data: customerRows, error: customersError },
+    ] = await Promise.all([
         supabase.from('projects').select('*'),
-        supabase.from('customers').select('*')
+        supabase.from('customers').select('*'),
     ]);
+    ensureSupabaseSuccess(projectsError, 'Failed to load projects for customer budgets');
+    ensureSupabaseSuccess(customersError, 'Failed to load customers for customer budgets');
+    const projects = projectRows || [];
+    const customers = customerRows || [];
     
     // 注文データを取得
-    const { data: orders } = await supabase
-        .from('orders')
-        .select('*')
-        .in('project_id', projects.map(p => p.id));
+    const projectIds = projects.map((p: any) => p.id).filter(Boolean);
+    const { data: orderRows, error: ordersError } = projectIds.length
+        ? await supabase
+            .from('orders')
+            .select('id, project_id, amount, order_date, create_date')
+            .in('project_id', projectIds)
+        : { data: [], error: null };
+    ensureSupabaseSuccess(ordersError as any, 'Failed to load orders for customer budgets');
+    const orders = orderRows || [];
     
     // 顧客別にデータを集計
-    const customerMap = new Map();
-    customers.forEach(customer => {
+    const customerMap = new Map<any, any>();
+    customers.forEach((customer: any) => {
         customerMap.set(customer.id, customer);
         if (customer.customer_code) {
             customerMap.set(customer.customer_code, customer);
         }
     });
     
-    const projectByCustomer = new Map();
-    projects.forEach(project => {
+    const projectByCustomer = new Map<any, any[]>();
+    projects.forEach((project: any) => {
         const customerKey = project.customer_id || project.customer_code;
         if (!customerKey) return;
         
@@ -1468,8 +1481,8 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
         projectByCustomer.get(customerKey).push(project);
     });
     
-    const ordersByProject = new Map();
-    orders.forEach(order => {
+    const ordersByProject = new Map<any, any[]>();
+    orders.forEach((order: any) => {
         if (!ordersByProject.has(order.project_id)) {
             ordersByProject.set(order.project_id, []);
         }
@@ -1488,12 +1501,12 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
         let totalCost = 0;
         let projectCount = customerProjects.length;
         
-        customerProjects.forEach(project => {
+        customerProjects.forEach((project: any) => {
             totalBudget += project.amount || 0;
             totalCost += project.total_cost || 0;
             
             const projectOrders = ordersByProject.get(project.id) || [];
-            projectOrders.forEach(order => {
+            projectOrders.forEach((order: any) => {
                 totalActual += order.amount || 0;
             });
         });
@@ -1511,13 +1524,17 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
             profitMargin,
             achievementRate,
             projectCount,
-            projects: customerProjects.map(p => ({
+            projects: customerProjects.map((p: any) => ({
                 id: p.id,
                 projectCode: p.project_code,
                 projectName: p.project_name,
-                budget: p.amount,
-                actualCost: totalCost,
-                orders: ordersByProject.get(p.id) || []
+                budget: p.amount || 0,
+                actualCost: p.total_cost || 0,
+                orders: (ordersByProject.get(p.id) || []).map((o: any) => ({
+                    id: o.id,
+                    amount: o.amount || 0,
+                    orderDate: o.order_date || o.create_date || '',
+                }))
             }))
         });
     }
