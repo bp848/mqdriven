@@ -835,6 +835,7 @@ const dbApplicationToApplication = (app: any): Application => ({
     formData: app.form_data,
     documentUrl: app.document_url ?? app.form_data?.documentUrl ?? null,
     status: app.status,
+    accountingStatus: app.accounting_status ?? 'none',
     submittedAt: app.submitted_at,
     approvedAt: app.approved_at,
     rejectedAt: app.rejected_at,
@@ -972,17 +973,43 @@ const ensureSupabaseSuccess = (error: PostgrestError | null, context: string): v
 
 export const getProjects = async (): Promise<Project[]> => {
     const supabase = getSupabase();
-    const [
-        { data: projectRows, error: projectError },
-        { data: customerRows, error: customerError },
-    ] = await Promise.all([
-        supabase
+    
+    // Try the enhanced query first (with relationship), fallback to basic query
+    let projectRows: any[] = [];
+    let projectError: any = null;
+    
+    try {
+        // Try with relationship (will work once foreign key is added)
+        const { data, error } = await supabase
+            .from('projects')
+            .select(`
+                *,
+                customers(id, customer_name, customer_code)
+            `)
+            .order('update_date', { ascending: false })
+            .order('project_code', { ascending: false });
+        
+        if (error) throw error;
+        projectRows = data || [];
+    } catch (err) {
+        // Fallback to basic query without relationship
+        console.warn('Projects relationship not available, using fallback query:', err.message);
+        const { data, error } = await supabase
             .from('projects')
             .select('*')
             .order('update_date', { ascending: false })
-            .order('project_code', { ascending: false }),
-        supabase.from('customers').select('id, customer_code, customer_name'),
-    ]);
+            .order('project_code', { ascending: false });
+        
+        if (error) {
+            projectError = error;
+        } else {
+            projectRows = data || [];
+        }
+    }
+    
+    const { data: customerRows, error: customerError } = await supabase
+        .from('customers')
+        .select('id, customer_code, customer_name');
 
     if (projectError) throw formatSupabaseError('Failed to fetch projects', projectError);
     if (customerError) console.warn('Failed to fetch customers for project mapping:', customerError.message);
@@ -1002,6 +1029,17 @@ export const getProjects = async (): Promise<Project[]> => {
     });
 
     return (projectRows || []).map(project => {
+        // Check if customer data is already included from the relationship query
+        if (project.customers) {
+            const merged = {
+                ...project,
+                customer_name: project.customers.customer_name ?? project.customer_name ?? null,
+                customer_code: project.customers.customer_code ?? project.customer_code ?? null,
+            };
+            return dbProjectToProject(merged);
+        }
+        
+        // Fallback to manual lookup
         const projectCustomerId = normalizeLookupKey(project.customer_id);
         const projectCustomerCode = normalizeLookupKey(project.customer_code);
         const customerInfo =
@@ -1714,6 +1752,23 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
         approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
     }));
+};
+
+export const createJournalFromApplication = async (
+    applicationId: string,
+    userId: string
+): Promise<string> => {
+    if (!applicationId) throw new Error('applicationId is required');
+    if (!userId) throw new Error('userId is required');
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('create_journal_from_application', {
+        p_application_id: applicationId,
+        p_user_id: userId,
+    });
+
+    ensureSupabaseSuccess(error, 'Failed to create journal from application');
+    return String(data);
 };
 
 export const syncApprovedLeaveToCalendars = async (): Promise<{ created: number; skipped: number; }> => {
