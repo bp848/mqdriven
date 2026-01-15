@@ -236,47 +236,36 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       </div>
       <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
-          {visibleCategories.map(category => (
-            <React.Fragment key={category.id}>
-              <li className={`mt-4`}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setExpandedItems(prev => ({ ...prev, [category.id]: !(prev[category.id] ?? false) }));
-                  }}
-                  className={`flex items-center w-full p-3 rounded-lg transition-colors duration-200 ${
-                    expandedItems[category.id] ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                  } ${isCollapsed ? 'justify-center' : 'gap-3'}`}
-                  aria-label={expandedItems[category.id] ? 'カテゴリを折りたたむ' : 'カテゴリを展開する'}
-                >
-                  {category.icon && <category.icon className="w-5 h-5 flex-shrink-0" />}
-                  <span className={`font-semibold text-xs uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>{category.name}</span>
-                  {!isCollapsed && (
-                    <ChevronDown className={`ml-auto w-4 h-4 transition-transform ${expandedItems[category.id] ? 'rotate-180' : ''}`} />
-                  )}
-                </button>
+	          {visibleCategories.map(category => (
+	            <React.Fragment key={category.id}>
+              <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
+                {!isCollapsed && category.name}
               </li>
-              {expandedItems[category.id] && !isCollapsed && (
-                <ul className="mt-1 space-y-1">
-                  {category.items.map(item => {
-                    const ItemIcon = item.icon ?? category.icon;
-                    const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
-                    const isActive = currentPage === item.page || isChildActive;
-                    const isExpanded = (expandedItems[item.page] ?? false) || isChildActive;
-                    return (
-                      <li key={item.page}>
+	              {category.items.map(item => {
+	                const ItemIcon = item.icon ?? category.icon;
+	                const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
+	                const isActive = currentPage === item.page || isChildActive;
+                    const isExpanded = !isCollapsed && ((expandedItems[item.page] ?? false) || isChildActive);
+	                return (
+	                  <li key={item.page}>
                         <a
                           href="#"
-                          onClick={(e) => { e.preventDefault(); onNavigate(item.page); }}
+                          onClick={(e) => { 
+                            e.preventDefault(); 
+                            if (item.children) {
+                              e.stopPropagation();
+                              setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
+                            } else {
+                              onNavigate(item.page);
+                            }
+                          }}
                           className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
                             isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                          } gap-3 ml-4`}
+                          } ${isCollapsed ? 'justify-center' : 'gap-3'}`}
                         >
                           {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
-                          <span className="font-medium">{item.name}</span>
-                          {item.children && (
+                          <span className={`font-medium ${isCollapsed ? 'sr-only' : ''}`}>{item.name}</span>
+                          {item.children && !isCollapsed && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -298,7 +287,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                                   : item.badgeColor === 'red'
                                     ? 'bg-rose-500 text-white'
                                     : 'bg-blue-500 text-white'
-                              }`}
+                              } ${isCollapsed ? 'ml-0' : ''}`}
                             >
                               {item.badge}
                             </span>
@@ -324,11 +313,9 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                             })}
                           </ul>
                         )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+	                  </li>
+	                );
+	              })}
             </React.Fragment>
           ))}
         </ul>
