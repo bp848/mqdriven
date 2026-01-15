@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getSupabase } from '../../services/supabaseClient';
+import { SUPABASE_KEY, SUPABASE_URL } from '../../supabaseCredentials';
 
 interface TestResult {
   test: string;
@@ -79,12 +80,13 @@ const DatabaseConnectionTest: React.FC = () => {
       // Test 5: Network Connectivity
       updateResult('Network Test', 'pending', 'Testing direct network connectivity...');
       try {
-        const response = await fetch('https://rwjhpfghhgstvplmggks.supabase.co/rest/v1/', {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
           method: 'GET',
           headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo',
-            'Content-Type': 'application/json'
-          }
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+          },
         });
         
         if (response.ok) {
