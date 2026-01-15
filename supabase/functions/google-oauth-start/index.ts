@@ -38,19 +38,22 @@ const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; 
   if (envUri) {
     if (/functions\.supabase\.co/.test(envUri)) {
       console.warn(
-        "GOOGLE_REDIRECT_URI points to Supabase Functions. Browser redirects from Google won't include Authorization headers; prefer an app callback URL like https://<app>/api/google/oauth/callback.",
+        "GOOGLE_REDIRECT_URI points to Supabase Functions. OAuth redirects from Google cannot include Authorization headers, so redirecting to a Functions URL will 401. Use an app URL (SPA route) instead, e.g. https://<app>/settings",
         { envUri },
       );
+      // Treat Functions URLs as misconfiguration and fall back to an app route.
+    } else {
+      return { uri: envUri, source: "env" };
     }
-    return { uri: envUri, source: "env" };
   }
-  // Fall back to app callback (preferred) instead of Functions callback, because OAuth redirects cannot set Authorization headers.
+
+  // Prefer an app route (SPA) for redirects. The app will then call the Edge Function with auth headers.
   const publicBaseUrl = Deno.env.get("PUBLIC_BASE_URL") || Deno.env.get("APP_BASE_URL");
   if (publicBaseUrl) {
     const base = publicBaseUrl.replace(/\/+$/, "");
-    return { uri: `${base}/api/google/oauth/callback`, source: "fallback" };
+    return { uri: `${base}/settings`, source: "fallback" };
   }
-  return { uri: "https://erp.b-p.co.jp/api/google/oauth/callback", source: "fallback" };
+  return { uri: "https://erp.b-p.co.jp/settings", source: "fallback" };
 };
 
 const parseAllowedOrigins = (): string[] => {

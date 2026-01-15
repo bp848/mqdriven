@@ -162,10 +162,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, goog
         autoExport: true,
     });
     const [isGoogleActionLoading, setIsGoogleActionLoading] = useState(false);
-    const callbackUrl =
+    const googleRedirectUri =
         typeof window !== 'undefined'
-            ? `${window.location.origin}/settings?google_calendar=ok`
-            : 'https://your-domain/settings?google_calendar=ok';
+            ? `${window.location.origin}/settings`
+            : 'https://your-domain/settings';
 
     useEffect(() => {
         mounted.current = true;
@@ -429,9 +429,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, goog
                         </p>
                         <div className="mt-2 text-xs text-slate-600 dark:text-slate-300 space-y-1 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-200 dark:border-slate-600">
                             <p className="font-semibold">連携に必要な設定</p>
-                            <p>・Google OAuthのリダイレクトURI: <span className="font-mono break-all">{callbackUrl}</span></p>
+                            <p>・Google OAuthのリダイレクトURI: <span className="font-mono break-all">{googleRedirectUri}</span></p>
                             <p>・Supabase Functions 環境変数: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI</p>
-                            <p>・この設定画面に戻ると `google_calendar=ok|error` がクエリに付きます。</p>
+                            <p>・リダイレクト後、この画面が `code/state` を処理して `google_calendar=ok|error` を表示します。</p>
                         </div>
                         <div className="mt-3 text-sm text-slate-700 dark:text-slate-200 space-y-1">
                             <p>連携状態: {currentGoogleStatus.loading ? '確認中...' : currentGoogleStatus.connected ? '連携済み' : '未連携'}</p>

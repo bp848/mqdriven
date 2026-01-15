@@ -40,19 +40,21 @@ const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; 
   if (envUri) {
     if (/functions\.supabase\.co/.test(envUri)) {
       console.warn(
-        "GOOGLE_REDIRECT_URI points to Supabase Functions. Browser redirects from Google won't include Authorization headers; prefer an app callback URL like https://<app>/api/google/oauth/callback.",
+        "GOOGLE_REDIRECT_URI points to Supabase Functions. OAuth redirects from Google cannot include Authorization headers, so redirecting to a Functions URL will 401. Use an app URL (SPA route) instead, e.g. https://<app>/settings",
         { envUri },
       );
+      // Treat Functions URLs as misconfiguration and fall back to an app route.
+    } else {
+      return { uri: envUri, source: 'env' };
     }
-    return { uri: envUri, source: 'env' };
   }
   const publicBaseUrl = Deno.env.get('PUBLIC_BASE_URL') || Deno.env.get('APP_BASE_URL');
   if (publicBaseUrl) {
     const base = publicBaseUrl.replace(/\/+$/, '');
-    return { uri: `${base}/api/google/oauth/callback`, source: 'fallback' };
+    return { uri: `${base}/settings`, source: 'fallback' };
   }
   // Token exchange must use the same redirect_uri as the one used in google-oauth-start.
-  return { uri: 'https://erp.b-p.co.jp/api/google/oauth/callback', source: 'fallback' };
+  return { uri: 'https://erp.b-p.co.jp/settings', source: 'fallback' };
 };
 
 const parseAllowedOrigins = (): string[] => {
@@ -217,19 +219,26 @@ serve(async (req: Request) => {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
 
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return jsonResponse({ error: 'method not allowed' }, 405, origin);
   }
 
   try {
     const url = new URL(req.url);
-    const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state');
+    const isJson = (req.headers.get('content-type') || '').includes('application/json');
+    const input = req.method === 'POST' && isJson
+      ? await req.json().catch(() => null) as { code?: string; state?: string } | null
+      : null;
+    const code = req.method === 'GET' ? url.searchParams.get('code') : (input?.code ?? null);
+    const state = req.method === 'GET' ? url.searchParams.get('state') : (input?.state ?? null);
     const parsedState = parseStatePayload(state);
-    const redirectBase = pickRedirectBase(parsedState.returnTo, url.origin);
+    const redirectBase = pickRedirectBase(parsedState.returnTo, origin ?? url.origin);
 
     if (!code || !parsedState.userId) {
-      return jsonResponse({ error: 'missing or invalid code/state' }, 400, origin);
+      if (req.method === 'GET') {
+        return jsonResponse({ error: 'missing or invalid code/state' }, 400, origin);
+      }
+      return jsonResponse({ ok: false, reason: 'missing_code_or_state' }, 200, origin);
     }
 
     // TODO: Add signed/DB-backed state verification if needed
@@ -256,8 +265,11 @@ serve(async (req: Request) => {
         origin,
         requestHost,
       });
-      const location = `${redirectNg}&reason=server_not_configured`;
-      return redirectResponse(location, origin);
+      if (req.method === 'GET') {
+        const location = `${redirectNg}&reason=server_not_configured`;
+        return redirectResponse(location, origin);
+      }
+      return jsonResponse({ ok: false, reason: 'server_not_configured' }, 200, origin);
     }
 
     // Exchange code for tokens
@@ -281,8 +293,11 @@ serve(async (req: Request) => {
         origin,
         requestHost,
       });
-      const location = `${redirectNg}&reason=token_exchange_failed`;
-      return redirectResponse(location, origin);
+      if (req.method === 'GET') {
+        const location = `${redirectNg}&reason=token_exchange_failed`;
+        return redirectResponse(location, origin);
+      }
+      return jsonResponse({ ok: false, reason: 'token_exchange_failed' }, 200, origin);
     }
 
     if (redirectSource === 'fallback') {
@@ -295,8 +310,11 @@ serve(async (req: Request) => {
 
     if (!refreshToken) {
       console.error('google-oauth-callback missing refresh_token after consent', { userId: parsedState.userId });
-      const location = `${redirectNg}&reason=missing_refresh_token`;
-      return redirectResponse(location, origin);
+      if (req.method === 'GET') {
+        const location = `${redirectNg}&reason=missing_refresh_token`;
+        return redirectResponse(location, origin);
+      }
+      return jsonResponse({ ok: false, reason: 'missing_refresh_token' }, 200, origin);
     }
 
     const payload = {
@@ -325,8 +343,11 @@ serve(async (req: Request) => {
     if (!upsertRes.ok) {
       const detail = await upsertRes.text();
       console.error('google-oauth-callback upsert failed', { status: upsertRes.status, detail, origin, requestHost });
-      const location = `${redirectNg}&reason=store_failed`;
-      return redirectResponse(location, origin);
+      if (req.method === 'GET') {
+        const location = `${redirectNg}&reason=store_failed`;
+        return redirectResponse(location, origin);
+      }
+      return jsonResponse({ ok: false, reason: 'store_failed' }, 200, origin);
     }
 
     console.info('google-oauth-callback success', {
@@ -340,9 +361,12 @@ serve(async (req: Request) => {
     // Kick off first sync if configured
     await triggerInitialSync(parsedState.userId);
 
-    return redirectResponse(redirectOk, origin);
+    if (req.method === 'GET') {
+      return redirectResponse(redirectOk, origin);
+    }
+    return jsonResponse({ ok: true }, 200, origin);
   } catch (e) {
     console.error('google-oauth-callback unexpected error', e);
-    return jsonResponse({ error: 'unexpected_error', message: String(e) }, 500, origin);
+    return jsonResponse({ ok: false, reason: 'unexpected_error', message: String(e) }, 500, origin);
   }
 });
