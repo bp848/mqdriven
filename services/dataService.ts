@@ -1,4 +1,4 @@
-import { getSupabase } from './supabaseClient';
+import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from './notificationService';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
@@ -3423,7 +3423,12 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
 
 const invokeFunction = async <T = any>(name: string, options?: { body?: any; headers?: Record<string, string> }) => {
     const supabase = getSupabase();
-    const { data, error } = await withTimeout(supabase.functions.invoke<T>(name, options), 12000);
+    const defaultHeaders = await getSupabaseFunctionHeaders(supabase);
+    const mergedHeaders = options?.headers?.Authorization
+        ? { ...options.headers }
+        : { ...defaultHeaders, ...(options?.headers || {}) };
+    const invokeOptions = options ? { ...options, headers: mergedHeaders } : { headers: mergedHeaders };
+    const { data, error } = await withTimeout(supabase.functions.invoke<T>(name, invokeOptions), 12000);
     if (error) {
         throw new Error(error.message || 'Function invocation failed');
     }
@@ -3739,7 +3744,8 @@ export const requestFaxOcr = async (intake: FaxIntake): Promise<void> => {
         }
 
         const supabase = getSupabase();
-        const { error } = await supabase.functions.invoke(getFaxOcrFunctionName(), { body: payload });
+        const headers = await getSupabaseFunctionHeaders(supabase);
+        const { error } = await supabase.functions.invoke(getFaxOcrFunctionName(), { body: payload, headers });
         if (error) {
             throw new Error(error.message || 'Failed to invoke fax OCR function');
         }

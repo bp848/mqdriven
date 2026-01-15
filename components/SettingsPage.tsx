@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, Save, Mail, CheckCircle } from './Icons';
 import { Toast, EmployeeUser } from '../types';
-import { getSupabase } from '../services/supabaseClient';
+import { getSupabase, getSupabaseFunctionHeaders } from '../services/supabaseClient';
 
 type NotificationTemplateKey = 'submitted' | 'step_forward' | 'approved' | 'rejected';
 
@@ -230,8 +230,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, goog
         setCurrentGoogleStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabase = getSupabase();
-            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
-            const headers = { Authorization: `Bearer ${anonKey}` };
+            const headers = await getSupabaseFunctionHeaders(supabase);
             const { data, error } = await supabase.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
                 body: { user_id: currentUser.id },
                 headers,
@@ -312,8 +311,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, goog
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
-            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
-            const headers = { Authorization: `Bearer ${anonKey}` };
+            const headers = await getSupabaseFunctionHeaders(supabase);
             const { data, error } = await supabase.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
                 body: { user_id: currentUser.id },
                 headers,
@@ -350,8 +348,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, goog
         setIsGoogleActionLoading(true);
         try {
             const supabase = getSupabase();
-            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3amhwZmdoaGdzdHZwbG1nZ2tzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MDgzNDYsImV4cCI6MjA3NDI4NDM0Nn0.RfCRooN6YVTHJ2Mw-xFCWus3wUVMLkJCLSitB8TNiIo';
-            const headers = { Authorization: `Bearer ${anonKey}` };
+            const headers = await getSupabaseFunctionHeaders(supabase);
             const { error } = await supabase.functions.invoke('google-oauth-disconnect', {
                 body: { user_id: currentUser.id },
                 headers,

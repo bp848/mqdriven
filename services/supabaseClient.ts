@@ -39,3 +39,22 @@ export const hasSupabaseCredentials = (): boolean => {
     const isKeyPlaceholder = SUPABASE_KEY.includes('ここにキーを貼り付け');
     return !!(SUPABASE_URL && SUPABASE_KEY && !isUrlPlaceholder && !isKeyPlaceholder);
 };
+
+// Supabase Functions を呼び出すための Authorization ヘッダーを生成する。
+// - 可能なら Supabase Auth の access_token を優先（ユーザーコンテキストで実行）
+// - それ以外は anon key を Bearer として付与（Functions Gateway の 401 を回避）
+export const getSupabaseFunctionHeaders = async (
+    client?: SupabaseClient,
+): Promise<Record<string, string>> => {
+    const supabaseClient = client ?? getSupabase();
+    try {
+        const { data } = await supabaseClient.auth.getSession();
+        const accessToken = data?.session?.access_token;
+        if (accessToken) {
+            return { Authorization: `Bearer ${accessToken}` };
+        }
+    } catch {
+        // Ignore and fall back to anon key below.
+    }
+    return { Authorization: `Bearer ${SUPABASE_KEY}` };
+};

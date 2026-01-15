@@ -65,10 +65,14 @@ import PromptManagementPage from './components/PromptManagementPage';
 import AnalysisMenuPage from './components/analysis/AnalysisMenuPage';
 import SalesAnalysisPage from './components/analysis/SalesAnalysisPage';
 import ApprovalExpenseAnalysisPage from './components/analysis/ApprovalExpenseAnalysisPage';
+import BusinessPlanPage from './components/analysis/BusinessPlanPage';
+import SalesStatusPage from './components/analysis/SalesStatusPage';
+import CustomerAnalysisPage from './components/analysis/CustomerAnalysisPage';
+import FinancialAnalysisPage from './components/analysis/FinancialAnalysisPage';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
-import { getSupabase, hasSupabaseCredentials } from './services/supabaseClient';
+import { getSupabase, getSupabaseFunctionHeaders, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill, Project } from './types';
@@ -531,8 +535,7 @@ const App: React.FC = () => {
         setGoogleAuthStatus(prev => ({ ...prev, loading: true }));
         try {
             const supabaseClient = getSupabase();
-            const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
-            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
+            const headers = await getSupabaseFunctionHeaders(supabaseClient);
             const { data, error } = await withTimeout(
                 supabaseClient.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
                     body: { user_id: currentUser.id },
@@ -636,8 +639,7 @@ const App: React.FC = () => {
         setIsGoogleAuthLoading(true);
         try {
             const supabaseClient = getSupabase();
-            const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
-            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
+            const headers = await getSupabaseFunctionHeaders(supabaseClient);
             const { data, error } = await withTimeout(
                 supabaseClient.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
                     body: { user_id: currentUser.id },
@@ -670,8 +672,7 @@ const App: React.FC = () => {
         setIsGoogleAuthLoading(true);
         try {
             const supabaseClient = getSupabase();
-            const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
-            const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
+            const headers = await getSupabaseFunctionHeaders(supabaseClient);
             const { error } = await withTimeout(
                 supabaseClient.functions.invoke('google-oauth-disconnect', {
                     body: { user_id: currentUser.id },
@@ -1229,6 +1230,14 @@ useEffect(() => {
                 return <SalesAnalysisPage />;
             case 'analysis_approval_expense':
                 return <ApprovalExpenseAnalysisPage />;
+            case 'analysis_business_plan':
+                return <BusinessPlanPage />;
+            case 'analysis_sales_status':
+                return <SalesStatusPage />;
+            case 'analysis_customer':
+                return <CustomerAnalysisPage />;
+            case 'analysis_financial':
+                return <FinancialAnalysisPage />;
             case 'sales_orders':
                 return (
                     <SalesOrdersPage
