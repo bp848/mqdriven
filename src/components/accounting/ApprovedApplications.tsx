@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { FileCheck, Search, Eye, Calendar, ArrowRight, Loader } from 'lucide-react';
+import { FileCheck, Search, Eye, Calendar, ArrowRight, Loader, X } from 'lucide-react';
 import { ApplicationWithDetails, Page } from '../../../types';
 import * as dataService from '../../../services/dataService';
 import { getSupabase } from '../../../services/supabaseClient';
@@ -34,6 +34,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   const [isSyncingLeave, setIsSyncingLeave] = useState(false);
   const [isCreatingJournalFor, setIsCreatingJournalFor] = useState<string | null>(null);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -171,6 +172,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
 
   const handleSyncLeaveToCalendars = async () => {
     setIsSyncingLeave(true);
+    setActionError(null);
     try {
       const result = await dataService.syncApprovedLeaveToCalendars();
       notify?.(
@@ -179,18 +181,23 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
       );
     } catch (err: any) {
       console.error('[ApprovedApplications] sync leave failed', err);
-      notify?.(err?.message || '休暇予定の登録に失敗しました。', 'error');
+      const message = err?.message || '休暇予定の登録に失敗しました。';
+      setActionError(message);
+      notify?.(message, 'error');
     } finally {
       setIsSyncingLeave(false);
     }
   };
 
   const handleCreateJournal = async (applicationId: string) => {
-    const operatorId = currentUserId ?? authUserId;
+    const operatorId = authUserId ?? currentUserId;
     if (!operatorId) {
-      notify?.('ログインユーザーが特定できないため、仕訳を作成できません。', 'error');
+      const message = 'ログインユーザーが特定できないため、仕訳を作成できません。';
+      setActionError(message);
+      notify?.(message, 'error');
       return;
     }
+    setActionError(null);
     setIsCreatingJournalFor(applicationId);
     try {
       const batchId = await dataService.createJournalFromApplication(applicationId, operatorId);
@@ -199,7 +206,13 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
       onNavigate?.('accounting_journal_review');
     } catch (err: any) {
       console.error('[ApprovedApplications] create journal failed', err);
-      notify?.(err?.message || '仕訳ドラフトの作成に失敗しました。', 'error');
+      const rawMessage = err?.message || '仕訳ドラフトの作成に失敗しました。';
+      const message =
+        typeof rawMessage === 'string' && /Could not determine accounts/i.test(rawMessage)
+          ? `${rawMessage}\n（勘定科目マスタ: public.account_items に必要な勘定科目コードがあるか確認してください）`
+          : rawMessage;
+      setActionError(message);
+      notify?.(message, 'error');
     } finally {
       setIsCreatingJournalFor(null);
     }
@@ -266,6 +279,12 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
             />
         </div>
       </div>
+
+      {actionError && (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 rounded-xl p-4 text-sm whitespace-pre-wrap">
+          {actionError}
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -411,49 +430,95 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
       </div>
 
       {selectedApplication && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">詳細</p>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{buildTitle(selectedApplication)}</h3>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                {selectedApplication.applicationCode?.name || '種別未設定'} / {selectedApplication.applicant?.name || '申請者未設定'}
-              </p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-label="承認済申請 詳細"
+          onClick={() => setSelectedApplicationId(null)}
+        >
+          <div
+            className="w-full max-w-4xl bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200 dark:border-slate-700">
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500 dark:text-slate-400">詳細</p>
+                <h3 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white truncate">
+                  {buildTitle(selectedApplication)}
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {selectedApplication.applicationCode?.name || '種別未設定'} / {selectedApplication.applicant?.name || '申請者未設定'}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  承認日時: {formatDate(selectedApplication.approvedAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedApplicationId(null)}
+                className="inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                aria-label="閉じる"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              承認日時: {formatDate(selectedApplication.approvedAt)}
+
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">金額</p>
+                  <p className="font-mono font-semibold text-slate-800 dark:text-slate-100">
+                    {(() => {
+                      const amount = deriveAmount(selectedApplication);
+                      return amount !== null ? `¥${formatCurrency(amount)}` : '-';
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">会計ステータス</p>
+                  <p className="text-slate-800 dark:text-slate-100">
+                    {getAccountingStatusLabel(selectedApplication.accountingStatus ?? 'none')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">申請ID</p>
+                  <p className="font-mono text-slate-800 dark:text-slate-100 break-all">{selectedApplication.id}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">申請コード</p>
+                  <p className="text-slate-800 dark:text-slate-100">
+                    {selectedApplication.applicationCode?.code || '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">申請者メール</p>
+                  <p className="text-slate-800 dark:text-slate-100">{selectedApplication.applicant?.email || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">添付</p>
+                  {selectedApplication.documentUrl ? (
+                    <a
+                      className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200 underline break-all"
+                      href={selectedApplication.documentUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {selectedApplication.documentUrl}
+                    </a>
+                  ) : (
+                    <span className="text-slate-500 dark:text-slate-400">-</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">申請内容 (form_data)</p>
+                <pre className="text-xs bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 overflow-x-auto text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
+                  {JSON.stringify(selectedApplication.formData ?? {}, null, 2)}
+                </pre>
+              </div>
             </div>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-	            <div>
-	              <p className="text-xs text-slate-500 dark:text-slate-400">金額</p>
-	              <p className="font-mono font-semibold text-slate-800 dark:text-slate-100">
-	                {(() => {
-	                  const amount = deriveAmount(selectedApplication);
-	                  return amount !== null ? `¥${formatCurrency(amount)}` : '-';
-	                })()}
-	              </p>
-	            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">申請ID</p>
-              <p className="font-mono text-slate-800 dark:text-slate-100 break-all">{selectedApplication.id}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">申請者メール</p>
-              <p className="text-slate-800 dark:text-slate-100">{selectedApplication.applicant?.email || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">申請コード</p>
-              <p className="text-slate-800 dark:text-slate-100">
-                {selectedApplication.applicationCode?.code || '-'}
-              </p>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">申請内容 (form_data)</p>
-            <pre className="text-xs bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 overflow-x-auto text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
-              {JSON.stringify(selectedApplication.formData ?? {}, null, 2)}
-            </pre>
           </div>
         </div>
       )}

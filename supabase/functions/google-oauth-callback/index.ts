@@ -1,3 +1,5 @@
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://erp.b-p.co.jp',
   'http://localhost:3000',
@@ -200,7 +202,7 @@ const fetchExistingRefreshToken = async (
 
 console.info('google-oauth-callback ready');
 
-Deno.serve(async (req: Request) => {
+serve(async (req: Request) => {
   const origin = req.headers.get('Origin');
   const requestHost = (() => {
     try {

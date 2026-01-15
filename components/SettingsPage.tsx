@@ -238,6 +238,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ addToast, currentUser, goog
             });
             if (error) {
                 console.warn('Google OAuth status fetch failed (function may not be deployed):', error);
+                setCurrentGoogleStatus(prev => ({ ...prev, loading: false }));
                 return;
             }
             console.info('[GoogleAuth] status fetched', data);

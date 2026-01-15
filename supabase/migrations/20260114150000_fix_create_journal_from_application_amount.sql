@@ -1,9 +1,9 @@
--- supabase/rpc_create_journal_from_application.sql
+-- Fix amount parsing in create_journal_from_application (handle JSON string amounts like "2,200")
 CREATE OR REPLACE FUNCTION public.create_journal_from_application(
     p_application_id uuid,
     p_user_id uuid
 )
-RETURNS uuid -- 作成されたバッチIDを返します
+RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -35,7 +35,6 @@ BEGIN
     END IF;
 
     -- 3. 申請データに基づき、仕訳内容を決定（マッピングロジック）
-    -- ここは申請種別ごとに拡張が必要なプレースホルダーロジックです
     v_amount_text := COALESCE(
         v_application.form_data->>'totalAmount',
         v_application.form_data->>'amount',
@@ -159,6 +158,5 @@ BEGIN
 
     -- 6. 作成したバッチIDを返す
     RETURN v_batch_id;
-
 END;
 $$;

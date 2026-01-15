@@ -116,6 +116,27 @@ const isGoogleOAuthAllowedOrigin = () => {
     return false;
 };
 
+class TimeoutError extends Error {
+    constructor(message = 'Request timed out') {
+        super(message);
+        this.name = 'TimeoutError';
+    }
+}
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new TimeoutError()), timeoutMs);
+    });
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+    }
+};
+
 type PredictiveSuggestion = {
     id: string;
     value: string;
@@ -486,7 +507,7 @@ const App: React.FC = () => {
         });
     };
 
-    const fetchGoogleAuthStatus = useCallback(async () => {
+    const fetchGoogleAuthStatus = useCallback(async (options?: { interactive?: boolean }) => {
         if (!currentUser) {
             setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
             return;
@@ -500,10 +521,13 @@ const App: React.FC = () => {
             const supabaseClient = getSupabase();
             const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
             const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
-            const { data, error } = await supabaseClient.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
-                body: { user_id: currentUser.id },
-                headers,
-            });
+            const { data, error } = await withTimeout(
+                supabaseClient.functions.invoke<{ connected?: boolean; expires_at?: string | null }>('google-oauth-status', {
+                    body: { user_id: currentUser.id },
+                    headers,
+                }),
+                8000,
+            );
             if (error) {
                 console.warn('Google OAuth status fetch failed (function may not be deployed):', error);
                 setGoogleAuthStatus({
@@ -511,6 +535,9 @@ const App: React.FC = () => {
                     expiresAt: null,
                     loading: false,
                 });
+                if (options?.interactive) {
+                    addToast('Google連携ステータスの取得に失敗しました（Supabase Functionsの状態をご確認ください）。', 'error');
+                }
                 return;
             }
             setGoogleAuthStatus({
@@ -521,8 +548,17 @@ const App: React.FC = () => {
         } catch (err) {
             console.warn('Failed to fetch Google OAuth status (function may not be deployed):', err);
             setGoogleAuthStatus(prev => ({ ...prev, loading: false }));
+            if (options?.interactive) {
+                const isTimeout = err instanceof TimeoutError;
+                addToast(
+                    isTimeout
+                        ? 'Google連携ステータスの取得がタイムアウトしました（Supabase Functionsの応答をご確認ください）。'
+                        : 'Google連携ステータスの取得でエラーが発生しました。',
+                    'error',
+                );
+            }
         }
-    }, [currentUser]);
+    }, [addToast, currentUser]);
 
     useEffect(() => {
         fetchGoogleAuthStatus();
@@ -590,10 +626,13 @@ const App: React.FC = () => {
             const supabaseClient = getSupabase();
             const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
             const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
-            const { data, error } = await supabaseClient.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
-                body: { user_id: currentUser.id },
-                headers,
-            });
+            const { data, error } = await withTimeout(
+                supabaseClient.functions.invoke<{ authUrl?: string }>('google-oauth-start', {
+                    body: { user_id: currentUser.id },
+                    headers,
+                }),
+                8000,
+            );
             if (error) throw error;
             if (data?.authUrl) window.open(data.authUrl, '_blank', 'noopener');
             else addToast('認可URLを取得できませんでした。', 'error');
@@ -621,10 +660,13 @@ const App: React.FC = () => {
             const supabaseClient = getSupabase();
             const anonKey = (supabaseClient as any).supabaseKey ?? (typeof process !== 'undefined' ? (process as any).env?.VITE_SUPABASE_ANON_KEY : undefined);
             const headers = anonKey ? { Authorization: `Bearer ${anonKey}` } : undefined;
-            const { error } = await supabaseClient.functions.invoke('google-oauth-disconnect', {
-                body: { user_id: currentUser.id },
-                headers,
-            });
+            const { error } = await withTimeout(
+                supabaseClient.functions.invoke('google-oauth-disconnect', {
+                    body: { user_id: currentUser.id },
+                    headers,
+                }),
+                8000,
+            );
             if (error) throw error;
             addToast('Googleカレンダー連携を解除しました。', 'success');
             setGoogleAuthStatus({ connected: false, expiresAt: null, loading: false });
@@ -636,6 +678,10 @@ const App: React.FC = () => {
             setIsGoogleAuthLoading(false);
         }
     };
+
+    const handleRefreshGoogleAuthStatus = useCallback(() => {
+        fetchGoogleAuthStatus({ interactive: true });
+    }, [fetchGoogleAuthStatus]);
 
     const handleResumeApplicationDraft = useCallback((application: ApplicationWithDetails) => {
         if (!currentUser || application.applicantId !== currentUser.id) {
@@ -1352,7 +1398,7 @@ useEffect(() => {
                         allUsers={allUsers}
                         addToast={addToast}
                         onCreateDailyReport={handleCreateDailyReport}
-                        onRefreshGoogleAuthStatus={fetchGoogleAuthStatus}
+                        onRefreshGoogleAuthStatus={handleRefreshGoogleAuthStatus}
                         onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
                         onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
                         googleAuthConnected={googleAuthStatus.connected}

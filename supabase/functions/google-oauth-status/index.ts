@@ -1,3 +1,5 @@
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://erp.b-p.co.jp",
   "http://localhost:3000",
@@ -57,7 +59,7 @@ const jsonResponse = (req: Request, body: unknown, status = 200) =>
 
 console.info("google-oauth-status ready");
 
-Deno.serve(async (req: Request) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: buildCorsHeaders(req) });
   }

@@ -3394,9 +3394,30 @@ export const deleteEstimateDetail = async (detailId: string): Promise<void> => {
 };
 
 // --- Calendar (system) ---
+class FunctionTimeoutError extends Error {
+    constructor(message = 'Function invocation timed out') {
+        super(message);
+        this.name = 'FunctionTimeoutError';
+    }
+}
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new FunctionTimeoutError()), timeoutMs);
+    });
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+    }
+};
+
 const invokeFunction = async <T = any>(name: string, options?: { body?: any; headers?: Record<string, string> }) => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.functions.invoke<T>(name, options);
+    const { data, error } = await withTimeout(supabase.functions.invoke<T>(name, options), 12000);
     if (error) {
         throw new Error(error.message || 'Function invocation failed');
     }
