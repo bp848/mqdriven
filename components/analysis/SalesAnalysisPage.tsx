@@ -46,14 +46,13 @@ const SalesAnalysisPage: React.FC = () => {
       } else if (timeRange === '30d') {
         startDate.setDate(endDate.getDate() - 30);
       } else {
-        startDate.setDate(endDate.getDate() - 90);
+        startDate.setFullYear(endDate.getFullYear() - 1);
       }
 
-      // 見積データから売上情報を取得
+      // 見積データから売上情報を取得（過去データも含める）
       const { data: estimates, error: estimatesError } = await supabase
         .from('estimates')
         .select('*')
-        .gte('create_date', startDate.toISOString())
         .lte('create_date', endDate.toISOString())
         .in('status', ['1', '2']); // status: 1=approved, 2=ordered
 
@@ -78,13 +77,17 @@ const SalesAnalysisPage: React.FC = () => {
       const dailySalesMap = new Map<string, { sales: number; orders: number; customers: number }>();
       
       estimates?.forEach(estimate => {
-        const date = new Date(estimate.create_date).toISOString().split('T')[0];
-        const current = dailySalesMap.get(date) || { sales: 0, orders: 0, customers: 0 };
-        dailySalesMap.set(date, {
-          sales: current.sales + (estimate.total || 0),
-          orders: current.orders + 1,
-          customers: current.customers + 1
-        });
+        const estimateDate = new Date(estimate.create_date);
+        // 指定期間内のデータのみを集計
+        if (estimateDate >= startDate && estimateDate <= endDate) {
+          const date = estimateDate.toISOString().split('T')[0];
+          const current = dailySalesMap.get(date) || { sales: 0, orders: 0, customers: 0 };
+          dailySalesMap.set(date, {
+            sales: current.sales + (estimate.total || 0),
+            orders: current.orders + 1,
+            customers: current.customers + 1
+          });
+        }
       });
 
       const salesData: SalesData[] = Array.from(dailySalesMap.entries())
@@ -95,14 +98,16 @@ const SalesAnalysisPage: React.FC = () => {
       const productSalesMap = new Map<string, { sales: number; quantity: number }>();
       
       estimates?.forEach(estimate => {
-        estimate.items?.forEach((item: any) => {
-          const productName = item.division || 'その他';
+        const estimateDate = new Date(estimate.create_date);
+        // 指定期間内のデータのみを集計
+        if (estimateDate >= startDate && estimateDate <= endDate) {
+          const productName = estimate.specification || 'その他';
           const current = productSalesMap.get(productName) || { sales: 0, quantity: 0 };
           productSalesMap.set(productName, {
-            sales: current.sales + (item.price || 0),
-            quantity: current.quantity + (item.quantity || 0)
+            sales: current.sales + (estimate.total || 0),
+            quantity: current.quantity + (estimate.copies || 0)
           });
-        });
+        }
       });
 
       const productSales: ProductSales[] = Array.from(productSalesMap.entries())

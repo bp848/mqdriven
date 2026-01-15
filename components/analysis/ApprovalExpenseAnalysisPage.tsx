@@ -52,7 +52,7 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         startDate.setFullYear(endDate.getFullYear() - 1);
       }
 
-      // 申請データを取得
+      // 申請データを取得（過去データも含める）
       const { data: applications, error: applicationsError } = await supabase
         .from('applications')
         .select(`
@@ -60,7 +60,6 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
           applicant:employees(name, department),
           application_code:application_codes(name, code)
         `)
-        .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString());
 
       if (applicationsError) {
@@ -72,26 +71,30 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       const monthlyDataMap = new Map<string, { pending: number; approved: number; rejected: number; totalAmount: number }>();
       
       applications?.forEach(app => {
-        const month = new Date(app.created_at).toISOString().slice(0, 7); // YYYY-MM
-        const current = monthlyDataMap.get(month) || { pending: 0, approved: 0, rejected: 0, totalAmount: 0 };
-        
-        if (app.status === 'pending_approval') {
-          current.pending++;
-        } else if (app.status === 'approved') {
-          current.approved++;
-        } else if (app.status === 'rejected') {
-          current.rejected++;
-        }
-
-        // 経費申請の場合は金額を加算（form_dataから取得）
-        if (app.form_data && typeof app.form_data === 'object') {
-          const formData = app.form_data as any;
-          if (formData.amount) {
-            current.totalAmount += Number(formData.amount) || 0;
+        const appDate = new Date(app.created_at);
+        // 指定期間内のデータのみを集計
+        if (appDate >= startDate && appDate <= endDate) {
+          const month = appDate.toISOString().slice(0, 7); // YYYY-MM
+          const current = monthlyDataMap.get(month) || { pending: 0, approved: 0, rejected: 0, totalAmount: 0 };
+          
+          if (app.status === 'pending_approval') {
+            current.pending++;
+          } else if (app.status === 'approved') {
+            current.approved++;
+          } else if (app.status === 'rejected') {
+            current.rejected++;
           }
-        }
 
-        monthlyDataMap.set(month, current);
+          // 経費申請の場合は金額を加算（form_dataから取得）
+          if (app.form_data && typeof app.form_data === 'object') {
+            const formData = app.form_data as any;
+            if (formData.amount) {
+              current.totalAmount += Number(formData.amount) || 0;
+            }
+          }
+
+          monthlyDataMap.set(month, current);
+        }
       });
 
       const approvalData: ApprovalData[] = Array.from(monthlyDataMap.entries())
@@ -110,16 +113,20 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       };
 
       applications?.forEach(app => {
-        if (app.form_data && typeof app.form_data === 'object') {
-          const formData = app.form_data as any;
-          if (formData.expenseCategory) {
-            const category = formData.expenseCategory;
-            const amount = Number(formData.amount) || 0;
-            const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
-            expenseCategoryMap.set(category, {
-              amount: current.amount + amount,
-              count: current.count + 1
-            });
+        const appDate = new Date(app.created_at);
+        // 指定期間内のデータのみを集計
+        if (appDate >= startDate && appDate <= endDate) {
+          if (app.form_data && typeof app.form_data === 'object') {
+            const formData = app.form_data as any;
+            if (formData.expenseCategory) {
+              const category = formData.expenseCategory;
+              const amount = Number(formData.amount) || 0;
+              const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
+              expenseCategoryMap.set(category, {
+                amount: current.amount + amount,
+                count: current.count + 1
+              });
+            }
           }
         }
       });
@@ -136,25 +143,29 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       const departmentMap = new Map<string, { pending: number; approved: number; totalProcessTime: number; count: number }>();
       
       applications?.forEach(app => {
-        const department = app.applicant?.department || '未設定';
-        const current = departmentMap.get(department) || { pending: 0, approved: 0, totalProcessTime: 0, count: 0 };
-        
-        if (app.status === 'pending_approval') {
-          current.pending++;
-        } else if (app.status === 'approved') {
-          current.approved++;
+        const appDate = new Date(app.created_at);
+        // 指定期間内のデータのみを集計
+        if (appDate >= startDate && appDate <= endDate) {
+          const department = app.applicant?.department || '未設定';
+          const current = departmentMap.get(department) || { pending: 0, approved: 0, totalProcessTime: 0, count: 0 };
           
-          // 承認処理時間を計算
-          if (app.submitted_at && app.approved_at) {
-            const submitted = new Date(app.submitted_at);
-            const approved = new Date(app.approved_at);
-            const processTime = Math.ceil((approved.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24)); // 日数
-            current.totalProcessTime += processTime;
-            current.count++;
+          if (app.status === 'pending_approval') {
+            current.pending++;
+          } else if (app.status === 'approved') {
+            current.approved++;
+            
+            // 承認処理時間を計算
+            if (app.submitted_at && app.approved_at) {
+              const submitted = new Date(app.submitted_at);
+              const approved = new Date(app.approved_at);
+              const processTime = Math.ceil((approved.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24)); // 日数
+              current.totalProcessTime += processTime;
+              current.count++;
+            }
           }
-        }
 
-        departmentMap.set(department, current);
+          departmentMap.set(department, current);
+        }
       });
 
       const departmentStats: DepartmentStats[] = Array.from(departmentMap.entries())
