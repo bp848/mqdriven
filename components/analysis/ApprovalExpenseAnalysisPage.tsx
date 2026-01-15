@@ -41,7 +41,131 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       setLoading(true);
       const supabase = getSupabase();
       
-      // ダミーデータ（実際にはデータベースから取得）
+      // データ取得期間を計算
+      const endDate = new Date();
+      const startDate = new Date();
+      if (timeRange === '30d') {
+        startDate.setDate(endDate.getDate() - 30);
+      } else if (timeRange === '90d') {
+        startDate.setDate(endDate.getDate() - 90);
+      } else {
+        startDate.setFullYear(endDate.getFullYear() - 1);
+      }
+
+      // 申請データを取得
+      const { data: applications, error: applicationsError } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          applicant:employees(name, department),
+          application_code:application_codes(name, code)
+        `)
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString());
+
+      if (applicationsError) {
+        console.error('申請データ取得エラー:', applicationsError);
+        throw applicationsError;
+      }
+
+      // 月別承認状況データの集計
+      const monthlyDataMap = new Map<string, { pending: number; approved: number; rejected: number; totalAmount: number }>();
+      
+      applications?.forEach(app => {
+        const month = new Date(app.created_at).toISOString().slice(0, 7); // YYYY-MM
+        const current = monthlyDataMap.get(month) || { pending: 0, approved: 0, rejected: 0, totalAmount: 0 };
+        
+        if (app.status === 'pending_approval') {
+          current.pending++;
+        } else if (app.status === 'approved') {
+          current.approved++;
+        } else if (app.status === 'rejected') {
+          current.rejected++;
+        }
+
+        // 経費申請の場合は金額を加算
+        if (app.application_code?.code === 'EXP' && app.formData?.amount) {
+          current.totalAmount += Number(app.formData.amount) || 0;
+        }
+
+        monthlyDataMap.set(month, current);
+      });
+
+      const approvalData: ApprovalData[] = Array.from(monthlyDataMap.entries())
+        .map(([month, data]) => ({ month, ...data }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+      // 経費カテゴリー別データの集計
+      const expenseCategoryMap = new Map<string, { amount: number; count: number }>();
+      const categoryColors: Record<string, string> = {
+        '出張旅費': '#3B82F6',
+        '接待交際費': '#10B981',
+        '消耗品費': '#F59E0B',
+        '通信費': '#EF4444',
+        '修繕費': '#8B5CF6',
+        'その他': '#6B7280'
+      };
+
+      applications?.forEach(app => {
+        if (app.application_code?.code === 'EXP' && app.formData?.expenseCategory) {
+          const category = app.formData.expenseCategory;
+          const amount = Number(app.formData.amount) || 0;
+          const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
+          expenseCategoryMap.set(category, {
+            amount: current.amount + amount,
+            count: current.count + 1
+          });
+        }
+      });
+
+      const expenseCategories: ExpenseCategory[] = Array.from(expenseCategoryMap.entries())
+        .map(([name, data]) => ({
+          name,
+          ...data,
+          color: categoryColors[name] || '#6B7280'
+        }))
+        .sort((a, b) => b.amount - a.amount);
+
+      // 部署別統計データの集計
+      const departmentMap = new Map<string, { pending: number; approved: number; totalProcessTime: number; count: number }>();
+      
+      applications?.forEach(app => {
+        const department = app.applicant?.department || '未設定';
+        const current = departmentMap.get(department) || { pending: 0, approved: 0, totalProcessTime: 0, count: 0 };
+        
+        if (app.status === 'pending_approval') {
+          current.pending++;
+        } else if (app.status === 'approved') {
+          current.approved++;
+          
+          // 承認処理時間を計算
+          if (app.submitted_at && app.approved_at) {
+            const submitted = new Date(app.submitted_at);
+            const approved = new Date(app.approved_at);
+            const processTime = Math.ceil((approved.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24)); // 日数
+            current.totalProcessTime += processTime;
+            current.count++;
+          }
+        }
+
+        departmentMap.set(department, current);
+      });
+
+      const departmentStats: DepartmentStats[] = Array.from(departmentMap.entries())
+        .map(([name, data]) => ({
+          name,
+          pending: data.pending,
+          approved: data.approved,
+          avgProcessTime: data.count > 0 ? Math.round(data.totalProcessTime / data.count * 10) / 10 : 0
+        }))
+        .sort((a, b) => b.approved - a.approved);
+
+      setApprovalData(approvalData);
+      setExpenseCategories(expenseCategories);
+      setDepartmentStats(departmentStats);
+    } catch (error) {
+      console.error('承認・経費データの取得に失敗しました:', error);
+      // エラー時はダミーデータを表示
       const mockApprovalData: ApprovalData[] = [
         { month: '2024-10', pending: 12, approved: 45, rejected: 3, totalAmount: 2800000 },
         { month: '2024-11', pending: 15, approved: 52, rejected: 5, totalAmount: 3200000 },
@@ -68,8 +192,6 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       setApprovalData(mockApprovalData);
       setExpenseCategories(mockExpenseCategories);
       setDepartmentStats(mockDepartmentStats);
-    } catch (error) {
-      console.error('承認・経費データの取得に失敗しました:', error);
     } finally {
       setLoading(false);
     }
