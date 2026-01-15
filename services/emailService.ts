@@ -92,8 +92,8 @@ const isSupabaseFunctionsEndpoint = (value: string): boolean => {
     const url = new URL(value, 'http://localhost');
     const host = url.hostname.toLowerCase();
     if (host.endsWith('.functions.supabase.co')) return true;
-    if (host.endsWith('.supabase.co') && url.pathname.includes('/functions/v1/')) return true;
-    return false;
+    if (url.pathname.includes('/functions/v1/')) return true; // localhost / self-hosted / legacy path
+    return host.endsWith('.supabase.co') && url.pathname.includes('/functions/v1/');
   } catch {
     return value.includes('/functions/v1/') || value.includes('.functions.supabase.co');
   }
@@ -323,8 +323,8 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   let resolvedAuthorization: string | undefined;
   const shouldAttachSupabaseAuth =
     !!endpoint && isSupabaseFunctionsEndpoint(endpoint) && !!CREDENTIAL_SUPABASE_KEY?.trim();
-  if (EMAIL_API_KEY) {
-    resolvedAuthorization = `Bearer ${EMAIL_API_KEY}`;
+  if (EMAIL_API_KEY?.trim()) {
+    resolvedAuthorization = `Bearer ${EMAIL_API_KEY.trim()}`;
   } else if (shouldAttachSupabaseAuth) {
     try {
       const headers = await getSupabaseFunctionHeaders(getSupabase());
