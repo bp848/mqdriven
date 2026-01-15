@@ -321,17 +321,18 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   // Supabase Edge Functions の場合、Authorization ヘッダーが無いと 401 になる。
   // EMAIL_API_KEY が未設定なら、ログイン中の access_token（なければ anon key）を使う。
   let resolvedAuthorization: string | undefined;
-  const shouldAttachSupabaseAuth =
-    !!endpoint && isSupabaseFunctionsEndpoint(endpoint) && !!CREDENTIAL_SUPABASE_KEY?.trim();
-  if (EMAIL_API_KEY?.trim()) {
-    resolvedAuthorization = `Bearer ${EMAIL_API_KEY.trim()}`;
-  } else if (shouldAttachSupabaseAuth) {
+  const isSupabaseEndpoint = !!endpoint && isSupabaseFunctionsEndpoint(endpoint);
+  const supabaseKey = CREDENTIAL_SUPABASE_KEY?.trim();
+  const shouldAttachSupabaseAuth = isSupabaseEndpoint && !!supabaseKey;
+  if (shouldAttachSupabaseAuth) {
     try {
       const headers = await getSupabaseFunctionHeaders(getSupabase());
       resolvedAuthorization = headers.Authorization;
     } catch (_err) {
-      resolvedAuthorization = `Bearer ${CREDENTIAL_SUPABASE_KEY.trim()}`;
+      resolvedAuthorization = `Bearer ${supabaseKey}`;
     }
+  } else if (EMAIL_API_KEY?.trim()) {
+    resolvedAuthorization = `Bearer ${EMAIL_API_KEY.trim()}`;
   }
 
   if (!payload.subject || !payload.subject.trim()) {
