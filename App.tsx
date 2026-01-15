@@ -890,6 +890,7 @@ const App: React.FC = () => {
                 dataService.getPaymentRecipients(),
                 dataService.getAllocationDivisions(),
                 dataService.getTitles(),
+                dataService.getEstimatesPage(targetEstimatesPage, ESTIMATE_PAGE_SIZE),
             ]);
 
             if (signal.aborted) return;
@@ -908,6 +909,7 @@ const App: React.FC = () => {
                 paymentRecipientsResult,
                 allocationDivisionsResult,
                 titlesResult,
+                estimatesResult,
             ] = results;
 
       const sortCustomersDesc = (items: Customer[]) =>
@@ -933,7 +935,13 @@ const App: React.FC = () => {
             if (poResult.status === 'fulfilled') setPurchaseOrders(poResult.value); else console.error('Failed to load purchase orders:', poResult.reason);
             if (inventoryResult.status === 'fulfilled') setInventoryItems(inventoryResult.value); else console.error('Failed to load inventory items:', inventoryResult.reason);
             setEmployees(employeesFromUsers);
-            await refreshEstimatesPage(targetEstimatesPage, signal);
+            if (estimatesResult.status === 'fulfilled') {
+                setEstimates(estimatesResult.value.rows);
+                setEstimateTotalCount(estimatesResult.value.totalCount);
+                setEstimatePage(targetEstimatesPage);
+            } else {
+                console.error('Failed to load estimates:', estimatesResult.reason);
+            }
             if (departmentsResult.status === 'fulfilled') setDepartments(departmentsResult.value); else console.error('Failed to load departments:', departmentsResult.reason);
             if (paymentRecipientsResult.status === 'fulfilled') setPaymentRecipients(paymentRecipientsResult.value); else console.error('Failed to load payment recipients:', paymentRecipientsResult.reason);
             if (allocationDivisionsResult.status === 'fulfilled') setAllocationDivisions(allocationDivisionsResult.value); else console.error('Failed to load allocation divisions:', allocationDivisionsResult.reason);
