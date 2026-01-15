@@ -37,21 +37,22 @@ const buildFunctionsRedirectUri = (requestHost?: string | null): string | null =
 
 const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; source: 'env' | 'fallback' } => {
   const envUri = Deno.env.get('GOOGLE_REDIRECT_URI');
-  const fallback = buildFunctionsRedirectUri(requestHost);
   if (envUri) {
     if (/functions\.supabase\.co/.test(envUri)) {
-      return { uri: envUri, source: 'env' };
-    }
-    if (fallback) {
       console.warn(
-        'GOOGLE_REDIRECT_URI is not a Supabase Functions URL. Falling back to functions callback.',
-        { envUri, fallback },
+        "GOOGLE_REDIRECT_URI points to Supabase Functions. Browser redirects from Google won't include Authorization headers; prefer an app callback URL like https://<app>/api/google/oauth/callback.",
+        { envUri },
       );
-      return { uri: fallback, source: 'fallback' };
     }
     return { uri: envUri, source: 'env' };
   }
-  return { uri: fallback, source: 'fallback' };
+  const publicBaseUrl = Deno.env.get('PUBLIC_BASE_URL') || Deno.env.get('APP_BASE_URL');
+  if (publicBaseUrl) {
+    const base = publicBaseUrl.replace(/\/+$/, '');
+    return { uri: `${base}/api/google/oauth/callback`, source: 'fallback' };
+  }
+  // Token exchange must use the same redirect_uri as the one used in google-oauth-start.
+  return { uri: 'https://erp.b-p.co.jp/api/google/oauth/callback', source: 'fallback' };
 };
 
 const parseAllowedOrigins = (): string[] => {

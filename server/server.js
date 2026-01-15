@@ -449,18 +449,44 @@ app.get('/api/google/oauth/callback', async (req, res) => {
         return res.status(503).json({ error: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI.', requestId });
     }
     const code = req.query.code;
+    const rawState = req.query.state;
+    const parseState = (state) => {
+        if (!state) return { userId: null, returnTo: null };
+        if (typeof state === 'string' && isUuid(state)) return { userId: state, returnTo: null };
+        if (typeof state !== 'string') return { userId: null, returnTo: null };
+        try {
+            const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+            const userId = typeof decoded?.user_id === 'string' && isUuid(decoded.user_id)
+                ? decoded.user_id
+                : (typeof decoded?.userId === 'string' && isUuid(decoded.userId) ? decoded.userId : null);
+            const returnToRaw = decoded?.return_to ?? decoded?.returnTo ?? null;
+            const returnTo = typeof returnToRaw === 'string' ? returnToRaw : null;
+            return { userId, returnTo };
+        } catch {
+            return { userId: null, returnTo: null };
+        }
+    };
+    const parsed = parseState(rawState);
     // user id is expected either in state or query param
-    const userId = req.query.user_id || req.query.state;
+    const userId = req.query.user_id || parsed.userId || null;
+    const redirectBase = (() => {
+        const candidate = parsed.returnTo || process.env.PUBLIC_BASE_URL;
+        if (typeof candidate === 'string' && candidate) return candidate.replace(/\/+$/, '');
+        return 'https://erp.b-p.co.jp';
+    })();
+    const redirectOk = `${redirectBase}/settings?google_calendar=ok`;
+    const redirectNg = `${redirectBase}/settings?google_calendar=error`;
+
     if (!code || !isUuid(userId)) {
-        return res.status(400).json({ error: 'code and user_id are required', requestId });
+        return res.redirect(302, `${redirectNg}&reason=missing_code_or_user`);
     }
     try {
         const { tokens } = await client.getToken(code);
         await upsertGoogleToken({ userId, tokens });
-        return res.status(200).json({ message: 'Google tokens saved', requestId });
+        return res.redirect(302, redirectOk);
     } catch (err) {
         console.error('[google/oauth/callback] token exchange failed', { requestId, err });
-        return res.status(500).json({ error: 'Failed to exchange token', requestId });
+        return res.redirect(302, `${redirectNg}&reason=token_exchange_failed`);
     }
 });
 

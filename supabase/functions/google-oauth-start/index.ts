@@ -35,22 +35,22 @@ const buildFunctionsRedirectUri = (requestHost?: string | null): string | null =
 
 const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; source: "env" | "fallback" } => {
   const envUri = Deno.env.get("GOOGLE_REDIRECT_URI");
-  const fallback = buildFunctionsRedirectUri(requestHost);
-  // Prefer a functions.* redirect. If env is set but not functions.*, fall back to computed one.
   if (envUri) {
     if (/functions\.supabase\.co/.test(envUri)) {
-      return { uri: envUri, source: "env" };
-    }
-    if (fallback) {
       console.warn(
-        "GOOGLE_REDIRECT_URI does not point to Supabase Functions. Falling back to functions callback.",
-        { envUri, fallback },
+        "GOOGLE_REDIRECT_URI points to Supabase Functions. Browser redirects from Google won't include Authorization headers; prefer an app callback URL like https://<app>/api/google/oauth/callback.",
+        { envUri },
       );
-      return { uri: fallback, source: "fallback" };
     }
     return { uri: envUri, source: "env" };
   }
-  return { uri: fallback, source: "fallback" };
+  // Fall back to app callback (preferred) instead of Functions callback, because OAuth redirects cannot set Authorization headers.
+  const publicBaseUrl = Deno.env.get("PUBLIC_BASE_URL") || Deno.env.get("APP_BASE_URL");
+  if (publicBaseUrl) {
+    const base = publicBaseUrl.replace(/\/+$/, "");
+    return { uri: `${base}/api/google/oauth/callback`, source: "fallback" };
+  }
+  return { uri: "https://erp.b-p.co.jp/api/google/oauth/callback", source: "fallback" };
 };
 
 const parseAllowedOrigins = (): string[] => {
