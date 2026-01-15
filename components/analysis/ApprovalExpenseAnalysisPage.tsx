@@ -83,9 +83,12 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
           current.rejected++;
         }
 
-        // 経費申請の場合は金額を加算
-        if (app.application_code?.code === 'EXP' && app.formData?.amount) {
-          current.totalAmount += Number(app.formData.amount) || 0;
+        // 経費申請の場合は金額を加算（form_dataから取得）
+        if (app.form_data && typeof app.form_data === 'object') {
+          const formData = app.form_data as any;
+          if (formData.amount) {
+            current.totalAmount += Number(formData.amount) || 0;
+          }
         }
 
         monthlyDataMap.set(month, current);
@@ -107,14 +110,17 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       };
 
       applications?.forEach(app => {
-        if (app.application_code?.code === 'EXP' && app.formData?.expenseCategory) {
-          const category = app.formData.expenseCategory;
-          const amount = Number(app.formData.amount) || 0;
-          const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
-          expenseCategoryMap.set(category, {
-            amount: current.amount + amount,
-            count: current.count + 1
-          });
+        if (app.form_data && typeof app.form_data === 'object') {
+          const formData = app.form_data as any;
+          if (formData.expenseCategory) {
+            const category = formData.expenseCategory;
+            const amount = Number(formData.amount) || 0;
+            const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
+            expenseCategoryMap.set(category, {
+              amount: current.amount + amount,
+              count: current.count + 1
+            });
+          }
         }
       });
 

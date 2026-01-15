@@ -53,9 +53,9 @@ const SalesAnalysisPage: React.FC = () => {
       const { data: estimates, error: estimatesError } = await supabase
         .from('estimates')
         .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .in('status', ['approved', 'accepted']);
+        .gte('create_date', startDate.toISOString())
+        .lte('create_date', endDate.toISOString())
+        .in('status', ['1', '2']); // status: 1=approved, 2=ordered
 
       if (estimatesError) {
         console.error('見積データ取得エラー:', estimatesError);
@@ -78,12 +78,12 @@ const SalesAnalysisPage: React.FC = () => {
       const dailySalesMap = new Map<string, { sales: number; orders: number; customers: number }>();
       
       estimates?.forEach(estimate => {
-        const date = new Date(estimate.created_at).toISOString().split('T')[0];
+        const date = new Date(estimate.create_date).toISOString().split('T')[0];
         const current = dailySalesMap.get(date) || { sales: 0, orders: 0, customers: 0 };
         dailySalesMap.set(date, {
           sales: current.sales + (estimate.total || 0),
           orders: current.orders + 1,
-          customers: current.customers
+          customers: current.customers + 1
         });
       });
 
