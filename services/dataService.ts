@@ -837,6 +837,9 @@ const dbApplicationToApplication = (app: any): Application => ({
     documentUrl: app.document_url ?? app.form_data?.documentUrl ?? null,
     status: app.status,
     accountingStatus: app.accounting_status ?? 'none',
+    handlingStatus: app.handling_status ?? 'unhandled',
+    handlingUpdatedAt: app.handling_updated_at ?? null,
+    handlingUpdatedBy: app.handling_updated_by ?? null,
     submittedAt: app.submitted_at,
     approvedAt: app.approved_at,
     rejectedAt: app.rejected_at,
@@ -980,39 +983,24 @@ export const getProjects = async (): Promise<Project[]> => {
     let projectError: any = null;
     
     try {
-        // Try with relationship (will work once foreign key is added)
-        const { data, error } = await supabase
-            .from('projects')
-            .select(`
-                *,
-                customers(id, customer_name, customer_code)
-            `)
-            .order('update_date', { ascending: false })
-            .order('project_code', { ascending: false });
-        
-        if (error) throw error;
-        projectRows = data || [];
-    } catch (err) {
-        // Fallback to basic query without relationship
-        console.warn('Projects relationship not available, using fallback query:', err.message);
+        // Use basic query without relationship since customers() doesn't exist
         const { data, error } = await supabase
             .from('projects')
             .select('*')
             .order('update_date', { ascending: false })
             .order('project_code', { ascending: false });
         
-        if (error) {
-            projectError = error;
-        } else {
-            projectRows = data || [];
-        }
+        if (error) throw error;
+        projectRows = data || [];
+    } catch (err) {
+        console.error('Error fetching projects:', err);
+        projectRows = [];
     }
     
     const { data: customerRows, error: customerError } = await supabase
         .from('customers')
         .select('id, customer_code, customer_name');
 
-    if (projectError) throw formatSupabaseError('Failed to fetch projects', projectError);
     if (customerError) console.warn('Failed to fetch customers for project mapping:', customerError.message);
 
     const customerById = new Map<string, { customer_name: string; customer_code: string | null }>();
@@ -1912,6 +1900,24 @@ export const createJournalFromApplication = async (
 
     ensureSupabaseSuccess(error, 'Failed to create journal from application');
     return String(data);
+};
+
+export const setApplicationHandlingStatus = async (
+    applicationId: string,
+    userId: string,
+    handlingStatus: string,
+): Promise<void> => {
+    if (!applicationId) throw new Error('applicationId is required');
+    if (!userId) throw new Error('userId is required');
+    if (!handlingStatus) throw new Error('handlingStatus is required');
+
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('set_application_handling_status', {
+        p_application_id: applicationId,
+        p_user_id: userId,
+        p_handling_status: handlingStatus,
+    });
+    ensureSupabaseSuccess(error, 'Failed to update handling status');
 };
 
 export const syncApprovedLeaveToCalendars = async (): Promise<{ created: number; skipped: number; }> => {

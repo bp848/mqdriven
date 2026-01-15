@@ -16,6 +16,7 @@ export type Page =
   | 'accounting_dashboard' | 'accounting_journal_review'
   | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
   | 'accounting_approved_applications'
+  | 'accounting_approved_unhandled'
   | 'accounting_approved_expense'
   | 'accounting_approved_transport'
   | 'accounting_approved_leave'
@@ -602,6 +603,9 @@ export interface Application {
     formData: any;
     status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
     accountingStatus?: 'none' | 'drafted' | 'posted' | (string & {});
+    handlingStatus?: 'unhandled' | 'in_progress' | 'done' | 'blocked' | (string & {});
+    handlingUpdatedAt?: string | null;
+    handlingUpdatedBy?: string | null;
     submittedAt: string | null;
     approvedAt: string | null;
     rejectedAt: string | null;

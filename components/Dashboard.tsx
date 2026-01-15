@@ -10,6 +10,21 @@ import { getBulletinThreads } from '../services/dataService';
 import { getSupabase } from '../services/supabaseClient';
 import DataSeeder from './DataSeeder';
 
+const getExpenseRequestType = (requestType: string): string => {
+    const EXPENSE_TYPE_LABELS: Record<string, string> = {
+        '経費精算申請': '経費精算',
+        '経費申請': '経費申請',
+        '出張旅費精算': '出張旅費精算',
+        '接待費': '接待費',
+        '交際費': '交際費',
+        '消耗品費': '消耗品費',
+        '通信費': '通信費',
+        '修繕費': '修繕費',
+        'その他': 'その他'
+    };
+    return EXPENSE_TYPE_LABELS[requestType] || requestType;
+};
+
 // Integrated Board API service
 const getIntegratedBoardPosts = async (userId?: string) => {
     try {

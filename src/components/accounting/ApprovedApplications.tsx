@@ -13,6 +13,7 @@ interface ApprovedApplicationsProps {
   showLeaveSync?: boolean;
   currentUserId?: string | null;
   onNavigate?: (page: Page) => void;
+  handlingStatusOnly?: 'unhandled' | 'in_progress' | 'done' | 'blocked';
 }
 
 export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
@@ -23,6 +24,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   showLeaveSync = codes ? codes.includes('LEV') : true,
   currentUserId,
   onNavigate,
+  handlingStatusOnly,
 }) => {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,8 +35,29 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [isSyncingLeave, setIsSyncingLeave] = useState(false);
   const [isCreatingJournalFor, setIsCreatingJournalFor] = useState<string | null>(null);
+  const [isUpdatingHandlingFor, setIsUpdatingHandlingFor] = useState<string | null>(null);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const normalizeHandlingStatus = (value: unknown): 'unhandled' | 'in_progress' | 'done' | 'blocked' => {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (raw === 'in_progress' || raw === 'done' || raw === 'blocked') return raw;
+    return 'unhandled';
+  };
+
+  const getHandlingStatusLabel = (status: ReturnType<typeof normalizeHandlingStatus>) => {
+    if (status === 'in_progress') return '対応中';
+    if (status === 'done') return '対応済';
+    if (status === 'blocked') return '保留';
+    return '未対応';
+  };
+
+  const getHandlingBadgeClass = (status: ReturnType<typeof normalizeHandlingStatus>) => {
+    if (status === 'done') return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800';
+    if (status === 'in_progress') return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-800';
+    if (status === 'blocked') return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800';
+    return 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800';
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -120,6 +143,8 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   };
 
   const filteredApps = applications.filter(app => {
+    const handlingStatus = normalizeHandlingStatus((app as any).handlingStatus);
+    if (handlingStatusOnly && handlingStatus !== handlingStatusOnly) return false;
     const term = searchTerm.toLowerCase();
     const title = (app.formData?.title || app.formData?.subject || '').toLowerCase();
     const applicantName = (app.applicant?.name || '').toLowerCase();
@@ -218,6 +243,44 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     }
   };
 
+  const handleUpdateHandlingStatus = async (
+    applicationId: string,
+    nextStatus: ReturnType<typeof normalizeHandlingStatus>,
+  ) => {
+    const operatorId = authUserId ?? currentUserId;
+    if (!operatorId) {
+      const message = 'ログインユーザーが特定できないため、対応ステータスを更新できません。';
+      setActionError(message);
+      notify?.(message, 'error');
+      return;
+    }
+    setActionError(null);
+    setIsUpdatingHandlingFor(applicationId);
+    try {
+      await dataService.setApplicationHandlingStatus(applicationId, operatorId, nextStatus);
+      setApplications(prev =>
+        prev.map(app =>
+          app.id === applicationId
+            ? {
+              ...app,
+              handlingStatus: nextStatus,
+              handlingUpdatedAt: new Date().toISOString(),
+              handlingUpdatedBy: operatorId,
+            }
+            : app
+        )
+      );
+      notify?.('対応ステータスを更新しました。', 'success');
+    } catch (err: any) {
+      console.error('[ApprovedApplications] update handling status failed', err);
+      const message = err?.message || '対応ステータスの更新に失敗しました。';
+      setActionError(message);
+      notify?.(message, 'error');
+    } finally {
+      setIsUpdatingHandlingFor(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -240,20 +303,33 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
 	          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700/50">
 	            平均 ¥{formatCurrency(totals.avg)}
 	          </span>
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('accounting_journal_review')}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
-                title="自動仕訳レビューへ移動します"
-              >
-                <ArrowRight className="w-4 h-4" />
-                仕訳レビューへ
-              </button>
-            )}
-	          {showLeaveSync && (
-	            <button
-	              type="button"
+	            {onNavigate && (
+	              <button
+	                type="button"
+	                onClick={() => onNavigate('accounting_journal_review')}
+	                className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
+	                title="自動仕訳レビューへ移動します"
+	              >
+	                <ArrowRight className="w-4 h-4" />
+	                仕訳レビューへ
+	              </button>
+	            )}
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate(handlingStatusOnly === 'unhandled' ? 'accounting_approved_applications' : 'accounting_approved_unhandled')
+                  }
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-60"
+                  title={handlingStatusOnly === 'unhandled' ? '承認済み一覧（全件）へ戻ります' : '未対応のみを別ページで管理します'}
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  {handlingStatusOnly === 'unhandled' ? '全件へ' : '未対応を管理'}
+                </button>
+              )}
+		          {showLeaveSync && (
+		            <button
+		              type="button"
 	              onClick={handleSyncLeaveToCalendars}
 	              disabled={isSyncingLeave}
               className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
@@ -311,24 +387,27 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                                 {sortKey === 'amount' && <span>{sortDir === 'asc' ? '▲' : '▼'}</span>}
                               </button>
                             </th>
-                            <th className="px-6 py-4">
-                              <button type="button" onClick={() => toggleSort('approvedAt')} className="flex items-center gap-1">
-                                承認日時
-                                {sortKey === 'approvedAt' && <span>{sortDir === 'asc' ? '▲' : '▼'}</span>}
-	                          </button>
-	                        </th>
-                            <th className="px-6 py-4">会計</th>
-	                            <th className="px-6 py-4">詳細</th>
-	                        </tr>
+	                            <th className="px-6 py-4">
+	                              <button type="button" onClick={() => toggleSort('approvedAt')} className="flex items-center gap-1">
+	                                承認日時
+	                                {sortKey === 'approvedAt' && <span>{sortDir === 'asc' ? '▲' : '▼'}</span>}
+		                          </button>
+		                        </th>
+                            <th className="px-6 py-4">対応</th>
+	                            <th className="px-6 py-4">会計</th>
+		                            <th className="px-6 py-4">詳細</th>
+		                        </tr>
 	                    </thead>
 	                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-	                        {sortedApps.map((app) => {
-	                                const amount = deriveAmount(app);
-	                                const accountingStatus = app.accountingStatus ?? 'none';
-	                                const canCreateJournal = accountingStatus === 'none' && amount !== null && amount > 0;
-	                                const isDrafted = accountingStatus === 'drafted';
-	                                const isPosted = accountingStatus === 'posted';
-                                return (
+		                        {sortedApps.map((app) => {
+		                                const amount = deriveAmount(app);
+                                    const handlingStatus = normalizeHandlingStatus((app as any).handlingStatus);
+                                    const isHandlingUpdating = isUpdatingHandlingFor === app.id;
+		                                const accountingStatus = app.accountingStatus ?? 'none';
+		                                const canCreateJournal = accountingStatus === 'none' && amount !== null && amount > 0;
+		                                const isDrafted = accountingStatus === 'drafted';
+		                                const isPosted = accountingStatus === 'posted';
+	                                return (
 	                            <tr
 	                                key={app.id}
 	                                className={`transition ${
@@ -353,14 +432,34 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
 	                                <td className="px-6 py-4 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300">
 	                                    {amount !== null ? `¥${formatCurrency(amount)}` : '-'}
 	                                </td>
-	                                <td className="px-6 py-4 text-xs font-mono text-slate-500 dark:text-slate-400">
-	                                    {formatDate(app.approvedAt)}
-	                                </td>
+		                                <td className="px-6 py-4 text-xs font-mono text-slate-500 dark:text-slate-400">
+		                                    {formatDate(app.approvedAt)}
+		                                </td>
                                     <td className="px-6 py-4">
                                       <div className="flex items-center gap-2">
-                                        <span className="text-xs text-slate-500 dark:text-slate-300">
-                                          {getAccountingStatusLabel(accountingStatus)}
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${getHandlingBadgeClass(handlingStatus)}`}>
+                                          {getHandlingStatusLabel(handlingStatus)}
                                         </span>
+                                        <select
+                                          value={handlingStatus}
+                                          onChange={(e) => handleUpdateHandlingStatus(app.id, normalizeHandlingStatus(e.target.value))}
+                                          disabled={isHandlingUpdating}
+                                          className="text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 disabled:opacity-60"
+                                          aria-label="対応ステータス"
+                                        >
+                                          <option value="unhandled">未対応</option>
+                                          <option value="in_progress">対応中</option>
+                                          <option value="done">対応済</option>
+                                          <option value="blocked">保留</option>
+                                        </select>
+                                        {isHandlingUpdating && <Loader className="w-4 h-4 animate-spin text-slate-500" />}
+                                      </div>
+                                    </td>
+	                                    <td className="px-6 py-4">
+	                                      <div className="flex items-center gap-2">
+	                                        <span className="text-xs text-slate-500 dark:text-slate-300">
+	                                          {getAccountingStatusLabel(accountingStatus)}
+	                                        </span>
                                         {canCreateJournal && (
                                           <button
                                             type="button"
@@ -416,13 +515,13 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
 	                            </tr>
                                 );
 	                        })}
-	                        {filteredApps.length === 0 && (
-	                            <tr>
-	                                <td colSpan={7} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
-	                                    該当する承認済み申請データが見つかりません。
-	                                </td>
-	                            </tr>
-	                        )}
+		                        {filteredApps.length === 0 && (
+		                            <tr>
+		                                <td colSpan={8} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+		                                    該当する承認済み申請データが見つかりません。
+		                                </td>
+		                            </tr>
+		                        )}
 	                    </tbody>
 	                </table>
             )}
