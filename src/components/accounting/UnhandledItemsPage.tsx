@@ -57,7 +57,6 @@ const UnhandledItemsPage: React.FC<UnhandledItemsPageProps> = ({
     setUpdatingLeadId(leadId);
     try {
       await onUpdateLead(leadId, { status: nextStatus });
-      notify?.('リードのステータスを更新しました。', 'success');
     } catch (err: any) {
       console.error('[UnhandledItems] update lead failed', err);
       notify?.(err?.message || 'リードの更新に失敗しました。', 'error');
@@ -200,4 +199,3 @@ const UnhandledItemsPage: React.FC<UnhandledItemsPageProps> = ({
 };
 
 export default UnhandledItemsPage;
-
