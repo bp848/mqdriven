@@ -139,12 +139,12 @@ const FinancialAnalysisPage: React.FC = () => {
         }
       });
 
-      const totalExpenses = Array.from(expenseCategoryMap.values()).reduce((sum, amount) => sum + amount, 0);
+      const totalCategoryExpenses = Array.from(expenseCategoryMap.values()).reduce((sum, amount) => sum + amount, 0);
       const expenseCategories: ExpenseCategory[] = Array.from(expenseCategoryMap.entries())
         .map(([name, amount]) => ({
           name,
           amount,
-          percentage: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
+          percentage: totalCategoryExpenses > 0 ? Math.round((amount / totalCategoryExpenses) * 100) : 0,
           color: categoryColors[name] || '#6B7280'
         }))
         .sort((a, b) => b.amount - a.amount);
