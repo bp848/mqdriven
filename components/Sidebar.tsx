@@ -201,9 +201,14 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [expandedItems, setExpandedItems] = React.useState<Record<string, boolean>>({});
+  const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({});
 
   const toggleSidebar = () => {
     setIsCollapsed(prev => !prev);
+  };
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => ({ ...prev, [categoryId]: !(prev[categoryId] ?? false) }));
   };
   const visibleCategories = React.useMemo(
     () => buildNavCategories(currentUser, approvalsCount),
@@ -236,12 +241,29 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       </div>
       <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
-	          {visibleCategories.map(category => (
-	            <React.Fragment key={category.id}>
-              <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
-                {!isCollapsed && category.name}
-              </li>
-	              {category.items.map(item => {
+	          {visibleCategories.map(category => {
+            const isCategoryExpanded = !isCollapsed && ((expandedCategories[category.id] ?? false) || category.items.some(item => {
+              const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
+              return currentPage === item.page || isChildActive;
+            }));
+            
+            return (
+              <React.Fragment key={category.id}>
+                <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
+                  {!isCollapsed && (
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(category.id)}
+                      className="flex items-center w-full hover:text-slate-300 transition-colors"
+                      aria-label={isCategoryExpanded ? `${category.name}カテゴリを折りたたむ` : `${category.name}カテゴリを展開する`}
+                    >
+                      {category.icon && <category.icon className="w-4 h-4 mr-2" />}
+                      <span className="flex-1 text-left">{category.name}</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${isCategoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </li>
+                {isCategoryExpanded && category.items.map(item => {
 	                const ItemIcon = item.icon ?? category.icon;
 	                const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
 	                const isActive = currentPage === item.page || isChildActive;
@@ -317,7 +339,8 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 	                );
 	              })}
             </React.Fragment>
-          ))}
+            );
+          })}
         </ul>
       </nav>
       <div className="mt-auto pt-4 border-t border-slate-700 space-y-4">
