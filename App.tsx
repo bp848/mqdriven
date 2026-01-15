@@ -1229,7 +1229,7 @@ useEffect(() => {
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;
             case 'analysis_menu':
-                return <AnalysisMenuPage />;
+                return <AnalysisMenuPage onNavigate={handleNavigate} />;
             case 'analysis_sales':
                 return <SalesAnalysisPage />;
             case 'analysis_approval_expense':

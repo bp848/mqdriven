@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FileText, Clock, CheckCircle, XCircle, AlertTriangle, TrendingUp, Users } from 'lucide-react';
+import { FileText, Clock, CheckCircle, XCircle, AlertTriangle, TrendingUp, TrendingDown, Users } from 'lucide-react';
 import { getSupabase } from '../../services/supabaseClient';
 
 interface ApprovalData {
@@ -25,12 +25,27 @@ interface DepartmentStats {
   avgProcessTime: number;
 }
 
+const pctChange = (current: number, previous: number): number | null => {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+};
+
+const formatDelta = (value: number | null) => {
+  if (value === null) return '—';
+  const rounded = Math.round(value * 10) / 10;
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded}%`;
+};
+
 const ApprovalExpenseAnalysisPage: React.FC = () => {
   const [approvalData, setApprovalData] = useState<ApprovalData[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [departmentStats, setDepartmentStats] = useState<DepartmentStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'30d' | '90d' | '1y'>('30d');
+  const [approvedChangePct, setApprovedChangePct] = useState<number | null>(null);
+  const [rejectedChangePct, setRejectedChangePct] = useState<number | null>(null);
 
   useEffect(() => {
     fetchApprovalData();
@@ -39,9 +54,10 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
   const fetchApprovalData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const supabase = getSupabase();
       
-      // データ取得期間を計算
+      // データ取得期間を計算（前期間も含めて取得）
       const endDate = new Date();
       const startDate = new Date();
       if (timeRange === '30d') {
@@ -51,15 +67,18 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       } else {
         startDate.setFullYear(endDate.getFullYear() - 1);
       }
+      const days = timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 365;
+      const prevStartDate = new Date(startDate);
+      prevStartDate.setDate(prevStartDate.getDate() - days);
 
       // 申請データを取得（過去データも含める）
       const { data: applications, error: applicationsError } = await supabase
         .from('applications')
         .select(`
           *,
-          applicant:employees(name, department),
           application_code:application_codes(name, code)
         `)
+        .gte('created_at', prevStartDate.toISOString())
         .lte('created_at', endDate.toISOString());
 
       if (applicationsError) {
@@ -67,34 +86,33 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         throw applicationsError;
       }
 
+      const currentApps = (applications || []).filter((app: any) => {
+        const d = new Date(app.created_at);
+        return d >= startDate && d <= endDate;
+      });
+      const prevApps = (applications || []).filter((app: any) => {
+        const d = new Date(app.created_at);
+        return d >= prevStartDate && d < startDate;
+      });
+
       // 月別承認状況データの集計
       const monthlyDataMap = new Map<string, { pending: number; approved: number; rejected: number; totalAmount: number }>();
       
-      applications?.forEach(app => {
+      currentApps.forEach((app: any) => {
         const appDate = new Date(app.created_at);
-        // 指定期間内のデータのみを集計
-        if (appDate >= startDate && appDate <= endDate) {
-          const month = appDate.toISOString().slice(0, 7); // YYYY-MM
-          const current = monthlyDataMap.get(month) || { pending: 0, approved: 0, rejected: 0, totalAmount: 0 };
-          
-          if (app.status === 'pending_approval') {
-            current.pending++;
-          } else if (app.status === 'approved') {
-            current.approved++;
-          } else if (app.status === 'rejected') {
-            current.rejected++;
-          }
+        const month = appDate.toISOString().slice(0, 7); // YYYY-MM
+        const current = monthlyDataMap.get(month) || { pending: 0, approved: 0, rejected: 0, totalAmount: 0 };
 
-          // 経費申請の場合は金額を加算（form_dataから取得）
-          if (app.form_data && typeof app.form_data === 'object') {
-            const formData = app.form_data as any;
-            if (formData.amount) {
-              current.totalAmount += Number(formData.amount) || 0;
-            }
-          }
+        if (app.status === 'pending_approval') current.pending++;
+        else if (app.status === 'approved') current.approved++;
+        else if (app.status === 'rejected') current.rejected++;
 
-          monthlyDataMap.set(month, current);
+        if (app.form_data && typeof app.form_data === 'object') {
+          const formData = app.form_data as any;
+          if (formData.amount) current.totalAmount += Number(formData.amount) || 0;
         }
+
+        monthlyDataMap.set(month, current);
       });
 
       const approvalData: ApprovalData[] = Array.from(monthlyDataMap.entries())
@@ -112,21 +130,17 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         'その他': '#6B7280'
       };
 
-      applications?.forEach(app => {
-        const appDate = new Date(app.created_at);
-        // 指定期間内のデータのみを集計
-        if (appDate >= startDate && appDate <= endDate) {
-          if (app.form_data && typeof app.form_data === 'object') {
-            const formData = app.form_data as any;
-            if (formData.expenseCategory) {
-              const category = formData.expenseCategory;
-              const amount = Number(formData.amount) || 0;
-              const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
-              expenseCategoryMap.set(category, {
-                amount: current.amount + amount,
-                count: current.count + 1
-              });
-            }
+      currentApps.forEach((app: any) => {
+        if (app.form_data && typeof app.form_data === 'object') {
+          const formData = app.form_data as any;
+          if (formData.expenseCategory) {
+            const category = formData.expenseCategory;
+            const amount = Number(formData.amount) || 0;
+            const current = expenseCategoryMap.get(category) || { amount: 0, count: 0 };
+            expenseCategoryMap.set(category, {
+              amount: current.amount + amount,
+              count: current.count + 1,
+            });
           }
         }
       });
@@ -142,30 +156,24 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       // 部署別統計データの集計
       const departmentMap = new Map<string, { pending: number; approved: number; totalProcessTime: number; count: number }>();
       
-      applications?.forEach(app => {
-        const appDate = new Date(app.created_at);
-        // 指定期間内のデータのみを集計
-        if (appDate >= startDate && appDate <= endDate) {
-          const department = app.applicant?.department || '未設定';
-          const current = departmentMap.get(department) || { pending: 0, approved: 0, totalProcessTime: 0, count: 0 };
-          
-          if (app.status === 'pending_approval') {
-            current.pending++;
-          } else if (app.status === 'approved') {
-            current.approved++;
-            
-            // 承認処理時間を計算
-            if (app.submitted_at && app.approved_at) {
-              const submitted = new Date(app.submitted_at);
-              const approved = new Date(app.approved_at);
-              const processTime = Math.ceil((approved.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24)); // 日数
-              current.totalProcessTime += processTime;
-              current.count++;
-            }
-          }
+      currentApps.forEach((app: any) => {
+        const department = '未設定'; // employeesテーブル参照を削除したため固定値
+        const current = departmentMap.get(department) || { pending: 0, approved: 0, totalProcessTime: 0, count: 0 };
 
-          departmentMap.set(department, current);
+        if (app.status === 'pending_approval') {
+          current.pending++;
+        } else if (app.status === 'approved') {
+          current.approved++;
+          if (app.submitted_at && app.approved_at) {
+            const submitted = new Date(app.submitted_at);
+            const approved = new Date(app.approved_at);
+            const processTime = Math.ceil((approved.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24));
+            current.totalProcessTime += processTime;
+            current.count++;
+          }
         }
+
+        departmentMap.set(department, current);
       });
 
       const departmentStats: DepartmentStats[] = Array.from(departmentMap.entries())
@@ -180,35 +188,18 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       setApprovalData(approvalData);
       setExpenseCategories(expenseCategories);
       setDepartmentStats(departmentStats);
+
+      const countByStatus = (rows: any[], status: string) => rows.filter((r: any) => r.status === status).length;
+      setApprovedChangePct(pctChange(countByStatus(currentApps, 'approved'), countByStatus(prevApps, 'approved')));
+      setRejectedChangePct(pctChange(countByStatus(currentApps, 'rejected'), countByStatus(prevApps, 'rejected')));
     } catch (error) {
       console.error('承認・経費データの取得に失敗しました:', error);
-      // エラー時はダミーデータを表示
-      const mockApprovalData: ApprovalData[] = [
-        { month: '2024-10', pending: 12, approved: 45, rejected: 3, totalAmount: 2800000 },
-        { month: '2024-11', pending: 15, approved: 52, rejected: 5, totalAmount: 3200000 },
-        { month: '2024-12', pending: 18, approved: 48, rejected: 4, totalAmount: 3500000 },
-        { month: '2025-01', pending: 8, approved: 38, rejected: 2, totalAmount: 2100000 },
-      ];
-
-      const mockExpenseCategories: ExpenseCategory[] = [
-        { name: '出張旅費', amount: 1500000, count: 25, color: '#3B82F6' },
-        { name: '接待交際費', amount: 800000, count: 18, color: '#10B981' },
-        { name: '消耗品費', amount: 450000, count: 32, color: '#F59E0B' },
-        { name: '通信費', amount: 320000, count: 15, color: '#EF4444' },
-        { name: '修繕費', amount: 280000, count: 8, color: '#8B5CF6' },
-        { name: 'その他', amount: 150000, count: 12, color: '#6B7280' },
-      ];
-
-      const mockDepartmentStats: DepartmentStats[] = [
-        { name: '営業部', pending: 8, approved: 22, avgProcessTime: 2.5 },
-        { name: '技術部', pending: 5, approved: 18, avgProcessTime: 3.2 },
-        { name: '管理部', pending: 3, approved: 15, avgProcessTime: 1.8 },
-        { name: '製造部', pending: 7, approved: 20, avgProcessTime: 2.8 },
-      ];
-
-      setApprovalData(mockApprovalData);
-      setExpenseCategories(mockExpenseCategories);
-      setDepartmentStats(mockDepartmentStats);
+      setError(error instanceof Error ? error.message : '承認・経費データの取得に失敗しました');
+      setApprovalData([]);
+      setExpenseCategories([]);
+      setDepartmentStats([]);
+      setApprovedChangePct(null);
+      setRejectedChangePct(null);
     } finally {
       setLoading(false);
     }
@@ -219,6 +210,14 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
   const totalRejected = approvalData.reduce((sum, month) => sum + month.rejected, 0);
   const totalAmount = approvalData.reduce((sum, month) => sum + month.totalAmount, 0);
   const approvalRate = totalPending + totalApproved > 0 ? (totalApproved / (totalPending + totalApproved)) * 100 : 0;
+  const overallAvgProcessDays =
+    departmentStats.length > 0
+      ? Math.round((departmentStats.reduce((sum, d) => sum + d.avgProcessTime, 0) / departmentStats.length) * 10) / 10
+      : 0;
+  const mostPendingDept = departmentStats.reduce<{ name: string; pending: number } | null>((acc, d) => {
+    if (!acc) return { name: d.name, pending: d.pending };
+    return d.pending > acc.pending ? { name: d.name, pending: d.pending } : acc;
+  }, null);
 
   if (loading) {
     return (
@@ -226,6 +225,17 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">承認・経費データを読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <h1 className="text-xl font-semibold text-red-900 mb-2">承認稟議・経費分析</h1>
+          <p className="text-red-800 text-sm break-words">データ取得に失敗しました: {error}</p>
         </div>
       </div>
     );
@@ -277,9 +287,9 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
             <div className="p-2 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
-            <div className="flex items-center text-green-600 text-sm">
-              <TrendingUp className="w-4 h-4 mr-1" />
-              +15.2%
+            <div className={`flex items-center text-sm ${approvedChangePct === null ? 'text-gray-500' : approvedChangePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {approvedChangePct !== null && (approvedChangePct >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+              {formatDelta(approvedChangePct)}
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900">
@@ -293,9 +303,9 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
             <div className="p-2 bg-red-100 rounded-lg">
               <XCircle className="w-6 h-6 text-red-600" />
             </div>
-            <div className="flex items-center text-red-600 text-sm">
-              <TrendingUp className="w-4 h-4 mr-1" />
-              +8.7%
+            <div className={`flex items-center text-sm ${rejectedChangePct === null ? 'text-gray-500' : rejectedChangePct >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {rejectedChangePct !== null && (rejectedChangePct >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+              {formatDelta(rejectedChangePct)}
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900">
@@ -451,9 +461,8 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
             <h3 className="text-lg font-semibold text-yellow-900 mb-2">承認待ち案件の注意事項</h3>
             <ul className="text-sm text-yellow-800 space-y-1">
               <li>• 現在 {totalPending} 件の承認待ち案件があります</li>
-              <li>• 平均承認処理時間は 2.6 日です</li>
-              <li>• 営業部の承認待ち案件が最も多くなっています</li>
-              <li>• 来週までに 8 件の期限切れ案件が予想されます</li>
+              <li>• 平均承認処理時間は {overallAvgProcessDays} 日です</li>
+              {mostPendingDept && <li>• 承認待ち案件が最も多い部署: {mostPendingDept.name}（{mostPendingDept.pending}件）</li>}
             </ul>
           </div>
         </div>

@@ -11,26 +11,39 @@ interface BusinessPlanData {
 }
 
 interface DepartmentGoal {
-  department: string;
-  target: number;
-  actual: number;
-  achievement: number;
+  department: string; // 表示ラベル（顧客/部署など）
+  target: number; // 前期間
+  actual: number; // 当期間
+  achievement: number; // 当期間/前期間 (%)
   color: string;
 }
 
 interface KPIData {
   title: string;
   value: string;
-  change: number;
+  change: number | null;
   icon: React.ReactNode;
   color: string;
 }
+
+const pctChange = (current: number, previous: number): number | null => {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+};
+
+const formatDelta = (value: number | null) => {
+  if (value === null) return '—';
+  const rounded = Math.round(value * 10) / 10;
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded}%`;
+};
 
 const BusinessPlanPage: React.FC = () => {
   const [businessPlanData, setBusinessPlanData] = useState<BusinessPlanData[]>([]);
   const [departmentGoals, setDepartmentGoals] = useState<DepartmentGoal[]>([]);
   const [kpiData, setKpiData] = useState<KPIData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'30d' | '90d' | '1y'>('90d');
 
   useEffect(() => {
@@ -40,9 +53,10 @@ const BusinessPlanPage: React.FC = () => {
   const fetchBusinessPlanData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const supabase = getSupabase();
       
-      // データ取得期間を計算
+      // データ取得期間を計算（前期間も含めて取得）
       const endDate = new Date();
       const startDate = new Date();
       if (timeRange === '30d') {
@@ -52,155 +66,173 @@ const BusinessPlanPage: React.FC = () => {
       } else {
         startDate.setFullYear(endDate.getFullYear() - 1);
       }
+      const days = timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 365;
+      const prevStartDate = new Date(startDate);
+      prevStartDate.setDate(prevStartDate.getDate() - days);
 
-      // 見積データから実績を取得
+      // 見積データから実績を取得（前期間も含む）
       const { data: estimates, error: estimatesError } = await supabase
         .from('estimates')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .in('status', ['approved', 'accepted']);
+        .select('create_date,total,project_id')
+        .gte('create_date', prevStartDate.toISOString())
+        .lte('create_date', endDate.toISOString())
+        .in('status', ['1', '2']);
 
       if (estimatesError) {
         console.error('実績データ取得エラー:', estimatesError);
         throw estimatesError;
       }
 
-      // 月別目標対実績データの集計
-      const monthlyDataMap = new Map<string, { target: number; actual: number }>();
-      
-      // 過去6ヶ月分の目標データ（ダミー）
-      const monthlyTargets = {
-        '2024-08': 5000000,
-        '2024-09': 5200000,
-        '2024-10': 5500000,
-        '2024-11': 5800000,
-        '2024-12': 6000000,
-        '2025-01': 6200000,
-      };
-
-      estimates?.forEach(estimate => {
-        const month = new Date(estimate.created_at).toISOString().slice(0, 7); // YYYY-MM
-        const current = monthlyDataMap.get(month) || { target: monthlyTargets[month as keyof typeof monthlyTargets] || 0, actual: 0 };
-        monthlyDataMap.set(month, {
-          target: current.target,
-          actual: current.actual + (estimate.total || 0)
-        });
+      const currentEstimates = (estimates || []).filter((e: any) => {
+        const d = new Date(e.create_date);
+        return d >= startDate && d <= endDate;
+      });
+      const prevEstimates = (estimates || []).filter((e: any) => {
+        const d = new Date(e.create_date);
+        return d >= prevStartDate && d < startDate;
       });
 
-      const businessPlanData: BusinessPlanData[] = Array.from(monthlyDataMap.entries())
-        .map(([month, data]) => ({
-          month,
-          target: data.target,
-          actual: data.actual,
-          achievement: data.target > 0 ? Math.round((data.actual / data.target) * 100) : 0
-        }))
-        .sort((a, b) => a.month.localeCompare(b.month));
-
-      // 部署別目標達成率
-      const departmentMap = new Map<string, { target: number; actual: number }>();
-      const departmentTargets = {
-        '営業部': 3000000,
-        '技術部': 1500000,
-        '管理部': 1000000,
-        '製造部': 700000,
-      };
-
-      estimates?.forEach(estimate => {
-        // 仮の部署割り当て（実際はユーザー情報から取得）
-        const department = estimate.userId ? '営業部' : '技術部';
-        const current = departmentMap.get(department) || { target: departmentTargets[department as keyof typeof departmentTargets] || 0, actual: 0 };
-        departmentMap.set(department, {
-          target: current.target,
-          actual: current.actual + (estimate.total || 0)
+      // 月別（当期間 vs 前期間）
+      const monthlyActual = new Map<string, number>();
+      const monthlyPrev = new Map<string, number>();
+      const sumByMonth = (rows: any[], map: Map<string, number>) => {
+        rows.forEach((e: any) => {
+          const month = new Date(e.create_date).toISOString().slice(0, 7);
+          map.set(month, (map.get(month) || 0) + (Number(e.total) || 0));
         });
+      };
+      sumByMonth(currentEstimates, monthlyActual);
+      sumByMonth(prevEstimates, monthlyPrev);
+
+      const allMonths = Array.from(new Set([...monthlyActual.keys(), ...monthlyPrev.keys()])).sort((a, b) => a.localeCompare(b));
+      const businessPlanData: BusinessPlanData[] = allMonths.map((month) => {
+        const actual = monthlyActual.get(month) || 0;
+        const target = monthlyPrev.get(month) || 0;
+        const achievement = target > 0 ? Math.round((actual / target) * 100) : 0;
+        return { month, target, actual, achievement };
       });
 
-      const departmentColors = {
-        '営業部': '#3B82F6',
-        '技術部': '#10B981',
-        '管理部': '#F59E0B',
-        '製造部': '#EF4444',
-      };
+      // 顧客（上位）: projects→customers で名称解決
+      const projectIds = Array.from(new Set((estimates || []).map((e: any) => e.project_id).filter(Boolean)));
+      const projectCustomerMap = new Map<string, string>();
+      if (projectIds.length) {
+        const { data: projects, error: projectsError } = await supabase
+          .from('projects')
+          .select('id,customer_id')
+          .in('id', projectIds);
+        if (projectsError) {
+          console.error('プロジェクト取得エラー:', projectsError);
+          throw projectsError;
+        }
+        (projects || []).forEach((p: any) => {
+          if (p?.id && p?.customer_id) projectCustomerMap.set(p.id, p.customer_id);
+        });
+      }
 
-      const departmentGoals: DepartmentGoal[] = Array.from(departmentMap.entries())
-        .map(([department, data]) => ({
-          department,
-          target: data.target,
-          actual: data.actual,
-          achievement: data.target > 0 ? Math.round((data.actual / data.target) * 100) : 0,
-          color: departmentColors[department as keyof typeof departmentColors] || '#6B7280'
-        }))
-        .sort((a, b) => b.achievement - a.achievement);
+      const customerTotals = new Map<string, { current: number; prev: number }>();
+      const addCustomerTotal = (row: any, key: 'current' | 'prev') => {
+        const customerId = row.project_id ? projectCustomerMap.get(row.project_id) : null;
+        if (!customerId) return;
+        const current = customerTotals.get(customerId) || { current: 0, prev: 0 };
+        current[key] += Number(row.total) || 0;
+        customerTotals.set(customerId, current);
+      };
+      currentEstimates.forEach((e: any) => addCustomerTotal(e, 'current'));
+      prevEstimates.forEach((e: any) => addCustomerTotal(e, 'prev'));
+
+      const customerIds = Array.from(customerTotals.keys());
+      const customerNameMap = new Map<string, string>();
+      if (customerIds.length) {
+        const { data: customers, error: customersError } = await supabase
+          .from('customers')
+          .select('id,customer_name')
+          .in('id', customerIds);
+        if (customersError) {
+          console.error('顧客取得エラー:', customersError);
+          throw customersError;
+        }
+        (customers || []).forEach((c: any) => {
+          if (c?.id) customerNameMap.set(c.id, c.customer_name || c.id);
+        });
+      }
+
+      const customerGoals: DepartmentGoal[] = customerIds
+        .map((id) => {
+          const totals = customerTotals.get(id)!;
+          const achievement = totals.prev > 0 ? Math.round((totals.current / totals.prev) * 100) : 0;
+          return {
+            department: customerNameMap.get(id) || id,
+            target: totals.prev,
+            actual: totals.current,
+            achievement,
+            color: '#3B82F6',
+          };
+        })
+        .sort((a, b) => b.actual - a.actual)
+        .slice(0, 8);
 
       // KPIデータの計算
-      const totalTarget = Array.from(monthlyDataMap.values()).reduce((sum, data) => sum + data.target, 0);
-      const totalActual = Array.from(monthlyDataMap.values()).reduce((sum, data) => sum + data.actual, 0);
-      const overallAchievement = totalTarget > 0 ? Math.round((totalActual / totalTarget) * 100) : 0;
+      const sumSales = (rows: any[]) => rows.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+      const currentSales = sumSales(currentEstimates);
+      const prevSales = sumSales(prevEstimates);
+      const salesDelta = pctChange(currentSales, prevSales);
+      const currentOrders = currentEstimates.length;
+      const prevOrders = prevEstimates.length;
+      const ordersDelta = pctChange(currentOrders, prevOrders);
+      const uniqCustomerCount = (rows: any[]) => {
+        const set = new Set<string>();
+        rows.forEach((r: any) => {
+          const customerId = r.project_id ? projectCustomerMap.get(r.project_id) : null;
+          if (customerId) set.add(customerId);
+        });
+        return set.size;
+      };
+      const currentCustomers = uniqCustomerCount(currentEstimates);
+      const prevCustomers = uniqCustomerCount(prevEstimates);
+      const customerDelta = pctChange(currentCustomers, prevCustomers);
+      const topCustomerSales = customerGoals[0]?.actual || 0;
+      const topCustomerShare = currentSales > 0 ? Math.round((topCustomerSales / currentSales) * 100) : 0;
 
       const kpiData: KPIData[] = [
         {
-          title: '全体目標達成率',
-          value: `${overallAchievement}%`,
-          change: overallAchievement - 95, // 前月比（仮）
-          icon: <Target className="w-6 h-6" />,
-          color: overallAchievement >= 100 ? 'text-green-600' : overallAchievement >= 80 ? 'text-yellow-600' : 'text-red-600'
-        },
-        {
-          title: '月間売上目標',
-          value: `¥${(totalTarget / 12 / 10000).toFixed(0)}万`,
-          change: 5.2,
+          title: '期間売上',
+          value: `¥${Math.round(currentSales / 10000).toLocaleString()}万`,
+          change: salesDelta,
           icon: <DollarSign className="w-6 h-6" />,
-          color: 'text-blue-600'
+          color: 'text-blue-600',
         },
         {
-          title: '達成部署数',
-          value: `${departmentGoals.filter(d => d.achievement >= 100).length}/${departmentGoals.length}`,
-          change: 1,
+          title: '受注件数',
+          value: `${currentOrders.toLocaleString()}件`,
+          change: ordersDelta,
+          icon: <Target className="w-6 h-6" />,
+          color: 'text-green-600',
+        },
+        {
+          title: '顧客数',
+          value: `${currentCustomers.toLocaleString()}社`,
+          change: customerDelta,
+          icon: <Users className="w-6 h-6" />,
+          color: 'text-purple-600',
+        },
+        {
+          title: 'トップ顧客比率',
+          value: `${topCustomerShare}%`,
+          change: null,
           icon: <CheckCircle className="w-6 h-6" />,
-          color: 'text-purple-600'
+          color: 'text-orange-600',
         },
-        {
-          title: '平均達成率',
-          value: `${Math.round(departmentGoals.reduce((sum, d) => sum + d.achievement, 0) / departmentGoals.length)}%`,
-          change: -2.1,
-          icon: <TrendingUp className="w-6 h-6" />,
-          color: 'text-orange-600'
-        }
       ];
 
       setBusinessPlanData(businessPlanData);
-      setDepartmentGoals(departmentGoals);
+      setDepartmentGoals(customerGoals);
       setKpiData(kpiData);
     } catch (error) {
       console.error('経営計画データの取得に失敗しました:', error);
-      // エラー時はダミーデータを表示
-      const mockBusinessPlanData: BusinessPlanData[] = [
-        { month: '2024-08', target: 5000000, actual: 4800000, achievement: 96 },
-        { month: '2024-09', target: 5200000, actual: 5400000, achievement: 104 },
-        { month: '2024-10', target: 5500000, actual: 5100000, achievement: 93 },
-        { month: '2024-11', target: 5800000, actual: 6200000, achievement: 107 },
-        { month: '2024-12', target: 6000000, actual: 5800000, achievement: 97 },
-        { month: '2025-01', target: 6200000, actual: 5900000, achievement: 95 },
-      ];
-
-      const mockDepartmentGoals: DepartmentGoal[] = [
-        { department: '営業部', target: 3000000, actual: 3200000, achievement: 107, color: '#3B82F6' },
-        { department: '技術部', target: 1500000, actual: 1400000, achievement: 93, color: '#10B981' },
-        { department: '管理部', target: 1000000, actual: 950000, achievement: 95, color: '#F59E0B' },
-        { department: '製造部', target: 700000, actual: 350000, achievement: 50, color: '#EF4444' },
-      ];
-
-      const mockKpiData: KPIData[] = [
-        { title: '全体目標達成率', value: '95%', change: -2.1, icon: <Target className="w-6 h-6" />, color: 'text-yellow-600' },
-        { title: '月間売上目標', value: '¥517万', change: 5.2, icon: <DollarSign className="w-6 h-6" />, color: 'text-blue-600' },
-        { title: '達成部署数', value: '2/4', change: 1, icon: <CheckCircle className="w-6 h-6" />, color: 'text-purple-600' },
-        { title: '平均達成率', value: '86%', change: -2.1, icon: <TrendingUp className="w-6 h-6" />, color: 'text-orange-600' }
-      ];
-
-      setBusinessPlanData(mockBusinessPlanData);
-      setDepartmentGoals(mockDepartmentGoals);
-      setKpiData(mockKpiData);
+      setError(error instanceof Error ? error.message : '経営計画データの取得に失敗しました');
+      setBusinessPlanData([]);
+      setDepartmentGoals([]);
+      setKpiData([]);
     } finally {
       setLoading(false);
     }
@@ -212,6 +244,17 @@ const BusinessPlanPage: React.FC = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">経営計画データを読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <h1 className="text-xl font-semibold text-red-900 mb-2">経営計画</h1>
+          <p className="text-red-800 text-sm break-words">データ取得に失敗しました: {error}</p>
         </div>
       </div>
     );
@@ -249,9 +292,9 @@ const BusinessPlanPage: React.FC = () => {
               <div className="p-2 bg-blue-100 rounded-lg">
                 <div className={kpi.color}>{kpi.icon}</div>
               </div>
-              <div className={`flex items-center text-sm ${kpi.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {kpi.change >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
-                {Math.abs(kpi.change)}%
+              <div className={`flex items-center text-sm ${kpi.change === null ? 'text-gray-500' : kpi.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {kpi.change !== null && (kpi.change >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+                {kpi.change === null ? '—' : formatDelta(kpi.change)}
               </div>
             </div>
             <div className="text-2xl font-bold text-gray-900">{kpi.value}</div>
@@ -262,9 +305,9 @@ const BusinessPlanPage: React.FC = () => {
 
       {/* チャートエリア */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* 目標対実績トレンド */}
+        {/* 当期間 vs 前期間 */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">目標対実績トレンド</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">売上推移（当期間 / 前期間）</h3>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={businessPlanData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -272,15 +315,15 @@ const BusinessPlanPage: React.FC = () => {
               <YAxis />
               <Tooltip formatter={(value) => `¥${Number(value).toLocaleString()}`} />
               <Legend />
-              <Line type="monotone" dataKey="target" stroke="#EF4444" strokeWidth={2} name="目標" />
-              <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} name="実績" />
+              <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} name="前期間" />
+              <Line type="monotone" dataKey="actual" stroke="#10B981" strokeWidth={2} name="当期間" />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* 達成率トレンド */}
+        {/* 前期間比 */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">月別達成率</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">月別 前期間比</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={businessPlanData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -288,15 +331,15 @@ const BusinessPlanPage: React.FC = () => {
               <YAxis />
               <Tooltip formatter={(value) => `${value}%`} />
               <Legend />
-              <Bar dataKey="achievement" fill="#3B82F6" name="達成率" />
+              <Bar dataKey="achievement" fill="#3B82F6" name="前期間比" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* 部署別目標達成状況 */}
+      {/* 上位顧客（当期間 vs 前期間） */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">部署別目標達成状況</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">上位顧客（当期間 / 前期間）</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
             <ResponsiveContainer width="100%" height={300}>
@@ -306,7 +349,7 @@ const BusinessPlanPage: React.FC = () => {
                 <YAxis dataKey="department" type="category" width={80} />
                 <Tooltip formatter={(value) => `${value}%`} />
                 <Legend />
-                <Bar dataKey="achievement" fill="#10B981" name="達成率" />
+                <Bar dataKey="achievement" fill="#10B981" name="前期間比" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -323,8 +366,8 @@ const BusinessPlanPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                  <span>目標: ¥{(dept.target / 10000).toFixed(0)}万</span>
-                  <span>実績: ¥{(dept.actual / 10000).toFixed(0)}万</span>
+                  <span>前期間: ¥{(dept.target / 10000).toFixed(0)}万</span>
+                  <span>当期間: ¥{(dept.actual / 10000).toFixed(0)}万</span>
                 </div>
                 <div className="bg-gray-100 rounded-full h-2">
                   <div 

@@ -22,12 +22,29 @@ interface CustomerSegment {
   color: string;
 }
 
+const pctChange = (current: number, previous: number): number | null => {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+};
+
+const formatDelta = (value: number | null) => {
+  if (value === null) return '—';
+  const rounded = Math.round(value * 10) / 10;
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded}%`;
+};
+
 const SalesAnalysisPage: React.FC = () => {
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [productSales, setProductSales] = useState<ProductSales[]>([]);
   const [customerSegments, setCustomerSegments] = useState<CustomerSegment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
+  const [salesChangePct, setSalesChangePct] = useState<number | null>(null);
+  const [ordersChangePct, setOrdersChangePct] = useState<number | null>(null);
+  const [customersChangePct, setCustomersChangePct] = useState<number | null>(null);
+  const [periodCustomerCount, setPeriodCustomerCount] = useState<number>(0);
 
   useEffect(() => {
     fetchSalesData();
@@ -36,9 +53,10 @@ const SalesAnalysisPage: React.FC = () => {
   const fetchSalesData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const supabase = getSupabase();
       
-      // 売上データの取得期間を計算
+      // 売上データの取得期間を計算（前期間も含めて取得）
       const endDate = new Date();
       const startDate = new Date();
       if (timeRange === '7d') {
@@ -46,13 +64,17 @@ const SalesAnalysisPage: React.FC = () => {
       } else if (timeRange === '30d') {
         startDate.setDate(endDate.getDate() - 30);
       } else {
-        startDate.setFullYear(endDate.getFullYear() - 1);
+        startDate.setDate(endDate.getDate() - 90);
       }
+      const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+      const prevStartDate = new Date(startDate);
+      prevStartDate.setDate(prevStartDate.getDate() - days);
 
-      // 見積データから売上情報を取得（過去データも含める）
+      // 見積データから売上情報を取得（前期間も含める）
       const { data: estimates, error: estimatesError } = await supabase
         .from('estimates')
-        .select('*')
+        .select('create_date,total,copies,specification,pattern_name,project_id')
+        .gte('create_date', prevStartDate.toISOString())
         .lte('create_date', endDate.toISOString())
         .in('status', ['1', '2']); // status: 1=approved, 2=ordered
 
@@ -61,53 +83,62 @@ const SalesAnalysisPage: React.FC = () => {
         throw estimatesError;
       }
 
-      // 顧客データを取得
-      const { data: customers, error: customersError } = await supabase
-        .from('customers')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString());
-
-      if (customersError) {
-        console.error('顧客データ取得エラー:', customersError);
-        throw customersError;
+      // プロジェクト→顧客の紐付け（customerSegments / 顧客数集計用）
+      const projectIds = Array.from(new Set((estimates || []).map((e: any) => e.project_id).filter(Boolean)));
+      const projectCustomerMap = new Map<string, string>();
+      if (projectIds.length) {
+        const { data: projects, error: projectsError } = await supabase
+          .from('projects')
+          .select('id,customer_id')
+          .in('id', projectIds);
+        if (projectsError) {
+          console.error('プロジェクト取得エラー:', projectsError);
+          throw projectsError;
+        }
+        (projects || []).forEach((p: any) => {
+          if (p?.id && p?.customer_id) projectCustomerMap.set(p.id, p.customer_id);
+        });
       }
 
       // 日別売上データの集計
-      const dailySalesMap = new Map<string, { sales: number; orders: number; customers: number }>();
+      const dailySalesMap = new Map<string, { sales: number; orders: number; customerSet: Set<string> }>();
       
-      estimates?.forEach(estimate => {
+      const currentEstimates = (estimates || []).filter((estimate: any) => {
+        const d = new Date(estimate.create_date);
+        return d >= startDate && d <= endDate;
+      });
+      const prevEstimates = (estimates || []).filter((estimate: any) => {
+        const d = new Date(estimate.create_date);
+        return d >= prevStartDate && d < startDate;
+      });
+
+      currentEstimates.forEach((estimate: any) => {
         const estimateDate = new Date(estimate.create_date);
-        // 指定期間内のデータのみを集計
-        if (estimateDate >= startDate && estimateDate <= endDate) {
-          const date = estimateDate.toISOString().split('T')[0];
-          const current = dailySalesMap.get(date) || { sales: 0, orders: 0, customers: 0 };
-          dailySalesMap.set(date, {
-            sales: current.sales + (estimate.total || 0),
-            orders: current.orders + 1,
-            customers: current.customers + 1
-          });
-        }
+        const date = estimateDate.toISOString().split('T')[0];
+        const customerId = estimate.project_id ? (projectCustomerMap.get(estimate.project_id) || '') : '';
+        const current = dailySalesMap.get(date) || { sales: 0, orders: 0, customerSet: new Set<string>() };
+        if (customerId) current.customerSet.add(customerId);
+        dailySalesMap.set(date, {
+          sales: current.sales + (Number(estimate.total) || 0),
+          orders: current.orders + 1,
+          customerSet: current.customerSet,
+        });
       });
 
       const salesData: SalesData[] = Array.from(dailySalesMap.entries())
-        .map(([date, data]) => ({ date, ...data }))
+        .map(([date, data]) => ({ date, sales: data.sales, orders: data.orders, customers: data.customerSet.size }))
         .sort((a, b) => a.date.localeCompare(b.date));
 
       // 製品別売上データの集計
       const productSalesMap = new Map<string, { sales: number; quantity: number }>();
       
-      estimates?.forEach(estimate => {
-        const estimateDate = new Date(estimate.create_date);
-        // 指定期間内のデータのみを集計
-        if (estimateDate >= startDate && estimateDate <= endDate) {
-          const productName = estimate.specification || 'その他';
-          const current = productSalesMap.get(productName) || { sales: 0, quantity: 0 };
-          productSalesMap.set(productName, {
-            sales: current.sales + (estimate.total || 0),
-            quantity: current.quantity + (estimate.copies || 0)
-          });
-        }
+      currentEstimates.forEach((estimate: any) => {
+        const productName = estimate.pattern_name || estimate.specification || 'その他';
+        const current = productSalesMap.get(productName) || { sales: 0, quantity: 0 };
+        productSalesMap.set(productName, {
+          sales: current.sales + (Number(estimate.total) || 0),
+          quantity: current.quantity + (Number(estimate.copies) || 0),
+        });
       });
 
       const productSales: ProductSales[] = Array.from(productSalesMap.entries())
@@ -115,54 +146,76 @@ const SalesAnalysisPage: React.FC = () => {
         .sort((a, b) => b.sales - a.sales)
         .slice(0, 5);
 
-      // 顧客セグメントの計算
-      const totalCustomers = customers?.length || 0;
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const newCustomers = customers?.filter(c => 
-        new Date(c.created_at) >= thirtyDaysAgo
-      ).length || 0;
+      // 顧客セグメント（DB参照: 見積×プロジェクトの顧客紐付けのみで算出）
+      const customerStats = new Map<string, { sales: number; orders: number; hadPrev: boolean }>();
+      const addCustomer = (estimate: any, hadPrev: boolean) => {
+        const customerId = estimate.project_id ? projectCustomerMap.get(estimate.project_id) : null;
+        if (!customerId) return;
+        const current = customerStats.get(customerId) || { sales: 0, orders: 0, hadPrev: false };
+        customerStats.set(customerId, {
+          sales: current.sales + (Number(estimate.total) || 0),
+          orders: current.orders + 1,
+          hadPrev: current.hadPrev || hadPrev,
+        });
+      };
+      prevEstimates.forEach((e: any) => addCustomer(e, true));
+      currentEstimates.forEach((e: any) => addCustomer(e, false));
+
+      const activeCustomers = Array.from(customerStats.entries());
+      const totalActiveCustomers = activeCustomers.length;
+      const newCustomers = activeCustomers.filter(([, s]) => !s.hadPrev);
+      const existingCustomers = activeCustomers.filter(([, s]) => s.hadPrev);
+      existingCustomers.sort((a, b) => b[1].sales - a[1].sales);
+      const vipCount = existingCustomers.length ? Math.max(1, Math.ceil(existingCustomers.length * 0.1)) : 0;
+      const vipCustomerIds = new Set(existingCustomers.slice(0, vipCount).map(([id]) => id));
+      const repeatCustomers = existingCustomers.filter(([id, s]) => !vipCustomerIds.has(id) && s.orders >= 2);
+      const repeatCustomerIds = new Set(repeatCustomers.map(([id]) => id));
+      const otherCount = Math.max(0, totalActiveCustomers - newCustomers.length - vipCustomerIds.size - repeatCustomerIds.size);
+      const toPct = (n: number) => (totalActiveCustomers > 0 ? Math.round((n / totalActiveCustomers) * 100) : 0);
 
       const customerSegments: CustomerSegment[] = [
-        { name: '新規顧客', value: totalCustomers > 0 ? Math.round((newCustomers / totalCustomers) * 100) : 0, color: '#3B82F6' },
-        { name: 'リピート顧客', value: totalCustomers > 0 ? Math.round(((totalCustomers - newCustomers) / totalCustomers) * 70) : 0, color: '#10B981' },
-        { name: 'VIP顧客', value: totalCustomers > 0 ? Math.round(((totalCustomers - newCustomers) / totalCustomers) * 30) : 0, color: '#F59E0B' },
+        { name: '新規顧客', value: toPct(newCustomers.length), color: '#3B82F6' },
+        { name: 'リピート顧客', value: toPct(repeatCustomerIds.size), color: '#10B981' },
+        { name: 'VIP顧客', value: toPct(vipCustomerIds.size), color: '#F59E0B' },
+        ...(otherCount > 0 ? [{ name: 'その他', value: toPct(otherCount), color: '#6B7280' }] : []),
       ];
+
+      // KPI差分（前期間比）
+      const sumSales = (rows: any[]) => rows.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+      const currentSales = sumSales(currentEstimates);
+      const prevSales = sumSales(prevEstimates);
+      setSalesChangePct(pctChange(currentSales, prevSales));
+
+      const currentOrders = currentEstimates.length;
+      const prevOrders = prevEstimates.length;
+      setOrdersChangePct(pctChange(currentOrders, prevOrders));
+
+      const uniqCustomers = (rows: any[]) => {
+        const set = new Set<string>();
+        rows.forEach((r: any) => {
+          const customerId = r.project_id ? projectCustomerMap.get(r.project_id) : null;
+          if (customerId) set.add(customerId);
+        });
+        return set.size;
+      };
+      const currentCustomerCount = uniqCustomers(currentEstimates);
+      const prevCustomerCount = uniqCustomers(prevEstimates);
+      setCustomersChangePct(pctChange(currentCustomerCount, prevCustomerCount));
+      setPeriodCustomerCount(currentCustomerCount);
 
       setSalesData(salesData);
       setProductSales(productSales);
       setCustomerSegments(customerSegments);
     } catch (error) {
       console.error('販売データの取得に失敗しました:', error);
-      // エラー時はダミーデータを表示
-      const mockSalesData: SalesData[] = [
-        { date: '2025-01-01', sales: 1500000, orders: 45, customers: 32 },
-        { date: '2025-01-02', sales: 2100000, orders: 62, customers: 48 },
-        { date: '2025-01-03', sales: 1800000, orders: 51, customers: 38 },
-        { date: '2025-01-04', sales: 2400000, orders: 68, customers: 52 },
-        { date: '2025-01-05', sales: 1900000, orders: 55, customers: 41 },
-        { date: '2025-01-06', sales: 2600000, orders: 72, customers: 58 },
-        { date: '2025-01-07', sales: 2200000, orders: 63, customers: 47 },
-      ];
-
-      const mockProductSales: ProductSales[] = [
-        { name: '製品A', sales: 4500000, quantity: 150 },
-        { name: '製品B', sales: 3200000, quantity: 120 },
-        { name: '製品C', sales: 2800000, quantity: 95 },
-        { name: '製品D', sales: 1900000, quantity: 78 },
-        { name: 'その他', sales: 1100000, quantity: 45 },
-      ];
-
-      const mockCustomerSegments: CustomerSegment[] = [
-        { name: '新規顧客', value: 35, color: '#3B82F6' },
-        { name: 'リピート顧客', value: 45, color: '#10B981' },
-        { name: 'VIP顧客', value: 20, color: '#F59E0B' },
-      ];
-
-      setSalesData(mockSalesData);
-      setProductSales(mockProductSales);
-      setCustomerSegments(mockCustomerSegments);
+      setError(error instanceof Error ? error.message : '販売データの取得に失敗しました');
+      setSalesData([]);
+      setProductSales([]);
+      setCustomerSegments([]);
+      setSalesChangePct(null);
+      setOrdersChangePct(null);
+      setCustomersChangePct(null);
+      setPeriodCustomerCount(0);
     } finally {
       setLoading(false);
     }
@@ -178,6 +231,17 @@ const SalesAnalysisPage: React.FC = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">販売データを読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <h1 className="text-xl font-semibold text-red-900 mb-2">販売分析</h1>
+          <p className="text-red-800 text-sm break-words">データ取得に失敗しました: {error}</p>
         </div>
       </div>
     );
@@ -214,9 +278,9 @@ const SalesAnalysisPage: React.FC = () => {
             <div className="p-2 bg-blue-100 rounded-lg">
               <DollarSign className="w-6 h-6 text-blue-600" />
             </div>
-            <div className="flex items-center text-green-600 text-sm">
-              <TrendingUp className="w-4 h-4 mr-1" />
-              +12.5%
+            <div className={`flex items-center text-sm ${salesChangePct === null ? 'text-gray-500' : salesChangePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {salesChangePct !== null && (salesChangePct >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+              {formatDelta(salesChangePct)}
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900">
@@ -230,9 +294,9 @@ const SalesAnalysisPage: React.FC = () => {
             <div className="p-2 bg-green-100 rounded-lg">
               <ShoppingCart className="w-6 h-6 text-green-600" />
             </div>
-            <div className="flex items-center text-green-600 text-sm">
-              <TrendingUp className="w-4 h-4 mr-1" />
-              +8.3%
+            <div className={`flex items-center text-sm ${ordersChangePct === null ? 'text-gray-500' : ordersChangePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {ordersChangePct !== null && (ordersChangePct >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+              {formatDelta(ordersChangePct)}
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900">
@@ -246,13 +310,13 @@ const SalesAnalysisPage: React.FC = () => {
             <div className="p-2 bg-purple-100 rounded-lg">
               <Users className="w-6 h-6 text-purple-600" />
             </div>
-            <div className="flex items-center text-red-600 text-sm">
-              <TrendingDown className="w-4 h-4 mr-1" />
-              -2.1%
+            <div className={`flex items-center text-sm ${customersChangePct === null ? 'text-gray-500' : customersChangePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {customersChangePct !== null && (customersChangePct >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+              {formatDelta(customersChangePct)}
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900">
-            {salesData.reduce((sum, day) => sum + day.customers, 0).toLocaleString()}
+            {periodCustomerCount.toLocaleString()}
           </div>
           <div className="text-sm text-gray-600 mt-1">顧客数</div>
         </div>
@@ -262,9 +326,8 @@ const SalesAnalysisPage: React.FC = () => {
             <div className="p-2 bg-orange-100 rounded-lg">
               <Calendar className="w-6 h-6 text-orange-600" />
             </div>
-            <div className="flex items-center text-green-600 text-sm">
-              <TrendingUp className="w-4 h-4 mr-1" />
-              +5.7%
+            <div className="flex items-center text-gray-500 text-sm">
+              平均
             </div>
           </div>
           <div className="text-2xl font-bold text-gray-900">

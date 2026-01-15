@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import { BarChart3, TrendingUp, FileText, DollarSign, Users, ShoppingCart } from 'lucide-react';
+import type { Page } from '../../types';
 
 interface AnalysisMenuItem {
   id: string;
   title: string;
   description: string;
   icon: React.ReactNode;
-  path: string;
+  page: Page;
   color: string;
 }
 
-const AnalysisMenuPage: React.FC = () => {
+interface AnalysisMenuPageProps {
+  onNavigate?: (page: Page) => void;
+}
+
+const AnalysisMenuPage: React.FC<AnalysisMenuPageProps> = ({ onNavigate }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const menuItems: AnalysisMenuItem[] = [
@@ -19,7 +24,7 @@ const AnalysisMenuPage: React.FC = () => {
       title: '販売分析',
       description: '売上データ、受注状況、顧客分析など販売関連の総合分析',
       icon: <TrendingUp className="w-8 h-8" />,
-      path: '/analysis/sales',
+      page: 'analysis_sales',
       color: 'bg-blue-500'
     },
     {
@@ -27,7 +32,7 @@ const AnalysisMenuPage: React.FC = () => {
       title: '承認稟議・経費分析',
       description: '稟議承認状況、経費申請分析、承認フロー最適化',
       icon: <FileText className="w-8 h-8" />,
-      path: '/analysis/approval-expense',
+      page: 'analysis_approval_expense',
       color: 'bg-green-500'
     },
     {
@@ -35,7 +40,7 @@ const AnalysisMenuPage: React.FC = () => {
       title: '経営計画',
       description: '事業計画、予算管理、目標達成状況の分析',
       icon: <BarChart3 className="w-8 h-8" />,
-      path: '/analysis/business-plan',
+      page: 'analysis_business_plan',
       color: 'bg-purple-500'
     },
     {
@@ -43,7 +48,7 @@ const AnalysisMenuPage: React.FC = () => {
       title: '販売状況',
       description: 'リアルタイム販売状況、在庫分析、販売パフォーマンス',
       icon: <ShoppingCart className="w-8 h-8" />,
-      path: '/analysis/sales-status',
+      page: 'analysis_sales_status',
       color: 'bg-orange-500'
     },
     {
@@ -51,7 +56,7 @@ const AnalysisMenuPage: React.FC = () => {
       title: '顧客分析',
       description: '顧客データ、購買履歴、顧客セグメント分析',
       icon: <Users className="w-8 h-8" />,
-      path: '/analysis/customer',
+      page: 'analysis_customer',
       color: 'bg-indigo-500'
     },
     {
@@ -59,7 +64,7 @@ const AnalysisMenuPage: React.FC = () => {
       title: '財務分析',
       description: '損益計算、キャッシュフロー、財務健全性分析',
       icon: <DollarSign className="w-8 h-8" />,
-      path: '/analysis/financial',
+      page: 'analysis_financial',
       color: 'bg-red-500'
     }
   ];
@@ -68,9 +73,11 @@ const AnalysisMenuPage: React.FC = () => {
     ? menuItems 
     : menuItems.filter(item => item.id.includes(selectedCategory));
 
-  const handleNavigation = (path: string) => {
-    // App.tsxのルーティングを更新する必要あり
-    window.location.hash = path;
+  const handleNavigation = (page: Page) => {
+    if (onNavigate) {
+      onNavigate(page);
+      return;
+    }
   };
 
   return (
@@ -129,7 +136,7 @@ const AnalysisMenuPage: React.FC = () => {
         {filteredItems.map((item) => (
           <div
             key={item.id}
-            onClick={() => handleNavigation(item.path)}
+            onClick={() => handleNavigation(item.page)}
             className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer hover:border-blue-300"
           >
             <div className="flex items-start space-x-4">
@@ -154,21 +161,21 @@ const AnalysisMenuPage: React.FC = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">クイックアクセス</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
-            onClick={() => handleNavigation('/analysis/sales')}
+            onClick={() => handleNavigation('analysis_sales')}
             className="bg-white p-4 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors text-left"
           >
             <div className="font-medium text-blue-900">今日の売上レポート</div>
             <div className="text-sm text-blue-700 mt-1">リアルタイム売上データを確認</div>
           </button>
           <button
-            onClick={() => handleNavigation('/analysis/approval-expense')}
+            onClick={() => handleNavigation('analysis_approval_expense')}
             className="bg-white p-4 rounded-lg border border-green-200 hover:bg-green-100 transition-colors text-left"
           >
             <div className="font-medium text-green-900">承認待ち案件</div>
             <div className="text-sm text-green-700 mt-1">現在の承認状況を確認</div>
           </button>
           <button
-            onClick={() => handleNavigation('/analysis/business-plan')}
+            onClick={() => handleNavigation('analysis_business_plan')}
             className="bg-white p-4 rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors text-left"
           >
             <div className="font-medium text-purple-900">月次目標達成率</div>
