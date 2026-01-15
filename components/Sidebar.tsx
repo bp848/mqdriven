@@ -242,10 +242,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
 	          {visibleCategories.map(category => {
-            const isCategoryExpanded = !isCollapsed && ((expandedCategories[category.id] ?? false) || category.items.some(item => {
-              const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
-              return currentPage === item.page || isChildActive;
-            }));
+            const isCategoryExpanded = !isCollapsed && (expandedCategories[category.id] ?? true);
             
             return (
               <React.Fragment key={category.id}>
