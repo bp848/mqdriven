@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { SUPABASE_URL as CREDENTIAL_SUPABASE_URL } from '../supabaseCredentials';
+import { SUPABASE_KEY as CREDENTIAL_SUPABASE_KEY, SUPABASE_URL as CREDENTIAL_SUPABASE_URL } from '../supabaseCredentials';
 import { getEnvValue } from '../utils.ts';
 import { GEMINI_DEFAULT_MODEL, isGeminiAIDisabled, requireGeminiClient } from './Gemini';
+import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 
 export interface EmailPayload {
   to: string[];
@@ -85,6 +86,15 @@ const EMAIL_API_KEY =
 const EMAIL_TEST_MODE =
   getEnvValue('EMAIL_TEST_MODE') ??
   getEnvValue('VITE_EMAIL_TEST_MODE');
+
+const isSupabaseFunctionsEndpoint = (value: string): boolean => {
+  try {
+    const url = new URL(value, 'http://localhost');
+    return url.pathname.includes('/functions/v1/');
+  } catch {
+    return value.includes('/functions/v1/');
+  }
+};
 
 const isValidAddress = (value: string | null | undefined): value is string => {
   if (!value) return false;
@@ -305,6 +315,22 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     throw new EmailDispatchError('メール送信エンドポイントが構成されていません。APPLICATION_EMAIL_ENDPOINT または SUPABASE_URL を設定してください。');
   }
 
+  // Supabase Edge Functions の場合、Authorization ヘッダーが無いと 401 になる。
+  // EMAIL_API_KEY が未設定なら、ログイン中の access_token（なければ anon key）を使う。
+  let resolvedAuthorization: string | undefined;
+  if (EMAIL_API_KEY) {
+    resolvedAuthorization = `Bearer ${EMAIL_API_KEY}`;
+  } else if (isSupabaseFunctionsEndpoint(endpoint)) {
+    try {
+      const headers = await getSupabaseFunctionHeaders(getSupabase());
+      resolvedAuthorization = headers.Authorization;
+    } catch (_err) {
+      if (CREDENTIAL_SUPABASE_KEY && CREDENTIAL_SUPABASE_KEY.trim()) {
+        resolvedAuthorization = `Bearer ${CREDENTIAL_SUPABASE_KEY.trim()}`;
+      }
+    }
+  }
+
   if (!payload.subject || !payload.subject.trim()) {
     throw new EmailDispatchError('件名を入力してください。');
   }
@@ -350,7 +376,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(EMAIL_API_KEY ? { Authorization: `Bearer ${EMAIL_API_KEY}` } : {}),
+      ...(resolvedAuthorization ? { Authorization: resolvedAuthorization } : {}),
       ...(isTestMode ? { 'X-MQ-Test-Email': 'true' } : {}),
     },
     body: JSON.stringify(emailPayload),
