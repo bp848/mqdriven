@@ -4,37 +4,43 @@ describe('sendEmail auth headers', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    delete process.env.APPLICATION_EMAIL_ENDPOINT;
+    delete process.env.APPLICATION_EMAIL_API_KEY;
   });
 
-  it(
-    'prefers Supabase auth for Supabase Functions endpoints even when EMAIL_API_KEY is set',
-    async () => {
-    process.env.APPLICATION_EMAIL_ENDPOINT = 'https://example.supabase.co/functions/v1/resend';
+  it('invokes Supabase function with Supabase Authorization even when EMAIL_API_KEY is set', async () => {
+    const { SUPABASE_KEY, SUPABASE_URL } = await import('../supabaseCredentials');
+
+    const baseUrl = SUPABASE_URL.endsWith('/') ? SUPABASE_URL.slice(0, -1) : SUPABASE_URL;
+    process.env.APPLICATION_EMAIL_ENDPOINT = `${baseUrl}/functions/v1/resend`;
     process.env.APPLICATION_EMAIL_API_KEY = 'NOT_A_JWT';
 
-    const { SUPABASE_KEY } = await import('../supabaseCredentials');
-
-    const fetchMock = vi.fn(async () => {
-      return {
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify({ id: 'id', sentAt: new Date().toISOString() }),
-      } as any;
+    const invokeMock = vi.fn(async () => {
+      return { data: { id: 'id', sentAt: new Date().toISOString() }, error: null };
     });
-    // @ts-expect-error - assign mock fetch for test
-    globalThis.fetch = fetchMock;
+
+    vi.doMock('../services/supabaseClient', async () => {
+      const actual = await vi.importActual<any>('../services/supabaseClient');
+      return {
+        ...actual,
+        getSupabase: () => ({ functions: { invoke: invokeMock } }),
+        getSupabaseFunctionHeaders: async () => ({ Authorization: `Bearer ${SUPABASE_KEY}` }),
+      };
+    });
+
+    const fetchSpy = vi.spyOn(globalThis as any, 'fetch');
 
     const { sendEmail } = await import('../services/emailService');
 
     await sendEmail({ to: ['test@example.com'], subject: 'subj', body: 'body' });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
-    const headers = (requestInit?.headers ?? {}) as Record<string, string>;
-    expect(headers.Authorization).toBe(`Bearer ${SUPABASE_KEY}`);
-    expect(headers.apikey).toBe(SUPABASE_KEY);
-    expect(headers.Authorization).not.toBe('Bearer NOT_A_JWT');
-    },
-    20000,
-  );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith(
+      'resend',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Bearer ${SUPABASE_KEY}` }),
+      }),
+    );
+  }, 20000);
 });

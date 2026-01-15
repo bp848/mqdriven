@@ -99,6 +99,51 @@ const isSupabaseFunctionsEndpoint = (value: string): boolean => {
   }
 };
 
+const getSupabaseFunctionNameFromEndpoint = (value: string): string | null => {
+  try {
+    const url = new URL(value, 'http://localhost');
+    const host = url.hostname.toLowerCase();
+    const pathname = url.pathname.replace(/\/+$/, '');
+    if (host.endsWith('.functions.supabase.co')) {
+      const parts = pathname.split('/').filter(Boolean);
+      return parts[0] || null;
+    }
+    const marker = '/functions/v1/';
+    const idx = pathname.indexOf(marker);
+    if (idx === -1) return null;
+    const rest = pathname.slice(idx + marker.length);
+    const name = rest.split('/').filter(Boolean)[0];
+    return name || null;
+  } catch {
+    const marker = '/functions/v1/';
+    const idx = value.indexOf(marker);
+    if (idx === -1) return null;
+    const rest = value.slice(idx + marker.length);
+    const name = rest.split('/').filter(Boolean)[0];
+    return name || null;
+  }
+};
+
+const isSameSupabaseProjectAsCredentials = (value: string): boolean => {
+  const credentialUrl = CREDENTIAL_SUPABASE_URL?.trim();
+  if (!credentialUrl) return false;
+  try {
+    const endpointUrl = new URL(value, 'http://localhost');
+    const endpointHost = endpointUrl.hostname.toLowerCase();
+    if (endpointHost === 'localhost' || endpointHost === '127.0.0.1' || endpointHost === '0.0.0.0') return false;
+
+    const credentialHost = new URL(credentialUrl).hostname.toLowerCase();
+    const credentialRef = credentialHost.endsWith('.supabase.co') ? credentialHost.split('.')[0] : null;
+    if (!credentialRef) return false;
+
+    if (endpointHost.endsWith('.supabase.co')) return endpointHost.split('.')[0] === credentialRef;
+    if (endpointHost.endsWith('.functions.supabase.co')) return endpointHost.split('.')[0] === credentialRef;
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 const isValidAddress = (value: string | null | undefined): value is string => {
   if (!value) return false;
   return /.+@.+\..+/.test(value);
@@ -374,6 +419,36 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     emailPayload.body = hasText ? payload.body : htmlToText(payload.html);
   } else {
     emailPayload.body = payload.body;
+  }
+
+  const functionName =
+    isSupabaseEndpoint && isSameSupabaseProjectAsCredentials(endpoint)
+      ? getSupabaseFunctionNameFromEndpoint(endpoint)
+      : null;
+
+  if (functionName) {
+    const supabase = getSupabase();
+    const headers = await getSupabaseFunctionHeaders(supabase);
+    const { data, error } = await supabase.functions.invoke(functionName, {
+      body: emailPayload,
+      headers: {
+        ...headers,
+        ...(isTestMode ? { 'X-MQ-Test-Email': 'true' } : {}),
+      },
+    });
+
+    if (error) {
+      throw new EmailDispatchError('メール送信に失敗しました。', (error as any)?.status, (error as any)?.message);
+    }
+
+    const sentAt: string =
+      (data?.sentAt && typeof data.sentAt === 'string' ? data.sentAt : null) ?? new Date().toISOString();
+    const messageId: string =
+      (data?.id && typeof data.id === 'string' ? data.id : null) ??
+      (data?.messageId && typeof data.messageId === 'string' ? data.messageId : null) ??
+      uuidv4();
+
+    return { id: messageId, sentAt };
   }
 
   const response = await fetch(endpoint, {
