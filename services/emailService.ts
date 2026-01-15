@@ -90,9 +90,12 @@ const EMAIL_TEST_MODE =
 const isSupabaseFunctionsEndpoint = (value: string): boolean => {
   try {
     const url = new URL(value, 'http://localhost');
-    return url.pathname.includes('/functions/v1/');
+    const host = url.hostname.toLowerCase();
+    if (host.endsWith('.functions.supabase.co')) return true;
+    if (host.endsWith('.supabase.co') && url.pathname.includes('/functions/v1/')) return true;
+    return false;
   } catch {
-    return value.includes('/functions/v1/');
+    return value.includes('/functions/v1/') || value.includes('.functions.supabase.co');
   }
 };
 
@@ -318,16 +321,16 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
   // Supabase Edge Functions の場合、Authorization ヘッダーが無いと 401 になる。
   // EMAIL_API_KEY が未設定なら、ログイン中の access_token（なければ anon key）を使う。
   let resolvedAuthorization: string | undefined;
+  const shouldAttachSupabaseAuth =
+    !!endpoint && isSupabaseFunctionsEndpoint(endpoint) && !!CREDENTIAL_SUPABASE_KEY?.trim();
   if (EMAIL_API_KEY) {
     resolvedAuthorization = `Bearer ${EMAIL_API_KEY}`;
-  } else if (isSupabaseFunctionsEndpoint(endpoint)) {
+  } else if (shouldAttachSupabaseAuth) {
     try {
       const headers = await getSupabaseFunctionHeaders(getSupabase());
       resolvedAuthorization = headers.Authorization;
     } catch (_err) {
-      if (CREDENTIAL_SUPABASE_KEY && CREDENTIAL_SUPABASE_KEY.trim()) {
-        resolvedAuthorization = `Bearer ${CREDENTIAL_SUPABASE_KEY.trim()}`;
-      }
+      resolvedAuthorization = `Bearer ${CREDENTIAL_SUPABASE_KEY.trim()}`;
     }
   }
 
@@ -377,6 +380,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
     headers: {
       'Content-Type': 'application/json',
       ...(resolvedAuthorization ? { Authorization: resolvedAuthorization } : {}),
+      ...(shouldAttachSupabaseAuth ? { apikey: CREDENTIAL_SUPABASE_KEY.trim() } : {}),
       ...(isTestMode ? { 'X-MQ-Test-Email': 'true' } : {}),
     },
     body: JSON.stringify(emailPayload),
