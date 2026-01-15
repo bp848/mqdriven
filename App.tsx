@@ -69,6 +69,8 @@ import BusinessPlanPage from './components/analysis/BusinessPlanPage';
 import SalesStatusPage from './components/analysis/SalesStatusPage';
 import CustomerAnalysisPage from './components/analysis/CustomerAnalysisPage';
 import FinancialAnalysisPage from './components/analysis/FinancialAnalysisPage';
+import HistoricalEstimateAnalysisPage from './components/analysis/HistoricalEstimateAnalysisPage';
+import HistoricalProjectAnalysisPage from './components/analysis/HistoricalProjectAnalysisPage';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -162,6 +164,8 @@ const PAGE_TITLES: Record<Page, string> = {
     analysis_sales_status: '販売状況',
     analysis_customer: '顧客分析',
     analysis_financial: '財務分析',
+    analysis_historical_estimates: '過去の見積分析',
+    analysis_historical_projects: '過去のプロジェクト分析',
     my_schedule: '日報タスクカレンダー',
     sales_dashboard: '販売状況',
     sales_leads: 'リード管理',
@@ -1238,6 +1242,10 @@ useEffect(() => {
                 return <CustomerAnalysisPage />;
             case 'analysis_financial':
                 return <FinancialAnalysisPage />;
+            case 'analysis_historical_estimates':
+                return <HistoricalEstimateAnalysisPage />;
+            case 'analysis_historical_projects':
+                return <HistoricalProjectAnalysisPage />;
             case 'sales_orders':
                 return (
                     <SalesOrdersPage
