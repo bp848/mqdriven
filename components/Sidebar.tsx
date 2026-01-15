@@ -37,6 +37,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: PieChart,
     items: [
       { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
+      { page: 'analysis_menu', name: '分析一覧', icon: PieChart },
       { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
       { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
@@ -96,6 +97,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
           name: '承認済一覧',
           icon: CheckCircle,
           children: [
+            { page: 'accounting_approved_unhandled', name: '未対応' },
             { page: 'accounting_approved_applications', name: '全て' },
             { page: 'accounting_approved_expense', name: '経費' },
             { page: 'accounting_approved_transport', name: '交通費' },

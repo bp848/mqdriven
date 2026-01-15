@@ -34,6 +34,7 @@ import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
 import AccountingDashboard from './src/components/accounting/Dashboard';
 import { JournalReviewPage } from './src/components/accounting/JournalEntry';
 import { ApprovedApplications } from './src/components/accounting/ApprovedApplications';
+import UnhandledItemsPage from './src/components/accounting/UnhandledItemsPage';
 import GeneralLedger from './components/accounting/GeneralLedger';
 import PayablesPage from './components/accounting/Payables';
 import ReceivablesPage from './components/accounting/Receivables';
@@ -61,6 +62,9 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
+import AnalysisMenuPage from './components/analysis/AnalysisMenuPage';
+import SalesAnalysisPage from './components/analysis/SalesAnalysisPage';
+import ApprovalExpenseAnalysisPage from './components/analysis/ApprovalExpenseAnalysisPage';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -147,6 +151,13 @@ type PredictiveSuggestion = {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ダッシュボード',
+    analysis_menu: '分析一覧',
+    analysis_sales: '販売分析',
+    analysis_approval_expense: '承認稟議・経費分析',
+    analysis_business_plan: '経営計画',
+    analysis_sales_status: '販売状況',
+    analysis_customer: '顧客分析',
+    analysis_financial: '財務分析',
     my_schedule: '日報タスクカレンダー',
     sales_dashboard: '販売状況',
     sales_leads: 'リード管理',
@@ -188,6 +199,7 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_receivables: '売掛金管理',
     accounting_cash_schedule: '資金繰り表',
     accounting_approved_applications: '承認済み申請',
+    accounting_approved_unhandled: '未対応管理',
     accounting_approved_expense: '承認済み（経費）',
     accounting_approved_transport: '承認済み（交通費）',
     accounting_approved_leave: '承認済み（休暇）',
@@ -1203,6 +1215,12 @@ useEffect(() => {
                         />;
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;
+            case 'analysis_menu':
+                return <AnalysisMenuPage />;
+            case 'analysis_sales':
+                return <SalesAnalysisPage />;
+            case 'analysis_approval_expense':
+                return <ApprovalExpenseAnalysisPage />;
             case 'sales_orders':
                 return (
                     <SalesOrdersPage
@@ -1347,6 +1365,16 @@ useEffect(() => {
                 return <CashSchedulePage />;
             case 'accounting_approved_applications':
                 return <ApprovedApplications notify={addToast} currentUserId={currentUser?.id} onNavigate={handleNavigate} />;
+            case 'accounting_approved_unhandled':
+                return (
+                    <UnhandledItemsPage
+                        leads={leads}
+                        onUpdateLead={handleUpdateLead}
+                        onNavigate={handleNavigate}
+                        notify={addToast}
+                        currentUserId={currentUser?.id ?? null}
+                    />
+                );
             case 'bulletin_board':
                 return <BulletinBoardPage currentUser={currentUser} addToast={addToast} allUsers={allUsers} />;
             case 'knowledge_base':

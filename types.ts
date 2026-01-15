@@ -1,5 +1,6 @@
 export type Page =
-  | 'analysis_dashboard' | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
+  | 'analysis_dashboard' | 'analysis_menu' | 'analysis_sales' | 'analysis_approval_expense' | 'analysis_business_plan' | 'analysis_sales_status' | 'analysis_customer' | 'analysis_financial'
+  | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
   | 'sales_estimates' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
   | 'inventory_management' | 'manufacturing_orders' | 'manufacturing_progress' | 'manufacturing_cost'
