@@ -44,17 +44,51 @@ serve(async (req) => {
     const { user_id, return_to } = decodedState
 
     // Exchange code for tokens
+    const clientId = Deno.env.get('GOOGLE_CLIENT_ID')
+    const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    
+    console.log('Environment check:', {
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
+      hasSupabaseUrl: !!supabaseUrl,
+      code: code?.substring(0, 10) + '...',
+    })
+
+    if (!clientId || !clientSecret || !supabaseUrl) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing environment variables',
+          details: {
+            hasClientId: !!clientId,
+            hasClientSecret: !!clientSecret,
+            hasSupabaseUrl: !!supabaseUrl
+          }
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // Use application callback URL instead of Functions URL
+    const redirectUri = Deno.env.get('PUBLIC_BASE_URL') || Deno.env.get('APP_BASE_URL') || 'https://erp.b-p.co.jp'
+    const callbackUrl = `${redirectUri.replace(/\/+$/, '')}/api/google/oauth/callback`
+
+    console.log('Using redirect URI:', callbackUrl)
+
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        client_id: Deno.env.get('GOOGLE_CLIENT_ID')!,
-        client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET')!,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: `${Deno.env.get('SUPABASE_URL')}/functions/v1/google-oauth-callback`,
+        redirect_uri: callbackUrl,
       }),
     })
 
