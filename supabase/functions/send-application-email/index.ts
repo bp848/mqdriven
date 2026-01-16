@@ -30,17 +30,23 @@ const ALLOWED_ORIGINS = parseAllowedOrigins();
 
 const buildCorsHeaders = (req: Request) => {
   const origin = req.headers.get("origin");
-  // Always allow the specific domain and localhost for development
-  const allowedOrigin = origin && (
-    origin === "https://erp.b-p.co.jp" || 
-    origin === "http://localhost:5173" ||
-    origin === "http://localhost:5174" ||
-    origin === "http://localhost:3000" ||
-    origin === "*"
-  ) ? origin : "https://erp.b-p.co.jp";
+  const allowedOrigins = parseAllowedOrigins();
   
+  // Check if origin is in allowed list
+  if (origin && allowedOrigins.includes(origin)) {
+    return {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Max-Age": "86400",
+      "Access-Control-Allow-Credentials": "true",
+      Vary: "Origin, Access-Control-Request-Headers",
+    };
+  }
+  
+  // Fallback to default domain
   return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Origin": "https://erp.b-p.co.jp",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
@@ -99,7 +105,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const apiKey = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("RESEND_FROM") || Deno.env.get("RESEND_FROM_ADDRESS");
+  const from = Deno.env.get("RESEND_FROM_ADDRESS") || Deno.env.get("RESEND_FROM");
   const replyTo = Deno.env.get("RESEND_REPLY_TO") || from;
 
   console.log("Email function environment check:", {
