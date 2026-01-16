@@ -44,6 +44,7 @@ export const useSubmitWithConfirmation = () => {
   const [isDrafting, setIsDrafting] = useState(false);
 
   const closeDialog = useCallback(() => {
+    console.log('[useSubmitWithConfirmation] closeDialog called - resetting states');
     setDialogState(null);
     setIsConfirming(false);
     setIsDrafting(false);
@@ -52,17 +53,22 @@ export const useSubmitWithConfirmation = () => {
   const runAction = useCallback(
     async (action: ConfirmableAction | undefined, setBusy?: (value: boolean) => void) => {
       if (!action) {
+        console.log('[useSubmitWithConfirmation] No action provided, closing dialog');
         closeDialog();
         return;
       }
+      console.log('[useSubmitWithConfirmation] Starting action, setBusy:', !!setBusy);
       if (setBusy) setBusy(true);
       try {
         await action();
+        console.log('[useSubmitWithConfirmation] Action completed successfully');
       } catch (error) {
         console.error('Action failed:', error);
         throw error;
       } finally {
+        console.log('[useSubmitWithConfirmation] Finally block, setBusy:', !!setBusy);
         if (setBusy) setBusy(false);
+        console.log('[useSubmitWithConfirmation] Closing dialog');
         closeDialog();
       }
     },
@@ -70,10 +76,12 @@ export const useSubmitWithConfirmation = () => {
   );
 
   const handleConfirm = useCallback(() => {
+    console.log('[useSubmitWithConfirmation] handleConfirm called, isConfirming:', isConfirming);
     runAction(dialogState?.onConfirm, setIsConfirming);
   }, [dialogState?.onConfirm, runAction]);
 
   const handleDraft = useCallback(() => {
+    console.log('[useSubmitWithConfirmation] handleDraft called, isDrafting:', isDrafting);
     runAction(dialogState?.onDraft, setIsDrafting);
   }, [dialogState?.onDraft, runAction]);
 
