@@ -34,6 +34,8 @@ export const getServerSupabase = (): SupabaseClient | null => {
         global: {
             headers: {
                 'X-Client-Info': 'mqdriven-board-api',
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
             },
         },
     });

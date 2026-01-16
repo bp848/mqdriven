@@ -395,7 +395,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             // 全期間の申請済データ（経費申請を表示するため）
             applications.forEach(app => {
-                const requestType = getExpenseRequestType(app.request_type);
+                const requestType = getExpenseRequestType(app.applicationCode?.name ?? '申請');
                 
                 if (!['approved', 'pending_approval'].includes(app.status)) return;
                 

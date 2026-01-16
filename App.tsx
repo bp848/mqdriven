@@ -29,7 +29,7 @@ import PurchasingManagementPage from './components/purchasing/PurchasingManageme
 import CreatePurchaseOrderModal from './components/purchasing/CreatePurchaseOrderModal';
 import EstimateManagementPage from './components/sales/EstimateManagementPage';
 import SalesRanking from './components/accounting/SalesRanking';
-import BusinessPlanPage from './components/accounting/BusinessPlanPage';
+import AccountingBusinessPlanPage from './components/accounting/BusinessPlanPage';
 import ApprovalWorkflowPage from './components/accounting/ApprovalWorkflowPage';
 import AccountingDashboard from './src/components/accounting/Dashboard';
 import { JournalReviewPage } from './src/components/accounting/JournalEntry';
@@ -65,7 +65,7 @@ import PromptManagementPage from './components/PromptManagementPage';
 import AnalysisMenuPage from './components/analysis/AnalysisMenuPage';
 import SalesAnalysisPage from './components/analysis/SalesAnalysisPage';
 import ApprovalExpenseAnalysisPage from './components/analysis/ApprovalExpenseAnalysisPage';
-import BusinessPlanPage from './components/analysis/BusinessPlanPage';
+import AnalysisBusinessPlanPage from './components/analysis/BusinessPlanPage';
 import SalesStatusPage from './components/analysis/SalesStatusPage';
 import CustomerAnalysisPage from './components/analysis/CustomerAnalysisPage';
 import FinancialAnalysisPage from './components/analysis/FinancialAnalysisPage';
@@ -1235,7 +1235,7 @@ useEffect(() => {
             case 'analysis_approval_expense':
                 return <ApprovalExpenseAnalysisPage />;
             case 'analysis_business_plan':
-                return <BusinessPlanPage />;
+                return <AnalysisBusinessPlanPage />;
             case 'analysis_sales_status':
                 return <SalesStatusPage />;
             case 'analysis_customer':
@@ -1375,7 +1375,7 @@ useEffect(() => {
                         </div>
                     );
                 }
-                return <BusinessPlanPage allUsers={allUsers} />;
+                return <AccountingBusinessPlanPage allUsers={allUsers} />;
             case 'accounting_dashboard':
                 return <AccountingDashboard setCurrentView={handleNavigate} />;
             case 'accounting_journal_review':

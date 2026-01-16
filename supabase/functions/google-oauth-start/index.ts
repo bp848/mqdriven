@@ -10,6 +10,18 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "*",
 ];
 
+const isSupabaseFunctionsRedirectUri = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    const host = url.host;
+    if (host.endsWith(".functions.supabase.co")) return true;
+    if (host.endsWith(".supabase.co") && /\/functions\/v1(\/|$)/.test(url.pathname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 const deriveProjectRef = (supabaseUrl: string | null, requestHost?: string | null): string | null => {
   try {
     if (supabaseUrl) {
@@ -29,9 +41,9 @@ const deriveProjectRef = (supabaseUrl: string | null, requestHost?: string | nul
 const resolveRedirectUri = (requestHost?: string | null): { uri: string | null; source: "env" | "fallback" } => {
   const envUri = Deno.env.get("GOOGLE_REDIRECT_URI");
   if (envUri) {
-    if (/functions\.supabase\.co/.test(envUri)) {
+    if (isSupabaseFunctionsRedirectUri(envUri)) {
       console.warn(
-        "GOOGLE_REDIRECT_URI points to Supabase Functions. OAuth redirects from Google cannot include Authorization headers, so redirecting to a Functions URL will 401. Use an app callback URL instead, e.g. https://<app>/api/google/oauth/callback",
+        "GOOGLE_REDIRECT_URI points to Supabase Edge Functions. OAuth redirects from Google cannot include Authorization headers, so redirecting to a Functions URL will 401. Use an app callback URL instead, e.g. https://<app>/api/google/oauth/callback",
         { envUri },
       );
       // Treat Functions URLs as misconfiguration and fall back to an app callback.

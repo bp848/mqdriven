@@ -1,5 +1,7 @@
 import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from './notificationService';
+import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
     EmployeeUser,
@@ -2095,24 +2097,49 @@ export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
     return (data || []).map(dbApplicationCodeToApplicationCode);
 };
 export const submitApplication = async (appData: any, applicantId: string): Promise<Application> => {
+    console.log('[submitApplication] 申請送信開始', { applicationCodeId: appData.applicationCodeId, applicantId });
     const supabase = getSupabase();
 
+    // 認証状態を確認
+    const { data: authData } = await supabase.auth.getSession();
+    if (!authData.session) {
+        throw new Error('認証が必要です。再度ログインしてください。');
+    }
+
     const { data: routeData, error: routeError } = await supabase.from('approval_routes').select('route_data').eq('id', appData.approvalRouteId).single();
-    if (routeError) throw formatSupabaseError('承認ルートの取得に失敗しました', routeError);
-    if (!routeData?.route_data?.steps || routeData.route_data.steps.length === 0) throw new Error('選択された承認ルートに承認者が設定されていません。');
+    if (routeError) {
+        console.error('[submitApplication] 承認ルート取得エラー:', routeError);
+        throw formatSupabaseError('承認ルートの取得に失敗しました', routeError);
+    }
+    if (!routeData?.route_data?.steps || routeData.route_data.steps.length === 0) {
+        throw new Error('選択された承認ルートに承認者が設定されていません。');
+    }
 
     const firstApproverId = routeData.route_data.steps[0].approver_id;
+    console.log('[submitApplication] 初期承認者:', firstApproverId);
 
-    const { data, error } = await supabase.from('applications').insert({
+    const applicationData = {
         application_code_id: appData.applicationCodeId,
         form_data: appData.formData,
         approval_route_id: appData.approvalRouteId,
         document_url: appData.documentUrl ?? appData.formData?.documentUrl ?? null,
-        applicant_id: applicantId, status: 'pending_approval', submitted_at: new Date().toISOString(), current_level: 1, approver_id: firstApproverId,
-    }).select().single();
+        applicant_id: applicantId, 
+        status: 'pending_approval', 
+        submitted_at: new Date().toISOString(), 
+        current_level: 1, 
+        approver_id: firstApproverId,
+    };
 
-    ensureSupabaseSuccess(error, 'Failed to submit application');
+    console.log('[submitApplication] 申請データ:', applicationData);
 
+    const { data, error } = await supabase.from('applications').insert(applicationData).select().single();
+
+    if (error) {
+        console.error('[submitApplication] 申請登録エラー:', error);
+        throw formatSupabaseError('申請の登録に失敗しました', error);
+    }
+
+    console.log('[submitApplication] 申請登録成功:', data);
     const createdApplication = dbApplicationToApplication(data);
 
     try {
@@ -2716,27 +2743,100 @@ export const deactivateAccountItem = async (id: string): Promise<void> => {
     ensureSupabaseSuccess(error, '勘定科目の無効化に失敗しました');
 };
 
+// デバッグ用：サービスロールキーで直接クエリを実行
+export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRecipient[]> => {
+    console.log(`[debugPaymentRecipientsWithServiceRole] サービスロールキーでクエリ実行`);
+    
+    // サービスロールキーで新しいクライアントを作成
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    
+    if (!serviceRoleKey || !supabaseUrl) {
+        console.error('[debugPaymentRecipientsWithServiceRole] サービスロールキーが見つかりません');
+        return [];
+    }
+    
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+            persistSession: false,
+        },
+        global: {
+            headers: {
+                'apikey': serviceRoleKey,
+                'Authorization': `Bearer ${serviceRoleKey}`,
+            },
+        },
+    });
+    
+    try {
+        const { data, error } = await serviceClient
+            .from('payment_recipients')
+            .select('id,recipient_code,company_name,recipient_name')
+            .limit(10);
+            
+        if (error) {
+            console.error('[debugPaymentRecipientsWithServiceRole] サービスロールクエリエラー:', error);
+            return [];
+        }
+        
+        console.log(`[debugPaymentRecipientsWithServiceRole] サービスロールで取得: ${data?.length || 0}件`, data);
+        return (data || []).map(mapDbPaymentRecipient);
+    } catch (err) {
+        console.error('[debugPaymentRecipientsWithServiceRole] 例外:', err);
+        return [];
+    }
+};
+
 export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
+    console.log(`[getPaymentRecipients] 開始 - 検索クエリ: "${q}"`);
     const supabase = getSupabase();
+    
+    // 認証状態を確認
+    const { data: authData } = await supabase.auth.getSession();
+    console.log(`[getPaymentRecipients] 認証状態:`, { 
+        hasSession: !!authData.session,
+        userId: authData.session?.user?.id,
+        userEmail: authData.session?.user?.email 
+    });
+    
     const buildQuery = (columns: string) => {
         let query = supabase
             .from('payment_recipients')
             .select(columns)
             .order('company_name', { ascending: true })
             .order('recipient_name', { ascending: true });
+        
+        // 検索クエリがある場合は複数カラムを対象に検索
         if (q && q.trim()) {
-            query = query.ilike('company_name', `%${q}%`);
+            const searchTerm = `%${q.trim()}%`;
+            query = query.or(`company_name.ilike.${searchTerm},recipient_name.ilike.${searchTerm},recipient_code.ilike.${searchTerm}`);
+            console.log(`[getPaymentRecipients] 検索条件適用: ${searchTerm}`);
         }
+        
         return query.limit(1000);
     };
 
+    console.log(`[getPaymentRecipients] プライマリクエリ実行`);
     let { data, error } = await buildQuery(PAYMENT_RECIPIENT_SELECT);
+    
     if (error && isMissingColumnError(error)) {
-        console.warn('payment_recipients table missing extended columns; falling back to legacy schema');
+        console.warn('payment_recipients table missing extended columns; falling back to legacy schema', error);
+        console.log(`[getPaymentRecipients] レガシークエリ実行`);
         ({ data, error } = await buildQuery(PAYMENT_RECIPIENT_LEGACY_SELECT));
     }
-    ensureSupabaseSuccess(error, 'Failed to fetch payment recipients');
-    return (data || []).map(mapDbPaymentRecipient);
+    
+    if (error) {
+        console.error(`[getPaymentRecipients] エラー:`, error);
+        throw error;
+    }
+    
+    const result = (data || []).map(mapDbPaymentRecipient);
+    console.log(`[getPaymentRecipients] 完了 - 取得件数: ${result.length}件`, { 
+        searchQuery: q, 
+        rawDataCount: data?.length || 0,
+        firstFewItems: result.slice(0, 3).map(r => ({ id: r.id, name: r.companyName || r.recipientName }))
+    });
+    return result;
 };
 
 export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<void> => {

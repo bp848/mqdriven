@@ -16,6 +16,7 @@ interface ExpenseCategory {
   amount: number;
   percentage: number;
   color: string;
+  [key: string]: string | number;
 }
 
 interface CashFlowData {
@@ -399,7 +400,11 @@ const FinancialAnalysisPage: React.FC = () => {
                 cy="50%"
                 outerRadius={80}
                 dataKey="amount"
-                label={({ name, percentage }) => `${name}: ${percentage}%`}
+                label={(props: any) => {
+                  const name = typeof props?.name === 'string' ? props.name : '';
+                  const percent = typeof props?.percent === 'number' ? Math.round(props.percent * 100) : null;
+                  return percent === null ? name : `${name}: ${percent}%`;
+                }}
               >
                 {expenseCategories.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />

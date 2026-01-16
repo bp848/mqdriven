@@ -57,6 +57,14 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       setError(null);
       const supabase = getSupabase();
       
+      // 認証状態を確認
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) {
+        console.warn('[ApprovalExpenseAnalysis] 未認証状態');
+        setError('認証が必要です。再度ログインしてください。');
+        return;
+      }
+      
       // データ取得期間を計算（前期間も含めて取得）
       const endDate = new Date();
       const startDate = new Date();
@@ -71,6 +79,8 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       const prevStartDate = new Date(startDate);
       prevStartDate.setDate(prevStartDate.getDate() - days);
 
+      console.log(`[ApprovalExpenseAnalysis] データ取得期間: ${prevStartDate.toISOString()} 〜 ${endDate.toISOString()}`);
+
       // 申請データを取得（過去データも含める）
       const { data: applications, error: applicationsError } = await supabase
         .from('applications')
@@ -79,12 +89,15 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
           application_code:application_codes(name, code)
         `)
         .gte('created_at', prevStartDate.toISOString())
-        .lte('created_at', endDate.toISOString());
+        .lte('created_at', endDate.toISOString())
+        .limit(1000); // limitを追加
 
       if (applicationsError) {
         console.error('申請データ取得エラー:', applicationsError);
-        throw applicationsError;
+        throw new Error(`申請データの取得に失敗しました: ${applicationsError.message}`);
       }
+
+      console.log(`[ApprovalExpenseAnalysis] 取得件数: ${applications?.length || 0}件`);
 
       const currentApps = (applications || []).filter((app: any) => {
         const d = new Date(app.created_at);
@@ -94,6 +107,8 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         const d = new Date(app.created_at);
         return d >= prevStartDate && d < startDate;
       });
+
+      console.log(`[ApprovalExpenseAnalysis] 期間内データ: 現在${currentApps.length}件, 前期${prevApps.length}件`);
 
       // 月別承認状況データの集計
       const monthlyDataMap = new Map<string, { pending: number; approved: number; rejected: number; totalAmount: number }>();
@@ -157,7 +172,9 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       const departmentMap = new Map<string, { pending: number; approved: number; totalProcessTime: number; count: number }>();
       
       currentApps.forEach((app: any) => {
-        const department = '未設定'; // employeesテーブル参照を削除したため固定値
+        // 申請者情報を取得
+        const applicantName = app.applicant?.name || app.applicant?.email || '不明';
+        const department = applicantName; // 申請者名を部署として使用
         const current = departmentMap.get(department) || { pending: 0, approved: 0, totalProcessTime: 0, count: 0 };
 
         if (app.status === 'pending_approval') {
@@ -418,6 +435,48 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* 承認済み申請詳細リスト */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">承認済み申請詳細（最新20件）</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">申請日</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">申請者</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">会社名</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">金額</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">カテゴリー</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">承認日</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {currentApps
+                  .filter((app: any) => app.status === 'approved')
+                  .sort((a: any, b: any) => new Date(b.approved_at).getTime() - new Date(a.approved_at).getTime())
+                  .slice(0, 20)
+                  .map((app: any) => {
+                    const formData = app.form_data as any;
+                    const amount = Number(formData.amount || formData.totalGross || formData.invoice?.totalGross || 0);
+                    const supplierName = formData.supplierName || formData.companyName || '-';
+                    const applicantName = app.applicant?.name || app.applicant?.email || '不明';
+                    
+                    return (
+                      <tr key={app.id} className="hover:bg-gray-50">
+                        <td className="py-3 px-4">{new Date(app.approved_at).toLocaleDateString('ja-JP')}</td>
+                        <td className="py-3 px-4">{applicantName}</td>
+                        <td className="py-3 px-4">{supplierName}</td>
+                        <td className="py-3 px-4 text-right font-mono">¥{amount.toLocaleString()}</td>
+                        <td className="py-3 px-4">{formData.expenseCategory || '-'}</td>
+                        <td className="py-3 px-4">{new Date(app.approved_at).toLocaleDateString('ja-JP')}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
         </div>
 

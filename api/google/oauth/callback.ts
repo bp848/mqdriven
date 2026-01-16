@@ -36,10 +36,23 @@ const resolveRequestOrigin = (req: any): string => {
     return `${proto}://${host}`;
 };
 
-const resolveRedirectUri = (req: any): string => {
+export const isSupabaseFunctionsRedirectUri = (value: string): boolean => {
+    try {
+        const url = new URL(value);
+        const host = url.host;
+        if (host.endsWith('.functions.supabase.co')) return true;
+        if (host.endsWith('.supabase.co') && /\/functions\/v1(\/|$)/.test(url.pathname)) return true;
+        return false;
+    } catch {
+        return false;
+    }
+};
+
+export const resolveRedirectUri = (req: any): string => {
     const envUri = process.env.GOOGLE_REDIRECT_URI;
-    if (envUri && !/functions\.supabase\.co/.test(envUri)) {
-        return envUri;
+    const trimmedEnvUri = typeof envUri === 'string' ? envUri.trim() : '';
+    if (trimmedEnvUri && !isSupabaseFunctionsRedirectUri(trimmedEnvUri)) {
+        return trimmedEnvUri;
     }
     return `${resolveRequestOrigin(req)}/api/google/oauth/callback`;
 };

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { submitApplication, saveApplicationDraft, getApplicationDraft, clearApplicationDraft, uploadFile } from '../../services/dataService';
+import { submitApplication, saveApplicationDraft, getApplicationDraft, clearApplicationDraft, uploadFile, debugPaymentRecipientsWithServiceRole } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
@@ -424,7 +424,18 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     }, [applicationCodeId, currentUser?.id, draftApplication, addToast]);
 
     const handleFieldChange = (field: keyof ExpenseInvoiceDraft, value: any) => {
-        setInvoice(prev => ({ ...prev, [field]: value }));
+        setInvoice(prev => {
+            const updated = { ...prev, [field]: value };
+            
+            // 税抜合計または消費税が変更された場合は税込合計を再計算
+            if (field === 'totalNet' || field === 'taxAmount') {
+                const net = Number(updated.totalNet) || 0;
+                const tax = Number(updated.taxAmount) || 0;
+                updated.totalGross = net + tax;
+            }
+            
+            return updated;
+        });
     };
 
     const handleLineChange = (lineId: string, field: keyof ExpenseLine, value: any) => {
@@ -435,28 +446,61 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             const newLines = prev.lines.map(line => {
                 if (line.id !== lineId) return line;
                 const updatedLine = { ...line, [field]: value };
-                if (field === 'quantity' || field === 'unitPrice') {
-                    const quantity = field === 'quantity' ? Number(value) : Number(updatedLine.quantity);
-                    const unitPrice = field === 'unitPrice' ? Number(value) : Number(updatedLine.unitPrice);
-                    updatedLine.amountExclTax = quantity * unitPrice;
+                if (field === 'quantity' || field === 'unitPrice' || field === 'amountExclTax') {
+                    const quantity = field === 'quantity' ? Number(value) || 0 : Number(updatedLine.quantity) || 0;
+                    const unitPrice = field === 'unitPrice' ? Number(value) || 0 : Number(updatedLine.unitPrice) || 0;
+                    const amountExclTax = field === 'amountExclTax' ? Number(value) || 0 : quantity * unitPrice;
+                    updatedLine.amountExclTax = amountExclTax;
                 }
                 return updatedLine;
             });
-            return { ...prev, lines: newLines };
+            
+            // 再計算した合計金額をinvoice状態に反映（手動入力された場合は維持）
+            const totals = computeLineTotals({ ...prev, lines: newLines });
+            const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
+            
+            return { 
+                ...prev, 
+                lines: newLines,
+                totalNet: hasManualNetInput ? prev.totalNet : totals.net,
+                taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
+                totalGross: hasManualNetInput ? prev.totalGross : totals.gross
+            };
         });
     };
 
     const addLine = () => {
-        setInvoice(prev => ({ ...prev, lines: normalizeLinesForInternalExpense([...prev.lines, createEmptyLine()]) }));
+        setInvoice(prev => {
+            const newLines = normalizeLinesForInternalExpense([...prev.lines, createEmptyLine()]);
+            const totals = computeLineTotals({ ...prev, lines: newLines });
+            const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
+            
+            return { 
+                ...prev, 
+                lines: newLines,
+                totalNet: hasManualNetInput ? prev.totalNet : totals.net,
+                taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
+                totalGross: hasManualNetInput ? prev.totalGross : totals.gross
+            };
+        });
     };
 
     const removeLine = (lineId: string) => {
         setInvoice(prev => {
             const newLines = prev.lines.filter(l => l.id !== lineId);
             if (newLines.length === 0) {
-                return { ...prev, lines: normalizeLinesForInternalExpense([createEmptyLine()]) };
+                newLines.push(...normalizeLinesForInternalExpense([createEmptyLine()]));
             }
-            return { ...prev, lines: newLines };
+            const totals = computeLineTotals({ ...prev, lines: newLines });
+            const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
+            
+            return { 
+                ...prev, 
+                lines: newLines,
+                totalNet: hasManualNetInput ? prev.totalNet : totals.net,
+                taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
+                totalGross: hasManualNetInput ? prev.totalGross : totals.gross
+            };
         });
     };
 
@@ -636,14 +680,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     };
 
     const executeSubmission = async () => {
-        if (!currentUser) {
-            setError('ユーザー情報が見つかりません。');
-            return;
-        }
-        const payload = buildApplicationPayload();
         setIsSubmitting(true);
         setError('');
         try {
+            const payload = buildApplicationPayload();
             await submitApplication(payload, currentUser.id);
             await clearApplicationDraft(applicationCodeId, currentUser.id);
             resetFormFields();
@@ -651,7 +691,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             addToast?.('経費精算を送信しました。', 'success');
             onSuccess();
         } catch (err: any) {
+            console.error('申請送信エラー:', err);
             setError(err.message || '申請の提出に失敗しました。');
+            addToast?.(err.message || '申請の提出に失敗しました。', 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -718,6 +760,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
     return (
         <div className="w-full p-2 sm:p-4">
+            {/* デバッグ用ボタン */}
+            <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded">
+                <button
+                    type="button"
+                    onClick={async () => {
+                        console.log('デバッグ：サービスロールで支払先を取得');
+                        await debugPaymentRecipientsWithServiceRole();
+                    }}
+                    className="bg-red-600 text-white px-3 py-1 rounded text-sm"
+                >
+                    デバッグ：サービスロールで支払先取得
+                </button>
+            </div>
+            
             {hasSubmitted && (
                 <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/40 dark:bg-emerald-900/20 sm:flex-row sm:items-center sm:justify-between">
                     <div>

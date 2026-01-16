@@ -11,7 +11,14 @@ export const initializeSupabase = (url: string, key: string): SupabaseClient | n
             supabase = null;
             return null;
         }
-        supabase = createClient(url, key);
+        supabase = createClient(url, key, {
+            global: {
+                headers: {
+                    'apikey': key,
+                    'Authorization': `Bearer ${key}`,
+                },
+            },
+        });
         return supabase;
     } catch (e) {
         console.error("Error initializing Supabase", e);

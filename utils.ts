@@ -18,10 +18,44 @@ export const formatJPY = (amount: number | null | undefined): string => {
   return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(Math.round(amount));
 };
 
+export const parseDateSafe = (input: string | Date | null | undefined): Date | null => {
+  if (!input) return null;
+  if (input instanceof Date) {
+    return Number.isNaN(input.getTime()) ? null : input;
+  }
+
+  const raw = String(input).trim();
+  if (!raw) return null;
+
+  // Prefer stable parsing for date-only strings (avoid timezone shifts and Safari parsing quirks).
+  const ymdMatch = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = Number(ymdMatch[1]);
+    const month = Number(ymdMatch[2]);
+    const day = Number(ymdMatch[3]);
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      const d = new Date(year, month - 1, day);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+export const toLocalISODate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const formatDate = (dateString: string | Date | null | undefined): string => {
   if (!dateString) return '-';
   try {
-    return new Date(dateString).toLocaleDateString('ja-JP', {
+    const date = parseDateSafe(dateString);
+    if (!date) return String(dateString);
+    return date.toLocaleDateString('ja-JP', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -34,7 +68,8 @@ export const formatDate = (dateString: string | Date | null | undefined): string
 export const formatDateTime = (dateString: string | Date | null | undefined): string => {
   if (!dateString) return '-';
   try {
-    const date = new Date(dateString);
+    const date = parseDateSafe(dateString);
+    if (!date) return String(dateString);
     //toLocaleString can produce slightly different formats, so we build it manually
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
