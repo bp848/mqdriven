@@ -3359,7 +3359,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         };
     }
 
-    console.warn('Page query on estimates_list_view failed, falling back:', error);
+    console.warn('estimates_list_view not available - please create the database view. Using fallback query. Error:', error);
 
     const { data: fallbackRows, error: fallbackError, count: fallbackCount } = await supabase
         .from('estimates')

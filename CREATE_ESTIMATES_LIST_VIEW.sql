@@ -1,0 +1,32 @@
+-- Create estimates_list_view to resolve the query failure
+-- This view combines estimates with project and customer data
+
+CREATE OR REPLACE VIEW estimates_list_view AS
+SELECT 
+    e.id as estimates_id,
+    e.pattern_no as pattern_no,
+    e.pattern_name as specification,
+    e.copies,
+    e.unit_price,
+    e.tax_rate,
+    e.total,
+    e.subtotal,
+    e.consumption,
+    e.delivery_date,
+    e.transaction_method,
+    e.delivery_place,
+    e.note,
+    e.status,
+    e.create_id,
+    e.created_at,
+    e.update_date,
+    e.version,
+    p.project_code,
+    p.project_name,
+    p.customer_id,
+    p.customer_code,
+    c.customer_name,
+    c.customer_code as customer_code_resolved
+FROM estimates e
+LEFT JOIN projects p ON e.project_id = p.id OR e.project_code = p.project_code
+LEFT JOIN customers c ON p.customer_id = c.id OR p.customer_code = c.customer_code;

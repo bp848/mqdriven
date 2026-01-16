@@ -58,19 +58,20 @@ export const useSubmitWithConfirmation = () => {
         return;
       }
       console.log('[useSubmitWithConfirmation] Starting action, setBusy:', !!setBusy);
-      if (setBusy) setBusy(true);
-      try {
-        await action();
-        console.log('[useSubmitWithConfirmation] Action completed successfully');
-      } catch (error) {
-        console.error('Action failed:', error);
-        throw error;
-      } finally {
-        console.log('[useSubmitWithConfirmation] Finally block, setBusy:', !!setBusy);
-        if (setBusy) setBusy(false);
-        console.log('[useSubmitWithConfirmation] Closing dialog');
-        closeDialog();
-      }
+      
+      // Close dialog immediately and run action in background
+      closeDialog();
+      
+      // Run action asynchronously without blocking the UI
+      (async () => {
+        try {
+          await action();
+          console.log('[useSubmitWithConfirmation] Action completed successfully');
+        } catch (error) {
+          console.error('Action failed:', error);
+          // Could show toast notification here if needed
+        }
+      })();
     },
     [closeDialog]
   );

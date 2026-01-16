@@ -30,20 +30,18 @@ const ALLOWED_ORIGINS = parseAllowedOrigins();
 
 const buildCorsHeaders = (req: Request) => {
   const origin = req.headers.get("origin");
-  const wildcard = ALLOWED_ORIGINS.includes("*");
-  const allowedOrigin = wildcard
-    ? "*"
-    : (origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
-  const requestedHeaders = req.headers.get("access-control-request-headers");
-  const requestedList = requestedHeaders
-    ? requestedHeaders.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean)
-    : [];
-  const allowHeaders = wildcard
-    ? "*"
-    : Array.from(new Set([...DEFAULT_ALLOWED_HEADERS, ...requestedList])).join(", ");
+  // Always allow the specific domain and localhost for development
+  const allowedOrigin = origin && (
+    origin === "https://erp.b-p.co.jp" || 
+    origin === "http://localhost:5173" ||
+    origin === "http://localhost:5174" ||
+    origin === "http://localhost:3000" ||
+    origin === "*"
+  ) ? origin : "https://erp.b-p.co.jp";
+  
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": allowHeaders,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Access-Control-Allow-Credentials": "true",
@@ -51,10 +49,10 @@ const buildCorsHeaders = (req: Request) => {
   };
 };
 
-const jsonResponse = (req: Request, body: unknown, status = 200) =>
+const jsonResponse = (req: Request, body: unknown, status = 200, headers?: HeadersInit) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...buildCorsHeaders(req) },
+    headers: { "Content-Type": "application/json", ...buildCorsHeaders(req), ...headers },
   });
 
 const normalizeEmails = (values: unknown): string[] => {
@@ -87,8 +85,13 @@ const toHtml = (text: string) => {
 console.info("send-application-email ready");
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(req);
+  
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: buildCorsHeaders(req) });
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   if (req.method !== "POST") {
