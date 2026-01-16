@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { submitApplication, saveApplicationDraft, getApplicationDraft, clearApplicationDraft, uploadFile, debugPaymentRecipientsWithServiceRole } from '../../services/dataService';
 import { extractInvoiceDetails } from '../../services/geminiService';
+import SMTPEmailService from '../../services/smtpEmailService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import AccountItemSelect from './AccountItemSelect';
 import DepartmentSelect from './DepartmentSelect';
@@ -313,6 +314,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const [error, setError] = useState('');
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
+    const [emailService] = useState(() => new SMTPEmailService());
 
     const isDisabled = isSubmitting || isLoading || isRestoring || !!formLoadError || hasSubmitted || isDocumentUploading;
 
@@ -697,6 +699,23 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             await clearApplicationDraft(applicationCodeId, currentUser.id);
             setHasSubmitted(true);
             addToast?.('経費精算を送信しました。', 'success');
+            
+            // Send submission notification email
+            if (emailService) {
+                try {
+                    const emailResult = await emailService.sendApplicationNotification(
+                        currentUser.email,
+                        '経費精算申請を送信しました',
+                        `経費精算申請が正常に送信されました。\n\n申請ID: ${applicationCodeId}\n申請日時: ${new Date().toLocaleString('ja-JP')}`
+                    );
+                    if (!emailResult.success) {
+                        console.warn('Submission email failed:', emailResult.error);
+                    }
+                } catch (emailError) {
+                    console.error('Email notification error:', emailError);
+                }
+            }
+            
             onSuccess();
         } catch (err: any) {
             console.error('申請送信エラー:', err);
