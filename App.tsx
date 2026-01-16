@@ -1710,22 +1710,6 @@ useEffect(() => {
             {/* Global UI */}
             <ToastContainer toasts={toasts} onDismiss={dismissToast} />
             <ConfirmationDialog {...confirmationDialog} />
-            
-             <button
-                onClick={() => setIsBugReportModalOpen(true)}
-                className="fixed bottom-8 right-8 bg-purple-600 text-white p-4 rounded-full shadow-lg hover:bg-purple-700 transition-transform transform hover:scale-110"
-                title="バグ報告・改善要望"
-                disabled={isAIOff}
-            >
-                <PlusCircle className="w-6 h-6" />
-            </button>
-            <button
-                onClick={toggleToasts}
-                className="fixed bottom-8 right-24 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-4 py-2 rounded-full shadow hover:bg-slate-300 dark:hover:bg-slate-600 text-sm font-semibold"
-                title="トースト通知 ON/OFF"
-            >
-                {toastsEnabled ? 'トースト: ON' : 'トースト: OFF'}
-            </button>
         </div>
     );
 };

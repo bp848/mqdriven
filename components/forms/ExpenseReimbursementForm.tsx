@@ -1084,7 +1084,7 @@ const UploadZone: React.FC<{
                     accept="application/pdf,image/png,image/jpeg"
                 />
                 {isBusy && (
-                    <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 flex flex-col items-center justify-center rounded-lg">
+                    <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 flex flex-col items-center justify-center rounded-lg z-50">
                         <Loader className="w-8 h-8 animate-spin text-blue-600" />
                         <p className="mt-2 text-sm font-semibold text-blue-600">
                             {isSavingAttachment ? 'ファイルをSupabaseに保存中です...' : 'AI-OCRが解析中...'}
