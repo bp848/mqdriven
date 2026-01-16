@@ -207,10 +207,21 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       setDepartmentStats(departmentStats);
 
       const countByStatus = (rows: any[], status: string) => rows.filter((r: any) => r.status === status).length;
-      setApprovedChangePct(pctChange(countByStatus(currentApps, 'approved'), countByStatus(prevApps, 'approved')));
-      setRejectedChangePct(pctChange(countByStatus(currentApps, 'rejected'), countByStatus(prevApps, 'rejected')));
+      const currentApprovedCount = countByStatus(currentApps, 'approved');
+      const prevApprovedCount = countByStatus(prevApps, 'approved');
+      const currentRejectedCount = countByStatus(currentApps, 'rejected');
+      const prevRejectedCount = countByStatus(prevApps, 'rejected');
+      
+      setApprovedChangePct(pctChange(currentApprovedCount, prevApprovedCount));
+      setRejectedChangePct(pctChange(currentRejectedCount, prevRejectedCount));
     } catch (error) {
       console.error('承認・経費データの取得に失敗しました:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        stack: error?.stack
+      });
       setError(error instanceof Error ? error.message : '承認・経費データの取得に失敗しました');
       setApprovalData([]);
       setExpenseCategories([]);
@@ -253,6 +264,44 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         <div className="bg-red-50 border border-red-200 rounded-xl p-6">
           <h1 className="text-xl font-semibold text-red-900 mb-2">承認稟議・経費分析</h1>
           <p className="text-red-800 text-sm break-words">データ取得に失敗しました: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            再読み込み
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // データがない場合のフォールバック
+  if (!loading && approvalData.length === 0) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+          <h1 className="text-xl font-semibold text-yellow-900 mb-2">承認稟議・経費分析</h1>
+          <p className="text-yellow-800 text-sm mb-4">分析対象のデータがありません。</p>
+          <div className="space-y-2 text-sm text-yellow-700">
+            <p>• 対象期間内に申請データがない可能性があります</p>
+            <p>• 期間選択を変更して別の期間を試してください</p>
+            <p>• 申請データが存在する場合、管理者にお問い合わせください</p>
+          </div>
+          <div className="mt-4 flex gap-2">
+            {(['30d', '90d', '1y'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  timeRange === range
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {range === '30d' ? '過去30日間' : range === '90d' ? '過去90日間' : '過去1年間'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );
