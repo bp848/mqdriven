@@ -385,7 +385,6 @@ const App: React.FC = () => {
     });
     const abortControllerRef = useRef<AbortController | null>(null);
     const estimatePageRef = useRef<number>(1);
-    const googleOAuthCallbackInFlightRef = useRef(false);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
 
@@ -599,54 +598,9 @@ const App: React.FC = () => {
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const url = new URL(window.location.href);
-        const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state');
-        let googleCalendarStatus = url.searchParams.get('google_calendar');
-        let reason = url.searchParams.get('reason');
-
-        const run = async () => {
-            if (code && state) {
-                if (googleOAuthCallbackInFlightRef.current) return;
-                googleOAuthCallbackInFlightRef.current = true;
-                setIsGoogleAuthLoading(true);
-                try {
-                    const supabaseClient = getSupabase();
-                    const headers = await getSupabaseFunctionHeaders(supabaseClient);
-                    const { data, error } = await withTimeout(
-                        supabaseClient.functions.invoke<{ ok?: boolean; reason?: string }>('google-oauth-callback', {
-                            body: { code, state },
-                            headers,
-                        }),
-                        20000,
-                    );
-                    if (error) {
-                        googleCalendarStatus = 'error';
-                        reason = error.message || 'token_exchange_failed';
-                    } else {
-                        googleCalendarStatus = data?.ok ? 'ok' : 'error';
-                        reason = data?.reason ?? null;
-                    }
-                } catch (err) {
-                    googleCalendarStatus = 'error';
-                    reason = err instanceof TimeoutError ? 'timeout' : 'unexpected_error';
-                } finally {
-                    setIsGoogleAuthLoading(false);
-                    googleOAuthCallbackInFlightRef.current = false;
-                    url.searchParams.delete('code');
-                    url.searchParams.delete('state');
-                    url.searchParams.delete('scope');
-                    url.searchParams.delete('authuser');
-                    url.searchParams.delete('prompt');
-                    if (googleCalendarStatus) url.searchParams.set('google_calendar', googleCalendarStatus);
-                    if (reason) url.searchParams.set('reason', reason);
-                    else url.searchParams.delete('reason');
-                    window.history.replaceState({}, document.title, url.toString());
-                }
-            }
-
-            googleCalendarStatus = url.searchParams.get('google_calendar');
-            if (!googleCalendarStatus) return;
-            reason = url.searchParams.get('reason');
+        const googleCalendarStatus = url.searchParams.get('google_calendar');
+        if (!googleCalendarStatus) return;
+        const reason = url.searchParams.get('reason');
 
         console.info('[GoogleAuth] return to app', { googleCalendarStatus, reason });
         if (googleCalendarStatus === 'ok') {
@@ -660,8 +614,6 @@ const App: React.FC = () => {
                         return 'トークン保存に失敗しました。管理者に連絡してください。';
                     case 'token_exchange_failed':
                         return 'Googleとのトークン交換に失敗しました。再度お試しください。';
-                    case 'timeout':
-                        return 'Google連携の処理がタイムアウトしました。時間をおいて再度お試しください。';
                     case 'server_not_configured':
                         return '環境変数が不足しているためGoogle連携を完了できません。管理者に連絡してください。';
                     default:
@@ -677,9 +629,6 @@ const App: React.FC = () => {
         const newSearch = url.searchParams.toString();
         const newUrl = `${url.pathname}${newSearch ? `?${newSearch}` : ''}${url.hash ?? ''}`;
         window.history.replaceState({}, document.title, newUrl);
-        };
-
-        run();
     }, [addToast, fetchGoogleAuthStatus]);
 
     const handleStartGoogleCalendarAuth = async () => {
