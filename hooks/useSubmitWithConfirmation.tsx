@@ -55,9 +55,9 @@ export const useSubmitWithConfirmation = () => {
       if (setBusy) setBusy(true);
       try {
         await action();
-        closeDialog();
       } finally {
         if (setBusy) setBusy(false);
+        closeDialog();
       }
     },
     [closeDialog]
