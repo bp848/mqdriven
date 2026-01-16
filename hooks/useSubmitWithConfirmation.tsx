@@ -40,10 +40,14 @@ const matchKeyword = (label: string): boolean => {
 
 export const useSubmitWithConfirmation = () => {
   const [dialogState, setDialogState] = useState<DialogState | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
 
   const closeDialog = useCallback(() => {
     console.log('[useSubmitWithConfirmation] closeDialog called - resetting states');
     setDialogState(null);
+    setIsConfirming(false);
+    setIsDrafting(false);
   }, []);
 
   const runAction = useCallback(
@@ -54,32 +58,38 @@ export const useSubmitWithConfirmation = () => {
         return;
       }
       console.log('[useSubmitWithConfirmation] Starting action, setBusy:', !!setBusy);
+      if (setBusy) setBusy(true);
       
-      // Close dialog immediately and run action in background
-      closeDialog();
+      // Add safety timeout to prevent infinite processing
+      const timeoutId = setTimeout(() => {
+        console.warn('[useSubmitWithConfirmation] Action timeout - forcing completion');
+        closeDialog();
+      }, 15000); // 15 second timeout
       
-      // Run action asynchronously without blocking the UI
-      (async () => {
-        try {
-          await action();
-          console.log('[useSubmitWithConfirmation] Action completed successfully');
-        } catch (error) {
-          console.error('Action failed:', error);
-          // Could show toast notification here if needed
-        }
-      })();
+      try {
+        await action();
+        console.log('[useSubmitWithConfirmation] Action completed successfully');
+      } catch (error) {
+        console.error('Action failed:', error);
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+        if (setBusy) setBusy(false);
+        console.log('[useSubmitWithConfirmation] Action finished, closing dialog');
+        closeDialog();
+      }
     },
     [closeDialog]
   );
 
   const handleConfirm = useCallback(() => {
     console.log('[useSubmitWithConfirmation] handleConfirm called');
-    runAction(dialogState?.onConfirm);
+    runAction(dialogState?.onConfirm, setIsConfirming);
   }, [dialogState?.onConfirm, runAction]);
 
   const handleDraft = useCallback(() => {
     console.log('[useSubmitWithConfirmation] handleDraft called');
-    runAction(dialogState?.onDraft);
+    runAction(dialogState?.onDraft, setIsDrafting);
   }, [dialogState?.onDraft, runAction]);
 
   const requestConfirmation = useCallback(
@@ -108,9 +118,11 @@ export const useSubmitWithConfirmation = () => {
         cancelLabel={dialogState?.cancelLabel}
         draftLabel={dialogState?.draftLabel}
         postConfirmMessage={dialogState?.postConfirmMessage}
+        isSubmitting={isConfirming}
+        isSavingDraft={isDrafting}
       />
     ),
-    [dialogState, closeDialog, handleConfirm, handleDraft]
+    [dialogState, closeDialog, handleConfirm, handleDraft, isConfirming, isDrafting]
   );
 
   return {

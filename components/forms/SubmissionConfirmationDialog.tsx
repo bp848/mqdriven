@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader } from 'lucide-react';
 
 interface SubmissionConfirmationDialogProps {
   isOpen: boolean;
@@ -31,15 +32,16 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
 }) => {
   if (!isOpen) return null;
 
-  const confirmText = confirmLabel;
-  const saveText = draftLabel;
+  const confirmText = isSubmitting ? '処理中…' : confirmLabel;
+  const saveText = isSavingDraft ? `${draftLabel}中…` : draftLabel;
 
   const handleConfirm = () => {
+    if (isSubmitting) return;
     onConfirm();
   };
 
   const handleSaveDraft = () => {
-    if (!onSaveDraft) return;
+    if (!onSaveDraft || isSavingDraft || isSubmitting) return;
     onSaveDraft();
   };
 
@@ -62,19 +64,40 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
             <button
               type="button"
               onClick={handleSaveDraft}
-              className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+              disabled={isSavingDraft || isSubmitting}
+              className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
             >
-              {saveText}
+              {isSavingDraft ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader className="w-4 h-4 animate-spin" />
+                  {saveText}
+                </span>
+              ) : (
+                  saveText
+              )}
             </button>
           )}
           <button
             type="button"
             onClick={handleConfirm}
-            className="w-full px-6 py-4 text-xl font-black tracking-wide rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-2xl hover:from-blue-500 hover:to-blue-400 flex items-center justify-center gap-3 border-4 border-white dark:border-slate-800 sm:flex-1"
+            disabled={isSubmitting}
+            className="w-full px-6 py-4 text-xl font-black tracking-wide rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-2xl hover:from-blue-500 hover:to-blue-400 disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed flex items-center justify-center gap-3 border-4 border-white dark:border-slate-800 sm:flex-1"
           >
-            {confirmText}
+            {isSubmitting ? (
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                処理中…
+              </>
+            ) : (
+              confirmText
+            )}
           </button>
         </div>
+        {isSubmitting && postConfirmMessage && (
+          <div className="px-6 pb-6 text-sm text-green-600 dark:text-green-400 font-semibold">
+            {postConfirmMessage}
+          </div>
+        )}
       </div>
     </div>
   );
