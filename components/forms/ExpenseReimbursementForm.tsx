@@ -695,7 +695,6 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             const payload = buildApplicationPayload();
             await submitApplication(payload, currentUser.id);
             await clearApplicationDraft(applicationCodeId, currentUser.id);
-            resetFormFields();
             setHasSubmitted(true);
             addToast?.('経費精算を送信しました。', 'success');
             onSuccess();
@@ -782,18 +781,42 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             </div>
             
             {hasSubmitted && (
-                <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/40 dark:bg-emerald-900/20 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">この申請は送信済みです。</p>
-                        <p className="text-sm text-emerald-900/80 dark:text-emerald-200/80">承認一覧 &gt; 自分の申請タブで内容を確認できます。新しい申請を作成する場合は下のボタンを押してください。</p>
+                <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-6 dark:border-emerald-500/40 dark:bg-emerald-900/20">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200">申請完了！</h3>
+                            <p className="text-sm text-emerald-700 dark:text-emerald-300">経費精算申請が正常に送信されました</p>
+                        </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleStartNewApplication}
-                        className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                    >
-                        新しい申請を作成
-                    </button>
+                    <div className="bg-emerald-100 dark:bg-emerald-800/30 rounded-lg p-4 mb-4">
+                        <p className="text-sm text-emerald-800 dark:text-emerald-200">
+                            <strong>次のステップ：</strong><br />
+                            • 承認一覧 &gt; 自分の申請タブで進捗を確認できます<br />
+                            • 承認者に通知が送信されました<br />
+                            • 承認完了後にメール通知が届きます
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={handleStartNewApplication}
+                            className="flex-1 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                        >
+                            <PlusCircle className="w-5 h-5 mr-2" />
+                            新しい申請を作成
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => window.location.href = '/accounting/approvals'}
+                            className="flex-1 inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                        >
+                            <List className="w-5 h-5 mr-2" />
+                            申請一覧を確認
+                        </button>
+                    </div>
                 </div>
             )}
 
