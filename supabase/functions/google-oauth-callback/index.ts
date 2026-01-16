@@ -94,9 +94,21 @@ serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error('Token exchange failed:', errorText)
+      console.error('Token exchange failed:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        errorText,
+        clientId: clientId ? clientId.substring(0, 10) + '...' : 'missing',
+        redirectUri: callbackUrl,
+      })
       return new Response(
-        JSON.stringify({ error: 'Failed to exchange code for tokens' }),
+        JSON.stringify({ 
+          error: 'Failed to exchange code for tokens',
+          details: {
+            status: tokenResponse.status,
+            errorText: errorText.substring(0, 200) + '...',
+          }
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

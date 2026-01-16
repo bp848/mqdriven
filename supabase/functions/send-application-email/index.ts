@@ -102,10 +102,23 @@ Deno.serve(async (req: Request) => {
   const from = Deno.env.get("RESEND_FROM") || Deno.env.get("RESEND_FROM_ADDRESS");
   const replyTo = Deno.env.get("RESEND_REPLY_TO") || from;
 
+  console.log("Email function environment check:", {
+    hasApiKey: !!apiKey,
+    hasFrom: !!from,
+    hasReplyTo: !!replyTo,
+    apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + "..." : null,
+  });
+
   if (!apiKey || !from) {
     return jsonResponse(
       req,
-      { error: "server not configured: missing RESEND_API_KEY or RESEND_FROM" },
+      { 
+        error: "server not configured: missing RESEND_API_KEY or RESEND_FROM",
+        details: {
+          hasApiKey: !!apiKey,
+          hasFrom: !!from,
+        }
+      },
       500,
     );
   }
