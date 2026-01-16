@@ -40,14 +40,10 @@ const matchKeyword = (label: string): boolean => {
 
 export const useSubmitWithConfirmation = () => {
   const [dialogState, setDialogState] = useState<DialogState | null>(null);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [isDrafting, setIsDrafting] = useState(false);
 
   const closeDialog = useCallback(() => {
     console.log('[useSubmitWithConfirmation] closeDialog called - resetting states');
     setDialogState(null);
-    setIsConfirming(false);
-    setIsDrafting(false);
   }, []);
 
   const runAction = useCallback(
@@ -77,13 +73,13 @@ export const useSubmitWithConfirmation = () => {
   );
 
   const handleConfirm = useCallback(() => {
-    console.log('[useSubmitWithConfirmation] handleConfirm called, isConfirming:', isConfirming);
-    runAction(dialogState?.onConfirm, setIsConfirming);
+    console.log('[useSubmitWithConfirmation] handleConfirm called');
+    runAction(dialogState?.onConfirm);
   }, [dialogState?.onConfirm, runAction]);
 
   const handleDraft = useCallback(() => {
-    console.log('[useSubmitWithConfirmation] handleDraft called, isDrafting:', isDrafting);
-    runAction(dialogState?.onDraft, setIsDrafting);
+    console.log('[useSubmitWithConfirmation] handleDraft called');
+    runAction(dialogState?.onDraft);
   }, [dialogState?.onDraft, runAction]);
 
   const requestConfirmation = useCallback(
@@ -112,11 +108,9 @@ export const useSubmitWithConfirmation = () => {
         cancelLabel={dialogState?.cancelLabel}
         draftLabel={dialogState?.draftLabel}
         postConfirmMessage={dialogState?.postConfirmMessage}
-        isSubmitting={isConfirming}
-        isSavingDraft={isDrafting}
       />
     ),
-    [dialogState, closeDialog, handleConfirm, handleDraft, isConfirming, isDrafting]
+    [dialogState, closeDialog, handleConfirm, handleDraft]
   );
 
   return {
