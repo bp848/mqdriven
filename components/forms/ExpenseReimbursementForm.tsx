@@ -314,7 +314,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
 
-    const isDisabled = isSubmitting || isSavingDraft || isLoading || isRestoring || !!formLoadError || hasSubmitted || isDocumentUploading;
+    const isDisabled = isSubmitting || isLoading || isRestoring || !!formLoadError || hasSubmitted || isDocumentUploading;
 
     const mqMRate = useMemo(() => {
         if (mqExpectedSalesPQ === '' || mqExpectedMarginMQ === '') return null;
@@ -740,14 +740,12 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             return;
         }
         if (!currentUser) return setError('ユーザー情報が見つかりません。');
-        setIsSavingDraft(true);
+        
         try {
             await saveApplicationDraft(buildApplicationPayload(), currentUser.id);
             addToast?.('下書きを保存しました。', 'success');
         } catch (err: any) {
             setError(err.message || '下書きの保存に失敗しました。');
-        } finally {
-            setIsSavingDraft(false);
         }
     };
 

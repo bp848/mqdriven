@@ -51,10 +51,16 @@ export const useSubmitWithConfirmation = () => {
 
   const runAction = useCallback(
     async (action: ConfirmableAction | undefined, setBusy?: (value: boolean) => void) => {
-      if (!action) return;
+      if (!action) {
+        closeDialog();
+        return;
+      }
       if (setBusy) setBusy(true);
       try {
         await action();
+      } catch (error) {
+        console.error('Action failed:', error);
+        throw error;
       } finally {
         if (setBusy) setBusy(false);
         closeDialog();
