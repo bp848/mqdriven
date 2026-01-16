@@ -49,6 +49,7 @@ export const useSubmitWithConfirmation = () => {
     setDialogState(null);
     setIsConfirming(false);
     setIsDrafting(false);
+    setIsProcessing(false);
   }, []);
 
   const runAction = useCallback(
