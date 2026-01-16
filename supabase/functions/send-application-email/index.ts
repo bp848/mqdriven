@@ -55,11 +55,19 @@ const buildCorsHeaders = (req: Request) => {
   };
 };
 
-const jsonResponse = (req: Request, body: unknown, status = 200, headers?: HeadersInit) =>
-  new Response(JSON.stringify(body), {
+const jsonResponse = (req: Request, body: unknown, status = 200, headers?: HeadersInit) => {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey",
+    "Access-Control-Max-Age": "86400",
+  };
+  
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...buildCorsHeaders(req), ...headers },
+    headers: { "Content-Type": "application/json", ...corsHeaders, ...headers },
   });
+};
 
 const normalizeEmails = (values: unknown): string[] => {
   const list = Array.isArray(values)
@@ -91,19 +99,18 @@ const toHtml = (text: string) => {
 console.info("send-application-email ready");
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = buildCorsHeaders(req);
+  // Simple CORS handling
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey",
+    "Access-Control-Max-Age": "86400",
+  };
   
   if (req.method === "OPTIONS") {
     return new Response(null, { 
       status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "https://erp.b-p.co.jp",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Max-Age": "86400",
-        "Access-Control-Allow-Credentials": "true",
-        Vary: "Origin, Access-Control-Request-Headers",
-      }
+      headers: corsHeaders
     });
   }
 
