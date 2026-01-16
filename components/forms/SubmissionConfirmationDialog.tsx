@@ -30,19 +30,33 @@ const SubmissionConfirmationDialog: React.FC<SubmissionConfirmationDialogProps> 
   draftLabel = '下書き',
   postConfirmMessage,
 }) => {
+  const [isActionCompleted, setIsActionCompleted] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isActionCompleted && !isSubmitting && !isSavingDraft) {
+      const timer = setTimeout(() => {
+        onClose();
+        setIsActionCompleted(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isActionCompleted, isSubmitting, isSavingDraft, onClose]);
+
   if (!isOpen) return null;
 
   const confirmText = isSubmitting ? '処理中…' : confirmLabel;
   const saveText = isSavingDraft ? `${draftLabel}中…` : draftLabel;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (isSubmitting) return;
-    onConfirm();
+    await onConfirm();
+    setIsActionCompleted(true);
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!onSaveDraft || isSavingDraft || isSubmitting) return;
-    onSaveDraft();
+    await onSaveDraft();
+    setIsActionCompleted(true);
   };
 
   return (

@@ -96,16 +96,12 @@ const toHtml = (text: string) => {
   return escaped.replace(/\n/g, "<br>");
 };
 
+import { cors } from "./cors.ts";
+
 console.info("send-application-email ready");
 
 Deno.serve(async (req: Request) => {
-  // Simple CORS handling
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey",
-    "Access-Control-Max-Age": "86400",
-  };
+  const corsHeaders = cors(req);
   
   if (req.method === "OPTIONS") {
     return new Response(null, { 
