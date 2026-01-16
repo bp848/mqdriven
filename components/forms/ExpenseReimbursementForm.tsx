@@ -546,6 +546,15 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
         }
     };
 
+    const handleFileDelete = () => {
+        setInvoice(prev => ({
+            ...prev,
+            sourceFile: undefined,
+        }));
+        setDocumentAttachment(null);
+        addToast?.('ファイルを削除しました。', 'info');
+    };
+
     const handleFileUpload = async (files: FileList | null) => {
         if (!files || files.length === 0) return;
         if (isOcrLoading || isDocumentUploading) {
@@ -801,6 +810,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                             <CardContent>
                                 <UploadZone
                                     onFileUpload={handleFileUpload}
+                                    onFileDelete={handleFileDelete}
                                     isLoading={isOcrLoading}
                                     isAIOff={isAIOff}
                                     sourceFile={invoice.sourceFile}
@@ -1018,12 +1028,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
 const UploadZone: React.FC<{
     onFileUpload: (files: FileList | null) => void;
+    onFileDelete?: () => void;
     isLoading: boolean;
     isAIOff: boolean;
     sourceFile?: { name: string; url: string; type: string };
     isSavingAttachment?: boolean;
     attachment?: ExpenseAttachment | null;
-}> = ({ onFileUpload, isLoading, isAIOff, sourceFile, isSavingAttachment = false, attachment }) => {
+}> = ({ onFileUpload, onFileDelete, isLoading, isAIOff, sourceFile, isSavingAttachment = false, attachment }) => {
     const [isDragging, setIsDragging] = useState(false);
     const isBusy = isLoading || isSavingAttachment;
 
@@ -1083,17 +1094,37 @@ const UploadZone: React.FC<{
                     </div>
                 )}
             </div>
-            <div className="h-64 bg-slate-100 dark:bg-slate-900/50 rounded-lg flex flex-col items-center justify-center border dark:border-slate-700 p-4 text-center gap-3">
+            <div className="h-64 bg-slate-100 dark:bg-slate-900/50 rounded-lg flex flex-col items-center justify-center border dark:border-slate-700 p-4 text-center gap-3 relative">
                 {sourceFile ? (
-                    sourceFile.type.startsWith('image/') ? (
-                        <img src={sourceFile.url} alt={sourceFile.name} className="max-h-full max-w-full object-contain rounded-md" />
-                    ) : (
-                        <div className="text-center p-4">
-                            <FileText className="w-16 h-16 mx-auto text-slate-500" />
-                            <p className="mt-2 font-semibold text-slate-700 dark:text-slate-200">{sourceFile.name}</p>
-                            <p className="text-xs text-slate-500">{sourceFile.type}</p>
-                        </div>
-                    )
+                    <>
+                        {sourceFile.type.startsWith('image/') ? (
+                            <img src={sourceFile.url} alt={sourceFile.name} className="max-h-full max-w-full object-contain rounded-md" />
+                        ) : sourceFile.type === 'application/pdf' ? (
+                            <iframe
+                                src={sourceFile.url}
+                                className="w-full h-full rounded-md"
+                                title={sourceFile.name}
+                                onLoad={() => console.log('PDF loaded successfully')}
+                                onError={() => console.log('PDF failed to load')}
+                            />
+                        ) : (
+                            <div className="text-center p-4">
+                                <FileText className="w-16 h-16 mx-auto text-slate-500" />
+                                <p className="mt-2 font-semibold text-slate-700 dark:text-slate-200">{sourceFile.name}</p>
+                                <p className="text-xs text-slate-500">{sourceFile.type}</p>
+                            </div>
+                        )}
+                        {onFileDelete && (
+                            <button
+                                type="button"
+                                onClick={onFileDelete}
+                                className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
+                                title="ファイルを削除"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </>
                 ) : (
                     <div className="text-center text-slate-500">
                         <FileText className="w-16 h-16 mx-auto" />
