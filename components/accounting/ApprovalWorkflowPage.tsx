@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import ApplicationList from '../ApplicationList';
 import ApplicationDetailModal from '../ApplicationDetailModal';
 import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft } from '../../services/dataService';
+import SMTPEmailService from '../../services/smtpEmailService';
 // FIX: Import AllocationDivision type.
 import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
-import { Loader, AlertTriangle } from '../Icons';
+import { Loader, AlertTriangle, Mail } from '../Icons';
 import { summarizeResubmissionLinks } from '../../utils/applicationResubmission';
 
 // Form components
@@ -14,6 +15,7 @@ import LeaveApplicationForm from '../forms/LeaveApplicationForm';
 import ApprovalForm from '../forms/ApprovalForm';
 import DailyReportForm from '../forms/DailyReportForm';
 import WeeklyReportForm from '../forms/WeeklyReportForm';
+import EmailNotificationSettings from '../forms/EmailNotificationSettings';
 
 interface ApprovalWorkflowPageProps {
     currentUser: EmployeeUser | null;
@@ -114,6 +116,13 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<TabId>('approvals');
     const [activeResumedApplication, setActiveResumedApplication] = useState<ApplicationWithDetails | null>(null);
+    const [isEmailSettingsOpen, setIsEmailSettingsOpen] = useState(false);
+    const [emailService, setEmailService] = useState<SMTPEmailService | null>(null);
+
+    // Initialize email service
+    useEffect(() => {
+        setEmailService(new SMTPEmailService());
+    }, []);
 
     // State for form view
     const [applicationCodes, setApplicationCodes] = useState<ApplicationCode[]>([]);
@@ -228,10 +237,22 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     };
 
     const handleApprove = async (application: ApplicationWithDetails) => {
-        if (!currentUser) return;
+        if (!currentUser || !emailService) return;
         try {
             await approveApplication(application, currentUser as any);
             addToast('申請を承認しました。', 'success');
+            
+            // Send approval notification via SMTP
+            const emailResult = await emailService.sendApprovalNotification(
+                application.applicant?.email || '',
+                '申請承認完了',
+                `申請が承認されました。\n\n申請ID: ${application.id}`
+            );
+            
+            if (!emailResult.success) {
+                addToast(`メール通知送信に失敗しました: ${emailResult.error}`, 'error');
+            }
+            
             handleModalClose();
             await fetchListData();
         } catch (err: any) {
@@ -240,10 +261,22 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     };
 
     const handleReject = async (application: ApplicationWithDetails, reason: string) => {
-        if (!currentUser) return;
+        if (!currentUser || !emailService) return;
         try {
-            await rejectApplication(application, reason, currentUser as any);
+            await rejectApplication(application, currentUser as any, reason);
             addToast('申請を差し戻しました。', 'success');
+            
+            // Send rejection notification via SMTP
+            const emailResult = await emailService.sendRejectionNotification(
+                application.applicant?.email || '',
+                '申請差し戻し',
+                reason
+            );
+            
+            if (!emailResult.success) {
+                addToast(`メール通知送信に失敗しました: ${emailResult.error}`, 'error');
+            }
+            
             handleModalClose();
             await fetchListData();
         } catch (err: any) {
@@ -474,19 +507,35 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                     <div className="text-center p-16"><Loader className="w-8 h-8 mx-auto animate-spin"/></div>
                 ) : error ? (
                     <div className="text-center p-16 text-red-500">{error}</div>
-                ) : displayedApplications.length > 0 ? (
-                    <ApplicationList
-                        applications={displayedApplications}
-                        onApplicationSelect={handleSelectApplication}
-                        selectedApplicationId={selectedApplication?.id || null}
-                        onResumeDraft={onResumeDraft}
-                        currentUserId={currentUser?.id}
-                        onCancelApplication={handleCancelApplication}
-                        onDeleteDraft={activeTab === 'drafts' ? handleDeleteDraft : undefined}
-                        resubmittedParentIds={resubmissionInfo.parentIds}
-                        resubmissionChildrenMap={resubmissionInfo.childMap}
-                    />
                 ) : (
+                    <>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                承認待ち申請一覧
+                            </h2>
+                            <button
+                                onClick={() => setIsEmailSettingsOpen(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                title="メール通知設定"
+                            >
+                                <Mail className="w-4 h-4" />
+                                <span>メール設定</span>
+                            </button>
+                        </div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">{TABS_CONFIG[activeTab].description}</div>
+                        <ApplicationList
+                            applications={displayedApplications}
+                            onApplicationSelect={handleSelectApplication}
+                            selectedApplicationId={selectedApplication?.id || null}
+                            onResumeDraft={onResumeDraft}
+                            currentUserId={currentUser?.id}
+                            onCancelApplication={handleCancelApplication}
+                            onDeleteDraft={activeTab === 'drafts' ? handleDeleteDraft : undefined}
+                            resubmittedParentIds={resubmissionInfo.parentIds}
+                            resubmissionChildrenMap={resubmissionInfo.childMap}
+                        />
+                    </>
+                )} : (
                     <EmptyState />
                 )}
 
@@ -498,6 +547,18 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                         onReject={handleReject}
                         onCancel={handleCancelApplication}
                         onClose={handleModalClose}
+                    />
+                )}
+                
+                {isEmailSettingsOpen && (
+                    <EmailNotificationSettings
+                        isOpen={isEmailSettingsOpen}
+                        onClose={() => setIsEmailSettingsOpen(false)}
+                        onSave={(settings) => {
+                            // Email settings saved
+                            addToast('メール設定を保存しました', 'success');
+                            setIsEmailSettingsOpen(false);
+                        }}
                     />
                 )}
             </div>
