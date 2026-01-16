@@ -302,14 +302,13 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     onUpdateApplication
 }) => {
     const [rejectionReason, setRejectionReason] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [selectedApplicantId, setSelectedApplicantId] = useState('');
     const [isUpdatingApplicant, setIsUpdatingApplicant] = useState(false);
     const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
     const [isDownloadingAttachment, setIsDownloadingAttachment] = useState(false);
     const mounted = useRef(true);
-    const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
+    const { requestConfirmation, ConfirmationDialog, isProcessing } = useSubmitWithConfirmation();
 
     useEffect(() => {
         mounted.current = true;
@@ -332,26 +331,12 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
 
     const executeApprove = async () => {
         if (!application) return;
-        setIsProcessing(true);
-        try {
-            await onApprove(application);
-        } finally {
-            if (mounted.current) {
-                setIsProcessing(false);
-            }
-        }
+        await onApprove(application);
     };
 
     const executeReject = async (reason: string) => {
         if (!application) return;
-        setIsProcessing(true);
-        try {
-            await onReject(application, reason);
-        } finally {
-            if (mounted.current) {
-                setIsProcessing(false);
-            }
-        }
+        await onReject(application, reason);
     };
 
     const handleApprove = () => {

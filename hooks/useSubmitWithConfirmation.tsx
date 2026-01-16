@@ -42,6 +42,7 @@ export const useSubmitWithConfirmation = () => {
   const [dialogState, setDialogState] = useState<DialogState | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const closeDialog = useCallback(() => {
     console.log('[useSubmitWithConfirmation] closeDialog called - resetting states');
@@ -57,14 +58,16 @@ export const useSubmitWithConfirmation = () => {
         closeDialog();
         return;
       }
-      console.log('[useSubmitWithConfirmation] Starting action, setBusy:', !!setBusy);
-      if (setBusy) setBusy(true);
       
-      // Add safety timeout to prevent infinite processing
-      const timeoutId = setTimeout(() => {
-        console.warn('[useSubmitWithConfirmation] Action timeout - forcing completion');
-        closeDialog();
-      }, 15000); // 15 second timeout
+      // Prevent multiple simultaneous actions
+      if (isProcessing) {
+        console.log('[useSubmitWithConfirmation] Already processing, ignoring action');
+        return;
+      }
+      
+      console.log('[useSubmitWithConfirmation] Starting action');
+      setIsProcessing(true);
+      if (setBusy) setBusy(true);
       
       try {
         await action();
@@ -73,13 +76,12 @@ export const useSubmitWithConfirmation = () => {
         console.error('Action failed:', error);
         throw error;
       } finally {
-        clearTimeout(timeoutId);
+        setIsProcessing(false);
         if (setBusy) setBusy(false);
-        console.log('[useSubmitWithConfirmation] Action finished, closing dialog');
-        closeDialog();
+        console.log('[useSubmitWithConfirmation] Action finished');
       }
     },
-    [closeDialog]
+    [isProcessing, closeDialog]
   );
 
   const handleConfirm = useCallback(() => {
@@ -94,15 +96,22 @@ export const useSubmitWithConfirmation = () => {
 
   const requestConfirmation = useCallback(
     async (options: ConfirmableActionOptions) => {
+      // Prevent new actions while processing
+      if (isProcessing) {
+        console.log('[useSubmitWithConfirmation] Cannot start new action while processing');
+        return;
+      }
+      
       const needsConfirmation = options.forceConfirmation ?? matchKeyword(options.label);
       if (!needsConfirmation) {
-        return options.onConfirm();
+        // For direct actions, still use the processing guard
+        return runAction(options.onConfirm);
       }
       setDialogState({
         ...options,
       });
     },
-    []
+    [isProcessing]
   );
 
   const ConfirmationDialog = useMemo(
@@ -128,6 +137,7 @@ export const useSubmitWithConfirmation = () => {
   return {
     requestConfirmation,
     ConfirmationDialog,
+    isProcessing,
     confirmationKeywords: KEYWORDS,
   };
 };
