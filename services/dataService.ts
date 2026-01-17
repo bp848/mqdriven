@@ -1442,11 +1442,12 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
     
     // 注文データを取得
     const projectIds = projects.map((p: any) => p.id).filter(Boolean);
-    const { data: orderRows, error: ordersError } = projectIds.length
+    const validProjectIds = filterUuidValues(projectIds);
+    const { data: orderRows, error: ordersError } = validProjectIds.length
         ? await supabase
             .from('orders')
             .select('id, project_id, amount, order_date, create_date')
-            .in('project_id', projectIds)
+            .in('project_id', validProjectIds)
         : { data: [], error: null };
     ensureSupabaseSuccess(ordersError as any, 'Failed to load orders for customer budgets');
     const orders = orderRows || [];
@@ -3663,7 +3664,7 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
     const { data: jobs, error: jobsError } = await supabase
         .from('projects')
         .select('id, customer_name, amount')
-        .in('id', jobIds);
+        .in('id', filterUuidValues(jobIds));
 
     ensureSupabaseSuccess(jobsError, 'Failed to fetch jobs for invoicing');
 
