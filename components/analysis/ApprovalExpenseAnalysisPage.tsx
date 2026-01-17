@@ -46,6 +46,8 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
   const [timeRange, setTimeRange] = useState<'30d' | '90d' | '1y'>('30d');
   const [approvedChangePct, setApprovedChangePct] = useState<number | null>(null);
   const [rejectedChangePct, setRejectedChangePct] = useState<number | null>(null);
+  const [currentApps, setCurrentApps] = useState<any[]>([]);
+  const [prevApps, setPrevApps] = useState<any[]>([]);
 
   useEffect(() => {
     fetchApprovalData();
@@ -99,21 +101,24 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
 
       console.log(`[ApprovalExpenseAnalysis] 取得件数: ${applications?.length || 0}件`);
 
-      const currentApps = (applications || []).filter((app: any) => {
+      const currentAppsData = (applications || []).filter((app: any) => {
         const d = new Date(app.created_at);
         return d >= startDate && d <= endDate;
       });
-      const prevApps = (applications || []).filter((app: any) => {
+      const prevAppsData = (applications || []).filter((app: any) => {
         const d = new Date(app.created_at);
         return d >= prevStartDate && d < startDate;
       });
 
-      console.log(`[ApprovalExpenseAnalysis] 期間内データ: 現在${currentApps.length}件, 前期${prevApps.length}件`);
+      setCurrentApps(currentAppsData);
+      setPrevApps(prevAppsData);
+
+      console.log(`[ApprovalExpenseAnalysis] 期間内データ: 現在${currentAppsData.length}件, 前期${prevAppsData.length}件`);
 
       // 月別承認状況データの集計
       const monthlyDataMap = new Map<string, { pending: number; approved: number; rejected: number; totalAmount: number }>();
       
-      currentApps.forEach((app: any) => {
+      currentAppsData.forEach((app: any) => {
         const appDate = new Date(app.created_at);
         const month = appDate.toISOString().slice(0, 7); // YYYY-MM
         const current = monthlyDataMap.get(month) || { pending: 0, approved: 0, rejected: 0, totalAmount: 0 };
@@ -145,7 +150,7 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
         'その他': '#6B7280'
       };
 
-      currentApps.forEach((app: any) => {
+      currentAppsData.forEach((app: any) => {
         if (app.form_data && typeof app.form_data === 'object') {
           const formData = app.form_data as any;
           if (formData.expenseCategory) {
@@ -171,7 +176,7 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       // 部署別統計データの集計
       const departmentMap = new Map<string, { pending: number; approved: number; totalProcessTime: number; count: number }>();
       
-      currentApps.forEach((app: any) => {
+      currentAppsData.forEach((app: any) => {
         // 申請者情報を取得
         const applicantName = app.applicant?.name || app.applicant?.email || '不明';
         const department = applicantName; // 申請者名を部署として使用
@@ -207,10 +212,10 @@ const ApprovalExpenseAnalysisPage: React.FC = () => {
       setDepartmentStats(departmentStats);
 
       const countByStatus = (rows: any[], status: string) => rows.filter((r: any) => r.status === status).length;
-      const currentApprovedCount = countByStatus(currentApps, 'approved');
-      const prevApprovedCount = countByStatus(prevApps, 'approved');
-      const currentRejectedCount = countByStatus(currentApps, 'rejected');
-      const prevRejectedCount = countByStatus(prevApps, 'rejected');
+      const currentApprovedCount = countByStatus(currentAppsData, 'approved');
+      const prevApprovedCount = countByStatus(prevAppsData, 'approved');
+      const currentRejectedCount = countByStatus(currentAppsData, 'rejected');
+      const prevRejectedCount = countByStatus(prevAppsData, 'rejected');
       
       setApprovedChangePct(pctChange(currentApprovedCount, prevApprovedCount));
       setRejectedChangePct(pctChange(currentRejectedCount, prevRejectedCount));
