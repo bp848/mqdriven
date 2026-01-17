@@ -507,7 +507,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                     <div className="text-center p-16"><Loader className="w-8 h-8 mx-auto animate-spin"/></div>
                 ) : error ? (
                     <div className="text-center p-16 text-red-500">{error}</div>
-                ) : (
+                ) : displayedApplications.length > 0 ? (
                     <>
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
@@ -535,7 +535,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                             resubmissionChildrenMap={resubmissionInfo.childMap}
                         />
                     </>
-                )} : (
+                ) : (
                     <EmptyState />
                 )}
 
