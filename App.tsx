@@ -64,6 +64,7 @@ import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
 import AnalysisMenuPage from './components/analysis/AnalysisMenuPage';
 import SalesAnalysisPage from './components/analysis/SalesAnalysisPage';
+import OrdersAnalysisPage from './components/analysis/OrdersAnalysisPage';
 import ApprovalExpenseAnalysisPage from './components/analysis/ApprovalExpenseAnalysisPage';
 import AnalysisBusinessPlanPage from './components/analysis/BusinessPlanPage';
 import SalesStatusPage from './components/analysis/SalesStatusPage';
@@ -159,6 +160,7 @@ const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ダッシュボード',
     analysis_menu: '分析一覧',
     analysis_sales: '販売分析',
+    analysis_orders: '受注テーブル分析（orders）',
     analysis_approval_expense: '承認稟議・経費分析',
     analysis_business_plan: '経営計画',
     analysis_sales_status: '販売状況',
@@ -1232,6 +1234,8 @@ useEffect(() => {
                 return <AnalysisMenuPage onNavigate={handleNavigate} />;
             case 'analysis_sales':
                 return <SalesAnalysisPage />;
+            case 'analysis_orders':
+                return <OrdersAnalysisPage />;
             case 'analysis_approval_expense':
                 return <ApprovalExpenseAnalysisPage />;
             case 'analysis_business_plan':

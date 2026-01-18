@@ -28,6 +28,14 @@ const AnalysisMenuPage: React.FC<AnalysisMenuPageProps> = ({ onNavigate }) => {
       color: 'bg-blue-500'
     },
     {
+      id: 'orders-table',
+      title: '受注テーブル分析（orders）',
+      description: 'ordersテーブルの全カラム閲覧・簡易集計・CSV出力',
+      icon: <ShoppingCart className="w-8 h-8" />,
+      page: 'analysis_orders',
+      color: 'bg-cyan-500'
+    },
+    {
       id: 'approval-expense',
       title: '承認稟議・経費分析',
       description: '稟議承認状況、経費申請分析、承認フロー最適化',

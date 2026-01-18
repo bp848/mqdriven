@@ -22,6 +22,35 @@ interface CustomerSegment {
   color: string;
 }
 
+const extractErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error && 'message' in error && typeof (error as any).message === 'string') {
+    return (error as any).message;
+  }
+  return '販売データの取得に失敗しました';
+};
+
+const isUuidLike = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const parseDbDate = (value: unknown): Date | null => {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const date = new Date(normalized);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date;
+};
+
+const toLocalDateKey = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const pctChange = (current: number, previous: number): number | null => {
   if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
   return ((current - previous) / previous) * 100;
@@ -84,19 +113,40 @@ const SalesAnalysisPage: React.FC = () => {
       }
 
       // プロジェクト→顧客の紐付け（customerSegments / 顧客数集計用）
-      const projectIds = Array.from(new Set((estimates || []).map((e: any) => e.project_id).filter(Boolean)));
+      const rawProjectKeys = (estimates || [])
+        .map((e: any) => e?.project_id)
+        .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
+        .map((v: any) => String(v));
+      const projectKeys = Array.from(new Set(rawProjectKeys));
+
+      const uuidProjectKeys = projectKeys.filter(isUuidLike);
+      const codeProjectKeys = projectKeys.filter((k) => !isUuidLike(k));
+
       const projectCustomerMap = new Map<string, string>();
-      if (projectIds.length) {
+      if (codeProjectKeys.length) {
         const { data: projects, error: projectsError } = await supabase
           .from('projects')
-          .select('id,customer_id')
-          .in('id', projectIds);
+          .select('project_code,customer_id')
+          .in('project_code', codeProjectKeys);
         if (projectsError) {
-          console.error('プロジェクト取得エラー:', projectsError);
+          console.error('プロジェクト取得エラー(project_code):', projectsError);
           throw projectsError;
         }
         (projects || []).forEach((p: any) => {
-          if (p?.id && p?.customer_id) projectCustomerMap.set(p.id, p.customer_id);
+          if (p?.project_code && p?.customer_id) projectCustomerMap.set(String(p.project_code), p.customer_id);
+        });
+      }
+      if (uuidProjectKeys.length) {
+        const { data: projects, error: projectsError } = await supabase
+          .from('projects')
+          .select('id,customer_id')
+          .in('id', uuidProjectKeys);
+        if (projectsError) {
+          console.error('プロジェクト取得エラー(id):', projectsError);
+          throw projectsError;
+        }
+        (projects || []).forEach((p: any) => {
+          if (p?.id && p?.customer_id) projectCustomerMap.set(String(p.id), p.customer_id);
         });
       }
 
@@ -104,18 +154,20 @@ const SalesAnalysisPage: React.FC = () => {
       const dailySalesMap = new Map<string, { sales: number; orders: number; customerSet: Set<string> }>();
       
       const currentEstimates = (estimates || []).filter((estimate: any) => {
-        const d = new Date(estimate.create_date);
-        return d >= startDate && d <= endDate;
+        const d = parseDbDate(estimate.create_date);
+        return d ? d >= startDate && d <= endDate : false;
       });
       const prevEstimates = (estimates || []).filter((estimate: any) => {
-        const d = new Date(estimate.create_date);
-        return d >= prevStartDate && d < startDate;
+        const d = parseDbDate(estimate.create_date);
+        return d ? d >= prevStartDate && d < startDate : false;
       });
 
       currentEstimates.forEach((estimate: any) => {
-        const estimateDate = new Date(estimate.create_date);
-        const date = estimateDate.toISOString().split('T')[0];
-        const customerId = estimate.project_id ? (projectCustomerMap.get(estimate.project_id) || '') : '';
+        const estimateDate = parseDbDate(estimate.create_date);
+        if (!estimateDate) return;
+        const date = toLocalDateKey(estimateDate);
+        const projectKey = estimate.project_id !== null && estimate.project_id !== undefined ? String(estimate.project_id) : '';
+        const customerId = projectKey ? projectCustomerMap.get(projectKey) || '' : '';
         const current = dailySalesMap.get(date) || { sales: 0, orders: 0, customerSet: new Set<string>() };
         if (customerId) current.customerSet.add(customerId);
         dailySalesMap.set(date, {
@@ -149,7 +201,8 @@ const SalesAnalysisPage: React.FC = () => {
       // 顧客セグメント（DB参照: 見積×プロジェクトの顧客紐付けのみで算出）
       const customerStats = new Map<string, { sales: number; orders: number; hadPrev: boolean }>();
       const addCustomer = (estimate: any, hadPrev: boolean) => {
-        const customerId = estimate.project_id ? projectCustomerMap.get(estimate.project_id) : null;
+        const projectKey = estimate.project_id !== null && estimate.project_id !== undefined ? String(estimate.project_id) : '';
+        const customerId = projectKey ? projectCustomerMap.get(projectKey) : null;
         if (!customerId) return;
         const current = customerStats.get(customerId) || { sales: 0, orders: 0, hadPrev: false };
         customerStats.set(customerId, {
@@ -193,7 +246,8 @@ const SalesAnalysisPage: React.FC = () => {
       const uniqCustomers = (rows: any[]) => {
         const set = new Set<string>();
         rows.forEach((r: any) => {
-          const customerId = r.project_id ? projectCustomerMap.get(r.project_id) : null;
+          const projectKey = r.project_id !== null && r.project_id !== undefined ? String(r.project_id) : '';
+          const customerId = projectKey ? projectCustomerMap.get(projectKey) : null;
           if (customerId) set.add(customerId);
         });
         return set.size;
@@ -208,7 +262,7 @@ const SalesAnalysisPage: React.FC = () => {
       setCustomerSegments(customerSegments);
     } catch (error) {
       console.error('販売データの取得に失敗しました:', error);
-      setError(error instanceof Error ? error.message : '販売データの取得に失敗しました');
+      setError(extractErrorMessage(error));
       setSalesData([]);
       setProductSales([]);
       setCustomerSegments([]);
