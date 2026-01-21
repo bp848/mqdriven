@@ -9,6 +9,7 @@ import ProposalPdfContent from './ProposalPdfContent';
 import { formatDateTime, formatJPY, generateMultipagePdf } from '../../utils';
 import InvestigationReportPdfContent from '../reports/InvestigationReportPdfContent';
 import { sendEmail } from '../../services/emailService';
+import { EmailStatusIndicator } from './EmailStatusIndicator';
 
 interface LeadDetailModalProps {
     isOpen: boolean;
@@ -353,6 +354,10 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
             })
             .join('');
 
+        // Generate tracking pixel
+        const emailId = `estimate_${lead.id}_${Date.now()}`;
+        const trackingPixel = `<img src="${window.location.origin}/api/tracking/pixel/${emailId}" width="1" height="1" style="display:none;" alt="" />`;
+
         const html = `
           <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; line-height: 1.6; color: #111827;">
             <p>${escapeHtml(lead.company)} ${escapeHtml(recipientName)}</p>
@@ -390,6 +395,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
               Web: http://b-p.co.jp
             </p>
           </div>
+          ${trackingPixel}
         `.trim();
 
         const body =
@@ -410,7 +416,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
             `Mail: ${currentUser?.email || ''}\n` +
             `Web: http://b-p.co.jp`;
 
-        return { subject, html, body };
+        return { subject, html, body, emailId };
     };
 
     const handleSendEstimateEmail = async () => {
@@ -418,7 +424,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         setIsSendingEstimateEmail(true);
         try {
             // Build email content
-            const { subject, html, body } = buildEstimateEmail();
+            const { subject, html, body, emailId } = buildEstimateEmail();
             
             // Send email through system
             const { sendEmail } = await import('../../services/emailService');
@@ -429,9 +435,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 html,
             });
             
-            // Log email sent
+            // Save email tracking information
             const timestamp = new Date().toLocaleString('ja-JP');
-            const logMessage = `[${timestamp}] 見積メールを送信しました (ID: ${result.id})。`;
+            const logMessage = `[${timestamp}] 見積メールを送信しました (ID: ${result.id})。開封状況を監視中。`;
             const updatedInfo = `${logMessage}\n${formData.infoSalesActivity || ''}`.trim();
 
             try {
@@ -439,6 +445,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                     estimateSentAt: new Date().toISOString(),
                     estimateSentBy: currentUser?.name || null,
                     infoSalesActivity: updatedInfo,
+                    lastEmailId: emailId,
                 });
             } catch (saveError) {
                 // Fallback: at least persist the activity log even if the dedicated columns don't exist.
@@ -451,9 +458,10 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 estimateSentAt: new Date().toISOString(),
                 estimateSentBy: currentUser?.name || null,
                 infoSalesActivity: updatedInfo,
+                lastEmailId: emailId,
             }));
             
-            addToast('見積メールを送信しました。', 'success');
+            addToast('見積メールを送信しました。開封状況を監視します。', 'success');
         } catch (e) {
             // Fallback to Gmail draft if system email fails
             addToast('システム送信に失敗したため、Gmail下書きを作成します。', 'warning');
@@ -1008,6 +1016,20 @@ Web: http://b-p.co.jp`;
                             <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
                                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">詳細情報</h3>
                                 <div className="space-y-3">
+                                    {/* Email Status */}
+                                    {formData.lastEmailId && (
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">メール状況</label>
+                                            <div className="bg-white dark:bg-slate-800 rounded p-2">
+                                                <EmailStatusIndicator 
+                                                    emailId={formData.lastEmailId}
+                                                    sentAt={formData.estimateSentAt || ''}
+                                                    recipientEmail={formData.email || ''}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    
                                     <div>
                                         <label className="text-xs font-medium text-slate-600 dark:text-slate-400">活動履歴</label>
                                         <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto">
