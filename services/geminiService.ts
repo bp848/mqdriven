@@ -1196,6 +1196,43 @@ export const generateCustomProposalContent = async (
   });
 };
 
+export const generateLeadSummary = async (
+  lead: Lead
+): Promise<string> => {
+  const ai = checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const prompt = `あなたは「文唱堂印刷株式会社」の営業担当者です。以下のリード情報を分析し、簡潔で分かりやすい要約を作成してください。
+
+## リード情報
+- 企業名: ${lead.company}
+- 担当者名: ${lead.name || "不明"}
+- メールアドレス: ${lead.email || "不明"}
+- 電話番号: ${lead.phone || "不明"}
+- ステータス: ${lead.status}
+- 問い合わせ内容: ${lead.message || "具体的な内容は記載されていません。"}
+
+## 要約の要件
+1. 顧客の基本情報（会社名、担当者名）
+2. 印刷に関する具体的な要望や仕様
+3. 緊急度や重要度の判断
+4. 営業としての次のアクションの提案
+5. 全体で3行以内の簡潔な表現
+
+## 出力形式
+簡潔で分かりやすい日本語の要約を作成してください。営業担当者がすぐに状況を把握できるように、重要な情報を優先的に含めてください。`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: prompt,
+      config: {
+        responseMimeType: "text/plain",
+      },
+    });
+
+    return response.text.trim();
+  });
+};
+
 export const createLeadProposalPackage = async (
   lead: Lead
 ): Promise<LeadProposalPackage> => {

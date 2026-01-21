@@ -4,7 +4,7 @@ import { X, Save, Loader, Pencil, Trash2, Mail, CheckCircle, Lightbulb, Search, 
 import LeadStatusBadge from './LeadStatusBadge';
 import { INQUIRY_TYPES } from '../../constants';
 import LeadScoreBadge from '../ui/LeadScoreBadge';
-import { createLeadProposalPackage, investigateLeadCompany } from '../../services/geminiService';
+import { createLeadProposalPackage, generateLeadSummary, investigateLeadCompany } from '../../services/geminiService';
 import ProposalPdfContent from './ProposalPdfContent';
 import { formatDateTime, formatJPY, generateMultipagePdf } from '../../utils';
 import InvestigationReportPdfContent from '../reports/InvestigationReportPdfContent';
@@ -116,7 +116,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     const [isInvestigating, setIsInvestigating] = useState(false);
     const [isGeneratingPackage, setIsGeneratingPackage] = useState(false);
     const [proposalPackage, setProposalPackage] = useState<LeadProposalPackage | null>(null);
-    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+    const [leadSummary, setLeadSummary] = useState<string | null>(null);
     const [isSavingEstimate, setIsSavingEstimate] = useState(false);
     const [isSendingEstimateEmail, setIsSendingEstimateEmail] = useState(false);
     const [activeAiTab, setActiveAiTab] = useState<'investigation' | 'proposal' | 'email'>(() => {
@@ -223,6 +224,22 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         }
     };
     
+    const handleGenerateSummary = async () => {
+        if (isAIOff) {
+            addToast('AI機能は現在無効です。', 'error');
+            return;
+        }
+        setIsGeneratingSummary(true);
+        try {
+            const summary = await generateLeadSummary(lead);
+            if (mounted.current) setLeadSummary(summary);
+        } catch(e) {
+            if (mounted.current) addToast(e instanceof Error ? e.message : 'リード要約の生成に失敗しました。', 'error');
+        } finally {
+            if(mounted.current) setIsGeneratingSummary(false);
+        }
+    };
+
     const handleCreateProposalPackage = async () => {
         if (isAIOff) {
             addToast('AI機能は現在無効です。', 'error');
@@ -474,6 +491,56 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 </div>
 
                 <div className="flex-1 p-6 overflow-y-auto">
+                    {/* Summary Section */}
+                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-6 mb-6">
+                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">リード要約</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+                                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">顧客情報</div>
+                                <div className="text-base font-semibold text-slate-900 dark:text-white">{formData.company}</div>
+                                <div className="text-sm text-slate-600 dark:text-slate-400">{formData.name}</div>
+                                <div className="text-sm text-slate-600 dark:text-slate-400">{formData.email}</div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+                                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">要約</div>
+                                <div className="text-sm text-slate-700 dark:text-slate-300">
+                                    {leadSummary ? (
+                                        <div>{leadSummary}</div>
+                                    ) : (
+                                        <div>
+                                            <div className="mb-2">
+                                                {formData.message ? 
+                                                    formData.message.length > 150 ? 
+                                                        formData.message.substring(0, 150) + '...' : 
+                                                        formData.message
+                                                    : '問い合わせ内容はありません'
+                                                }
+                                            </div>
+                                            <button 
+                                                onClick={handleGenerateSummary}
+                                                disabled={isGeneratingSummary || isAIOff}
+                                                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded disabled:opacity-50"
+                                            >
+                                                {isGeneratingSummary ? '生成中...' : 'AI要約を作成'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+                                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">進捗状況</div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <LeadStatusBadge status={formData.status as LeadStatus} />
+                                </div>
+                                <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                                    {formData.aiInvestigation && <div>✓ 企業調査完了</div>}
+                                    {formData.aiDraftProposal && <div>✓ 提案・見積作成完了</div>}
+                                    {formData.estimateSentAt && <div>✓ 見積送信完了</div>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12">
                         {/* Left Column */}
                         <div className="space-y-4">
@@ -764,7 +831,7 @@ Web: http://b-p.co.jp`;
         </div>
         
         {/* Hidden divs for PDF generation */}
-        { (isGeneratingPdf || proposalPackage?.proposal) &&
+        { (proposalPackage?.proposal) &&
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
                 {proposalPackage?.proposal && <ProposalPdfContent content={proposalPackage.proposal} lead={lead} />}
             </div>
