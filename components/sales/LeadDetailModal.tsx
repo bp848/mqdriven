@@ -414,24 +414,24 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     };
 
     const handleSendEstimateEmail = async () => {
-        if (!lead.email) {
-            addToast('送信先メールアドレスが登録されていません。', 'error');
-            return;
-        }
-        if (!proposalPackage?.estimate || proposalPackage.estimate.length === 0) {
-            addToast('送信する見積がありません。先に「AI提案パッケージ作成」してください。', 'error');
-            return;
-        }
+        if (!lead.email || !proposalPackage?.estimate || !currentUser) return;
         setIsSendingEstimateEmail(true);
         try {
-            const { subject, body } = buildEstimateEmail();
+            // Build email content
+            const { subject, html, body } = buildEstimateEmail();
             
-            // Create Gmail draft URL
-            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.open(gmailUrl, '_blank');
+            // Send email through system
+            const { sendEmail } = await import('../../services/emailService');
+            const result = await sendEmail({
+                to: [lead.email],
+                subject,
+                body,
+                html,
+            });
             
+            // Log email sent
             const timestamp = new Date().toLocaleString('ja-JP');
-            const logMessage = `[${timestamp}] Gmailの見積下書きを作成しました。`;
+            const logMessage = `[${timestamp}] 見積メールを送信しました (ID: ${result.id})。`;
             const updatedInfo = `${logMessage}\n${formData.infoSalesActivity || ''}`.trim();
 
             try {
@@ -452,14 +452,32 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 estimateSentBy: currentUser?.name || null,
                 infoSalesActivity: updatedInfo,
             }));
-            addToast('Gmailの見積下書きを作成しました。', 'success');
+            
+            addToast('見積メールを送信しました。', 'success');
         } catch (e) {
-            addToast(e instanceof Error ? `見積下書き作成エラー: ${e.message}` : '見積下書きの作成に失敗しました。', 'error');
+            // Fallback to Gmail draft if system email fails
+            addToast('システム送信に失敗したため、Gmail下書きを作成します。', 'warning');
+            
+            try {
+                const { subject, body } = buildEstimateEmail();
+                const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                window.open(gmailUrl, '_blank');
+                
+                const timestamp = new Date().toLocaleString('ja-JP');
+                const logMessage = `[${timestamp}] Gmailの見積下書きを作成しました。`;
+                const updatedInfo = `${logMessage}\n${formData.infoSalesActivity || ''}`.trim();
+
+                await onSave(lead.id, { infoSalesActivity: updatedInfo });
+                setFormData(prev => ({ ...prev, infoSalesActivity: updatedInfo }));
+                
+                addToast('Gmail下書きを作成しました。', 'success');
+            } catch (fallbackError) {
+                addToast('メール送信に失敗しました。', 'error');
+            }
         } finally {
             if (mounted.current) setIsSendingEstimateEmail(false);
         }
     };
-
     const getNextAction = (): { label: string; disabled?: boolean; onClick?: () => void } => {
         const hasEstimateSent = Boolean(formData.estimateSentAt) || /\[[^\]]+\]\s*Gmailの見積下書きを作成しました。?/.test(formData.infoSalesActivity || '');
         const hasEstimateDraft = Boolean(formData.aiDraftProposal && String(formData.aiDraftProposal).trim());
