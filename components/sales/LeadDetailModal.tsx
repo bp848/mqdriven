@@ -402,6 +402,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         const hasEstimateSent = Boolean(formData.estimateSentAt) || /\[[^\]]+\]\s*Gmailの見積下書きを作成しました。?/.test(formData.infoSalesActivity || '');
         const hasEstimateDraft = Boolean(formData.aiDraftProposal && String(formData.aiDraftProposal).trim());
         const hasReply = formData.status !== LeadStatus.Untouched || /\[[^\]]+\]\s*AI返信メールを作成しました。?/.test(formData.infoSalesActivity || '');
+        const hasInvestigation = Boolean(formData.aiInvestigation && String(formData.aiInvestigation).trim());
 
         if (hasEstimateSent) {
             return { label: '下書き作成済', disabled: true };
@@ -415,13 +416,23 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 },
             };
         }
-        if (hasReply) {
+        if (hasInvestigation && !hasEstimateDraft) {
             return {
-                label: '見積を作成',
+                label: '企業調査＋見積作成',
                 disabled: Boolean(isAIOff),
                 onClick: () => {
                     setActiveAiTab('proposal');
                     handleCreateProposalPackage();
+                },
+            };
+        }
+        if (hasReply && !hasInvestigation) {
+            return {
+                label: '企業調査',
+                disabled: Boolean(isAIOff),
+                onClick: () => {
+                    setActiveAiTab('investigation');
+                    handleInvestigateCompany();
                 },
             };
         }
