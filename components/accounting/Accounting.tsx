@@ -1,20 +1,34 @@
 import React from 'react';
-// FIX: Corrected import path for JournalLedger.
-import JournalLedger from '../JournalLedger.tsx';
-import GeneralLedger from './GeneralLedger.tsx';
-import TrialBalancePage from './TrialBalancePage.tsx';
-// FIX: Changed to default import for InvoiceOCR, which is now the correct export type.
-import InvoiceOCR from '../InvoiceOCR.tsx';
-import PaymentManagement from './PaymentManagement.tsx';
-import LaborCostManagement from './LaborCostManagement.tsx';
-import PeriodClosingPage from './PeriodClosingPage.tsx';
-import PlaceholderPage from '../PlaceholderPage.tsx';
-import BillingManagement from './BillingManagement.tsx';
+import JournalLedger from '../JournalLedger';
+import GeneralLedger from './GeneralLedger';
+import TrialBalancePage from './TrialBalancePage';
+import InvoiceOCR from '../InvoiceOCR';
+import PaymentManagement from './PaymentManagement';
+import LaborCostManagement from './LaborCostManagement';
+import PeriodClosingPage from './PeriodClosingPage';
+import PlaceholderPage from '../PlaceholderPage';
+import BillingManagement from './BillingManagement';
 
+import { JournalEntry, InvoiceData, Page } from '../../types';
 
-import { JournalEntry, InvoiceData, Page } from '../../types.ts';
+interface AccountingPageProps {
+    page: Page;
+    journalEntries: JournalEntry[];
+    accountItems: any[];
+    onAddEntry: (entry: JournalEntry) => void;
+    addToast: (message: string, type: 'success' | 'error' | 'warning') => void;
+    requestConfirmation: (dialog: any) => void;
+    jobs: any[];
+    applications: any[];
+    onNavigate: (page: Page) => void;
+    customers: any[];
+    employees: any[];
+    onRefreshData: () => void;
+    allocationDivisions?: any[];
+    isAIOff?: boolean;
+}
 
-const AccountingPage: React.FC<any> = (props) => {
+const AccountingPage: React.FC<AccountingPageProps> = (props) => {
     const { page, journalEntries, accountItems, onAddEntry, addToast, requestConfirmation, jobs, applications, onNavigate, customers, employees, onRefreshData, allocationDivisions } = props;
 
     switch(page as Page) {

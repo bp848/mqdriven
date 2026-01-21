@@ -29,7 +29,15 @@
   "include": [
     "src",
     "api",
-    "lib"
+    "lib",
+    "components",
+    "pages",
+    "accounting",
+    "sales",
+    "admin",
+    "services",
+    "utils",
+    "types"
   ],
   "exclude": [
     "node_modules",
