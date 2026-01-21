@@ -970,7 +970,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                         {/* Right: Email Reply Preview */}
                                         <div>
                                             <label className="text-xs font-medium text-slate-600 dark:text-slate-400">メール返信プレビュー</label>
-                                            <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded p-2">
+                                            <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-40 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded p-3 border border-slate-200 dark:border-slate-700">
                                                 {(() => {
                                                     // Check if there's a generated reply in the activity log
                                                     const replyMatch = (formData.infoSalesActivity || '').match(/\[([^\]]+)\]\s*AI返信メールを作成しました。?\s*\n([\s\S]*?)(?=\n\[|\n*$|$)/);
@@ -978,7 +978,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                                         return replyMatch[2].trim();
                                                     }
                                                     
-                                                    // Default preview template
+                                                    // Enhanced default template with strategic structure
                                                     const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
                                                     const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
                                                     
@@ -990,10 +990,16 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
 お問い合わせいただきありがとうございます。
 ご依頼内容を拝見いたしました。
 
-後ほど詳細なご提案をお送りいたします。
-今しばらくお待ちください。
+【ご提案】
+貴社のニーズに最適な印刷ソリューションをご提案いたします。
+詳細なお見積もりを別途お送りいたします。
 
-よろしくお願いいたします。
+【次のステップ】
+1. 見積書のご確認
+2. 仕様の最終調整
+3. ご発注
+
+ご多忙中とは存じますが、ご確認のほどよろしくお願いいたします。
 
 ------------------------------------
 文唱堂印刷株式会社
@@ -1004,16 +1010,41 @@ Mail: ${currentUser?.email || ''}
 Web: http://b-p.co.jp`;
                                                 })()}
                                             </div>
-                                            <button 
-                                                onClick={() => {
-                                                    setActiveAiTab('email');
-                                                    onGenerateReply(lead);
-                                                }}
-                                                disabled={isAIOff}
-                                                className="mt-2 w-full flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-1 px-2 rounded disabled:opacity-50 text-xs"
-                                            >
-                                                <Mail className="w-3 h-3"/> AIで返信作成
-                                            </button>
+                                            
+                                            {/* Strategic Email Actions */}
+                                            <div className="mt-3 space-y-2">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button 
+                                                        onClick={() => {
+                                                            setActiveAiTab('email');
+                                                            onGenerateReply(lead);
+                                                        }}
+                                                        disabled={isAIOff}
+                                                        className="flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-2 px-2 rounded disabled:opacity-50 text-xs"
+                                                    >
+                                                        <Mail className="w-3 h-3"/> AI返信作成
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=【お問い合わせ】&body=${encodeURIComponent(`お問い合わせありがとうございます。\n\n${formData.message || ''}`)}`;
+                                                            window.open(gmailUrl, '_blank');
+                                                        }}
+                                                        className="flex items-center justify-center gap-1 bg-blue-100 text-blue-700 font-semibold py-2 px-2 rounded text-xs"
+                                                    >
+                                                        <Mail className="w-3 h-3"/> Gmail作成
+                                                    </button>
+                                                </div>
+                                                
+                                                {/* Email Strategy Tips */}
+                                                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2">
+                                                    <div className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">📧 メール戦略</div>
+                                                    <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                                                        <div>• 最初は感謝と確認を重視</div>
+                                                        <div>• 具体的な仕様をヒアリング</div>
+                                                        <div>• 見積提出までのステップを明示</div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <div>
