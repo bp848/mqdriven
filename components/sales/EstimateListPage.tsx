@@ -74,47 +74,9 @@ export default function EstimateListPage() {
 
       if (error) {
         console.error('見積もり取得エラー:', error);
-        // エラー時はサンプルデータを表示
-        const sampleData: Estimate[] = [
-          {
-            id: "1",
-            documentNumber: "EST-2025-001",
-            documentType: "estimate",
-            status: "draft",
-            customerName: "株式会社ABC商事",
-            customerEmail: "info@abc-corp.jp",
-            customerPhone: "03-1234-5678",
-            customerAddress: "東京都千代田区丸の内1-1-1",
-            subtotal: 100000,
-            taxRate: 0.10,
-            taxAmount: 10000,
-            totalAmount: 110000,
-            issueDate: "2025-01-21",
-            validUntil: "2025-02-21",
-            title: "パンフレット印刷見積",
-            content: [
-              {
-                id: "1",
-                itemName: "A4パンフレット",
-                description: "フルカラー印刷",
-                quantity: 1000,
-                unit: "枚",
-                unitPrice: 100,
-                discountRate: 0,
-                subtotal: 100000
-              }
-            ],
-            notes: "納期：2週間",
-            emailSentAt: "2025-01-21 10:00",
-            emailOpenedAt: "2025-01-21 10:30",
-            emailOpenCount: 3,
-            createdBy: "山田太郎",
-            createdAt: "2025-01-21 09:00",
-            updatedAt: "2025-01-21 09:00"
-          }
-        ];
-        setEstimates(sampleData);
-        setFilteredEstimates(sampleData);
+        // エラー時は空の配列を表示
+        setEstimates([]);
+        setFilteredEstimates([]);
       } else {
         // データベースのデータをEstimate型に変換
         const formattedEstimates: Estimate[] = data.map(item => ({
@@ -148,6 +110,8 @@ export default function EstimateListPage() {
       }
     } catch (error) {
       console.error('見積もり取得エラー:', error);
+      setEstimates([]);
+      setFilteredEstimates([]);
     }
   };
 
