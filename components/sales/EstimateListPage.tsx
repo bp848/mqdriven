@@ -62,84 +62,98 @@ export default function EstimateListPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [activeTab, setActiveTab] = useState("list")
 
-  // サンプルデータ
-  useEffect(() => {
-    const sampleData: Estimate[] = [
-      {
-        id: "1",
-        documentNumber: "EST-2025-001",
-        documentType: "estimate",
-        status: "draft",
-        customerName: "株式会社ABC商事",
-        customerEmail: "info@abc-corp.jp",
-        customerPhone: "03-1234-5678",
-        customerAddress: "東京都千代田区丸の内1-1-1",
-        subtotal: 100000,
-        taxRate: 0.10,
-        taxAmount: 10000,
-        totalAmount: 110000,
-        issueDate: "2025-01-21",
-        validUntil: "2025-02-21",
-        title: "パンフレット印刷見積",
-        content: [
+  // 見積もりデータを再取得する関数
+  const fetchEstimates = async () => {
+    try {
+      const supabase = createSupabaseBrowser();
+      const { data, error } = await supabase
+        .from('estimate_invoices')
+        .select('*')
+        .eq('document_type', 'estimate')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('見積もり取得エラー:', error);
+        // エラー時はサンプルデータを表示
+        const sampleData: Estimate[] = [
           {
             id: "1",
-            itemName: "A4パンフレット",
-            description: "フルカラー印刷",
-            quantity: 1000,
-            unit: "枚",
-            unitPrice: 100,
-            discountRate: 0,
-            subtotal: 100000
+            documentNumber: "EST-2025-001",
+            documentType: "estimate",
+            status: "draft",
+            customerName: "株式会社ABC商事",
+            customerEmail: "info@abc-corp.jp",
+            customerPhone: "03-1234-5678",
+            customerAddress: "東京都千代田区丸の内1-1-1",
+            subtotal: 100000,
+            taxRate: 0.10,
+            taxAmount: 10000,
+            totalAmount: 110000,
+            issueDate: "2025-01-21",
+            validUntil: "2025-02-21",
+            title: "パンフレット印刷見積",
+            content: [
+              {
+                id: "1",
+                itemName: "A4パンフレット",
+                description: "フルカラー印刷",
+                quantity: 1000,
+                unit: "枚",
+                unitPrice: 100,
+                discountRate: 0,
+                subtotal: 100000
+              }
+            ],
+            notes: "納期：2週間",
+            emailSentAt: "2025-01-21 10:00",
+            emailOpenedAt: "2025-01-21 10:30",
+            emailOpenCount: 3,
+            createdBy: "山田太郎",
+            createdAt: "2025-01-21 09:00",
+            updatedAt: "2025-01-21 09:00"
           }
-        ],
-        notes: "納期：2週間",
-        emailSentAt: "2025-01-21 10:00",
-        emailOpenedAt: "2025-01-21 10:30",
-        emailOpenCount: 3,
-        createdBy: "山田太郎",
-        createdAt: "2025-01-21 09:00",
-        updatedAt: "2025-01-21 09:00"
-      },
-      {
-        id: "2",
-        documentNumber: "EST-2025-002",
-        documentType: "estimate",
-        status: "sent",
-        customerName: "株式会社XYZ",
-        customerEmail: "sales@xyz.co.jp",
-        customerPhone: "03-9876-5432",
-        customerAddress: "大阪府大阪市中央区1-1-1",
-        subtotal: 250000,
-        taxRate: 0.10,
-        taxAmount: 25000,
-        totalAmount: 275000,
-        issueDate: "2025-01-20",
-        validUntil: "2025-02-20",
-        title: "名刺印刷見積",
-        content: [
-          {
-            id: "1",
-            itemName: "名刺",
-            description: "フルカラー両面印刷",
-            quantity: 500,
-            unit: "枚",
-            unitPrice: 500,
-            discountRate: 0,
-            subtotal: 250000
-          }
-        ],
-        notes: "デザインデータお持ちの場合は割引",
-        emailSentAt: "2025-01-20 14:00",
-        emailOpenedAt: "2025-01-20 14:45",
-        emailOpenCount: 1,
-        createdBy: "鈴木花子",
-        createdAt: "2025-01-20 13:00",
-        updatedAt: "2025-01-20 13:00"
+        ];
+        setEstimates(sampleData);
+        setFilteredEstimates(sampleData);
+      } else {
+        // データベースのデータをEstimate型に変換
+        const formattedEstimates: Estimate[] = data.map(item => ({
+          id: item.id,
+          documentNumber: item.document_number,
+          documentType: item.document_type,
+          status: item.status,
+          customerName: item.customer_name,
+          customerEmail: item.customer_email,
+          customerPhone: item.customer_phone,
+          customerAddress: item.customer_address,
+          subtotal: item.subtotal,
+          taxRate: item.tax_rate,
+          taxAmount: item.tax_amount,
+          totalAmount: item.total_amount,
+          issueDate: item.issue_date,
+          dueDate: item.due_date,
+          validUntil: item.valid_until,
+          title: item.title,
+          content: item.content || [],
+          notes: item.notes,
+          emailSentAt: item.email_sent_at,
+          emailOpenedAt: item.email_opened_at,
+          emailOpenCount: item.email_open_count || 0,
+          createdBy: item.created_by,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at
+        }));
+        setEstimates(formattedEstimates);
+        setFilteredEstimates(formattedEstimates);
       }
-    ]
-    setEstimates(sampleData)
-    setFilteredEstimates(sampleData)
+    } catch (error) {
+      console.error('見積もり取得エラー:', error);
+    }
+  };
+
+  // データベースから見積もりデータを取得
+  useEffect(() => {
+    fetchEstimates();
   }, [])
 
   // フィルター処理

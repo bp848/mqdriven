@@ -642,6 +642,10 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                 isAIOff={isAIOff}
                 // FIX: Pass the onAddEstimate prop to satisfy the LeadDetailModalProps interface.
                 onAddEstimate={onAddEstimate}
+                onEstimateCreated={() => {
+                    // 見積もり作成後にリード一覧を更新
+                    onRefresh();
+                }}
                 initialAiTab={initialAiTab}
             />
         </>

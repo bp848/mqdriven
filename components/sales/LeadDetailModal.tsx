@@ -23,6 +23,7 @@ interface LeadDetailModalProps {
     onGenerateReply: (lead: Lead) => void;
     isAIOff: boolean;
     onAddEstimate: (estimate: any) => Promise<void>;
+    onEstimateCreated?: () => void; // 見積もり作成後のコールバック
     initialAiTab?: 'investigation' | 'proposal' | 'email';
 }
 
@@ -110,7 +111,7 @@ const renderInvestigationSummary = (text: string) => {
     );
 };
 
-export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate, initialAiTab }) => {
+export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate, onEstimateCreated, initialAiTab }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<Lead>>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -350,6 +351,11 @@ MQ会計分析:
             
             // Show MQ analysis toast
             addToast(`見積を保存しました。MQ分類: ${mqClassification} (¥${totalAmount.toLocaleString()})`, 'success');
+            
+            // 見積もり作成後のコールバックを呼び出し
+            if (onEstimateCreated) {
+                onEstimateCreated();
+            }
         } catch (e) {
             addToast(e instanceof Error ? `提案・見積保存エラー: ${e.message}`: '提案・見積の保存に失敗しました。', 'error');
         } finally {
