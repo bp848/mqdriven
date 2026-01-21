@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Filter, Download, Send, FileText, Calendar, DollarSign, Eye, Edit, Trash2, Plus, CheckCircle } from "lucide-react"
+import { Search, Filter, Download, Send, FileText, Calendar, DollarSign, Eye, Edit, Trash2, Plus, CheckCircle, TrendingUp, Users, Clock, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createSupabaseBrowser } from '../../lib/supabase';
+import { generateLeadProposalPackage } from '../../services/geminiService';
+import { saveEstimateToManagement } from '../../services/estimateManagementService';
 
 // 型定義
 interface EstimateItem {
