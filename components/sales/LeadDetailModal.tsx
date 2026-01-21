@@ -618,16 +618,15 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
 
                 <div className="flex-1 p-4 overflow-hidden">
                     <div className="h-full flex flex-col">
-                        {/* Summary Section - Fixed Height */}
-                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 mb-4">
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                        {/* Summary Section - Compact */}
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-3 mb-4">
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
                                     <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">顧客情報</div>
                                     <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{formData.company}</div>
                                     <div className="text-xs text-slate-600 dark:text-slate-400 truncate">{formData.name}</div>
-                                    <div className="text-xs text-slate-600 dark:text-slate-400 truncate">{formData.email}</div>
                                 </div>
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
                                     <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">AI要約</div>
                                     <div className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2">
                                         {leadSummary ? (
@@ -636,8 +635,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                             <div>
                                                 <div className="mb-1">
                                                     {formData.message ? 
-                                                        formData.message.length > 100 ? 
-                                                            formData.message.substring(0, 100) + '...' : 
+                                                        formData.message.length > 80 ? 
+                                                            formData.message.substring(0, 80) + '...' : 
                                                             formData.message
                                                         : '問い合わせ内容はありません'
                                                     }
@@ -653,15 +652,15 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                         )}
                                     </div>
                                 </div>
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
-                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">進捗状況</div>
-                                    <div className="flex items-center gap-2 mb-1">
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">進捗</div>
+                                    <div className="flex items-center gap-2">
                                         <LeadStatusBadge status={formData.status as LeadStatus} />
                                     </div>
-                                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                        {formData.aiInvestigation && <div>✓ 企業調査完了</div>}
-                                        {formData.aiDraftProposal && <div>✓ 提案・見積作成完了</div>}
-                                        {formData.estimateSentAt && <div>✓ 見積送信完了</div>}
+                                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1 mt-1">
+                                        {formData.aiInvestigation && <div>✓ 調査完了</div>}
+                                        {formData.aiDraftProposal && <div>✓ 提案完了</div>}
+                                        {formData.estimateSentAt && <div>✓ 見積送信</div>}
                                     </div>
                                 </div>
                             </div>
@@ -673,38 +672,6 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                             <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
                                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">基本情報</h3>
                                 <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">会社名</label>
-                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
-                                            {isEditing ? (
-                                                <input
-                                                    type="text"
-                                                    name="company"
-                                                    value={formData.company || ''}
-                                                    onChange={handleChange}
-                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                                                />
-                                            ) : (
-                                                <span>{formData.company || '-'}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">担当者名</label>
-                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
-                                            {isEditing ? (
-                                                <input
-                                                    type="text"
-                                                    name="name"
-                                                    value={formData.name || ''}
-                                                    onChange={handleChange}
-                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                                                />
-                                            ) : (
-                                                <span>{formData.name || '-'}</span>
-                                            )}
-                                        </div>
-                                    </div>
                                     <div>
                                         <label className="text-xs font-medium text-slate-600 dark:text-slate-400">メールアドレス</label>
                                         <div className="mt-1 text-sm text-slate-900 dark:text-white">
