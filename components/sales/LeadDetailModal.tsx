@@ -558,22 +558,111 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                                                 見積: {proposalPackage.estimate.length}項目が生成されました。
                                                             </div>
                                                         )}
-                                                        <div className="flex items-center gap-2">
-                                                            <button disabled={isGeneratingPdf} className="text-sm flex-1 flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50">
-                                                                {isGeneratingPdf ? <Loader className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/>} 提案書PDF
+                                                        
+                                                        {/* 見積内容プレビュー */}
+                                                        {proposalPackage.estimate && (
+                                                            <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
+                                                                <h5 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">見積内容プレビュー</h5>
+                                                                <div className="space-y-2 text-sm">
+                                                                    <div className="grid grid-cols-3 gap-2 font-semibold text-slate-600 dark:text-slate-400 border-b pb-2">
+                                                                        <div>品名</div>
+                                                                        <div className="text-right">数量</div>
+                                                                        <div className="text-right">金額</div>
+                                                                    </div>
+                                                                    {proposalPackage.estimate.map((item, idx) => (
+                                                                        <div key={idx} className="grid grid-cols-3 gap-2 py-1 border-b border-slate-100 dark:border-slate-700">
+                                                                            <div className="text-slate-700 dark:text-slate-300">{item.name || item.description}</div>
+                                                                            <div className="text-right text-slate-700 dark:text-slate-300">{item.quantity || 1}</div>
+                                                                            <div className="text-right text-slate-700 dark:text-slate-300">
+                                                                                ¥{Math.round((item.quantity || 1) * (item.unitPrice || 0)).toLocaleString()}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    <div className="grid grid-cols-3 gap-2 pt-2 font-semibold">
+                                                                        <div colSpan={2} className="text-right">合計:</div>
+                                                                        <div className="text-right text-blue-600">
+                                                                            ¥{proposalPackage.estimate.reduce((sum, item) => 
+                                                                                sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
+                                                                            ).toLocaleString()}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* メール内容プレビュー */}
+                                                        <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
+                                                            <h5 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">メール内容プレビュー</h5>
+                                                            <div className="space-y-3 text-sm">
+                                                                <div>
+                                                                    <span className="font-semibold text-slate-600 dark:text-slate-400">件名:</span>
+                                                                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                                                                        【見積】{lead.company}
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <span className="font-semibold text-slate-600 dark:text-slate-400">本文:</span>
+                                                                    <div className="mt-1 text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                                                        {(() => {
+                                                                            const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
+                                                                            const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
+                                                                            const total = proposalPackage.estimate.reduce((sum, item) => 
+                                                                                sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
+                                                                            );
+                                                                            
+                                                                            return `${recipientName}
+
+お世話になっております。
+文唱堂印刷の${senderName}です。
+
+ご依頼いただきました見積書を作成いたしましたので、
+お送りいたします。
+
+【見積内容】
+${proposalPackage.estimate.map(item => 
+    `・${item.name || item.description}: ${item.quantity || 1}個 × ¥${(item.unitPrice || 0).toLocaleString()} = ¥${Math.round((item.quantity || 1) * (item.unitPrice || 0)).toLocaleString()}`
+).join('\n')}
+
+【合計金額】
+¥${total.toLocaleString()}
+
+納期: 2週間
+お支払条件: 月末締め翌月末払い
+
+ご不明な点がございましたら、お気軽にお問い合わせください。
+よろしくお願いいたします。
+
+------------------------------------
+文唱堂印刷株式会社
+${senderName}
+〒101-0025 東京都千代田区神田佐久間町3-37
+TEL：03-3851-0111　FAX：03-3861-1979
+Mail: ${currentUser?.email || ''}
+Web: http://b-p.co.jp`;
+                                                                        })()}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex gap-2 mt-4">
+                                                            <button 
+                                                                onClick={handleSaveEstimate} 
+                                                                disabled={isSavingEstimate}
+                                                                className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
+                                                            >
+                                                                {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                                見積を保存
                                                             </button>
-                                                            <button disabled={isSavingEstimate} onClick={handleSaveEstimate} className="text-sm flex-1 flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50">
-                                                                 {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} 見積を保存
+                                                            <button 
+                                                                onClick={handleSendEstimateEmail} 
+                                                                disabled={isSendingEstimateEmail || !lead.email}
+                                                                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
+                                                            >
+                                                                {isSendingEstimateEmail ? <Loader className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                                                                メール送信
                                                             </button>
                                                         </div>
-                                                        <button
-                                                            onClick={handleSendEstimateEmail}
-                                                            disabled={isSendingEstimateEmail || !lead.email || !proposalPackage?.estimate || proposalPackage.estimate.length === 0}
-                                                            className="w-full text-sm flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-md disabled:opacity-50"
-                                                        >
-                                                            {isSendingEstimateEmail ? <Loader className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4" />}
-                                                            見積をメール送信
-                                                        </button>
                                                     </>
                                                 )}
                                             </div>
