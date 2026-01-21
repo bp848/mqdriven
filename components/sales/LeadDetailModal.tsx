@@ -762,6 +762,24 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                             {formData.assignedTo || '-'}
                                         </div>
                                     </div>
+                                    
+                                    {/* Inquiry Content in Basic Info */}
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">問い合わせ内容</label>
+                                        <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                            {isEditing ? (
+                                                <textarea
+                                                    name="message"
+                                                    value={formData.message || ''}
+                                                    onChange={handleChange}
+                                                    rows={4}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                                                />
+                                            ) : (
+                                                <span>{formData.message || '問い合わせ内容はありません'}</span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -936,53 +954,22 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                     {activeAiTab === 'email' && (
                                         <div className="space-y-3">
                                             <h4 className="text-xs font-semibold text-slate-800 dark:text-slate-100">メール返信</h4>
-                                            <button onClick={() => onGenerateReply(lead)} disabled={isAIOff} className="w-full flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-2 px-2 rounded disabled:opacity-50 text-xs">
-                                                <Mail className="w-3 h-3"/> AIで返信作成
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Right Column - Details */}
-                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
-                                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">詳細情報</h3>
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {/* Left: Inquiry Content */}
-                                        <div>
-                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">問い合わせ内容</label>
-                                            <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                                {isEditing ? (
-                                                    <textarea
-                                                        name="message"
-                                                        value={formData.message || ''}
-                                                        onChange={handleChange}
-                                                        rows={4}
-                                                        className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
-                                                    />
-                                                ) : (
-                                                    <span>{formData.message || '問い合わせ内容はありません'}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Right: Email Reply Preview */}
-                                        <div>
-                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">メール返信プレビュー</label>
-                                            <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-40 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded p-3 border border-slate-200 dark:border-slate-700">
-                                                {(() => {
-                                                    // Check if there's a generated reply in the activity log
-                                                    const replyMatch = (formData.infoSalesActivity || '').match(/\[([^\]]+)\]\s*AI返信メールを作成しました。?\s*\n([\s\S]*?)(?=\n\[|\n*$|$)/);
-                                                    if (replyMatch && replyMatch[2]) {
-                                                        return replyMatch[2].trim();
-                                                    }
-                                                    
-                                                    // Enhanced default template with strategic structure
-                                                    const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
-                                                    const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
-                                                    
-                                                    return `${lead.company} ${recipientName}
+                                            
+                                            {/* Email Reply Preview */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                                <div className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                                    {(() => {
+                                                        // Check if there's a generated reply in the activity log
+                                                        const replyMatch = (formData.infoSalesActivity || '').match(/\[([^\]]+)\]\s*AI返信メールを作成しました。?\s*\n([\s\S]*?)(?=\n\[|\n*$|$)/);
+                                                        if (replyMatch && replyMatch[2]) {
+                                                            return replyMatch[2].trim();
+                                                        }
+                                                        
+                                                        // Enhanced default template with strategic structure
+                                                        const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
+                                                        const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
+                                                        
+                                                        return `${lead.company} ${recipientName}
 
 お世話になっております。
 文唱堂印刷の${senderName}です。
@@ -1008,54 +995,61 @@ ${senderName}
 TEL：03-3851-0111　FAX：03-3861-1979
 Mail: ${currentUser?.email || ''}
 Web: http://b-p.co.jp`;
-                                                })()}
-                                            </div>
-                                            
-                                            {/* Strategic Email Actions */}
-                                            <div className="mt-3 space-y-2">
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <button 
-                                                        onClick={() => {
-                                                            setActiveAiTab('email');
-                                                            onGenerateReply(lead);
-                                                        }}
-                                                        disabled={isAIOff}
-                                                        className="flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-2 px-2 rounded disabled:opacity-50 text-xs"
-                                                    >
-                                                        <Mail className="w-3 h-3"/> AI返信作成
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => {
-                                                            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=【お問い合わせ】&body=${encodeURIComponent(`お問い合わせありがとうございます。\n\n${formData.message || ''}`)}`;
-                                                            window.open(gmailUrl, '_blank');
-                                                        }}
-                                                        className="flex items-center justify-center gap-1 bg-blue-100 text-blue-700 font-semibold py-2 px-2 rounded text-xs"
-                                                    >
-                                                        <Mail className="w-3 h-3"/> Gmail作成
-                                                    </button>
+                                                    })()}
                                                 </div>
                                                 
-                                                {/* Email Strategy Tips */}
-                                                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2">
-                                                    <div className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">📧 メール戦略</div>
-                                                    <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
-                                                        <div>• 最初は感謝と確認を重視</div>
-                                                        <div>• 具体的な仕様をヒアリング</div>
-                                                        <div>• 見積提出までのステップを明示</div>
+                                                {/* Strategic Email Actions */}
+                                                <div className="mt-3 space-y-2">
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button 
+                                                            onClick={() => {
+                                                                onGenerateReply(lead);
+                                                            }}
+                                                            disabled={isAIOff}
+                                                            className="flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-2 px-2 rounded disabled:opacity-50 text-xs"
+                                                        >
+                                                            <Mail className="w-3 h-3"/> AI返信作成
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => {
+                                                                const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=【お問い合わせ】&body=${encodeURIComponent(`お問い合わせありがとうございます。\n\n${formData.message || ''}`)}`;
+                                                                window.open(gmailUrl, '_blank');
+                                                            }}
+                                                            className="flex items-center justify-center gap-1 bg-blue-100 text-blue-700 font-semibold py-2 px-2 rounded text-xs"
+                                                        >
+                                                            <Mail className="w-3 h-3"/> Gmail作成
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {/* Email Strategy Tips */}
+                                                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2">
+                                                        <div className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">📧 メール戦略</div>
+                                                        <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                                                            <div>• 最初は感謝と確認を重視</div>
+                                                            <div>• 具体的な仕様をヒアリング</div>
+                                                            <div>• 見積提出までのステップを明示</div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right Column - Details */}
+                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
+                                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">詳細情報</h3>
+                                <div className="space-y-3">
                                     <div>
                                         <label className="text-xs font-medium text-slate-600 dark:text-slate-400">活動履歴</label>
-                                        <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                        <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto">
                                             {isEditing ? (
                                                 <textarea
                                                     name="infoSalesActivity"
                                                     value={formData.infoSalesActivity || ''}
                                                     onChange={handleChange}
-                                                    rows={4}
+                                                    rows={6}
                                                     className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
                                                 />
                                             ) : (
@@ -1063,7 +1057,7 @@ Web: http://b-p.co.jp`;
                                             )}
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-xs font-medium text-slate-600 dark:text-slate-400">見積送信者</label>
                                             <div className="mt-1 text-xs text-slate-900 dark:text-white">
@@ -1076,7 +1070,7 @@ Web: http://b-p.co.jp`;
                                                 {(() => {
                                                     if (formData.estimateSentAt) return formatDateTime(formData.estimateSentAt);
                                                     const raw = formData.infoSalesActivity || '';
-                                                    const match = raw.match(/\[([^\]]+)\]\s*見積メールを送信しました。?/);
+                                                    const match = raw.match(/\[([^\]]+)\]\s*Gmailの見積下書きを作成しました。?/);
                                                     return match?.[1] ?? '-';
                                                 })()}
                                             </div>
