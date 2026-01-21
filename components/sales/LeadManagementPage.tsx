@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Lead, LeadStatus, SortConfig, Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
-import { Loader, Pencil, Trash2, Mail, Eye, CheckCircle, Lightbulb, List, KanbanSquare } from '../Icons';
+import { Lead, LeadStatus, SortConfig, Toast, ConfirmationDialogProps, EmployeeUser, Customer } from '../../types';
+import { Loader, Pencil, Trash2, Mail, Eye, CheckCircle, Lightbulb, List, KanbanSquare, Plus, Users } from '../Icons';
 import { LeadDetailModal } from './LeadDetailModal';
 import LeadStatusBadge from './LeadStatusBadge';
 import LeadKanbanView from './LeadKanbanView';
@@ -21,9 +21,11 @@ interface LeadManagementPageProps {
   currentUser: EmployeeUser | null;
   isAIOff: boolean;
   onAddEstimate: (estimate: any) => Promise<void>;
+  customers: Customer[]; // 既存顧客リスト
+  onCreateExistingCustomerLead: (leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
 }
 
-const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff, onAddEstimate }) => {
+const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff, onAddEstimate, customers, onCreateExistingCustomerLead }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -34,6 +36,8 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
     const [isReplyingTo, setIsReplyingTo] = useState<string | null>(null);
     const [isMarkingContacted, setIsMarkingContacted] = useState<string | null>(null);
     const [togglingHandledId, setTogglingHandledId] = useState<string | null>(null);
+    const [isAddingExistingCustomerLead, setIsAddingExistingCustomerLead] = useState(false);
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
     const handleRowClick = (lead: Lead) => {
         setInitialAiTab(undefined);
@@ -136,6 +140,73 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
             addToast(error instanceof Error ? error.message : 'ステータスの更新に失敗しました。', 'error');
         } finally {
             setIsMarkingContacted(null);
+        }
+    };
+
+    // 既存顧客案件を追加するハンドラー
+    const handleAddExistingCustomerLead = async (customer: Customer, projectType: 'repeat' | 'upsell' | 'retention') => {
+        if (!currentUser) return;
+        
+        setIsAddingExistingCustomerLead(true);
+        try {
+            const now = new Date().toISOString();
+            const newLead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'> = {
+                status: LeadStatus.New,
+                name: customer.representative || '担当者',
+                email: customer.customerContactInfo || null,
+                phone: customer.phoneNumber || null,
+                company: customer.customerName,
+                source: 'existing_customer',
+                tags: ['既存顧客'],
+                message: `${projectType === 'repeat' ? 'リピート' : projectType === 'upsell' ? 'アップセル' : 'リテンション'}案件の問い合わせ`,
+                referrer: null,
+                referrerUrl: null,
+                landingPageUrl: null,
+                searchKeywords: null,
+                utmSource: null,
+                utmMedium: null,
+                utmCampaign: null,
+                utmTerm: null,
+                utmContent: null,
+                userAgent: null,
+                ipAddress: null,
+                deviceType: null,
+                browserName: null,
+                osName: null,
+                country: null,
+                city: null,
+                region: null,
+                employees: customer.employeesCount || null,
+                budget: null,
+                timeline: null,
+                inquiryType: projectType,
+                inquiryTypes: [projectType],
+                infoSalesActivity: null,
+                score: projectType === 'upsell' ? 80 : projectType === 'repeat' ? 70 : 60,
+                aiAnalysisReport: null,
+                aiDraftProposal: null,
+                aiInvestigation: null,
+                assignedTo: currentUser.name,
+                statusUpdatedAt: now,
+                estimateSentAt: null,
+                estimateSentBy: null,
+                // 既存顧客案件用のフィールド
+                isExistingCustomer: true,
+                customerId: customer.id,
+                projectType: projectType,
+                lastOrderDate: null, // 顧客マスタから取得するか別途設定
+                totalOrderAmount: null, // 顧客マスタから取得するか別途設定
+                preferredContactMethod: 'email'
+            };
+
+            await onCreateExistingCustomerLead(newLead);
+            addToast(`${customer.customerName}の${projectType === 'repeat' ? 'リピート' : projectType === 'upsell' ? 'アップセル' : 'リテンション'}案件を追加しました。`, 'success');
+            setSelectedCustomer(null);
+            onRefresh();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : '既存顧客案件の追加に失敗しました。', 'error');
+        } finally {
+            setIsAddingExistingCustomerLead(false);
         }
     };
 
@@ -301,6 +372,58 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                     >
                         対応済
                     </button>
+                    <div className="relative">
+                        <button
+                            onClick={() => setSelectedCustomer(customers[0] || null)}
+                            className="px-3 py-1.5 rounded-lg text-sm font-semibold border bg-blue-600 text-white border-blue-600 hover:bg-blue-700 flex items-center gap-2"
+                            disabled={customers.length === 0}
+                        >
+                            <Users className="w-4 h-4" />
+                            既存顧客案件
+                        </button>
+                        {selectedCustomer && (
+                            <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-50">
+                                <div className="p-3 border-b border-slate-200 dark:border-slate-600">
+                                    <h3 className="font-semibold text-sm">{selectedCustomer.customerName}</h3>
+                                    <p className="text-xs text-slate-500">{selectedCustomer.representative}</p>
+                                </div>
+                                <div className="p-2">
+                                    <button
+                                        onClick={() => handleAddExistingCustomerLead(selectedCustomer, 'repeat')}
+                                        disabled={isAddingExistingCustomerLead}
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 rounded flex items-center gap-2"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        リピート案件
+                                    </button>
+                                    <button
+                                        onClick={() => handleAddExistingCustomerLead(selectedCustomer, 'upsell')}
+                                        disabled={isAddingExistingCustomerLead}
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 rounded flex items-center gap-2"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        アップセル案件
+                                    </button>
+                                    <button
+                                        onClick={() => handleAddExistingCustomerLead(selectedCustomer, 'retention')}
+                                        disabled={isAddingExistingCustomerLead}
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 rounded flex items-center gap-2"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        リテンション案件
+                                    </button>
+                                </div>
+                                <div className="p-2 border-t border-slate-200 dark:border-slate-600">
+                                    <button
+                                        onClick={() => setSelectedCustomer(null)}
+                                        className="w-full text-left px-3 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                                    >
+                                        キャンセル
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg self-end md:self-auto">
                     <button onClick={() => setViewMode('list')} className={`px-3 py-1 rounded-md text-sm font-semibold flex items-center gap-2 ${viewMode === 'list' ? 'bg-white dark:bg-slate-800 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}>
@@ -324,6 +447,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                     <th scope="col" className="px-6 py-3 font-medium text-left">対応フラグ</th>
                                     <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">企業調査</th>
                                     <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">見積</th>
+                                    <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">顧客種別</th>
                                     <SortableHeader sortKey="status" label="ステータス" sortConfig={sortConfig} requestSort={requestSort} />
                                     <SortableHeader sortKey="inquiryTypes" label="問い合わせ種別" sortConfig={sortConfig} requestSort={requestSort} />
                                     <th scope="col" className="px-6 py-3 font-medium text-center whitespace-nowrap">次のアクション</th>
@@ -385,6 +509,25 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                     );
                                                 })()}
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            {lead.isExistingCustomer ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+                                                        既存顧客
+                                                    </span>
+                                                    {lead.projectType && (
+                                                        <span className="text-xs text-slate-500">
+                                                            {lead.projectType === 'repeat' ? 'リピート' : 
+                                                             lead.projectType === 'upsell' ? 'アップセル' : 'リテンション'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                                    新規
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                                             {editingStatusLeadId === lead.id ? (

@@ -586,6 +586,13 @@ export interface Lead {
     statusUpdatedAt?: string | null; // ステータス更新日時
     estimateSentAt?: string | null; // 見積メール送信日時
     estimateSentBy?: string | null; // 見積メール送信者
+    // 既存顧客案件用のフィールド
+    isExistingCustomer?: boolean; // 既存顧客かどうか
+    customerId?: string | null; // 顧客マスタのID
+    projectType?: 'inquiry' | 'repeat' | 'upsell' | 'retention'; // 案件種別
+    lastOrderDate?: string | null; // 前回受注日
+    totalOrderAmount?: number | null; // 累計受注額
+    preferredContactMethod?: 'email' | 'phone' | 'visit'; // 好みの連絡方法
 }
 
 export interface ApprovalRoute {
