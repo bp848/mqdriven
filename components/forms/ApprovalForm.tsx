@@ -1,11 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { submitApplication, saveApplicationDraft, clearApplicationDraft } from '../../services/dataService';
+import { submitApplication, saveApplicationDraft, clearApplicationDraft, uploadFile } from '../../services/dataService';
+import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
-import { Loader, Sparkles, AlertTriangle } from '../Icons';
+import { Loader, Sparkles, AlertTriangle, Upload, X, FileText, CheckCircle } from '../Icons';
 import { User, ApplicationWithDetails } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
+
+interface ApprovalAttachment {
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+    path: string;
+    ocrSummary?: string;
+    isProcessing?: boolean;
+}
 
 interface ApprovalFormProps {
     onSuccess: () => void;
@@ -23,6 +34,8 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [error, setError] = useState('');
+    const [attachments, setAttachments] = useState<ApprovalAttachment[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
@@ -38,7 +51,115 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
             amount: data.amount || '',
         });
         setApprovalRouteId(draftApplication.approvalRouteId || '');
+        // Load attachments from draft
+        if (data.attachments) {
+            setAttachments(data.attachments);
+        }
     }, [draftApplication, applicationCodeId]);
+
+    const readFileAsBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result === 'string') {
+                    resolve(reader.result.split(',')[1]);
+                } else {
+                    reject(new Error("ファイル読み取りに失敗しました。"));
+                }
+            };
+            reader.onerror = (error) => reject(error);
+            // Only read as data URL for image files and PDFs
+            const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+            if (imageTypes.includes(file.type)) {
+                reader.readAsDataURL(file);
+            } else {
+                // For non-image files, return empty string since we can't process them with OCR anyway
+                resolve('');
+            }
+        });
+    };
+
+    const processFileWithOCR = async (file: File): Promise<string | undefined> => {
+        if (isAIOff) return undefined;
+        
+        // Only process image files and PDFs with OCR
+        const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+        if (!imageTypes.includes(file.type)) {
+            return `ファイル名: ${file.name}
+ファイルタイプ: ${file.type}
+サイズ: ${(file.size / 1024 / 1024).toFixed(2)} MB
+備考: このファイル形式はOCR処理に対応していません`;
+        }
+        
+        try {
+            const base64String = await readFileAsBase64(file);
+            // Only process OCR for image files and PDFs
+            const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+            if (imageTypes.includes(file.type) && base64String) {
+                const ocrData = await extractInvoiceDetails(base64String, file.type);
+                
+                // Create a summary from OCR data
+                const summary = `
+ファイル名: ${file.name}
+発行元: ${ocrData.vendorName || '不明'}
+発行日: ${ocrData.invoiceDate || '不明'}
+合計金額: ${ocrData.totalAmount ? `¥${ocrData.totalAmount.toLocaleString()}` : '不明'}
+内容: ${ocrData.description || '不明'}
+費用種類: ${ocrData.costType === 'V' ? '変動費' : ocrData.costType === 'F' ? '固定費' : '不明'}
+                `.trim();
+                
+                return summary;
+            } else {
+                // Return basic file info for non-image files
+                return `ファイル名: ${file.name}
+ファイルタイプ: ${file.type}
+サイズ: ${(file.size / 1024 / 1024).toFixed(2)} MB
+備考: このファイル形式はOCR処理に対応していません`;
+            }
+        } catch (error) {
+            console.error('OCR処理エラー:', error);
+            return `ファイル名: ${file.name}
+ファイルタイプ: ${file.type}
+備考: OCR処理に失敗しました`;
+        }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsUploading(true);
+        try {
+            for (const file of Array.from(files)) {
+                // Upload file first
+                const { path, publicUrl } = await uploadFile(file as File, 'approval-attachments');
+                
+                // Process with OCR if not disabled
+                const ocrSummary = await processFileWithOCR(file as File);
+                
+                const newAttachment: ApprovalAttachment = {
+                    id: `attachment_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+                    name: (file as File).name,
+                    type: (file as File).type,
+                    url: publicUrl || '',
+                    path: path,
+                    ocrSummary: ocrSummary,
+                    isProcessing: false,
+                };
+                
+                setAttachments(prev => [...prev, newAttachment]);
+            }
+        } catch (error: any) {
+            setError(`ファイルアップロードに失敗しました: ${error.message}`);
+        } finally {
+            setIsUploading(false);
+            e.target.value = ''; // Clear file input
+        }
+    };
+
+    const removeAttachment = (id: string) => {
+        setAttachments(prev => prev.filter(att => att.id !== id));
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -53,7 +174,7 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
 
     const buildSubmissionPayload = () => ({
         applicationCodeId,
-        formData: attachResubmissionMeta(formData, resubmissionMeta),
+        formData: attachResubmissionMeta({ ...formData, attachments }, resubmissionMeta),
         approvalRouteId,
     });
 
@@ -176,6 +297,80 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
                             autoComplete="on" 
                         />
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">0円での申請も可能です</p>
+                    </div>
+
+                    <div>
+                        <label className={labelClass}>添付ファイル</label>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-4">
+                                <label htmlFor="file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-md hover:bg-blue-700 transition-colors ${isUploading || isDisabled ? 'bg-slate-400 cursor-not-allowed' : ''}`}>
+                                    <Upload className="w-5 h-5" />
+                                    <span>ファイルを追加</span>
+                                    <input 
+                                        id="file-upload" 
+                                        name="file-upload" 
+                                        type="file" 
+                                        className="sr-only" 
+                                        onChange={handleFileChange} 
+                                        accept="*"
+                                        multiple 
+                                        disabled={isUploading || isDisabled} 
+                                    />
+                                </label>
+                                {isUploading && <Loader className="w-5 h-5 animate-spin text-blue-500" />}
+                                {isAIOff && <p className="text-sm text-red-500 dark:text-red-400">AI機能無効のため、OCR機能は利用できません。</p>}
+                            </div>
+                            
+                            {attachments.length > 0 && (
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300">添付されたファイル</h4>
+                                    {attachments.map((attachment) => (
+                                        <div key={attachment.id} className="bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg p-4">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <FileText className="w-4 h-4 text-slate-500" />
+                                                        <span className="font-medium text-slate-800 dark:text-slate-200">{attachment.name}</span>
+                                                    </div>
+                                                    
+                                                    {attachment.ocrSummary && (
+                                                        <div className="mt-3 p-3 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-600">
+                                                            <h5 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1">
+                                                                <CheckCircle className="w-3 h-3 text-green-500" />
+                                                                AIによる要約
+                                                            </h5>
+                                                            <pre className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-mono">
+                                                                {attachment.ocrSummary}
+                                                            </pre>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <div className="mt-2">
+                                                        <a 
+                                                            href={attachment.url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                                        >
+                                                            ファイルをプレビュー
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                                
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeAttachment(attachment.id)}
+                                                    className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                                                    disabled={isDisabled}
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                     
                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} requiredRouteName="社長決裁ルート" />

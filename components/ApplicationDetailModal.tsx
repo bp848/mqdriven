@@ -243,6 +243,31 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
             pushHighlight('件名', data.title);
             pushHighlight('申請金額', data.amount, { format: 'currency' });
             pushListSection('申請概要', [{ label: '内容', value: data.details }]);
+            
+            // Add attachments section for approval forms
+            if (data.attachments && Array.isArray(data.attachments) && data.attachments.length > 0) {
+                pushListSection('添付ファイル', data.attachments.map((att: any) => ({
+                    label: att.name,
+                    value: (
+                        <div className="space-y-2">
+                            <a 
+                                href={att.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                                プレビュー
+                            </a>
+                            {att.ocrSummary && (
+                                <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-800 rounded text-xs">
+                                    <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">AI要約:</div>
+                                    <pre className="whitespace-pre-wrap text-slate-700 dark:text-slate-300">{att.ocrSummary}</pre>
+                                </div>
+                            )}
+                        </div>
+                    )
+                })));
+            }
             break;
         }
         case 'DLY': {
