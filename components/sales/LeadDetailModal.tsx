@@ -485,18 +485,97 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
       <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[95vh] flex flex-col">
+                {/* Header with Actions */}
                 <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">リード詳細</h2>
-                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <X className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {/* Next Action Button */}
+                        {(() => {
+                            const action = getNextAction();
+                            return (
+                                <button
+                                    type="button"
+                                    onClick={action.onClick}
+                                    disabled={Boolean(action.disabled) || isSendingEstimateEmail || isGeneratingPackage}
+                                    className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
+                                >
+                                    {(isSendingEstimateEmail || isGeneratingPackage) ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                                    {action.label}
+                                </button>
+                            );
+                        })()}
+                        
+                        {/* Action Buttons */}
+                        {isEditing ? (
+                            <div className="flex gap-2">
+                                <button 
+                                    type="button" 
+                                    onClick={handleDelete} 
+                                    className="flex items-center gap-2 text-red-600 font-semibold py-2 px-3 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/50"
+                                >
+                                    <Trash2 className="w-4 h-4"/>削除
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsEditing(false)} 
+                                    className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-3 rounded-lg"
+                                >
+                                    キャンセル
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={handleSave} 
+                                    disabled={isSaving} 
+                                    className="flex items-center justify-center bg-blue-600 text-white font-semibold py-2 px-3 rounded-lg disabled:bg-slate-400"
+                                >
+                                    {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                                    保存
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsEditing(true)} 
+                                    className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-3 rounded-lg hover:bg-slate-200"
+                                >
+                                    <Pencil className="w-4 h-4"/>編集
+                                </button>
+                                {lead.email && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=【お問い合わせ】&body=${encodeURIComponent(`お問い合わせありがとうございます。\n\n${formData.message || ''}`)}`;
+                                            window.open(gmailUrl, '_blank');
+                                        }}
+                                        className="flex items-center gap-2 bg-purple-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-purple-700"
+                                    >
+                                        <Mail className="w-4 h-4" />
+                                        メール確認
+                                    </button>
+                                )}
+                                <button 
+                                    type="button" 
+                                    onClick={onClose} 
+                                    className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-3 rounded-lg"
+                                >
+                                    閉じる
+                                </button>
+                            </div>
+                        )}
+                        
+                        {/* Close Button */}
+                        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 p-4 overflow-hidden">
                     <div className="h-full flex flex-col">
                         {/* Summary Section - Fixed Height */}
                         <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 mb-4">
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
                                     <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">顧客情報</div>
                                     <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{formData.company}</div>
@@ -539,23 +618,6 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                         {formData.aiDraftProposal && <div>✓ 提案・見積作成完了</div>}
                                         {formData.estimateSentAt && <div>✓ 見積送信完了</div>}
                                     </div>
-                                </div>
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
-                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">次のアクション</div>
-                                    {(() => {
-                                        const action = getNextAction();
-                                        return (
-                                            <button
-                                                type="button"
-                                                onClick={action.onClick}
-                                                disabled={Boolean(action.disabled) || isSendingEstimateEmail || isGeneratingPackage}
-                                                className="w-full flex items-center justify-center gap-1 bg-blue-600 text-white font-semibold py-2 px-2 rounded text-xs disabled:opacity-50"
-                                            >
-                                                {(isSendingEstimateEmail || isGeneratingPackage) ? <Loader className="w-3 h-3 animate-spin" /> : null}
-                                                {action.label}
-                                            </button>
-                                        );
-                                    })()}
                                 </div>
                             </div>
                         </div>
@@ -863,75 +925,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                     </div>
                 </div>
 
-                        {/* Fixed Bottom Actions */}
-                <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
-                    <div className="flex justify-between items-center gap-3">
-                        <div className="flex gap-2">
-                            {isEditing ? (
-                                <>
-                                    <button 
-                                        type="button" 
-                                        onClick={handleDelete} 
-                                        className="flex items-center gap-1 text-red-600 font-semibold py-1 px-3 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/50 text-sm"
-                                    >
-                                        <Trash2 className="w-3 h-3"/>削除
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setIsEditing(false)} 
-                                        className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 font-semibold py-1 px-3 rounded-lg text-sm"
-                                    >
-                                        キャンセル
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={handleSave} 
-                                        disabled={isSaving} 
-                                        className="flex items-center justify-center bg-blue-600 text-white font-semibold py-1 px-3 rounded-lg disabled:bg-slate-400 text-sm"
-                                    >
-                                        {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-                                        保存
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setIsEditing(true)} 
-                                        className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 font-semibold py-1 px-3 rounded-lg hover:bg-slate-200 text-sm"
-                                    >
-                                        <Pencil className="w-3 h-3"/>編集
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={onClose} 
-                                        className="flex items-center gap-1 bg-blue-600 text-white font-semibold py-1 px-3 rounded-lg text-sm"
-                                    >
-                                        閉じる
-                                    </button>
-                                </>
-                            )}
                         </div>
-                        
-                        {/* Additional Actions */}
-                        <div className="flex gap-2">
-                            {lead.email && (
-                                <button 
-                                    type="button"
-                                    onClick={() => {
-                                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=【お問い合わせ】&body=${encodeURIComponent(`お問い合わせありがとうございます。\n\n${formData.message || ''}`)}`;
-                                        window.open(gmailUrl, '_blank');
-                                    }}
-                                    className="flex items-center gap-1 bg-purple-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-purple-700 text-sm"
-                                >
-                                    <Mail className="w-3 h-3" />
-                                    メール確認
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
         
         {/* Hidden divs for PDF generation */}
