@@ -300,6 +300,41 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
 
             await onAddEstimate(estimateData);
 
+            // 新規：見積もり管理に保存
+            try {
+                const { saveEstimateToManagement } = await import('../../services/estimateManagementService');
+                await saveEstimateToManagement({
+                    leadId: lead.id,
+                    estimateData: {
+                        title: estimateData.title,
+                        items: estimateData.items.map(item => ({
+                            name: item.content || item.name || '',
+                            description: item.description || '',
+                            quantity: item.quantity || 1,
+                            unit: item.unit || '個',
+                            unitPrice: item.unitPrice || 0,
+                            subtotal: Math.round((item.quantity || 1) * (item.unitPrice || 0))
+                        })),
+                        subtotal: totalAmount,
+                        taxRate: 0.10,
+                        taxAmount: Math.round(totalAmount * 0.10),
+                        totalAmount: Math.round(totalAmount * 1.10),
+                        validUntil: estimateData.deliveryDate,
+                        notes: estimateData.notes,
+                    },
+                    customerInfo: {
+                        name: lead.company,
+                        email: lead.email || '',
+                        phone: lead.phone || '',
+                        address: lead.address || '',
+                    }
+                });
+                addToast('見積もりを管理一覧に保存しました', 'success');
+            } catch (mgmtError) {
+                console.error('管理一覧保存エラー:', mgmtError);
+                addToast('管理一覧への保存に失敗しました', 'error');
+            }
+
             const serializedPackage = JSON.stringify(proposalPackage);
             await onSave(lead.id, { aiDraftProposal: serializedPackage });
             setFormData(prev => ({ ...prev, aiDraftProposal: serializedPackage }));
@@ -640,15 +675,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                         {leadSummary ? (
                                             <div>{leadSummary}</div>
                                         ) : (
-                                            <div>
-                                                <div className="mb-1">
-                                                    {formData.message ? 
-                                                        formData.message.length > 80 ? 
-                                                            formData.message.substring(0, 80) + '...' : 
-                                                            formData.message
-                                                        : '問い合わせ内容はありません'
-                                                    }
-                                                </div>
+                                            <div className="flex items-center justify-between">
                                                 <button 
                                                     onClick={handleGenerateSummary}
                                                     disabled={isGeneratingSummary || isAIOff}
@@ -656,6 +683,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                                 >
                                                     {isGeneratingSummary ? '生成中...' : 'AI要約'}
                                                 </button>
+                                                <span className="text-xs text-slate-500">問い合わせ内容は基本情報で確認</span>
                                             </div>
                                         )}
                                     </div>
@@ -664,11 +692,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                     <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">進捗</div>
                                     <div className="flex items-center gap-2">
                                         <LeadStatusBadge status={formData.status as LeadStatus} />
-                                    </div>
-                                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1 mt-1">
-                                        {formData.aiInvestigation && <div>✓ 調査完了</div>}
-                                        {formData.aiDraftProposal && <div>✓ 提案完了</div>}
-                                        {formData.estimateSentAt && <div>✓ 見積送信</div>}
+                                        <span className="text-xs text-slate-500">詳細は右側で確認</span>
                                     </div>
                                 </div>
                             </div>
