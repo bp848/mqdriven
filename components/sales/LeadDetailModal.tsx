@@ -868,20 +868,72 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                             <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
                                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">詳細情報</h3>
                                 <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">問い合わせ内容</label>
-                                        <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                            {isEditing ? (
-                                                <textarea
-                                                    name="message"
-                                                    value={formData.message || ''}
-                                                    onChange={handleChange}
-                                                    rows={4}
-                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
-                                                />
-                                            ) : (
-                                                <span>{formData.message || '問い合わせ内容はありません'}</span>
-                                            )}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {/* Left: Inquiry Content */}
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">問い合わせ内容</label>
+                                            <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                                {isEditing ? (
+                                                    <textarea
+                                                        name="message"
+                                                        value={formData.message || ''}
+                                                        onChange={handleChange}
+                                                        rows={4}
+                                                        className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                                                    />
+                                                ) : (
+                                                    <span>{formData.message || '問い合わせ内容はありません'}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Right: Email Reply Preview */}
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">メール返信プレビュー</label>
+                                            <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded p-2">
+                                                {(() => {
+                                                    // Check if there's a generated reply in the activity log
+                                                    const replyMatch = (formData.infoSalesActivity || '').match(/\[([^\]]+)\]\s*AI返信メールを作成しました。?\s*\n([\s\S]*?)(?=\n\[|\n*$|$)/);
+                                                    if (replyMatch && replyMatch[2]) {
+                                                        return replyMatch[2].trim();
+                                                    }
+                                                    
+                                                    // Default preview template
+                                                    const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
+                                                    const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
+                                                    
+                                                    return `${lead.company} ${recipientName}
+
+お世話になっております。
+文唱堂印刷の${senderName}です。
+
+お問い合わせいただきありがとうございます。
+ご依頼内容を拝見いたしました。
+
+後ほど詳細なご提案をお送りいたします。
+今しばらくお待ちください。
+
+よろしくお願いいたします。
+
+------------------------------------
+文唱堂印刷株式会社
+${senderName}
+〒101-0025 東京都千代田区神田佐久間町3-37
+TEL：03-3851-0111　FAX：03-3861-1979
+Mail: ${currentUser?.email || ''}
+Web: http://b-p.co.jp`;
+                                                })()}
+                                            </div>
+                                            <button 
+                                                onClick={() => {
+                                                    setActiveAiTab('email');
+                                                    onGenerateReply(lead);
+                                                }}
+                                                disabled={isAIOff}
+                                                className="mt-2 w-full flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-1 px-2 rounded disabled:opacity-50 text-xs"
+                                            >
+                                                <Mail className="w-3 h-3"/> AIで返信作成
+                                            </button>
                                         </div>
                                     </div>
                                     <div>
