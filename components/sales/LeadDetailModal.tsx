@@ -362,17 +362,19 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         }
         setIsSendingEstimateEmail(true);
         try {
-            const { subject, html, body } = buildEstimateEmail();
-            const result = await sendEmail({ to: [lead.email], subject, html, body, mode: 'scheduled' });
-            const sentAt = result?.sentAt || new Date().toISOString();
-
-            const timestamp = new Date(sentAt).toLocaleString('ja-JP');
-            const logMessage = `[${timestamp}] 見積メールを送信しました。`;
+            const { subject, body } = buildEstimateEmail();
+            
+            // Create Gmail draft URL
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.open(gmailUrl, '_blank');
+            
+            const timestamp = new Date().toLocaleString('ja-JP');
+            const logMessage = `[${timestamp}] Gmailの見積下書きを作成しました。`;
             const updatedInfo = `${logMessage}\n${formData.infoSalesActivity || ''}`.trim();
 
             try {
                 await onSave(lead.id, {
-                    estimateSentAt: sentAt,
+                    estimateSentAt: new Date().toISOString(),
                     estimateSentBy: currentUser?.name || null,
                     infoSalesActivity: updatedInfo,
                 });
@@ -384,29 +386,29 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
 
             setFormData(prev => ({
                 ...prev,
-                estimateSentAt: sentAt,
+                estimateSentAt: new Date().toISOString(),
                 estimateSentBy: currentUser?.name || null,
                 infoSalesActivity: updatedInfo,
             }));
-            addToast('見積メールを送信しました。', 'success');
+            addToast('Gmailの見積下書きを作成しました。', 'success');
         } catch (e) {
-            addToast(e instanceof Error ? `見積送信エラー: ${e.message}` : '見積メールの送信に失敗しました。', 'error');
+            addToast(e instanceof Error ? `見積下書き作成エラー: ${e.message}` : '見積下書きの作成に失敗しました。', 'error');
         } finally {
             if (mounted.current) setIsSendingEstimateEmail(false);
         }
     };
 
     const getNextAction = (): { label: string; disabled?: boolean; onClick?: () => void } => {
-        const hasEstimateSent = Boolean(formData.estimateSentAt) || /\[[^\]]+\]\s*見積メールを送信しました。?/.test(formData.infoSalesActivity || '');
+        const hasEstimateSent = Boolean(formData.estimateSentAt) || /\[[^\]]+\]\s*Gmailの見積下書きを作成しました。?/.test(formData.infoSalesActivity || '');
         const hasEstimateDraft = Boolean(formData.aiDraftProposal && String(formData.aiDraftProposal).trim());
         const hasReply = formData.status !== LeadStatus.Untouched || /\[[^\]]+\]\s*AI返信メールを作成しました。?/.test(formData.infoSalesActivity || '');
 
         if (hasEstimateSent) {
-            return { label: '完了', disabled: true };
+            return { label: '下書き作成済', disabled: true };
         }
         if (hasEstimateDraft || proposalPackage?.estimate?.length) {
             return {
-                label: '見積をメール送信',
+                label: 'Gmail下書き作成',
                 onClick: () => {
                     setActiveAiTab('proposal');
                     handleSendEstimateEmail();
@@ -685,7 +687,7 @@ Web: http://b-p.co.jp`;
                                                                 className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
                                                             >
                                                                 {isSendingEstimateEmail ? <Loader className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                                                                メール送信
+                                                                Gmail下書き作成
                                                             </button>
                                                         </div>
                                                     </>
