@@ -242,9 +242,9 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
             const serializedPackage = JSON.stringify(proposalPackage);
             await onSave(lead.id, { aiDraftProposal: serializedPackage });
             setFormData(prev => ({ ...prev, aiDraftProposal: serializedPackage }));
-            addToast('提案書と見積もりを保存しました。', 'success');
+            addToast('提案書と見積を保存しました。', 'success');
         } catch (e) {
-            addToast(e instanceof Error ? `見積保存エラー: ${e.message}`: '見積の保存に失敗しました。', 'error');
+            addToast(e instanceof Error ? `提案・見積保存エラー: ${e.message}`: '提案・見積の保存に失敗しました。', 'error');
         } finally {
             if(mounted.current) setIsSavingEstimate(false);
         }
@@ -527,7 +527,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                         onClick={() => setActiveAiTab('proposal')}
                                         className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'proposal' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
                                     >
-                                        提案パッケージ
+                                        提案・見積作成
                                     </button>
                                     <button
                                         type="button"
@@ -558,13 +558,13 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                     </div>
                                 )}
 
-                                {/* 提案パッケージタブ */}
+                                {/* 提案・見積作成タブ */}
                                 {activeAiTab === 'proposal' && (
                                     <div className="space-y-2">
-                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">提案パッケージ</h4>
+                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">提案・見積作成</h4>
                                         <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
                                             {isGeneratingPackage ? <Loader className="w-5 h-5 animate-spin"/> : <Lightbulb className="w-5 h-5" />}
-                                            AI提案パッケージ作成
+                                            AIで提案・見積を作成
                                         </button>
                                         {isGeneratingPackage && <p className="text-sm text-slate-500 text-center mt-2">AIが提案書と見積を作成中です...</p>}
                                         {proposalPackage && (
@@ -679,7 +679,7 @@ Web: http://b-p.co.jp`;
                                                                 className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
                                                             >
                                                                 {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                                                見積を保存
+                                                                提案・見積を保存
                                                             </button>
                                                             <button 
                                                                 onClick={handleSendEstimateEmail} 
