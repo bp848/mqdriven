@@ -484,347 +484,451 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     return (
       <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-                <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700">
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">リード詳細</h2>
-                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="w-6 h-6" /></button>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[95vh] flex flex-col">
+                <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">リード詳細</h2>
+                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <X className="w-6 h-6" />
+                    </button>
                 </div>
 
-                <div className="flex-1 p-6 overflow-y-auto">
-                    {/* Summary Section */}
-                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-6 mb-6">
-                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">リード要約</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
-                                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">顧客情報</div>
-                                <div className="text-base font-semibold text-slate-900 dark:text-white">{formData.company}</div>
-                                <div className="text-sm text-slate-600 dark:text-slate-400">{formData.name}</div>
-                                <div className="text-sm text-slate-600 dark:text-slate-400">{formData.email}</div>
-                            </div>
-                            <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
-                                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">要約</div>
-                                <div className="text-sm text-slate-700 dark:text-slate-300">
-                                    {leadSummary ? (
-                                        <div>{leadSummary}</div>
-                                    ) : (
-                                        <div>
-                                            <div className="mb-2">
-                                                {formData.message ? 
-                                                    formData.message.length > 150 ? 
-                                                        formData.message.substring(0, 150) + '...' : 
-                                                        formData.message
-                                                    : '問い合わせ内容はありません'
-                                                }
+                <div className="flex-1 p-4 overflow-hidden">
+                    <div className="h-full flex flex-col">
+                        {/* Summary Section - Fixed Height */}
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 mb-4">
+                            <div className="grid grid-cols-4 gap-4">
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">顧客情報</div>
+                                    <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{formData.company}</div>
+                                    <div className="text-xs text-slate-600 dark:text-slate-400 truncate">{formData.name}</div>
+                                    <div className="text-xs text-slate-600 dark:text-slate-400 truncate">{formData.email}</div>
+                                </div>
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">AI要約</div>
+                                    <div className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2">
+                                        {leadSummary ? (
+                                            <div>{leadSummary}</div>
+                                        ) : (
+                                            <div>
+                                                <div className="mb-1">
+                                                    {formData.message ? 
+                                                        formData.message.length > 100 ? 
+                                                            formData.message.substring(0, 100) + '...' : 
+                                                            formData.message
+                                                        : '問い合わせ内容はありません'
+                                                    }
+                                                </div>
+                                                <button 
+                                                    onClick={handleGenerateSummary}
+                                                    disabled={isGeneratingSummary || isAIOff}
+                                                    className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded disabled:opacity-50"
+                                                >
+                                                    {isGeneratingSummary ? '生成中...' : 'AI要約'}
+                                                </button>
                                             </div>
-                                            <button 
-                                                onClick={handleGenerateSummary}
-                                                disabled={isGeneratingSummary || isAIOff}
-                                                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded disabled:opacity-50"
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">進捗状況</div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <LeadStatusBadge status={formData.status as LeadStatus} />
+                                    </div>
+                                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                                        {formData.aiInvestigation && <div>✓ 企業調査完了</div>}
+                                        {formData.aiDraftProposal && <div>✓ 提案・見積作成完了</div>}
+                                        {formData.estimateSentAt && <div>✓ 見積送信完了</div>}
+                                    </div>
+                                </div>
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3">
+                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">次のアクション</div>
+                                    {(() => {
+                                        const action = getNextAction();
+                                        return (
+                                            <button
+                                                type="button"
+                                                onClick={action.onClick}
+                                                disabled={Boolean(action.disabled) || isSendingEstimateEmail || isGeneratingPackage}
+                                                className="w-full flex items-center justify-center gap-1 bg-blue-600 text-white font-semibold py-2 px-2 rounded text-xs disabled:opacity-50"
                                             >
-                                                {isGeneratingSummary ? '生成中...' : 'AI要約を作成'}
+                                                {(isSendingEstimateEmail || isGeneratingPackage) ? <Loader className="w-3 h-3 animate-spin" /> : null}
+                                                {action.label}
                                             </button>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+
+                    {/* Content Grid - Flex Layout */}
+                        <div className="flex-1 grid grid-cols-3 gap-4 min-h-0">
+                            {/* Left Column - Basic Info */}
+                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
+                                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">基本情報</h3>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">会社名</label>
+                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                                            {isEditing ? (
+                                                <input
+                                                    type="text"
+                                                    name="company"
+                                                    value={formData.company || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                                                />
+                                            ) : (
+                                                <span>{formData.company || '-'}</span>
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">担当者名</label>
+                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                                            {isEditing ? (
+                                                <input
+                                                    type="text"
+                                                    name="name"
+                                                    value={formData.name || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                                                />
+                                            ) : (
+                                                <span>{formData.name || '-'}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">メールアドレス</label>
+                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                                            {isEditing ? (
+                                                <input
+                                                    type="email"
+                                                    name="email"
+                                                    value={formData.email || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                                                />
+                                            ) : (
+                                                <span>{formData.email || '-'}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">電話番号</label>
+                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                                            {isEditing ? (
+                                                <input
+                                                    type="tel"
+                                                    name="phone"
+                                                    value={formData.phone || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                                                />
+                                            ) : (
+                                                <span>{formData.phone || '-'}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">ステータス</label>
+                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                                            {isEditing ? (
+                                                <select
+                                                    name="status"
+                                                    value={formData.status || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                                                >
+                                                    {Object.values(LeadStatus).map(status => (
+                                                        <option key={status} value={status}>{status}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <LeadStatusBadge status={formData.status as LeadStatus} />
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">対応者</label>
+                                        <div className="mt-1 text-sm text-slate-900 dark:text-white">
+                                            {formData.assignedTo || '-'}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
-                                <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">進捗状況</div>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <LeadStatusBadge status={formData.status as LeadStatus} />
-                                </div>
-                                <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                    {formData.aiInvestigation && <div>✓ 企業調査完了</div>}
-                                    {formData.aiDraftProposal && <div>✓ 提案・見積作成完了</div>}
-                                    {formData.estimateSentAt && <div>✓ 見積送信完了</div>}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12">
-                        {/* Left Column */}
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <Field label="会社名" name="company" value={formData.company} isEditing={isEditing} onChange={handleChange} />
-                                <Field label="担当者名" name="name" value={formData.name} isEditing={isEditing} onChange={handleChange} />
-                                <Field label="メールアドレス" name="email" type="email" value={formData.email} isEditing={isEditing} onChange={handleChange} />
-                                <Field label="電話番号" name="phone" value={formData.phone} isEditing={isEditing} onChange={handleChange} />
-                                <Field label="ステータス" name="status" value={formData.status} isEditing={isEditing} onChange={handleChange} type="select" options={Object.values(LeadStatus)} />
-                                <Field label="ソース" name="source" value={formData.source} isEditing={isEditing} onChange={handleChange} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">対応者</div>
-                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
-                                        {formData.assignedTo || '-'}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">対応日時</div>
-                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
-                                        {formData.statusUpdatedAt ? formatDateTime(formData.statusUpdatedAt) : '-'}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">見積送信者</div>
-                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
-                                        {formData.estimateSentBy || '-'}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-sm font-medium text-slate-500 dark:text-slate-400">見積送信日時</div>
-                                    <div className="mt-1 text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">
-                                        {(() => {
-                                            if (formData.estimateSentAt) return formatDateTime(formData.estimateSentAt);
-                                            const raw = formData.infoSalesActivity || '';
-                                            const match = raw.match(/\[([^\]]+)\]\s*見積メールを送信しました。?/);
-                                            return match?.[1] ?? '-';
-                                        })()}
-                                    </div>
-                                </div>
-                            </div>
-                            <Field label="問い合わせ内容" name="message" value={formData.message} isEditing={isEditing} onChange={handleChange} type="textarea" />
-                            <Field label="活動履歴" name="infoSalesActivity" value={formData.infoSalesActivity} isEditing={isEditing} onChange={handleChange} type="textarea" />
-                        </div>
-
-                        {/* Right Column */}
-                        <div className="space-y-6">
-                            <DetailSection title="次のアクション" className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg">
-                                {(() => {
-                                    const action = getNextAction();
-                                    return (
-                                        <button
-                                            type="button"
-                                            onClick={action.onClick}
-                                            disabled={Boolean(action.disabled) || isSendingEstimateEmail || isGeneratingPackage}
-                                            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
-                                        >
-                                            {(isSendingEstimateEmail || isGeneratingPackage) ? <Loader className="w-5 h-5 animate-spin" /> : null}
-                                            {action.label}
-                                        </button>
-                                    );
-                                })()}
-                                {isAIOff && (
-                                    <p className="text-xs text-slate-500 mt-2">※AIが無効の場合、返信/見積作成は利用できません（見積のメール送信は利用可能です）。</p>
-                                )}
-                            </DetailSection>
-                            <DetailSection title="AIアシスタント" className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg">
-                                {/* AIタブ切り替え */}
-                                <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">
+                            {/* Middle Column - AI Assistant */}
+                            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 overflow-y-auto">
+                                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">AIアシスタント</h3>
+                                
+                                {/* AI Tabs */}
+                                <div className="flex gap-2 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">
                                     <button
                                         type="button"
                                         onClick={() => setActiveAiTab('investigation')}
-                                        className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'investigation' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
+                                        className={`px-2 py-1 text-xs font-semibold rounded-md ${activeAiTab === 'investigation' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
                                     >
                                         企業調査
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setActiveAiTab('proposal')}
-                                        className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'proposal' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
+                                        className={`px-2 py-1 text-xs font-semibold rounded-md ${activeAiTab === 'proposal' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
                                     >
-                                        提案・見積作成
+                                        提案・見積
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setActiveAiTab('email')}
-                                        className={`px-3 py-1 text-sm font-semibold rounded-md ${activeAiTab === 'email' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
+                                        className={`px-2 py-1 text-xs font-semibold rounded-md ${activeAiTab === 'email' ? 'bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-300'}`}
                                     >
                                         メール返信
                                     </button>
                                 </div>
 
-                                {/* 企業調査タブ */}
-                                {activeAiTab === 'investigation' && (
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <h4 className="font-semibold text-slate-800 dark:text-slate-100">企業調査</h4>
-                                            <button onClick={handleInvestigateCompany} disabled={isInvestigating || isAIOff} className="text-sm font-semibold text-blue-600 flex items-center gap-2 disabled:opacity-50">
-                                                {isInvestigating ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                                {formData.aiInvestigation ? '再調査' : 'AIで企業調査'}
-                                            </button>
+                                {/* Tab Content */}
+                                <div className="space-y-3">
+                                    {activeAiTab === 'investigation' && (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-xs font-semibold text-slate-800 dark:text-slate-100">企業調査</h4>
+                                                <button onClick={handleInvestigateCompany} disabled={isInvestigating || isAIOff} className="text-xs font-semibold text-blue-600 flex items-center gap-1 disabled:opacity-50">
+                                                    {isInvestigating ? <Loader className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                                                    {formData.aiInvestigation ? '再調査' : '調査'}
+                                                </button>
+                                            </div>
+                                            {isInvestigating ? (
+                                                <div className="text-xs text-slate-500">調査中...</div>
+                                            ) : formData.aiInvestigation ? (
+                                                renderInvestigationSummary(formData.aiInvestigation.summary)
+                                            ) : (
+                                                <p className="text-xs text-slate-500">企業情報を調査します</p>
+                                            )}
                                         </div>
-                                        {isInvestigating ? (
-                                            <div className="text-sm text-slate-500">Web検索を用いて調査中...</div>
-                                        ) : formData.aiInvestigation ? (
-                                            renderInvestigationSummary(formData.aiInvestigation.summary)
-                                        ) : (
-                                            <p className="text-sm text-slate-500">企業の基本情報や最新ニュースを調査します。</p>
-                                        )}
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* 提案・見積作成タブ */}
-                                {activeAiTab === 'proposal' && (
-                                    <div className="space-y-2">
-                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">提案・見積作成</h4>
-                                        <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
-                                            {isGeneratingPackage ? <Loader className="w-5 h-5 animate-spin"/> : <Lightbulb className="w-5 h-5" />}
-                                            AIで提案・見積を作成
-                                        </button>
-                                        {isGeneratingPackage && <p className="text-sm text-slate-500 text-center mt-2">AIが提案書と見積を作成中です...</p>}
-                                        {proposalPackage && (
-                                            <div className="mt-4 space-y-4">
-                                                {!proposalPackage.isSalesLead ? (
-                                                    <p className="p-3 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 rounded-md text-sm">
-                                                        AI分析結果: 営業メールの可能性が高いです (理由: {proposalPackage.reason})
-                                                    </p>
-                                                ) : (
-                                                    <>
-                                                        {proposalPackage.proposal && (
-                                                            <div className="p-3 bg-green-50 dark:bg-green-900/50 rounded-md text-sm">
-                                                                提案書: 「{proposalPackage.proposal.coverTitle}」が生成されました。
-                                                            </div>
-                                                        )}
-                                                        {proposalPackage.estimate && (
-                                                            <div className="p-3 bg-green-50 dark:bg-green-900/50 rounded-md text-sm">
-                                                                見積: {proposalPackage.estimate.length}項目が生成されました。
-                                                            </div>
-                                                        )}
-                                                        
-                                                        {/* 見積内容プレビュー */}
-                                                        {proposalPackage.estimate && (
-                                                            <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
-                                                                <h5 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">見積内容プレビュー</h5>
-                                                                <div className="space-y-2 text-sm">
-                                                                    <div className="grid grid-cols-3 gap-2 font-semibold text-slate-600 dark:text-slate-400 border-b pb-2">
-                                                                        <div>品名</div>
-                                                                        <div className="text-right">数量</div>
-                                                                        <div className="text-right">金額</div>
-                                                                    </div>
-                                                                    {proposalPackage.estimate.map((item, idx) => (
-                                                                        <div key={idx} className="grid grid-cols-3 gap-2 py-1 border-b border-slate-100 dark:border-slate-700">
-                                                                            <div className="text-slate-700 dark:text-slate-300">{item.name || item.description}</div>
-                                                                            <div className="text-right text-slate-700 dark:text-slate-300">{item.quantity || 1}</div>
-                                                                            <div className="text-right text-slate-700 dark:text-slate-300">
-                                                                                ¥{Math.round((item.quantity || 1) * (item.unitPrice || 0)).toLocaleString()}
+                                    {activeAiTab === 'proposal' && (
+                                        <div className="space-y-3">
+                                            <h4 className="text-xs font-semibold text-slate-800 dark:text-slate-100">提案・見積作成</h4>
+                                            <button onClick={handleCreateProposalPackage} disabled={isGeneratingPackage || isAIOff} className="w-full flex items-center justify-center gap-1 bg-blue-600 text-white font-semibold py-2 px-2 rounded-lg disabled:opacity-50 text-xs">
+                                                {isGeneratingPackage ? <Loader className="w-3 h-3 animate-spin"/> : <Lightbulb className="w-3 h-3" />}
+                                                AIで作成
+                                            </button>
+                                            {isGeneratingPackage && <p className="text-xs text-slate-500 text-center mt-1">作成中...</p>}
+                                            {proposalPackage && (
+                                                <div className="space-y-2">
+                                                    {!proposalPackage.isSalesLead ? (
+                                                        <p className="p-2 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 rounded text-xs">
+                                                            営業メールの可能性が高いです
+                                                        </p>
+                                                    ) : (
+                                                        <>
+                                                            {proposalPackage.proposal && (
+                                                                <div className="p-2 bg-green-50 dark:bg-green-900/50 rounded text-xs">
+                                                                    提案書が生成されました
+                                                                </div>
+                                                            )}
+                                                            {proposalPackage.estimate && (
+                                                                <div className="p-2 bg-green-50 dark:bg-green-900/50 rounded text-xs">
+                                                                    見積: {proposalPackage.estimate.length}項目
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {/* Estimate Preview */}
+                                                            {proposalPackage.estimate && (
+                                                                <div className="border border-slate-200 dark:border-slate-700 rounded p-2 bg-white dark:bg-slate-800">
+                                                                    <h5 className="text-xs font-semibold text-slate-800 dark:text-slate-100 mb-2">見積プレビュー</h5>
+                                                                    <div className="space-y-1 text-xs">
+                                                                        <div className="grid grid-cols-3 gap-1 font-semibold text-slate-600 dark:text-slate-400 border-b pb-1">
+                                                                            <div>品名</div>
+                                                                            <div className="text-right">数量</div>
+                                                                            <div className="text-right">金額</div>
+                                                                        </div>
+                                                                        {proposalPackage.estimate.slice(0, 5).map((item, idx) => (
+                                                                            <div key={idx} className="grid grid-cols-3 gap-1 py-1 border-b border-slate-100 dark:border-slate-700">
+                                                                                <div className="text-slate-700 dark:text-slate-300 truncate">{item.name || item.description}</div>
+                                                                                <div className="text-right text-slate-700 dark:text-slate-300">{item.quantity || 1}</div>
+                                                                                <div className="text-right text-slate-700 dark:text-slate-300">
+                                                                                    ¥{Math.round((item.quantity || 1) * (item.unitPrice || 0)).toLocaleString()}
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                        <div className="grid grid-cols-3 gap-1 pt-1 font-semibold">
+                                                                            <div colSpan={2} className="text-right">合計:</div>
+                                                                            <div className="text-right text-blue-600">
+                                                                                ¥{proposalPackage.estimate.reduce((sum, item) => 
+                                                                                    sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
+                                                                                ).toLocaleString()}
                                                                             </div>
                                                                         </div>
-                                                                    ))}
-                                                                    <div className="grid grid-cols-3 gap-2 pt-2 font-semibold">
-                                                                        <div colSpan={2} className="text-right">合計:</div>
-                                                                        <div className="text-right text-blue-600">
-                                                                            ¥{proposalPackage.estimate.reduce((sum, item) => 
-                                                                                sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
-                                                                            ).toLocaleString()}
-                                                                        </div>
                                                                     </div>
                                                                 </div>
+                                                            )}
+
+                                                            <div className="flex gap-2">
+                                                                <button 
+                                                                    onClick={handleSaveEstimate} 
+                                                                    disabled={isSavingEstimate}
+                                                                    className="flex-1 flex items-center justify-center gap-1 bg-green-600 text-white font-semibold py-1 px-2 rounded disabled:opacity-50 text-xs"
+                                                                >
+                                                                    {isSavingEstimate ? <Loader className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                                                    保存
+                                                                </button>
+                                                                <button 
+                                                                    onClick={handleSendEstimateEmail} 
+                                                                    disabled={isSendingEstimateEmail || !lead.email}
+                                                                    className="flex-1 flex items-center justify-center gap-1 bg-blue-600 text-white font-semibold py-1 px-2 rounded disabled:opacity-50 text-xs"
+                                                                >
+                                                                    {isSendingEstimateEmail ? <Loader className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                                                                    Gmail
+                                                                </button>
                                                             </div>
-                                                        )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
-                                                        {/* メール内容プレビュー */}
-                                                        <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800">
-                                                            <h5 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">メール内容プレビュー</h5>
-                                                            <div className="space-y-3 text-sm">
-                                                                <div>
-                                                                    <span className="font-semibold text-slate-600 dark:text-slate-400">件名:</span>
-                                                                    <div className="mt-1 text-slate-700 dark:text-slate-300">
-                                                                        【見積】{lead.company}
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <span className="font-semibold text-slate-600 dark:text-slate-400">本文:</span>
-                                                                    <div className="mt-1 text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                                                        {(() => {
-                                                                            const recipientName = lead.name ? `${lead.name} 様` : 'ご担当者様';
-                                                                            const senderName = currentUser?.name ? `${currentUser.name}` : '担当者';
-                                                                            const total = proposalPackage.estimate.reduce((sum, item) => 
-                                                                                sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
-                                                                            );
-                                                                            
-                                                                            return `${lead.company} ${recipientName}
+                                    {activeAiTab === 'email' && (
+                                        <div className="space-y-3">
+                                            <h4 className="text-xs font-semibold text-slate-800 dark:text-slate-100">メール返信</h4>
+                                            <button onClick={() => onGenerateReply(lead)} disabled={isAIOff} className="w-full flex items-center justify-center gap-1 bg-purple-100 text-purple-700 font-semibold py-2 px-2 rounded disabled:opacity-50 text-xs">
+                                                <Mail className="w-3 h-3"/> AIで返信作成
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
 
-お世話になっております。
-文唱堂印刷の${senderName}です。
-
-ご依頼いただきました見積書を作成いたしましたので、
-お送りいたします。
-
-【見積内容】
-${proposalPackage.estimate.map(item => 
-    `・${item.name || item.description}: ${item.quantity || 1}個 × ¥${(item.unitPrice || 0).toLocaleString()} = ¥${Math.round((item.quantity || 1) * (item.unitPrice || 0)).toLocaleString()}`
-).join('\n')}
-
-【合計金額】
-¥${total.toLocaleString()}
-
-納期: 2週間
-お支払条件: 月末締め翌月末払い
-
-ご不明な点がございましたら、お気軽にお問い合わせください。
-よろしくお願いいたします。
-
-------------------------------------
-文唱堂印刷株式会社
-${senderName}
-〒101-0025 東京都千代田区神田佐久間町3-37
-TEL：03-3851-0111　FAX：03-3861-1979
-Mail: ${currentUser?.email || ''}
-Web: http://b-p.co.jp`;
-                                                                        })()}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex gap-2 mt-4">
-                                                            <button 
-                                                                onClick={handleSaveEstimate} 
-                                                                disabled={isSavingEstimate}
-                                                                className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
-                                                            >
-                                                                {isSavingEstimate ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                                                提案・見積を保存
-                                                            </button>
-                                                            <button 
-                                                                onClick={handleSendEstimateEmail} 
-                                                                disabled={isSendingEstimateEmail || !lead.email}
-                                                                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"
-                                                            >
-                                                                {isSendingEstimateEmail ? <Loader className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                                                                Gmail下書き作成
-                                                            </button>
-                                                        </div>
-                                                    </>
-                                                )}
+                            {/* Right Column - Details */}
+                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 overflow-y-auto">
+                                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">詳細情報</h3>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">問い合わせ内容</label>
+                                        <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                            {isEditing ? (
+                                                <textarea
+                                                    name="message"
+                                                    value={formData.message || ''}
+                                                    onChange={handleChange}
+                                                    rows={4}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                                                />
+                                            ) : (
+                                                <span>{formData.message || '問い合わせ内容はありません'}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-600 dark:text-slate-400">活動履歴</label>
+                                        <div className="mt-1 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                            {isEditing ? (
+                                                <textarea
+                                                    name="infoSalesActivity"
+                                                    value={formData.infoSalesActivity || ''}
+                                                    onChange={handleChange}
+                                                    rows={4}
+                                                    className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs"
+                                                />
+                                            ) : (
+                                                <span>{formData.infoSalesActivity || '活動履歴はありません'}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">見積送信者</label>
+                                            <div className="mt-1 text-xs text-slate-900 dark:text-white">
+                                                {formData.estimateSentBy || '-'}
                                             </div>
-                                        )}
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-600 dark:text-slate-400">見積送信日時</label>
+                                            <div className="mt-1 text-xs text-slate-900 dark:text-white">
+                                                {(() => {
+                                                    if (formData.estimateSentAt) return formatDateTime(formData.estimateSentAt);
+                                                    const raw = formData.infoSalesActivity || '';
+                                                    const match = raw.match(/\[([^\]]+)\]\s*見積メールを送信しました。?/);
+                                                    return match?.[1] ?? '-';
+                                                })()}
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-
-                                {/* メール返信タブ */}
-                                {activeAiTab === 'email' && (
-                                    <div className="space-y-2">
-                                        <h4 className="font-semibold text-slate-800 dark:text-slate-100">メール返信</h4>
-                                        {/* FIX: Wrap onGenerateReply in an arrow function to match onClick's expected signature. */}
-                                        <button onClick={() => onGenerateReply(lead)} disabled={isAIOff} className="w-full flex items-center justify-center gap-2 bg-purple-100 text-purple-700 font-semibold py-2 px-4 rounded-lg disabled:opacity-50">
-                                            <Mail className="w-4 h-4"/> AIで返信作成
-                                        </button>
-                                    </div>
-                                )}
-                            </DetailSection>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-slate-700">
-                    {/* FIX: Call the newly defined handleDelete function. */}
-                    <div>{isEditing && <button type="button" onClick={handleDelete} className="flex items-center gap-2 text-red-600 font-semibold py-2 px-4 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/50"><Trash2 className="w-4 h-4"/>削除</button>}</div>
-                    <div className="flex gap-4">
-                        {!isEditing ? (
-                            <>
-                                <button type="button" onClick={() => setIsEditing(true)} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200"><Pencil className="w-4 h-4"/>編集</button>
-                                <button type="button" onClick={onClose} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">閉じる</button>
-                            </>
-                        ) : (
-                            <>
-                                <button type="button" onClick={() => setIsEditing(false)} className="bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-4 rounded-lg">キャンセル</button>
-                                <button type="button" onClick={handleSave} disabled={isSaving} className="w-32 flex items-center justify-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg disabled:bg-slate-400">
-                                    {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5 mr-2" />保存</>}
+                        {/* Fixed Bottom Actions */}
+                <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
+                    <div className="flex justify-between items-center gap-3">
+                        <div className="flex gap-2">
+                            {isEditing ? (
+                                <>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleDelete} 
+                                        className="flex items-center gap-1 text-red-600 font-semibold py-1 px-3 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/50 text-sm"
+                                    >
+                                        <Trash2 className="w-3 h-3"/>削除
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setIsEditing(false)} 
+                                        className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 font-semibold py-1 px-3 rounded-lg text-sm"
+                                    >
+                                        キャンセル
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleSave} 
+                                        disabled={isSaving} 
+                                        className="flex items-center justify-center bg-blue-600 text-white font-semibold py-1 px-3 rounded-lg disabled:bg-slate-400 text-sm"
+                                    >
+                                        {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                                        保存
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setIsEditing(true)} 
+                                        className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 font-semibold py-1 px-3 rounded-lg hover:bg-slate-200 text-sm"
+                                    >
+                                        <Pencil className="w-3 h-3"/>編集
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={onClose} 
+                                        className="flex items-center gap-1 bg-blue-600 text-white font-semibold py-1 px-3 rounded-lg text-sm"
+                                    >
+                                        閉じる
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        
+                        {/* Additional Actions */}
+                        <div className="flex gap-2">
+                            {lead.email && (
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=【お問い合わせ】&body=${encodeURIComponent(`お問い合わせありがとうございます。\n\n${formData.message || ''}`)}`;
+                                        window.open(gmailUrl, '_blank');
+                                    }}
+                                    className="flex items-center gap-1 bg-purple-600 text-white font-semibold py-1 px-3 rounded-lg hover:bg-purple-700 text-sm"
+                                >
+                                    <Mail className="w-3 h-3" />
+                                    メール確認
                                 </button>
-                            </>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
