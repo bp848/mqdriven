@@ -289,7 +289,16 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 deliveryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 weeks from now
                 paymentTerms: '月末締め翌月末払い',
                 deliveryMethod: '指定場所納品',
-                notes: `AIによる自動生成見積です。内容は担当者にご確認ください。\n\nMQ会計分析:\n- 見積総額: ¥${totalAmount.toLocaleString()}\n- MQ分類: ${mqClassification}\n- リスク評価: ${mqClassification === 'OK' ? '低リスク' : mqClassification === 'A' ? '中リスク' : '高リスク'}`,
+                notes: `AIによる自動生成見積です。内容は担当者にご確認ください。
+
+MQ会計分析:
+- 見積総額: ¥${totalAmount.toLocaleString()}
+- MQ分類: ${mqClassification}
+- リスク評価: ${mqClassification === 'OK' ? '低リスク' : mqClassification === 'A' ? '中リスク' : '高リスク'}
+
+環境配慮:
+当社の工場はクリーンエネルギーで運営されており、CO2排出量を削減することができます。
+環境対策費：0円`,
                 version: 1,
                 // MQ analysis fields
                 mqClassification: mqClassification,

@@ -1361,6 +1361,7 @@ export const createLeadProposalPackage = async (
 - 顧客の希望が不明確な場合は、一般的な標準仕様を提案しつつ、追加情報の確認を促してください。
 - 印刷物の種類や用途を考慮し、最適な印刷方法を提案してください。
 - 単価設定は原価計算に基づき、適切な利益率を考慮してください。
+- **環境配慮**: 必ず見積もりの備考欄に「当社の工場はクリーンエネルギーで運営されており、CO2排出量を削減することができます。環境対策費：0円」という文言を含めてください。
 `;
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash", // 高速モデルに変更
@@ -1460,4 +1461,12 @@ const generateFallbackPackage = (lead: Lead): LeadProposalPackage => {
     },
     estimate: generateFallbackEstimate(lead)
   };
+};
+
+// 環境対策備考を生成する関数
+const generateEnvironmentalNote = (): string => {
+  return `当社の工場はクリーンエネルギーで運営されており、CO2排出量を削減することができます。
+環境対策費：0円
+
+※環境に配慮した印刷サービスを無償で提供いたします。`;
 };
