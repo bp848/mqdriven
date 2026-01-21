@@ -119,7 +119,15 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isSavingEstimate, setIsSavingEstimate] = useState(false);
     const [isSendingEstimateEmail, setIsSendingEstimateEmail] = useState(false);
-    const [activeAiTab, setActiveAiTab] = useState<'investigation' | 'proposal' | 'email'>(initialAiTab ?? 'investigation');
+    const [activeAiTab, setActiveAiTab] = useState<'investigation' | 'proposal' | 'email'>(() => {
+        // If both investigation and estimate are completed, start with proposal tab for confirmation
+        const hasInvestigation = Boolean(formData.aiInvestigation && String(formData.aiInvestigation).trim());
+        const hasEstimateDraft = Boolean(formData.aiDraftProposal && String(formData.aiDraftProposal).trim());
+        if (hasInvestigation && hasEstimateDraft) {
+            return 'proposal';
+        }
+        return initialAiTab ?? 'investigation';
+    });
     
     const mounted = useRef(true);
 
@@ -130,20 +138,30 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
     
     useEffect(() => {
         if (lead) {
-            setFormData({ ...lead });
-            setIsEditing(false);
-            if (lead.aiDraftProposal) {
-                try {
-                    setProposalPackage(JSON.parse(lead.aiDraftProposal));
-                } catch (error) {
-                    console.warn('Failed to parse saved proposal package', error);
-                    setProposalPackage(null);
-                }
-            } else {
-                setProposalPackage(null);
+            setFormData({
+                company: lead.company,
+                name: lead.name,
+                email: lead.email,
+                phone: lead.phone,
+                website: lead.website,
+                status: lead.status,
+                message: lead.message,
+                infoSalesActivity: lead.infoSalesActivity,
+                assignedTo: lead.assignedTo,
+                estimateSentAt: lead.estimateSentAt,
+                estimateSentBy: lead.estimateSentBy,
+                aiInvestigation: lead.aiInvestigation,
+                aiDraftProposal: lead.aiDraftProposal,
+            });
+            
+            // Auto-switch to proposal tab if both investigation and estimate are completed
+            const hasInvestigation = Boolean(lead.aiInvestigation && String(lead.aiInvestigation).trim());
+            const hasEstimateDraft = Boolean(lead.aiDraftProposal && String(lead.aiDraftProposal).trim());
+            if (hasInvestigation && hasEstimateDraft && activeAiTab === 'investigation') {
+                setActiveAiTab('proposal');
             }
         }
-    }, [lead]);
+    }, [lead, activeAiTab]);
 
     useEffect(() => {
         if (!isOpen) return;
