@@ -261,7 +261,25 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         if (!proposalPackage?.estimate || !lead || !currentUser) return;
         setIsSavingEstimate(true);
         try {
-            await onAddEstimate({
+            // Calculate MQ metrics
+            const totalAmount = proposalPackage.estimate.reduce((sum, item) => 
+                sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
+            );
+            
+            // Determine MQ classification based on total amount
+            let mqClassification = 'A';
+            if (totalAmount >= 1000000) {
+                mqClassification = 'OK';
+            } else if (totalAmount >= 500000) {
+                mqClassification = 'A';
+            } else if (totalAmount >= 200000) {
+                mqClassification = 'B';
+            } else {
+                mqClassification = 'C';
+            }
+
+            // Create estimate with MQ analysis
+            const estimateData = {
                 customerName: lead.company,
                 title: proposalPackage.proposal?.coverTitle || `【提案】${lead.company}`,
                 items: proposalPackage.estimate,
@@ -270,14 +288,23 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                 deliveryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 weeks from now
                 paymentTerms: '月末締め翌月末払い',
                 deliveryMethod: '指定場所納品',
-                notes: 'AIによる自動生成見積です。内容は担当者にご確認ください。',
+                notes: `AIによる自動生成見積です。内容は担当者にご確認ください。\n\nMQ会計分析:\n- 見積総額: ¥${totalAmount.toLocaleString()}\n- MQ分類: ${mqClassification}\n- リスク評価: ${mqClassification === 'OK' ? '低リスク' : mqClassification === 'A' ? '中リスク' : '高リスク'}`,
                 version: 1,
-            });
+                // MQ analysis fields
+                mqClassification: mqClassification,
+                mqRiskLevel: mqClassification === 'OK' ? 'low' : mqClassification === 'A' ? 'medium' : 'high',
+                mqAmount: totalAmount,
+                mqGeneratedAt: new Date().toISOString(),
+            };
+
+            await onAddEstimate(estimateData);
 
             const serializedPackage = JSON.stringify(proposalPackage);
             await onSave(lead.id, { aiDraftProposal: serializedPackage });
             setFormData(prev => ({ ...prev, aiDraftProposal: serializedPackage }));
-            addToast('提案書と見積を保存しました。', 'success');
+            
+            // Show MQ analysis toast
+            addToast(`見積を保存しました。MQ分類: ${mqClassification} (¥${totalAmount.toLocaleString()})`, 'success');
         } catch (e) {
             addToast(e instanceof Error ? `提案・見積保存エラー: ${e.message}`: '提案・見積の保存に失敗しました。', 'error');
         } finally {
@@ -823,6 +850,41 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                                                                     sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
                                                                                 ).toLocaleString()}
                                                                             </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    {/* MQ Analysis Preview */}
+                                                                    <div className="mt-3 p-2 bg-slate-100 dark:bg-slate-700 rounded">
+                                                                        <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 mb-1">MQ会計分析</div>
+                                                                        <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                                                                            {(() => {
+                                                                                const totalAmount = proposalPackage.estimate.reduce((sum, item) => 
+                                                                                    sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
+                                                                                );
+                                                                                let mqClassification = 'A';
+                                                                                if (totalAmount >= 1000000) {
+                                                                                    mqClassification = 'OK';
+                                                                                } else if (totalAmount >= 500000) {
+                                                                                    mqClassification = 'A';
+                                                                                } else if (totalAmount >= 200000) {
+                                                                                    mqClassification = 'B';
+                                                                                } else {
+                                                                                    mqClassification = 'C';
+                                                                                }
+                                                                                
+                                                                                return (
+                                                                                    <>
+                                                                                        <div>見積総額: ¥{totalAmount.toLocaleString()}</div>
+                                                                                        <div>MQ分類: <span className={`font-semibold ${
+                                                                                            mqClassification === 'OK' ? 'text-green-600' : 
+                                                                                            mqClassification === 'A' ? 'text-blue-600' : 
+                                                                                            mqClassification === 'B' ? 'text-yellow-600' : 
+                                                                                            'text-red-600'
+                                                                                        }`}>{mqClassification}</span></div>
+                                                                                        <div>リスク: {mqClassification === 'OK' ? '低' : mqClassification === 'A' ? '中' : '高'}</div>
+                                                                                    </>
+                                                                                );
+                                                                            })()}
                                                                         </div>
                                                                     </div>
                                                                 </div>
