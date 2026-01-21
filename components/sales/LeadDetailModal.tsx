@@ -596,7 +596,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                         className="flex items-center gap-2 bg-purple-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-purple-700"
                                     >
                                         <Mail className="w-4 h-4" />
-                                        メール確認
+                                        Gmailで確認
                                     </button>
                                 )}
                                 <button 
