@@ -314,8 +314,8 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
 
             {viewMode === 'list' ? (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-base text-left text-slate-500 dark:text-slate-400">
+                    <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
+                        <table className="w-full text-base text-left text-slate-500 dark:text-slate-400 min-w-[1200px]">
                             <thead className="text-sm text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
                                 <tr>
                                     <SortableHeader sortKey="updatedAt" label="最終更新日時" sortConfig={sortConfig} requestSort={requestSort} />
