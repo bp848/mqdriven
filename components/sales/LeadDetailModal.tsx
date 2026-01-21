@@ -453,7 +453,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         }
         if (hasInvestigation && !hasEstimateDraft) {
             return {
-                label: '企業調査＋見積作成',
+                label: '提案・見積作成',
                 disabled: Boolean(isAIOff),
                 onClick: () => {
                     setActiveAiTab('proposal');
