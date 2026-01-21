@@ -268,19 +268,24 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
             return sum + (Number.isFinite(line) ? line : 0);
         }, 0);
 
-        const rows = estimate
+        const escapeHtml = (text: string) => text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        const estimateRows = estimate
             .map(item => {
                 const qty = Number.isFinite(item.quantity) ? item.quantity : 0;
                 const unitPrice = Number.isFinite(item.unitPrice) ? item.unitPrice : 0;
-                const line = item.subtotal ?? item.price ?? Math.round(qty * unitPrice);
+                const lineTotal = Math.round(qty * unitPrice);
                 return `
                   <tr>
-                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.division || '')}</td>
-                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.content || '')}</td>
-                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(String(qty))}</td>
-                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.unit || '')}</td>
-                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatJPY(unitPrice))}</td>
-                    <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(formatJPY(line))}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(item.name || item.description || '')}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">${qty.toLocaleString()}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">¥${unitPrice.toLocaleString()}</td>
+                    <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">¥${lineTotal.toLocaleString()}</td>
                   </tr>
                 `;
             })
@@ -289,39 +294,59 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
         const html = `
           <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; line-height: 1.6; color: #111827;">
             <p>${escapeHtml(lead.company)} ${escapeHtml(recipientName)}</p>
-            <p>お世話になっております。${escapeHtml(senderName)}です。</p>
-            <p>概算のお見積りをお送りします。内容のご確認をお願いいたします。</p>
+            <p>お世話になっております。<br>文唱堂印刷の${escapeHtml(senderName)}です。</p>
+            <p>ご依頼いただきました見積書を作成いたしましたので、<br>お送りいたします。</p>
             <table style="width:100%; border-collapse: collapse; margin: 12px 0; font-size: 14px;">
               <thead>
-                <tr>
-                  <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #111827;">区分</th>
-                  <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #111827;">内容</th>
-                  <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #111827;">数量</th>
-                  <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #111827;">単位</th>
-                  <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #111827;">単価</th>
-                  <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #111827;">金額</th>
+                <tr style="background-color: #f9fafb;">
+                  <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: left;">品名</th>
+                  <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">数量</th>
+                  <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">単価</th>
+                  <th style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">金額</th>
                 </tr>
               </thead>
               <tbody>
-                ${rows}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="5" style="padding:8px;border-top:2px solid #111827;text-align:right;font-weight:700;">合計</td>
-                  <td style="padding:8px;border-top:2px solid #111827;text-align:right;font-weight:700;">${escapeHtml(formatJPY(total))}</td>
+                ${estimateRows}
+                <tr style="background-color: #f9fafb; font-weight: bold;">
+                  <td colspan="3" style="padding: 8px; border: 1px solid #e5e7eb; text-align: right;">合計</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right; color: #1f2937;">¥${total.toLocaleString()}</td>
                 </tr>
-              </tfoot>
+              </tbody>
             </table>
-            <p style="color:#6b7280;font-size:12px;">※本メールはシステムから送信されています。</p>
+            <p style="margin: 16px 0;">
+              <strong>納期:</strong> 2週間<br>
+              <strong>お支払条件:</strong> 月末締め翌月末払い
+            </p>
+            <p>ご不明な点がございましたら、お気軽にお問い合わせください。<br>よろしくお願いいたします。</p>
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
+            <p style="font-size: 12px; color: #6b7280;">
+              文唱堂印刷株式会社<br>
+              ${escapeHtml(senderName)}<br>
+              〒101-0025 東京都千代田区神田佐久間町3-37<br>
+              TEL：03-3851-0111　FAX：03-3861-1979<br>
+              Mail: ${escapeHtml(currentUser?.email || '')}<br>
+              Web: http://b-p.co.jp
+            </p>
           </div>
         `.trim();
 
         const body =
             `${lead.company} ${recipientName}\n\n` +
-            `お世話になっております。${senderName}です。\n` +
-            `概算のお見積りをお送りします。内容のご確認をお願いいたします。\n\n` +
-            `合計: ${formatJPY(total)}\n\n` +
-            `※本メールはシステムから送信されています。`;
+            `お世話になっております。\n文唱堂印刷の${senderName}です。\n\n` +
+            `ご依頼いただきました見積書を作成いたしましたので、\nお送りいたします。\n\n` +
+            `【見積内容】\n` +
+            `${estimate.map(item => 
+                `・${item.name || item.description}: ${item.quantity || 1}個 × ¥${(item.unitPrice || 0).toLocaleString()} = ¥${Math.round((item.quantity || 1) * (item.unitPrice || 0)).toLocaleString()}`
+            ).join('\n')}\n\n` +
+            `【合計金額】\n¥${total.toLocaleString()}\n\n` +
+            `納期: 2週間\nお支払条件: 月末締め翌月末払い\n\n` +
+            `ご不明な点がございましたら、お気軽にお問い合わせください。\nよろしくお願いいたします。\n\n` +
+            `------------------------------------\n` +
+            `文唱堂印刷株式会社\n${senderName}\n` +
+            `〒101-0025 東京都千代田区神田佐久間町3-37\n` +
+            `TEL：03-3851-0111　FAX：03-3861-1979\n` +
+            `Mail: ${currentUser?.email || ''}\n` +
+            `Web: http://b-p.co.jp`;
 
         return { subject, html, body };
     };
@@ -610,7 +635,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClos
                                                                                 sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
                                                                             );
                                                                             
-                                                                            return `${recipientName}
+                                                                            return `${lead.company} ${recipientName}
 
 お世話になっております。
 文唱堂印刷の${senderName}です。
