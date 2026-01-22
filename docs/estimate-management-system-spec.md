@@ -16,7 +16,8 @@
 #### 主要テーブル
 ```sql
 -- 見積・請求書統合テーブル
-CREATE TABLE estimate_invoices (
+CREATE TABLE estimate_invoices (７
+
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id UUID REFERENCES leads(id) NOT NULL,
   document_number TEXT UNIQUE NOT NULL,

@@ -3,7 +3,7 @@ import { submitApplication, saveApplicationDraft, clearApplicationDraft } from '
 import { extractInvoiceDetails } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
-import { User, InvoiceData, ApplicationWithDetails } from '../../types';
+import { User, ApplicationWithDetails } from '../../types';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
 
@@ -70,6 +70,87 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     };
 
     const handleRemoveRow = (id: string) => setDetails(prev => prev.filter(item => item.id !== id));
+
+    // Handle paste from clipboard
+    const handlePaste = async (e: React.ClipboardEvent) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text');
+        if (!text) return;
+
+        try {
+            const lines = text.split('\n').filter(line => line.trim());
+            const newDetails: TransportDetail[] = [];
+
+            for (const line of lines) {
+                const parts = line.split('\t').map(p => p.trim());
+                if (parts.length >= 5) {
+                    const [date, departure, arrival, transport, amount] = parts;
+                    if (date && departure && arrival) {
+                        newDetails.push({
+                            id: `row_paste_${Date.now()}_${Math.random()}`,
+                            travelDate: date.includes('/') ? date : new Date().toISOString().split('T')[0],
+                            departure,
+                            arrival,
+                            transportMode: TRANSPORT_MODES.includes(transport) ? transport : TRANSPORT_MODES[0],
+                            amount: parseInt(amount.replace(/[^\d]/g, '')) || 0,
+                        });
+                    }
+                }
+            }
+
+            if (newDetails.length > 0) {
+                setDetails(prev => [...prev.filter(d => d.departure || d.arrival), ...newDetails]);
+                setError('');
+            }
+        } catch (err) {
+            setError('貼り付けデータの解析に失敗しました。タブ区切りのデータを貼り付けてください。');
+        }
+    };
+
+    // Handle Excel file upload
+    const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const lines = text.split('\n').filter(line => line.trim());
+            const newDetails: TransportDetail[] = [];
+
+            // Skip header row if exists
+            const startIndex = lines[0].includes('利用日') || lines[0].includes('日付') ? 1 : 0;
+
+            for (let i = startIndex; i < lines.length; i++) {
+                const line = lines[i];
+                const parts = line.split(',').map(p => p.trim().replace(/"/g, ''));
+                
+                if (parts.length >= 5) {
+                    const [date, departure, arrival, transport, amount] = parts;
+                    if (date && departure && arrival) {
+                        newDetails.push({
+                            id: `row_excel_${Date.now()}_${i}`,
+                            travelDate: date.includes('/') ? date : new Date().toISOString().split('T')[0],
+                            departure,
+                            arrival,
+                            transportMode: TRANSPORT_MODES.includes(transport) ? transport : TRANSPORT_MODES[0],
+                            amount: parseInt(amount.replace(/[^\d]/g, '')) || 0,
+                        });
+                    }
+                }
+            }
+
+            if (newDetails.length > 0) {
+                setDetails(prev => [...prev.filter(d => d.departure || d.arrival), ...newDetails]);
+                setError('');
+            } else {
+                setError('Excelファイルから有効なデータが見つかりませんでした。');
+            }
+        } catch (err) {
+            setError('Excelファイルの読み込みに失敗しました。CSV形式のファイルを確認してください。');
+        } finally {
+            e.target.value = '';
+        }
+    };
     
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -84,7 +165,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         setError('');
         try {
             const base64String = await readFileAsBase64(file);
-            const ocrData: InvoiceData = await extractInvoiceDetails(base64String, file.type);
+            const ocrData: any = await extractInvoiceDetails(base64String, file.type);
             
             // Heuristic to parse departure/arrival from description
             const description = ocrData.description || '';
@@ -247,9 +328,56 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     </div>
                 </details>
 
+                <details className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <summary className="text-base font-semibold cursor-pointer text-slate-700 dark:text-slate-200">一括入力 (コピペ & Excel)</summary>
+                    <div className="mt-4 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Excel/CSVファイルアップロード</label>
+                            <div className="flex items-center gap-4">
+                                <label htmlFor="excel-upload" className="relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer">
+                                    <Upload className="w-5 h-5" />
+                                    <span>Excel/CSVファイル選択</span>
+                                    <input id="excel-upload" type="file" className="sr-only" onChange={handleExcelUpload} accept=".csv,.xlsx,.xls" disabled={isDisabled} />
+                                </label>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">CSV/Excelファイルから交通費データを一括読み込み</p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">クリップボードから貼り付け</label>
+                            <div className="space-y-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        navigator.clipboard.readText().then(text => {
+                                            const syntheticEvent = {
+                                                preventDefault: () => {},
+                                                clipboardData: {
+                                                    getData: () => text
+                                                }
+                                            } as any;
+                                            handlePaste(syntheticEvent);
+                                        }).catch(() => {
+                                            setError('クリップボードへのアクセスが許可されていません。手動で貼り付けてください。');
+                                        });
+                                    }}
+                                    className="bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                                    disabled={isDisabled}
+                                >
+                                    📋 クリップボードから貼り付け
+                                </button>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    Excelからコピーしたデータを貼り付け（タブ区切り対応）<br/>
+                                    書式: 利用日\t出発地\t目的地\t交通手段\t金額
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
                 <div>
                     <label className="block text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">交通費明細 *</label>
-                    <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg" onPaste={handlePaste}>
                         <table className="w-full text-sm">
                             <thead className="bg-slate-50 dark:bg-slate-700/50">
                                 <tr>
