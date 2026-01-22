@@ -35,39 +35,34 @@ export const saveEstimateToManagement = async (request: SaveEstimateRequest): Pr
     const documentNumber = `EST-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
     
     const estimateData = {
-      lead_id: request.leadId,
-      document_number: documentNumber,
-      document_type: 'estimate' as const,
-      status: 'draft' as const,
-      customer_name: request.customerInfo.name,
-      customer_email: request.customerInfo.email,
-      customer_phone: request.customerInfo.phone,
-      customer_address: request.customerInfo.address,
-      title: request.estimateData.title,
-      content: request.estimateData.items.map(item => ({
-        id: Math.random().toString(36).substr(2, 9),
-        itemName: item.name,
-        description: item.description,
-        quantity: item.quantity,
-        unit: item.unit,
-        unitPrice: item.unitPrice,
-        discountRate: 0,
-        subtotal: item.subtotal
-      })),
-      subtotal: request.estimateData.subtotal,
-      tax_rate: request.estimateData.taxRate,
-      tax_amount: request.estimateData.taxAmount,
-      total_amount: request.estimateData.totalAmount,
-      issue_date: new Date().toISOString().split('T')[0],
-      valid_until: request.estimateData.validUntil,
-      notes: request.estimateData.notes,
-      created_by: 'current-user', // TODO: 実際のユーザーIDを取得
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      estimates_id: documentNumber,
+      project_id: request.customerInfo.name,
+      pattern_no: '1',
+      pattern_name: request.estimateData.title,
+      specification: request.estimateData.notes,
+      copies: 1,
+      unit_price: request.estimateData.totalAmount,
+      tax_rate: request.estimateData.taxRate * 100,
+      total: request.estimateData.totalAmount.toString(),
+      subtotal: request.estimateData.subtotal.toString(),
+      consumption: request.estimateData.taxAmount.toString(),
+      delivery_date: request.estimateData.validUntil,
+      expiration_date: request.estimateData.validUntil,
+      delivery_place: '',
+      transaction_method: '',
+      note: request.estimateData.notes,
+      status: '0', // draft
+      create_id: 'current-user',
+      create_date: new Date().toISOString(),
+      update_id: 'current-user',
+      update_date: new Date().toISOString(),
+      valiable_cost: '0',
+      margin: '0',
+      margin_rate: '0'
     };
 
     const { data, error } = await supabase
-      .from('estimate_invoices')
+      .from('estimates')
       .insert(estimateData)
       .select()
       .single();
