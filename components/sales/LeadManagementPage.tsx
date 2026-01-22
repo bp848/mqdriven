@@ -644,6 +644,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                 onAddEstimate={onAddEstimate}
                 onEstimateCreated={() => {
                     // 見積もり作成後にリード一覧を更新
+                    console.log('Estimate created callback triggered, refreshing leads...');
                     onRefresh();
                 }}
                 initialAiTab={initialAiTab}
