@@ -1,6 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Lead, LeadStatus, SortConfig, Toast, ConfirmationDialogProps, EmployeeUser, Customer } from '../../types';
-import { Loader, Pencil, Trash2, Mail, Eye, CheckCircle, Lightbulb, List, KanbanSquare, Plus, Users } from '../Icons';
+import { Lead, LeadStatus, Toast, ConfirmationDialogProps, EmployeeUser, Customer } from '../../types';
+import { Loader, Pencil, Trash2, Mail, Eye, CheckCircle, Lightbulb, List, KanbanSquare, Plus, Users, Upload } from '../Icons';
+
+type SortConfig = {
+  key: string;
+  direction: 'ascending' | 'descending';
+} | null;
 import { LeadDetailModal } from './LeadDetailModal';
 import LeadStatusBadge from './LeadStatusBadge';
 import LeadKanbanView from './LeadKanbanView';
