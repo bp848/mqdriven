@@ -3078,7 +3078,7 @@ const mapEstimateRow = (row: any): Estimate => {
     const subtotal = toNumberOrNull(row.subtotal) ?? (copies !== null && unitPrice !== null ? copies * unitPrice : null);
     const taxRate = toNumberOrNull(row.tax_rate);
     const taxAmount =
-        toNumberOrNull(row.tax_amount ?? row.consumption) ??
+        toNumberOrNull(row.tax_amount ?? row.consumption) ?
         (subtotal !== null && taxRate !== null ? Math.floor(subtotal * (taxRate / 100)) : null);
     const total = toNumberOrNull(row.total) ?? (subtotal !== null && taxAmount !== null ? subtotal + taxAmount : subtotal ?? 0);
     const salesAmount = toNumberOrNull(row.sales_amount) ?? subtotal ?? null;
@@ -3096,6 +3096,7 @@ const mapEstimateRow = (row: any): Estimate => {
     const customerName =
         toStringOrNull(row.customer_name) ??
         toStringOrNull(row.customer_name_resolved) ??
+        toStringOrNull(row.project_name) ??
         `顧客${row.estimates_id || row.id || '不明'}`;
     
     const displayName =
@@ -3106,6 +3107,14 @@ const mapEstimateRow = (row: any): Estimate => {
         (row.estimates_id ? `見積#${row.estimates_id}` : '見積');
     const createdAt = row.created_at ?? row.create_date ?? null;
     const updatedAt = row.updated_at ?? row.update_date ?? createdAt ?? null;
+
+    console.log('Mapping estimate row:', {
+        estimates_id: row.estimates_id,
+        project_name: row.project_name,
+        customer_name: row.customer_name,
+        created_at: row.created_at,
+        displayName
+    });
 
     return {
         id: row.estimates_id ?? row.id ?? generateEstimateId(),
