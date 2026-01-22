@@ -69,7 +69,16 @@ const Field: React.FC<{
 };
 
 const renderInvestigationSummary = (text: string) => {
-    const lines = text.split('\n');
+    // Unescape markdown and render properly
+    const unescapedText = text
+        .replace(/\\#/g, '#')
+        .replace(/\\\*/g, '*')
+        .replace(/\\_/g, '_')
+        .replace(/\\`/g, '`')
+        .replace(/\\\[/g, '[')
+        .replace(/\\\]/g, ']');
+    
+    const lines = unescapedText.split('\n');
     return (
         <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
             {lines.map((line, idx) => {
@@ -77,10 +86,10 @@ const renderInvestigationSummary = (text: string) => {
                 if (!trimmed) {
                     return <div key={idx} className="h-1" />;
                 }
-                if (trimmed.startsWith('### ')) {
+                if (trimmed.startsWith('# ')) {
                     return (
-                        <div key={idx} className="text-xs font-semibold text-slate-500 dark:text-slate-300 mt-2">
-                            {trimmed.replace(/^###\s+/, '')}
+                        <div key={idx} className="text-sm font-bold text-slate-900 dark:text-white mt-3">
+                            {trimmed.replace(/^#\s+/, '')}
                         </div>
                     );
                 }
@@ -91,19 +100,40 @@ const renderInvestigationSummary = (text: string) => {
                         </div>
                     );
                 }
-                if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+                // Handle bullet points
+                if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
                     return (
-                        <div key={idx} className="flex items-start gap-2">
-                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-slate-400" />
-                            <span className="whitespace-pre-wrap break-words">
-                                {trimmed.replace(/^(\*|-)\s+/, '')}
-                            </span>
+                        <div key={idx} className="flex items-start gap-2 ml-4">
+                            <span className="text-blue-500 mt-1">•</span>
+                            <span>{trimmed.replace(/^[-*]\s+/, '')}</span>
                         </div>
                     );
                 }
+                // Handle numbered lists
+                if (/^\d+\.\s/.test(trimmed)) {
+                    return (
+                        <div key={idx} className="flex items-start gap-2 ml-4">
+                            <span className="text-blue-500 mt-1">{trimmed.match(/^\d+/)[0]}.</span>
+                            <span>{trimmed.replace(/^\d+\.\s+/, '')}</span>
+                        </div>
+                    );
+                }
+                // Handle bold text
+                let processedLine = trimmed;
+                if (processedLine.includes('**')) {
+                    processedLine = processedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                }
+                if (processedLine.includes('*')) {
+                    processedLine = processedLine.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                }
+                
                 return (
-                    <div key={idx} className="whitespace-pre-wrap break-words">
-                        {line}
+                    <div key={idx} className="leading-relaxed">
+                        {processedLine.includes('<') ? (
+                            <span dangerouslySetInnerHTML={{ __html: processedLine }} />
+                        ) : (
+                            <span>{processedLine}</span>
+                        )}
                     </div>
                 );
             })}
