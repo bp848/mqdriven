@@ -337,7 +337,12 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         const hasReply = lead.status !== LeadStatus.Untouched || Boolean(extractReplyTimestampFromLog(lead));
 
         if (estimateSentAtLabel) {
-            return { label: '完了', disabled: true };
+            return {
+                label: '見積一覧',
+                onClick: () => {
+                    window.location.hash = '#/sales/estimates';
+                }
+            };
         }
         if (hasEstimateDraft || hasReply) {
             return {

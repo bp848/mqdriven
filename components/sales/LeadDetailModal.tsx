@@ -386,6 +386,12 @@ MQ会計分析:
             if (onEstimateCreated) {
                 onEstimateCreated();
             }
+            
+            // 見積もり一覧に遷移
+            setTimeout(() => {
+                window.location.hash = '#/sales/estimates';
+                addToast('見積もり一覧に移動しました', 'success');
+            }, 1000);
         } catch (e) {
             addToast(e instanceof Error ? `提案・見積保存エラー: ${e.message}`: '提案・見積の保存に失敗しました。', 'error');
         } finally {
