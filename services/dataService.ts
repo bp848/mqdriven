@@ -3348,7 +3348,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     
     // 優先: 顧客名/案件名が解決済みのビューを利用
     const { data, error, count } = await supabase
-        .from('estimates_list_view')
+        .from('estimates_working_view')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
