@@ -1306,7 +1306,24 @@ useEffect(() => {
             case 'newsletter':
                 return <NewsletterPage customers={customers} addToast={addToast} />;
             case 'sales_leads':
-                return <LeadManagementPage leads={leads} searchTerm={searchTerm} onRefresh={loadAllData} onUpdateLead={handleUpdateLead} onDeleteLead={handleDeleteLead} addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} isAIOff={isAIOff} onAddEstimate={handleAddEstimate} />;
+                return <LeadManagementPage 
+                    leads={leads} 
+                    searchTerm={searchTerm} 
+                    onRefresh={loadAllData} 
+                    onUpdateLead={handleUpdateLead} 
+                    onDeleteLead={handleDeleteLead} 
+                    addToast={addToast} 
+                    requestConfirmation={requestConfirmation} 
+                    currentUser={currentUser} 
+                    isAIOff={isAIOff} 
+                    onAddEstimate={handleAddEstimate} 
+                    customers={customers}
+                    onCreateExistingCustomerLead={async (leadData) => {
+                        await dataService.addLead(leadData);
+                        await loadAllData();
+                        addToast('既存顧客のリードを追加しました。', 'success');
+                    }}
+                />;
             case 'sales_pipeline':
                 return <SalesPipelinePage jobs={jobs} onUpdateJob={handleUpdateJob} onCardClick={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
             case 'admin_user_management':
