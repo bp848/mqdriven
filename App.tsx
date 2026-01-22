@@ -1253,8 +1253,8 @@ useEffect(() => {
             case 'sales_orders':
                 return (
                     <SalesOrdersPage
-                        projectSummaries={jobs}
-                        orders={purchaseOrders}
+                        projectSummaries={jobs || []}
+                        orders={purchaseOrders || []}
                         searchTerm={searchTerm}
                         isLoading={isLoading}
                         onRefresh={loadAllData}
@@ -1265,7 +1265,7 @@ useEffect(() => {
             case 'project_management':
                 return (
                     <ProjectManagementPage
-                        projects={projects}
+                        projects={projects || []}
                         isLoading={isLoading}
                         onRefresh={loadAllData}
                     />
@@ -1283,7 +1283,7 @@ useEffect(() => {
                 );
             case 'sales_customers':
                 return <CustomerList
-                    customers={customers}
+                    customers={customers || []}
                     searchTerm={searchTerm}
                     onSelectCustomer={(customer) => {
                         setCustomerInitialValues(null);
@@ -1356,27 +1356,27 @@ useEffect(() => {
                     currentUser={currentUser}
                 />;
             case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_trial_balance': case 'accounting_period_closing':
-                return <AccountingPage page={currentPage} journalEntries={journalEntries} accountItems={accountItems} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs} applications={applications} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers} employees={employees} onRefreshData={loadAllData} />;
+                return <AccountingPage page={currentPage} journalEntries={journalEntries || []} accountItems={accountItems || []} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs || []} applications={applications || []} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers || []} employees={employees || []} onRefreshData={loadAllData} />;
             case 'inventory_management':
-                return <InventoryManagementPage inventoryItems={inventoryItems} onSelectItem={(item) => { setSelectedInventoryItem(item); setIsCreateInventoryItemModalOpen(true); }} />;
+                return <InventoryManagementPage inventoryItems={inventoryItems || []} onSelectItem={(item) => { setSelectedInventoryItem(item); setIsCreateInventoryItemModalOpen(true); }} />;
             case 'manufacturing_progress':
-                return <ManufacturingPipelinePage jobs={jobs} onUpdateJob={handleUpdateJob} onCardClick={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
+                return <ManufacturingPipelinePage jobs={jobs || []} onUpdateJob={handleUpdateJob} onCardClick={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
              case 'manufacturing_orders':
-                return <ManufacturingOrdersPage jobs={jobs} onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
+                return <ManufacturingOrdersPage jobs={jobs || []} onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
             case 'manufacturing_cost':
-                return <ManufacturingCostManagement jobs={jobs} />;
+                return <ManufacturingCostManagement jobs={jobs || []} />;
             case 'purchasing_orders':
-                return <PurchasingManagementPage purchaseOrders={purchaseOrders} jobs={jobs} />;
+                return <PurchasingManagementPage purchaseOrders={purchaseOrders || []} jobs={jobs || []} />;
             case 'simple_estimates':
             case 'sales_estimates':
                 return <EstimateManagementPage
-                    estimates={estimates}
+                    estimates={estimates || []}
                     estimateTotalCount={estimateTotalCount}
                     estimatePage={estimatePage}
                     estimatePageSize={ESTIMATE_PAGE_SIZE}
                     onEstimatePageChange={handleEstimatePageChange}
-                    customers={customers}
-                    allUsers={allUsers}
+                    customers={customers || []}
+                    allUsers={allUsers || []}
                     onAddEstimate={handleAddEstimate}
                     addToast={addToast}
                     currentUser={currentUser}
@@ -1384,7 +1384,7 @@ useEffect(() => {
                     isAIOff={isAIOff}
                 />;
             case 'analysis_ranking':
-                return <SalesRanking initialSummaries={jobs} customers={customers} />;
+                return <SalesRanking initialSummaries={jobs || []} customers={customers || []} />;
             case 'accounting_business_plan':
                 if (currentUser?.role !== 'admin') {
                     return (
