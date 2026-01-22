@@ -1,6 +1,6 @@
 // services/estimateManagementService.ts
 import { createSupabaseBrowser } from '../lib/supabase';
-import { Estimate, CreateEstimateRequest, EstimateFilters } from '../types/estimate';
+import { Estimate } from '../types';
 
 export interface SaveEstimateRequest {
   leadId: string;
@@ -29,7 +29,7 @@ export interface SaveEstimateRequest {
   };
 }
 
-export const saveEstimateToManagement = async (request: SaveEstimateRequest): Promise<Estimate> => {
+export const saveEstimateToManagement = async (request: SaveEstimateRequest): Promise<any> => {
   try {
     const supabase = createSupabaseBrowser();
     const documentNumber = `EST-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
@@ -79,15 +79,14 @@ export const saveEstimateToManagement = async (request: SaveEstimateRequest): Pr
   }
 };
 
-export const getEstimatesByLeadId = async (leadId: string): Promise<Estimate[]> => {
+export const getEstimatesByLeadId = async (leadId: string): Promise<any[]> => {
   try {
     const supabase = createSupabaseBrowser();
     const { data, error } = await supabase
-      .from('estimate_invoices')
+      .from('estimates')
       .select('*')
-      .eq('lead_id', leadId)
-      .eq('document_type', 'estimate')
-      .order('created_at', { ascending: false });
+      .eq('project_id', leadId)
+      .order('create_date', { ascending: false });
 
     if (error) {
       console.error('Supabase error:', error);
@@ -101,14 +100,14 @@ export const getEstimatesByLeadId = async (leadId: string): Promise<Estimate[]> 
   }
 };
 
-export const updateEstimateStatus = async (estimateId: string, status: Estimate['status']): Promise<void> => {
+export const updateEstimateStatus = async (estimateId: string, status: string): Promise<void> => {
   try {
     const supabase = createSupabaseBrowser();
     const { error } = await supabase
-      .from('estimate_invoices')
+      .from('estimates')
       .update({ 
         status,
-        updated_at: new Date().toISOString()
+        update_date: new Date().toISOString()
       })
       .eq('id', estimateId);
 
@@ -126,7 +125,7 @@ export const deleteEstimate = async (estimateId: string): Promise<void> => {
   try {
     const supabase = createSupabaseBrowser();
     const { error } = await supabase
-      .from('estimate_invoices')
+      .from('estimates')
       .delete()
       .eq('id', estimateId);
 
