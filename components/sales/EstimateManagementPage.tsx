@@ -1147,9 +1147,124 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
 
                 {activeTab === 'list' && (
                     <div className="p-6">
-                        <div className="text-center text-slate-500">
-                            <p>一覧タブの内容</p>
-                        </div>
+                        {loading ? (
+                            <div className="flex justify-center py-8">
+                                <Loader className="w-8 h-8 animate-spin text-blue-600" />
+                            </div>
+                        ) : error ? (
+                            <div className="text-center py-8">
+                                <p className="text-red-600">{error}</p>
+                                <button onClick={() => window.location.reload()} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg">
+                                    再読み込み
+                                </button>
+                            </div>
+                        ) : estimates.length === 0 ? (
+                            <div className="text-center py-8">
+                                <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                                <p className="text-slate-500 mb-4">見積データがありません</p>
+                                <button 
+                                    onClick={() => { setSelectedEstimate(null); setIsModalOpen(true); }} 
+                                    className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"
+                                >
+                                    最初の見積を作成
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-200 dark:border-slate-700">
+                                            <SortableHeader
+                                                sortConfig={sortConfig}
+                                                onSort={setSortConfig}
+                                                field="estimateNumber"
+                                                label="No."
+                                            />
+                                            <SortableHeader
+                                                sortConfig={sortConfig}
+                                                onSort={setSortConfig}
+                                                field="customerName"
+                                                label="顧客名"
+                                            />
+                                            <SortableHeader
+                                                sortConfig={sortConfig}
+                                                onSort={setSortConfig}
+                                                field="title"
+                                                label="件名"
+                                            />
+                                            <SortableHeader
+                                                sortConfig={sortConfig}
+                                                onSort={setSortConfig}
+                                                field="total"
+                                                label="金額"
+                                            />
+                                            <SortableHeader
+                                                sortConfig={sortConfig}
+                                                onSort={setSortConfig}
+                                                field="status"
+                                                label="ステータス"
+                                            />
+                                            <SortableHeader
+                                                sortConfig={sortConfig}
+                                                onSort={setSortConfig}
+                                                field="created_at"
+                                                label="作成日"
+                                            />
+                                            <th className="text-left py-3 px-4 font-semibold text-slate-900 dark:text-white">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sortedEstimates.map((estimate) => (
+                                            <tr key={estimate.id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                                <td className="py-3 px-4">{estimate.estimateNumber}</td>
+                                                <td className="py-3 px-4">{estimate.customerName}</td>
+                                                <td className="py-3 px-4">
+                                                    <div className="max-w-xs truncate" title={estimate.title}>
+                                                        {estimate.title}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-4 text-right">{formatJPY(Number(estimate.total) || 0)}</td>
+                                                <td className="py-3 px-4">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                                        estimate.status === 'draft' ? 'bg-gray-100 text-gray-700' :
+                                                        estimate.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                                                        estimate.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                                        'bg-slate-100 text-slate-700'
+                                                    }`}>
+                                                        {estimate.status === 'draft' ? '見積中' :
+                                                         estimate.status === 'sent' ? '送付済' :
+                                                         estimate.status === 'approved' ? '承認済' :
+                                                         estimate.status}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4">{formatDate(estimate.created_at)}</td>
+                                                <td className="py-3 px-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => setSelectedEstimate(estimate)}
+                                                            className="text-blue-600 hover:text-blue-800"
+                                                            title="詳細を表示"
+                                                        >
+                                                            <FileText className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedEstimate(estimate);
+                                                                setIsModalOpen(true);
+                                                            }}
+                                                            className="text-amber-600 hover:text-amber-800"
+                                                            title="編集"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 )}
 
