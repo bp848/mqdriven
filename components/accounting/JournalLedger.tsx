@@ -1,11 +1,16 @@
 
 
 import React, { useState, useMemo } from 'react';
-import { JournalEntry, SortConfig } from '../../types';
+import { JournalEntry } from '../../types';
 import { PlusCircle, Sparkles, Loader, BookOpen } from '../Icons';
 import { suggestJournalEntry } from '../../services/geminiService';
 import EmptyState from '../ui/EmptyState';
 import SortableHeader from '../ui/SortableHeader';
+
+type SortConfig = {
+  key: string;
+  direction: 'ascending' | 'descending';
+} | null;
 
 interface JournalLedgerProps {
   entries: JournalEntry[];
@@ -193,11 +198,11 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ entries, onAddEntry, isAI
           <table className="w-full text-base text-left text-slate-500 dark:text-slate-400">
             <thead className="text-sm text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
               <tr>
-                <SortableHeader sortKey="date" label="日付" sortConfig={sortConfig} requestSort={requestSort} />
-                <SortableHeader sortKey="account" label="勘定科目" sortConfig={sortConfig} requestSort={requestSort} />
-                <SortableHeader sortKey="description" label="摘要" sortConfig={sortConfig} requestSort={requestSort} />
-                <SortableHeader sortKey="debit" label="借方" sortConfig={sortConfig} requestSort={requestSort} className="text-right" />
-                <SortableHeader sortKey="credit" label="貸方" sortConfig={sortConfig} requestSort={requestSort} className="text-right" />
+                <SortableHeader sortConfig={sortConfig} onSort={requestSort} field="date" label="日付" />
+                <SortableHeader sortConfig={sortConfig} onSort={requestSort} field="account" label="勘定科目" />
+                <SortableHeader sortConfig={sortConfig} onSort={requestSort} field="description" label="摘要" />
+                <SortableHeader sortConfig={sortConfig} onSort={requestSort} field="debit" label="借方" className="text-right" />
+                <SortableHeader sortConfig={sortConfig} onSort={requestSort} field="credit" label="貸方" className="text-right" />
               </tr>
             </thead>
             <tbody>
