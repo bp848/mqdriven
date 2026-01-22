@@ -1,5 +1,7 @@
+// Database-aligned Types for mqdriven ERP System
+// Based on actual Supabase schema
+
 export type Page =
-  | 'analysis_dashboard'
   | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
   | 'sales_estimates' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
@@ -32,6 +34,7 @@ export type Page =
   | 'newsletter'
   | 'simple_estimates';
 
+// Enums based on database constraints
 export enum JobStatus {
   Pending = '保留',
   InProgress = '進行中',
@@ -46,19 +49,19 @@ export enum InvoiceStatus {
 }
 
 export enum LeadStatus {
-    Untouched = '未対応',
-    New = '新規',
-    Contacted = 'コンタクト済',
-    Qualified = '有望',
-    Disqualified = '失注',
-    Converted = '商談化',
-    Closed = 'クローズ',
+  Untouched = '未対応',
+  New = '新規',
+  Contacted = 'コンタクト済',
+  Qualified = '有望',
+  Disqualified = '失注',
+  Converted = '商談化',
+  Closed = 'クローズ',
 }
 
 export enum PurchaseOrderStatus {
-    Ordered = '発注済',
-    Received = '受領済',
-    Cancelled = 'キャンセル',
+  Ordered = '発注済',
+  Received = '受領済',
+  Cancelled = 'キャンセル',
 }
 
 export enum ManufacturingStatus {
@@ -78,11 +81,248 @@ export enum EstimateStatus {
 }
 
 export enum BugReportStatus {
-    Open = '未対応',
-    InProgress = '対応中',
-    Closed = '完了',
+  Open = '未対応',
+  InProgress = '対応中',
+  Closed = '完了',
 }
 
+// Database-aligned interfaces
+export interface User {
+  id: string;
+  name: string;
+  email?: string;
+  employee_number?: string;
+  department_id?: string;
+  position_id?: string;
+  created_at: string;
+  role: string;
+  can_use_anything_analysis?: boolean;
+  auth_user_id?: string;
+  start_date?: string;
+  end_date?: string;
+  user_code?: string;
+  is_active?: boolean;
+}
+
+export interface Customer {
+  id: string;
+  customer_code?: string;
+  customer_name?: string;
+  customer_name_kana?: string;
+  post_no?: string;
+  address_1?: string;
+  address_2?: string;
+  phone_number?: string;
+  fax?: string;
+  closing_day?: string;
+  monthly_plan?: string;
+  pay_day?: string;
+  recovery_method?: string;
+  pay_money?: string;
+  drawing_memo?: string;
+  drawing_date?: string;
+  bill_payment_day?: string;
+  user_id?: string;
+  bill_pay?: string;
+  credit_sales_pay?: string;
+  tax_fraction?: string;
+  tax_in_flag?: string;
+  budget_flag?: string;
+  create_id?: string;
+  create_date?: string;
+  update_id?: string;
+  update_date?: string;
+  start_date?: string;
+  end_date?: string;
+  customer_rank?: string;
+  customer_division?: string;
+  sales_type?: string;
+  support_company_flag?: string;
+  note?: string;
+  bank_name?: string;
+  account_name_kana?: string;
+  branch_name?: string;
+  branch_code?: string;
+  account_no?: string;
+  name2?: string;
+  created_at?: string;
+  customer_contact_info?: string;
+  representative_name?: string;
+  website_url?: string;
+  zip_code?: string;
+  info_sales_activity?: string;
+  representative?: string;
+  representative_title?: string;
+  received_by_employee_code?: string;
+  business_event?: string;
+  ai_analysis?: string;
+}
+
+export interface Lead {
+  id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  address?: string;
+  message?: string;
+  status?: string;
+  source?: string;
+  created_at?: string;
+  updated_at?: string;
+  assigned_to?: string;
+  // Additional fields from database
+  lead_source?: string;
+  lead_status?: string;
+  lead_score?: number;
+  conversion_probability?: number;
+  expected_close_date?: string;
+  estimated_value?: number;
+  actual_value?: number;
+  lost_reason?: string;
+  notes?: string;
+  tags?: string;
+  contact_frequency?: string;
+  last_contact_date?: string;
+  next_follow_up_date?: string;
+  lead_owner?: string;
+  campaign_id?: string;
+  form_id?: string;
+  page_url?: string;
+  referrer_url?: string;
+  search_keywords?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_medium?: string;
+  utm_source?: string;
+  utm_term?: string;
+  visit_count?: string;
+  browser_name?: string;
+  browser_version?: string;
+  os_name?: string;
+  os_version?: string;
+  screen_resolution?: string;
+  viewport_size?: string;
+  language?: string;
+  timezone?: string;
+  session_id?: string;
+  page_load_time?: number;
+  time_on_page?: number;
+  cta_source?: string;
+  scroll_depth?: string;
+  sections_viewed?: string;
+  print_types?: string;
+  user_agent?: string;
+  country?: string;
+  city?: string;
+  region?: string;
+  employees?: string;
+  budget?: string;
+  timeline?: string;
+  inquiry_type?: string;
+  ai_investigation?: string;
+  ai_draft_proposal?: string;
+  estimate_sent_at?: string;
+}
+
+export interface Estimate {
+  id: string;
+  estimates_id?: string;
+  project_id?: string;
+  pattern_no?: string;
+  pattern_name?: string;
+  delivery_place?: string;
+  transaction_method?: string;
+  expiration_date?: string;
+  specification?: string;
+  copies?: string;
+  unit_price?: string;
+  tax_rate?: string;
+  note?: string;
+  fraction?: string;
+  approval1?: string;
+  approval2?: string;
+  approval3?: string;
+  approval4?: string;
+  approval_status1?: string;
+  approval_status2?: string;
+  approval_status3?: string;
+  approval_status4?: string;
+  subtotal?: string;
+  consumption?: string;
+  total?: string;
+  valiable_cost?: string;
+  delivery_date?: string;
+  create_date?: string;
+  create_id?: string;
+  update_date?: string;
+  update_id?: string;
+  status?: string;
+  // Additional fields for frontend
+  estimateNumber?: number;
+  customerName?: string;
+  title?: string;
+  displayName?: string;
+  projectName?: string;
+  items?: EstimateItem[];
+  taxAmount?: number;
+  variable_cost_amount?: number;
+  mqAmount?: number;
+  mqRate?: number;
+  detail_count?: number;
+  currency?: string;
+  notes?: string;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_primary_for_project?: boolean;
+  valid_until?: string;
+  version?: number;
+  userId?: string;
+}
+
+export interface EstimateItem {
+  division?: string;
+  content?: string;
+  quantity?: number;
+  unit?: string;
+  unitPrice?: number;
+  price?: number;
+  name?: string;
+  description?: string;
+  subtotal?: number;
+}
+
+export interface Project {
+  id: string;
+  project_code: string;
+  customer_code: string;
+  customer_id?: string;
+  sales_user_code?: string;
+  sales_user_id?: string;
+  estimate_id?: string;
+  estimate_code?: string;
+  order_id?: string;
+  order_code?: string;
+  project_name: string;
+  project_status: string;
+  classification_id?: string;
+  section_code_id?: string;
+  product_class_id?: string;
+  create_date: string;
+  create_user_id?: string;
+  create_user_code: string;
+  update_date: string;
+  update_user_id?: string;
+  update_user_code?: string;
+  project_id?: string;
+  updated_at?: string;
+  amount?: number;
+  subamount?: number;
+  total_cost?: number;
+  delivery_date?: string;
+  quantity?: string;
+}
 
 export interface Job {
   id: string;
@@ -99,976 +339,307 @@ export interface Job {
   finishing: string;
   details: string;
   createdAt: string;
-  price: number;
-  variableCost: number;
-  totalQuantity?: number;
-  totalAmount?: number;
-  totalCost?: number;
-  grossMargin?: number;
-  invoiceStatus: InvoiceStatus;
-  invoicedAt?: string | null;
-  paidAt?: string | null;
-  readyToInvoice?: boolean;
-  invoiceId?: string | null;
-  manufacturingStatus?: ManufacturingStatus;
+  updatedAt: string;
 }
 
-export interface Project {
-  id: string;
-  projectCode: string | null;
-  customerCode: string | null;
-  customerName?: string | null;
-  customerId: string | null;
-  salesUserCode: string | null;
-  salesUserId: string | null;
-  estimateId: string | null;
-  estimateCode: string | null;
-  orderId: string | null;
-  orderCode: string | null;
-  projectName: string;
-  projectStatus: string | null;
-  classificationId: string | null;
-  sectionCodeId: string | null;
-  productClassId: string | null;
-  createDate: string | null;
-  createUserId: string | null;
-  createUserCode: string | null;
-  updateDate: string | null;
-  updateUserId: string | null;
-  updateUserCode: string | null;
-  projectId: string | null;
-  updatedAt: string | null;
-  amount: number | null;
-  subamount: number | null;
-  totalCost: number | null;
-  deliveryDate: string | null;
-  quantity: string | number | null;
-  isActive?: boolean | null;
-}
-
-export interface JobCreationPayload {
-  status: JobStatus;
-  invoiceStatus: InvoiceStatus;
-  manufacturingStatus: ManufacturingStatus;
-  clientName: string;
-  customerId: string | null;
-  customerCode: string | null;
-  title: string;
-  quantity: number;
-  paperType: string;
-  finishing: string;
-  details: string;
-  dueDate: string;
-  price: number;
-  variableCost: number;
-  initialOrder: {
-    orderDate: string;
-    quantity: number;
-    unitPrice: number;
-  };
-}
-
-export interface JournalEntry {
-  id: number;
-  date: string;
-  account: string;
-  debit: number;
-  credit: number;
-  description: string;
-}
-
-export interface GeneralLedgerEntry {
-  id: string;
-  accountId?: string | null;
-  date: string;
-  description: string;
-  debit: number | null;
-  credit: number | null;
-  balance: number | null;
-  jobId?: string | null;
-  voucherNo?: string | null;
-  partner?: string | null;
-  type?: string | null;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string | null;
-  role: 'admin' | 'user';
-  createdAt: string;
-}
-
-export interface EmployeeUser {
-  id: string;
-  name: string;
-  department: string | null;
-  title: string | null;
-  email: string;
-  role: 'admin' | 'user';
-  createdAt: string;
-  isActive?: boolean | null;
-}
-
-export interface Customer {
-  id: string;
-  customerCode?: string;
-  customerName: string;
-  customerNameKana?: string;
-  representative?: string;
-  representativeTitle?: string | null;
-  phoneNumber?: string;
-  address1?: string;
-  companyContent?: string;
-  annualSales?: string;
-  employeesCount?: string;
-  note?: string;
-  infoSalesActivity?: string;
-  infoRequirements?: string;
-  infoHistory?: string;
-  createdAt: string;
-  postNo?: string;
-  address2?: string;
-  fax?: string;
-  closingDay?: string;
-  monthlyPlan?: string;
-  payDay?: string;
-  recoveryMethod?: string;
-  userId?: string;
-  name2?: string;
-  websiteUrl?: string;
-  zipCode?: string;
-  foundationDate?: string;
-  capital?: string;
-  customerRank?: string;
-  customerDivision?: string;
-  salesType?: string;
-  creditLimit?: string;
-  payMoney?: string;
-  bankName?: string;
-  branchName?: string;
-  accountNo?: string;
-  salesUserCode?: string;
-  startDate?: string;
-  endDate?: string;
-  drawingDate?: string;
-  salesGoal?: string;
-  infoSalesIdeas?: string;
-  customerContactInfo?: string; // for mailto
-  aiAnalysis?: CompanyAnalysis | null;
-  isActive?: boolean | null;
-  businessEvent?: string | null; // 名刺取得イベントなど
-  receivedByEmployeeCode?: string | null; // 名刺受領者（社員番号やID）
-}
-
-export interface BusinessCardContact {
-  companyName?: string;
-  personName?: string;
-  personNameKana?: string;
-  department?: string;
-  title?: string;
-  phoneNumber?: string;
-  mobileNumber?: string;
-  faxNumber?: string;
-  email?: string;
-  address?: string;
-  postalCode?: string;
-  websiteUrl?: string;
-  notes?: string;
-  recipientEmployeeCode?: string; // 名刺右上などに手書きされた受領者の社員番号
-}
-
-export interface BankAccountInfo {
-  bankName?: string | null;
-  branchName?: string | null;
-  accountType?: string | null;
-  accountNumber?: string | null;
-}
-
-export interface CustomerInfo {
-  id: string;
-  rank: string | null;
-  phoneNumber: string | null;
-  faxNumber: string | null;
-  introducer: string | null;
-  introductionDetail: string | null;
-  previousPerson: string | null;
-  salesTrends: string | null;
-  grossProfit: string | null;
-  grossProfitByProduct: string | null;
-  companyContent: string | null;
-  keyPerson: string | null;
-  orderRate: string | null;
-  generalNewspaperCoverage: string | null;
-  specialtyMagazineCoverage: string | null;
-  industryNewspaperCoverage: string | null;
-  chamberOfCommerce: string | null;
-  correspondenceEducation: string | null;
-  otherMedia: string | null;
-  codeNo: string | null;
-  businessResult: string | null;
-  companyFeatures: string | null;
-  customerTrends: string | null;
-  incidents: string | null;
-  competitors: string | null;
-  competitorMeasures: string | null;
-  salesTarget: string | null;
-  businessSummary: string | null;
-  externalItems: string | null;
-  internalItems: string | null;
-  quotationPoints: string | null;
-  orderProcess: string | null;
-  mainProducts: string | null;
-  totalOrderAmount: string | null;
-  needsAndIssues: string | null;
-  competitorInfo: string | null;
-  employeeCount: string | null;
-  businessStartYear: string | null;
-  creditLimit: string | null;
-  personInCharge: string | null;
-  closingDate: string | null;
-  paymentDate: string | null;
-  paymentTerms: string | null;
-  companyName: string | null;
-  address: string | null;
-  representativeName: string | null;
-  establishmentYear: string | null;
-  capital: string | null;
-  annualSales: string | null;
-  keyPersonInfo: string | null;
-  customerContactInfo: string | null;
-  orgChart: string | null;
-  pq: string | null;
-  vq: string | null;
-  mq: string | null;
-  mRate: string | null;
-  accidentHistory: string | null;
-  customerVoice: string | null;
-  annualActionPlan: string | null;
-  lostOrders: string | null;
-  growthPotential: string | null;
-  requirements: string | null;
-  other: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-}
-
-export interface SortConfig {
-  key: string;
-  direction: 'ascending' | 'descending';
-}
-
-export interface AISuggestions {
-    title: string;
-    quantity: number;
-    paperType: string;
-    finishing: string;
-    details: string;
-    price: number;
-    variableCost: number;
-}
-
-export interface CalendarEvent {
-    id: string;
-    userId: string;
-    title: string;
-    description?: string | null;
-    startAt: string;
-    endAt: string;
-    allDay: boolean;
-    source?: string | null;
-    googleEventId?: string | null;
-    updatedBySource?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-}
-
-export interface CompanyAnalysis {
-    swot: string;
-    painPointsAndNeeds: string;
-    suggestedActions: string;
-    proposalEmail: {
-        subject: string;
-        body: string;
-    };
-    sources?: { uri: string; title: string; }[];
-}
-
-export interface CompanyInvestigation {
-    summary: string;
-    sources: {
-        uri: string;
-        title: string;
-    }[];
-}
-
-export interface InvoiceData {
-    vendorName: string;
-    invoiceDate: string;
-    totalAmount: number;
-    description: string;
-    costType: 'V' | 'F';
-    account: string;
-    relatedCustomer?: string;
-    project?: string;
-    invoiceNumber?: string | null;
-    registrationNumber?: string | null;
-    dueDate?: string | null;
-    subtotalAmount?: number | null;
-    taxAmount?: number | null;
-    totalNet?: number | null;
-    totalGross?: number | null;
-    lineItems?: InvoiceItem[] | null;
-    expenseDraft?: Record<string, any> | null;
-    bankAccount?: BankAccountInfo | null;
-    matchedPaymentRecipientId?: string | null;
-    matchedCustomerId?: string | null;
-    paymentRecipientName?: string | null;
-    paymentRecipientId?: string | null;
-    paymentRecipientCode?: string | null;
-}
-
-export interface AIJournalSuggestion {
-    account: string;
-    description: string;
-    debit: number;
-    credit: number;
-}
-
+// Additional interfaces from database
 export interface ApplicationCode {
-    id: string;
-    code: string;
-    name: string;
-    description: string;
-    createdAt: string;
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface EstimateItem {
-    division: '用紙代' | 'デザイン・DTP代' | '刷版代' | '印刷代' | '加工代' | 'その他' | '初期費用' | '月額費用';
-    content: string;
-    quantity: number;
-    unit: string;
-    unitPrice: number;
-    price: number;
-    cost: number;
-    costRate: number;
-    subtotal: number;
-    name?: string;
-    qty?: number;
-    taxAmount?: number;
-    total?: number;
-}
-
-export interface Estimate {
-    id: string;
-    estimateNumber: number;
-    customerName: string;
-    title: string;
-    displayName?: string | null;
-    projectName?: string | null;
-    items: EstimateItem[];
-    total: number;
-    deliveryDate: string;
-    paymentTerms: string;
-    deliveryMethod: string;
-    notes: string;
-    status: EstimateStatus;
-    version: number;
-    userId: string;
-    user?: User;
-    createdAt: string;
-    updatedAt: string;
-    subtotal?: number;
-    taxTotal?: number;
-    grandTotal?: number;
-    deliveryTerms?: string;
-    projectId?: string | null;
-    patternNo?: string | null;
-    expirationDate?: string | null;
-    taxRate?: number | null;
-    consumption?: number | null;
-    rawStatusCode?: string | null;
-    copies?: number | null;
-    unitPrice?: number | null;
-    salesAmount?: number | null;
-    variableCostAmount?: number | null;
-    mqAmount?: number | null;
-    mqRate?: number | null;
-    mqMissingReason?: 'OK' | 'A' | 'B' | null;
-    detailCount?: number | null;
-    statusLabel?: string | null;
-    raw?: Record<string, any>;
-}
-
-export interface EstimateDetail {
-    id?: string | null;
-    detailId?: string | null;
-    estimateId: string;
-    itemName: string;
-    quantity: number | null;
-    unitPrice: number | null;
-    amount: number | null;
-    variableCost: number | null;
-    mqAmount?: number | null;
-    mqRate?: number | null;
-    note?: string | null;
-}
-
-export interface ScheduleItem {
-    id: string;
-    start: string;
-    end: string;
-    description: string;
-}
-
-export interface DailyReportData {
-    reportDate: string;
-    startTime: string;
-    endTime: string;
-    customerName: string;
-    activityContent: string;
-    nextDayPlan: string;
-    pqGoal: string;
-    pqCurrent: string;
-    pqLastYear: string;
-    mqGoal: string;
-    mqCurrent: string;
-    mqLastYear: string;
-    planItems: ScheduleItem[];
-    actualItems: ScheduleItem[];
-    comments: string[];
-}
-
-export interface DailyReportPrefill extends Partial<DailyReportData> {
-    id: string;
-}
-
-export interface Lead {
-    id: string;
-    status: LeadStatus;
-    createdAt: string;
-    name: string;
-    email: string | null;
-    phone: string | null;
-    company: string;
-    source: string | null;
-    tags: string[] | null;
-    message: string | null;
-    updatedAt: string | null;
-    referrer: string | null;
-    referrerUrl: string | null;
-    landingPageUrl: string | null;
-    searchKeywords: string | null;
-    utmSource: string | null;
-    utmMedium: string | null;
-    utmCampaign: string | null;
-    utmTerm: string | null;
-    utmContent: string | null;
-    userAgent: string | null;
-    ipAddress: string | null;
-    deviceType: string | null;
-    browserName: string | null;
-    osName: string | null;
-    country: string | null;
-    city: string | null;
-    region: string | null;
-    employees: string | null;
-    budget: string | null;
-    timeline: string | null;
-    inquiryType: string | null;
-    inquiryTypes: string[] | null;
-    infoSalesActivity: string | null;
-    score?: number;
-    aiAnalysisReport?: string;
-    aiDraftProposal?: string;
-    aiInvestigation?: CompanyInvestigation;
-    assignedTo?: string | null; // 対応した人
-    statusUpdatedAt?: string | null; // ステータス更新日時
-    estimateSentAt?: string | null; // 見積メール送信日時
-    estimateSentBy?: string | null; // 見積メール送信者
-    // 既存顧客案件用のフィールド
-    isExistingCustomer?: boolean; // 既存顧客かどうか
-    customerId?: string | null; // 顧客マスタのID
-    projectType?: 'inquiry' | 'repeat' | 'upsell' | 'retention'; // 案件種別
-    lastOrderDate?: string | null; // 前回受注日
-    totalOrderAmount?: number | null; // 累計受注額
-    preferredContactMethod?: 'email' | 'phone' | 'visit'; // 好みの連絡方法
+export interface ApplicationWithDetails {
+  id: string;
+  application_code_id?: string;
+  applicant_id?: string;
+  applicant?: User;
+  application_code?: ApplicationCode;
+  status?: string;
+  current_level?: number;
+  approver_id?: string;
+  rejection_reason?: string;
+  approval_route_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  formData?: any;
 }
 
 export interface ApprovalRoute {
-    id: string;
-    name: string;
-    routeData: {
-        steps: { approverId: string }[];
-    };
-    createdAt: string;
-}
-
-export interface Application {
-    id: string;
-    applicantId: string;
-    applicationCodeId: string;
-    formData: any;
-    status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
-    accountingStatus?: 'none' | 'drafted' | 'posted' | (string & {});
-    handlingStatus?: 'unhandled' | 'in_progress' | 'done' | 'blocked' | (string & {});
-    handlingUpdatedAt?: string | null;
-    handlingUpdatedBy?: string | null;
-    submittedAt: string | null;
-    approvedAt: string | null;
-    rejectedAt: string | null;
-    currentLevel: number;
-    approverId: string | null;
-    rejectionReason: string | null;
-    approvalRouteId: string;
-    createdAt: string;
-    updatedAt?: string | null;
-    documentUrl?: string | null;
-}
-
-export interface ApplicationWithDetails extends Application {
-    applicant?: User;
-    applicationCode?: ApplicationCode;
-    approvalRoute?: ApprovalRoute;
-}
-
-export interface Employee {
-    id: string;
-    name: string;
-    department: string;
-    title: string;
-    hireDate: string;
-    salary: number;
-    createdAt: string;
+  id: string;
+  name: string;
+  route_data: any;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AccountItem {
   id: string;
   code: string;
   name: string;
-  categoryCode?: string | null;
-  isActive?: boolean;
-  sortOrder?: number;
-  createdAt?: string;
-  updatedAt?: string;
-  mqCode?: string | Record<string, any> | null;
+  account_type: string;
+  parent_id?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface PurchaseOrder {
   id: string;
-  supplierName: string;
-  itemName: string;
-  orderDate: string;
-  quantity?: number;
-  unitPrice?: number;
+  order_number: string;
+  supplier_id?: string;
   status: PurchaseOrderStatus;
-  projectCode?: string | null;
-  projectId?: string | null;
-  paymentRecipientId?: string | null;
-  amount?: number | null;
-  subamount?: number | null;
-  totalCost?: number | null;
-  raw?: Record<string, any>;
-  orderCode?: string | null;
-  copies?: number | null;
-}
-
-export interface ProjectBudgetFilter {
-    startDate?: string;
-    endDate?: string;
-    status?: JobStatus;
-    customerId?: string;
-}
-
-export interface ProjectBudgetSummary extends Job {
-    totalQuantity: number;
-    totalAmount: number;
-    totalCost: number;
-    grossMargin: number;
-    orderCount: number;
-    orderTotalQuantity: number;
-    orderTotalAmount: number;
-    orderTotalCost: number;
-    orders: PurchaseOrder[];
+  total_amount: number;
+  order_date: string;
+  expected_delivery_date?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface InventoryItem {
-    id: string;
-    name: string;
-    category: string;
-    quantity: number;
-    unit: string;
-    unitPrice: number;
-}
-
-export interface BusinessPlan {
-    name: string;
-    headers: string[];
-    items: {
-        name: string;
-        totalValue: number | string;
-        data: {
-            type: '目標' | '実績' | '前年';
-            monthly: (number | string)[];
-            cumulative: (number | string)[];
-        }[];
-    }[];
-}
-
-export interface BulletinComment {
-    id: string;
-    postId: string;
-    authorId: string;
-    authorName: string;
-    authorDepartment: string | null;
-    body: string;
-    createdAt: string;
-}
-
-export interface BulletinThread {
-    id: string;
-    title: string;
-    body: string;
-    authorId: string;
-    authorName: string;
-    authorDepartment: string | null;
-    tags: string[];
-    assigneeIds: string[];
-    pinned: boolean;
-    createdAt: string;
-    updatedAt: string;
-    comments: BulletinComment[];
-    dueDate?: string;
-    isTask?: boolean;
-    completed?: boolean;
-}
-
-export interface KnowledgeArticle {
-    id: string;
-    title: string;
-    summary: string;
-    category: string;
-    tags: string[];
-    body: string;
-    createdAt: string;
-    updatedAt: string;
-    authorId?: string | null;
-    authorName?: string | null;
-    pinned?: boolean;
-}
-
-export interface Toast {
-    id: number;
-    message: string;
-    type: 'success' | 'error' | 'info' | 'warning';
-}
-  
-export interface ConfirmationDialogProps {
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    onClose: () => void;
-}
-
-export interface LeadScore {
-    score: number;
-    rationale: string;
-}
-
-export interface BugReport {
   id: string;
-  reporterName: string;
-  reportType: 'bug' | 'improvement';
-  summary: string;
-  description: string;
-  status: BugReportStatus;
-  createdAt: string;
+  item_code: string;
+  name: string;
+  description?: string;
+  quantity_on_hand: number;
+  reorder_level: number;
+  unit_cost: number;
+  location?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface ClosingChecklistItem {
-    id: string;
-    description: string;
-    count: number;
-    status: 'ok' | 'needs_review';
-    actionPage?: Page;
+export interface Employee {
+  id: string;
+  user_id?: string;
+  employee_number?: string;
+  name: string;
+  department_id?: string;
+  position_id?: string;
+  hire_date?: string;
+  termination_date?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface InvoiceItem {
-    id: string;
-    invoiceId: string;
-    jobId?: string;
-    description: string;
-    quantity: number;
-    unit: string;
-    unitPrice: number;
-    lineTotal: number;
-    sortIndex: number;
-    amountExclTax?: number;
-    taxRate?: number;
+export interface Department {
+  id: string;
+  name: string;
+  parent_id?: string;
+  manager_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface Invoice {
-    id: string;
-    invoiceNo: string;
-    invoiceDate: string;
-    dueDate?: string;
-    customerName: string;
-    subtotalAmount: number;
-    taxAmount: number;
-    totalAmount: number;
-    status: 'draft' | 'issued' | 'paid' | 'void';
-    createdAt: string;
-    paidAt?: string;
-    items?: InvoiceItem[];
-}
-
-export enum InboxItemStatus {
-  Processing = 'processing',
-  PendingReview = 'pending_review',
-  Approved = 'approved',
-  Error = 'error',
-}
-
-export interface InboxItem {
-    id: string;
-    fileName: string;
-    filePath: string;
-    fileUrl: string;
-    mimeType: string;
-    status: InboxItemStatus;
-    extractedData: InvoiceData | null;
-    errorMessage: string | null;
-    createdAt: string;
-}
-
-export type FaxIntakeStatus = 'draft' | 'ready' | 'linked' | 'deleted';
-export type FaxIntakeDocType = 'order' | 'estimate' | 'vendor_invoice' | 'unknown';
-export type FaxIntakeOcrStatus = 'pending' | 'processing' | 'done' | 'failed';
-
-export interface FaxIntake {
-    id: string;
-    uploadedBy: string;
-    uploadedAt: string;
-    filePath: string;
-    fileName: string;
-    fileMimeType: string;
-    fileSize: number;
-    fileUrl?: string;
-    ocrStatus: FaxIntakeOcrStatus;
-    ocrErrorMessage?: string | null;
-    ocrRawText?: string | null;
-    ocrJson?: any;
-    docType: FaxIntakeDocType;
-    sourceChannel: string;
-    linkedProjectId?: string | null;
-    linkedOrderId?: string | null;
-    linkedEstimateId?: string | null;
-    status: FaxIntakeStatus;
-    notes?: string | null;
+export interface PaymentRecipient {
+  id: string;
+  name: string;
+  bank_name?: string;
+  account_number?: string;
+  account_holder?: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface MasterAccountItem {
   id: string;
   code: string;
   name: string;
-  categoryCode?: string | null;
-}
-
-export interface PaymentRecipient {
-  id: string;
-  recipientCode: string;
-  companyName: string | null;
-  recipientName: string | null;
-  phoneNumber?: string | null;
-  bankName?: string | null;
-  branchName?: string | null;
-  bankBranch?: string | null;
-  bankAccountType?: string | null;
-  bankAccountNumber?: string | null;
-  accountNumber?: string | null;
-  invoiceRegistrationNumber?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface Department {
-  id: string;
-  name: string;
-}
-
-export type PayableStatus = 'outstanding' | 'partially_paid' | 'paid';
-export type ReceivableStatus = 'outstanding' | 'partially_paid' | 'paid';
-
-export interface PayableItem {
-    id: string;
-    supplier: string;
-    category: string | null;
-    amount: number;
-    paidAmount: number;
-    date: string;
-    due: string;
-    status: PayableStatus;
-    method?: string | null;
-    invoiceImage?: string | null;
-    journalLineId?: string | null;
-}
-
-export interface ReceivableItem {
-    id: string;
-    customer: string;
-    category: string | null;
-    amount: number;
-    paidAmount: number;
-    date: string;
-    due_date: string;
-    status: ReceivableStatus;
-    journalLineId?: string | null;
-}
-
-export interface CashScheduleData {
-    date: string;
-    opening_balance: number;
-    inflows: number;
-    outflows: number;
-    closing_balance: number;
-}
-
-export interface CustomProposalContent {
-  coverTitle: string;
-  businessUnderstanding: string;
-  challenges: string;
-  proposal: string;
-  conclusion: string;
-}
-
-export interface LeadProposalPackage {
-  isSalesLead: boolean;
-  reason: string;
-  proposal?: CustomProposalContent;
-  estimate?: EstimateItem[];
+  category?: string;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AllocationDivision {
   id: string;
   name: string;
-  isActive: boolean;
-  createdAt: string;
+  description?: string;
+  allocation_rules?: any;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Title {
   id: string;
   name: string;
-  isActive: boolean;
-  createdAt: string;
+  level?: number;
+  department_id?: string;
+  responsibilities?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface MarketResearchReport {
+export interface ProjectBudgetSummary {
+  project_id: string;
+  project_name: string;
+  budgeted_amount: number;
+  actual_amount: number;
+  variance_amount: number;
+  variance_percentage: number;
+  period: string;
+}
+
+export interface DailyReportPrefill {
+  project_id?: string;
+  work_description?: string;
+  hours_worked?: number;
+  tasks_completed?: string[];
+  challenges?: string;
+  next_day_plan?: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoice_code?: string;
+  order_id?: string;
+  project_id?: string;
+  invoice_date?: string;
+  due_date?: string;
+  subtotal?: number;
+  tax_amount?: number;
+  total?: number;
+  status?: string;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// UI-specific types
+export interface Toast {
+  id?: string;
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  duration?: number;
+}
+
+export interface ConfirmationDialogProps {
   title: string;
-  summary: string;
-  trends: string[];
-  competitorAnalysis: string;
-  opportunities: string[];
-  threats: string[];
-  sources?: { uri: string; title: string; }[];
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
 }
 
-export interface DraftJournalEntry {
-  batchId: string;
-  entryId: string;
-  source: string;
-  date: string;
+export interface BugReport {
+  id: string;
+  title: string;
   description: string;
-  status: 'draft' | 'posted';
-  lines: {
-    lineId: string;
-    accountId: string;
-    accountCode: string;
-    accountName: string;
-    debit: number;
-    credit: number;
-  }[];
-  debitAccount?: string;
-  debitAmount?: number;
-  creditAccount?: string;
-  creditAmount?: number;
-  confidence?: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  status: BugReportStatus;
+  reporter_id?: string;
+  assignee_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  resolved_at?: string;
 }
 
-export interface ProposalFormData {
-  purpose: string;
-  referenceInfo: string;
-  targetIndustry: string;
-  customerName: string;
-  salesRepName: string;
-  pageCount: number;
-  graphCount: number;
-  imageCount: number;
-  deepResearch: boolean;
+// AI-related types
+export interface CompanyAnalysis {
+  summary?: string;
+  swot?: string;
+  painPointsAndNeeds?: string;
+  suggestedActions?: string;
+  sources?: Array<{
+    uri: string;
+    title?: string;
+  }>;
 }
 
-export type ProposalGraphType = 'bar' | 'line' | 'pie';
-
-export interface ProposalGraphDataPoint {
-  name: string;
-  value: number;
+export interface CompanyInvestigation {
+  company_name?: string;
+  industry?: string;
+  size?: string;
+  location?: string;
+  founded?: string;
+  website?: string;
+  description?: string;
+  key_people?: string[];
+  products_services?: string[];
+  financials?: string;
+  recent_news?: string;
 }
 
-export interface ProposalSlideGraph {
-  type: ProposalGraphType;
-  dataDescription: string;
-  data: ProposalGraphDataPoint[];
+// Email service types
+export interface SMTPEmailService {
+  sendEmail(to: string, subject: string, body: string): Promise<void>;
 }
 
-export interface ProposalSlideImage {
+// Meeting assistant types
+export interface MeetingTranscript {
+  id: string;
+  meeting_id?: string;
+  transcript_text: string;
+  summary?: string;
+  action_items?: string[];
+  participants?: string[];
+  duration?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description?: string;
+  start_time: string;
+  end_time: string;
+  location?: string;
+  organizer_id?: string;
+  participants?: string[];
+  meeting_type?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Employee user type (combination of User and Employee)
+export interface EmployeeUser extends User {
+  employee_number?: string;
+  department_id?: string;
+  position_id?: string;
+  department_name?: string;
+  position_name?: string;
+}
+
+// Journal entry types
+export interface JournalEntry {
+  id: string;
+  entry_number: string;
+  entry_date: string;
   description: string;
+  status?: string;
+  total_debit: number;
+  total_credit: number;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  lines?: JournalEntryLine[];
 }
 
-export interface ProposalSlide {
-  title: string;
-  content: string[];
-  graph?: ProposalSlideGraph;
-  image?: ProposalSlideImage;
-  imageUrl?: string;
-  evidence?: string;
-  speakerNotes: string;
+export interface JournalEntryLine {
+  id: string;
+  journal_entry_id: string;
+  account_id: string;
+  account_code?: string;
+  account_name?: string;
+  description?: string;
+  debit_amount?: number;
+  credit_amount?: number;
+  created_at?: string;
 }
 
-export interface ProposalPresentation {
-  title: string;
-  slides: ProposalSlide[];
-}
+// Helper types
+export type TabId = 'approvals' | 'drafts' | 'submitted' | 'completed';
 
-export interface CustomerBudgetSummary {
-    customerId: string;
-    customerCode: string | null;
-    customerName: string;
-    totalBudget: number;
-    totalActual: number;
-    totalCost: number;
-    profitMargin: number;
-    achievementRate: number;
-    projectCount: number;
-    projects: Array<{
-        id: string;
-        projectCode: string;
-        projectName: string;
-        budget: number;
-        actualCost: number;
-        orders: Array<{
-            id: string;
-            amount: number;
-            orderDate: string;
-        }>;
-    }>;
-}
-
-export interface ProposalSource {
-  title: string;
-  uri: string;
-}
-
-export interface ProposalGenerationResult {
-  presentation: ProposalPresentation;
-  sources: ProposalSource[] | null;
-}
+export default types;
