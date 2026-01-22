@@ -1,0 +1,19 @@
+﻿# General Behavior
+- Be concise. Minimize explanation.
+- Always use the "Write" tool to edit files directly.
+- Focus on clean, readable, and performant code.
+
+# Database Safety (CRITICAL for Supabase/MCP)
+- IF a database error occurs, STOP IMMEDIATELY.
+- DO NOT generate/insert dummy data to attempt to fix errors.
+- First, check the table schema and column types using SQL.
+- Check Row Level Security (RLS) policies if permission is denied.
+
+# Tech Stack
+- Language: TypeScript, Python
+- Framework: Next.js, React, Tailwind CSS
+- Database: Supabase (PostgreSQL)
+
+# Error Handling & Formatting
+- Handle errors gracefully. No silent failures.
+- Follow ESLint/Prettier.
