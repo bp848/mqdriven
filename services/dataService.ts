@@ -3347,11 +3347,14 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const to = from + pageSize - 1;
     
     // 優先: 顧客名/案件名が解決済みのビューを利用
+    console.log('Fetching from estimates_working_view...');
     const { data, error, count } = await supabase
         .from('estimates_working_view')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
+
+    console.log('Estimates query result:', { error, dataLength: data?.length, count });
 
     if (!error && data && data.length > 0) {
         return {
