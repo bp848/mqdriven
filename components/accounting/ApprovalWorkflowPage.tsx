@@ -376,7 +376,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             filteredByTab = filteredByTab.filter(app =>
                 app.applicant?.name?.toLowerCase().includes(lowercasedTerm) ||
                 app.applicationCode?.name?.toLowerCase().includes(lowercasedTerm) ||
-                app.status.toLowerCase().includes(lowercasedTerm)
+                (app.status && app.status.toLowerCase().includes(lowercasedTerm))
             );
         }
         return { displayedApplications: filteredByTab, tabCounts: counts, tabTotals: totals };
