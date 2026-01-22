@@ -3073,99 +3073,102 @@ const generateEstimateId = () => {
 };
 
 const mapEstimateRow = (row: any): Estimate => {
+    // Handle all database fields with proper fallbacks
     const copies = toNumberOrNull(row.copies);
     const unitPrice = toNumberOrNull(row.unit_price);
     const subtotal = toNumberOrNull(row.subtotal) ?? (copies !== null && unitPrice !== null ? copies * unitPrice : null);
     const taxRate = toNumberOrNull(row.tax_rate);
-    const taxAmount =
-        toNumberOrNull(row.tax_amount ?? row.consumption) ?
-        (subtotal !== null && taxRate !== null ? Math.floor(subtotal * (taxRate / 100)) : null);
+    const taxAmount = toNumberOrNull(row.tax_amount ?? row.consumption);
     const total = toNumberOrNull(row.total) ?? (subtotal !== null && taxAmount !== null ? subtotal + taxAmount : subtotal ?? 0);
-    const salesAmount = toNumberOrNull(row.sales_amount) ?? subtotal ?? null;
-    const variableCostAmount = toNumberOrNull(row.variable_cost_amount ?? row.variable_cost_num ?? row.detail_variable_cost_num);
+    const variableCostAmount = toNumberOrNull(row.valiable_cost ?? row.variable_cost_amount);
     const mqAmount = toNumberOrNull(row.mq_amount);
     const mqRate = toNumberOrNull(row.mq_rate);
     const detailCount = toNumberOrNull(row.detail_count);
-    const mqMissingReason = toStringOrNull(row.mq_missing_reason);
-    const statusLabel = row.status_label ?? null;
-    const projectName =
-        toStringOrNull(row.project_name) ??
-        toStringOrNull(row.project_name_resolved);
     
-    // 顧客名がデータベースにない場合、案件名や仕様書から生成
-    const customerName =
-        toStringOrNull(row.customer_name) ??
-        toStringOrNull(row.customer_name_resolved) ??
-        toStringOrNull(row.project_name) ??
-        `顧客${row.estimates_id || row.id || '不明'}`;
+    // Project and customer names
+    const projectName = toStringOrNull(row.project_name) || toStringOrNull(row.pattern_name);
+    const customerName = toStringOrNull(row.customer_name) || projectName || `顧客${row.estimates_id || row.id || '不明'}`;
     
-    const displayName =
-        toStringOrNull(row.display_name) ||
-        projectName ||
-        toStringOrNull(row.pattern_name) ||
-        toStringOrNull(row.specification) ||
-        (row.estimates_id ? `見積#${row.estimates_id}` : '見積');
-    const createdAt = row.created_at ?? row.create_date ?? null;
-    const updatedAt = row.updated_at ?? row.update_date ?? createdAt ?? null;
-
-    console.log('Mapping estimate row:', {
-        estimates_id: row.estimates_id,
-        project_name: row.project_name,
-        customer_name: row.customer_name,
-        created_at: row.created_at,
-        displayName
+    // Display name
+    const displayName = projectName || toStringOrNull(row.specification) || `見積#${row.estimates_id || row.id}`;
+    
+    // Dates
+    const createdAt = toStringOrNull(row.created_at) || toStringOrNull(row.create_date) || new Date().toISOString();
+    const updatedAt = toStringOrNull(row.updated_at) || toStringOrNull(row.update_date) || createdAt;
+    
+    // Status mapping
+    const status = toStringOrNull(row.status) || 'draft';
+    
+    console.log('Mapping estimate:', {
+        id: row.estimates_id || row.id,
+        projectName,
+        customerName,
+        status,
+        total
     });
 
     return {
-        id: row.estimates_id ?? row.id ?? generateEstimateId(),
-        estimateNumber: Number(row.estimate_number ?? row.pattern_no ?? row.estimates_id ?? 0) || 0,
-        customerName: customerName,
-        title: row.pattern_name ?? row.specification ?? '見積',
+        id: toStringOrNull(row.estimates_id) || toStringOrNull(row.id) || generateEstimateId(),
+        estimates_id: toStringOrNull(row.estimates_id),
+        project_id: toStringOrNull(row.project_id),
+        pattern_no: toStringOrNull(row.pattern_no),
+        pattern_name: toStringOrNull(row.pattern_name),
+        delivery_place: toStringOrNull(row.delivery_place),
+        transaction_method: toStringOrNull(row.transaction_method),
+        expiration_date: toStringOrNull(row.expiration_date),
+        specification: toStringOrNull(row.specification),
+        copies: toStringOrNull(row.copies),
+        unit_price: toStringOrNull(row.unit_price),
+        tax_rate: toStringOrNull(row.tax_rate),
+        note: toStringOrNull(row.note),
+        fraction: toStringOrNull(row.fraction),
+        approval1: toStringOrNull(row.approval1),
+        approval2: toStringOrNull(row.approval2),
+        approval3: toStringOrNull(row.approval3),
+        approval4: toStringOrNull(row.approval4),
+        approval_status1: toStringOrNull(row.approval_status1),
+        approval_status2: toStringOrNull(row.approval_status2),
+        approval_status3: toStringOrNull(row.approval_status3),
+        approval_status4: toStringOrNull(row.approval_status4),
+        subtotal: toStringOrNull(row.subtotal),
+        consumption: toStringOrNull(row.consumption),
+        total: toStringOrNull(row.total),
+        valiable_cost: toStringOrNull(row.valiable_cost),
+        delivery_date: toStringOrNull(row.delivery_date),
+        create_date: toStringOrNull(row.create_date),
+        create_id: toStringOrNull(row.create_id),
+        update_date: toStringOrNull(row.update_date),
+        update_id: toStringOrNull(row.update_id),
+        status: status,
+        
+        // Frontend fields
+        estimateNumber: toNumberOrNull(row.estimate_number ?? row.pattern_no) || 0,
+        customerName,
+        title: toStringOrNull(row.pattern_name) || toStringOrNull(row.specification) || '見積',
         displayName,
         projectName,
-        items: [
-            {
-                division: 'その他',
-                content: row.specification ?? row.pattern_name ?? '見積',
-                quantity: copies ?? 0,
-                unit: '式',
-                unitPrice: unitPrice ?? 0,
-                price: subtotal ?? total ?? 0,
-                cost: 0,
-                costRate: 0,
-                subtotal: subtotal ?? total ?? 0,
-            },
-        ],
-        total: total ?? 0,
-        deliveryDate: row.delivery_date ?? row.valid_until ?? row.expiration_date ?? '',
-        paymentTerms: row.transaction_method ?? '',
-        deliveryMethod: row.delivery_place ?? '',
-        notes: row.note ?? '',
-        status: mapEstimateStatus(row.status),
-        version: Number(row.version ?? row.pattern_no ?? 1) || 1,
-        userId: row.create_id ?? row.created_by ?? '',
-        createdAt: createdAt ?? new Date().toISOString(),
-        updatedAt: updatedAt ?? new Date().toISOString(),
-        subtotal: subtotal ?? undefined,
-        taxTotal: taxAmount ?? undefined,
-        grandTotal: total ?? undefined,
-        deliveryTerms: row.specification ?? undefined,
-        projectId: row.project_id ?? null,
-        patternNo: row.pattern_no ?? null,
-        expirationDate: row.expiration_date ?? null,
-        taxRate: taxRate ?? null,
-        consumption: taxAmount ?? null,
-        rawStatusCode: row.status ?? null,
-        copies: copies ?? null,
-        unitPrice: unitPrice ?? null,
-        salesAmount,
-        variableCostAmount,
-        mqAmount,
-        mqRate,
-        mqMissingReason: (mqMissingReason as 'OK' | 'A' | 'B' | null) ?? null,
-        detailCount,
-        statusLabel,
-        raw: row,
+        items: [{
+            division: 'その他',
+            content: toStringOrNull(row.specification) || toStringOrNull(row.pattern_name) || '見積',
+            quantity: copies || 0,
+            unit: '式',
+            unitPrice: unitPrice || 0,
+            price: subtotal || total || 0,
+        }],
+        taxAmount: taxAmount || 0,
+        variable_cost_amount: variableCostAmount || 0,
+        mqAmount: mqAmount || 0,
+        mqRate: mqRate || 0,
+        detail_count: detailCount || 0,
+        currency: 'JPY',
+        notes: toStringOrNull(row.note),
+        created_by: toStringOrNull(row.created_by) || toStringOrNull(row.create_id),
+        created_at: createdAt,
+        updated_at: updatedAt,
+        is_primary_for_project: true,
+        valid_until: toStringOrNull(row.valid_until),
+        version: toNumberOrNull(row.version) || 1,
+        userId: toStringOrNull(row.created_by) || toStringOrNull(row.create_id),
     };
 };
 
