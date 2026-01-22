@@ -37,14 +37,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: PieChart,
     items: [
       { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
-      { page: 'analysis_menu', name: '分析一覧', icon: PieChart },
-      { page: 'analysis_sales', name: '販売分析', icon: PieChart },
-      { page: 'analysis_orders', name: '受注テーブル分析（orders）', icon: PieChart },
-      { page: 'analysis_approval_expense', name: '承認稟議・経費分析', icon: PieChart },
-      { page: 'analysis_business_plan', name: '経営計画', icon: PieChart },
-      { page: 'analysis_sales_status', name: '販売状況', icon: PieChart },
-      { page: 'analysis_customer', name: '顧客分析', icon: PieChart },
-      { page: 'analysis_financial', name: '財務分析', icon: PieChart },
     ],
   },
   {

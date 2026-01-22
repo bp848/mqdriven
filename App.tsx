@@ -62,16 +62,6 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
-import AnalysisMenuPage from './components/analysis/AnalysisMenuPage';
-import SalesAnalysisPage from './components/analysis/SalesAnalysisPage';
-import OrdersAnalysisPage from './components/analysis/OrdersAnalysisPage';
-import ApprovalExpenseAnalysisPage from './components/analysis/ApprovalExpenseAnalysisPage';
-import AnalysisBusinessPlanPage from './components/analysis/BusinessPlanPage';
-import SalesStatusPage from './components/analysis/SalesStatusPage';
-import CustomerAnalysisPage from './components/analysis/CustomerAnalysisPage';
-import FinancialAnalysisPage from './components/analysis/FinancialAnalysisPage';
-import HistoricalEstimateAnalysisPage from './components/analysis/HistoricalEstimateAnalysisPage';
-import HistoricalProjectAnalysisPage from './components/analysis/HistoricalProjectAnalysisPage';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -158,16 +148,6 @@ type PredictiveSuggestion = {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: 'ダッシュボード',
-    analysis_menu: '分析一覧',
-    analysis_sales: '販売分析',
-    analysis_orders: '受注テーブル分析（orders）',
-    analysis_approval_expense: '承認稟議・経費分析',
-    analysis_business_plan: '経営計画',
-    analysis_sales_status: '販売状況',
-    analysis_customer: '顧客分析',
-    analysis_financial: '財務分析',
-    analysis_historical_estimates: '過去の見積分析',
-    analysis_historical_projects: '過去のプロジェクト分析',
     my_schedule: '日報タスクカレンダー',
     sales_dashboard: '販売状況',
     sales_leads: 'リード管理',
@@ -305,7 +285,7 @@ const App: React.FC = () => {
     const [isAuthChecking, setIsAuthChecking] = useState<boolean>(shouldRequireAuth);
     const [authError, setAuthError] = useState<string | null>(null);
     // Global State
-    const [currentPage, setCurrentPage] = useState<Page>('analysis_dashboard');
+    const [currentPage, setCurrentPage] = useState<Page>('sales_dashboard');
     const [searchTerm, setSearchTerm] = useState('');
     const [currentUser, setCurrentUser] = useState<EmployeeUser | null>(null);
     const [user, setUser] = useState<any>(null); // TODO: Replace 'any' with proper user type
@@ -1011,20 +991,6 @@ useEffect(() => {
     }, [isSupabaseConfigured, loadAllData]);
     
     useEffect(() => {
-        if (currentPage === 'analysis_dashboard' && jobs.length > 0 && !isAIOff) {
-            setIsSuggestionLoading(true);
-            geminiService.getDashboardSuggestion(jobs)
-                .then(setAiSuggestion)
-                .catch(err => {
-                    if (err.name === 'AbortError') return;
-                    console.error("Failed to get AI suggestion:", err);
-                    setAiSuggestion("AIからの提案の取得に失敗しました。");
-                })
-                .finally(() => setIsSuggestionLoading(false));
-        } else if (currentPage === 'analysis_dashboard' && isAIOff) {
-            setAiSuggestion("AI機能は現在無効です。");
-            setIsSuggestionLoading(false);
-        }
     }, [currentPage, jobs, isAIOff]);
 
     const pendingApprovalCount = useMemo(() => {
@@ -1230,26 +1196,6 @@ useEffect(() => {
                         />;
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;
-            case 'analysis_menu':
-                return <AnalysisMenuPage onNavigate={handleNavigate} />;
-            case 'analysis_sales':
-                return <SalesAnalysisPage />;
-            case 'analysis_orders':
-                return <OrdersAnalysisPage />;
-            case 'analysis_approval_expense':
-                return <ApprovalExpenseAnalysisPage />;
-            case 'analysis_business_plan':
-                return <AnalysisBusinessPlanPage />;
-            case 'analysis_sales_status':
-                return <SalesStatusPage />;
-            case 'analysis_customer':
-                return <CustomerAnalysisPage />;
-            case 'analysis_financial':
-                return <FinancialAnalysisPage />;
-            case 'analysis_historical_estimates':
-                return <HistoricalEstimateAnalysisPage />;
-            case 'analysis_historical_projects':
-                return <HistoricalProjectAnalysisPage />;
             case 'sales_orders':
                 return (
                     <SalesOrdersPage
