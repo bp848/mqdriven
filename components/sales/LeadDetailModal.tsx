@@ -554,7 +554,7 @@ MQ会計分析:
                 },
             };
         }
-        if (hasInvestigation && !hasEstimateDraft) {
+        if (hasInvestigation) {
             return {
                 label: '提案・見積作成',
                 disabled: Boolean(isAIOff),
