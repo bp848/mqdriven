@@ -1606,14 +1606,20 @@ export const saveCustomerInfo = async (customerId: string, updates: Partial<Cust
 
 export const getJournalEntries = async (): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('journal_entries').select('*').order('date', { ascending: false });
+    const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .eq('status', 'posted')
+        .order('date', { ascending: false });
     ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
     return data || [];
 };
 
 export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>): Promise<JournalEntry> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('journal_entries').insert(entryData).select().single();
+    // Always create journal entries with 'draft' status
+    const draftEntryData = { ...entryData, status: 'draft' };
+    const { data, error } = await supabase.from('journal_entries').insert(draftEntryData).select().single();
     ensureSupabaseSuccess(error, 'Failed to add journal entry');
     return data;
 };
