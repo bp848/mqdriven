@@ -86,6 +86,13 @@ export enum BugReportStatus {
   Closed = '完了',
 }
 
+export enum InboxItemStatus {
+  Processing = 'processing',
+  PendingReview = 'pending_review',
+  Approved = 'approved',
+  Error = 'error',
+}
+
 // Database-aligned interfaces
 export interface User {
   id: string;
@@ -353,20 +360,43 @@ export interface ApplicationCode {
   updated_at?: string;
 }
 
+// 会計ステータスの明確な定義
+export enum AccountingStatus {
+  NONE = 'none',              // 会計処理対象外
+  PENDING = 'pending',        // 仕訳レビュー待ち
+  DRAFT = 'draft',            // 仕訳作成済み（未確定）
+  POSTED = 'posted',          // 仕訳確定済み
+  LOCKED = 'locked',          // 締処理済み（修正不可）
+}
+
+// 申請ステータス
+export enum ApplicationStatus {
+  DRAFT = 'draft',
+  PENDING_APPROVAL = 'pending_approval',
+  APPROVED = 'approved',      // 業務承認済み
+  REJECTED = 'rejected',
+  CANCELLED = 'cancelled',
+}
+
+// 正しい流れの型定義
 export interface ApplicationWithDetails {
   id: string;
   application_code_id?: string;
   applicant_id?: string;
   applicant?: User;
   application_code?: ApplicationCode;
-  status?: string;
+  status?: ApplicationStatus;  // 業務ステータス
   current_level?: number;
   approver_id?: string;
   rejection_reason?: string;
   approval_route_id?: string;
   created_at?: string;
   updated_at?: string;
+  submitted_at?: string;
+  approved_at?: string;
+  rejected_at?: string;
   formData?: any;
+  accounting_status?: AccountingStatus;  // 会計ステータス（別管理）
 }
 
 export interface ApprovalRoute {
@@ -512,6 +542,29 @@ export interface Invoice {
   created_by?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface InvoiceData {
+  vendorName: string;
+  invoiceDate: string;
+  totalAmount: number;
+  description: string;
+  costType: 'V' | 'F';
+  account: string;
+  relatedCustomer?: string;
+  project?: string;
+}
+
+export interface InboxItem {
+  id: string;
+  fileName: string;
+  filePath: string;
+  fileUrl: string;
+  mimeType: string;
+  status: InboxItemStatus;
+  extractedData: InvoiceData | null;
+  errorMessage: string | null;
+  createdAt: string;
 }
 
 // UI-specific types

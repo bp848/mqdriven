@@ -1905,6 +1905,22 @@ export const createJournalFromApplication = async (
     return String(data);
 };
 
+export const updateApplicationAccountingStatus = async (
+    applicationId: string,
+    status: string
+): Promise<void> => {
+    if (!applicationId) throw new Error('applicationId is required');
+    if (!status) throw new Error('status is required');
+
+    const supabase = getSupabase();
+    const { error } = await supabase
+        .from('applications')
+        .update({ accounting_status: status })
+        .eq('id', applicationId);
+
+    ensureSupabaseSuccess(error, 'Failed to update accounting status');
+};
+
 export const setApplicationHandlingStatus = async (
     applicationId: string,
     userId: string,
@@ -2851,26 +2867,28 @@ export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Pro
             .from('payment_recipients')
             .upsert({ id: item.id, ...legacyPayload });
         ensureSupabaseSuccess(fallbackError, '支払先の保存に失敗しました');
-        return;
+    } else {
+        ensureSupabaseSuccess(error, '支払先の保存に失敗しました');
     }
-    ensureSupabaseSuccess(error, '支払先の保存に失敗しました');
 };
 
-export const getGeneralLedger = async (accountId: string, period: { start: string, end: string }): Promise<GeneralLedgerEntry[]> => {
+export const getGeneralLedger = async (accountId: string, dateRange: { start: string; end: string }) => {
     const supabase = getSupabase();
     const { data, error } = await supabase.rpc('get_general_ledger', {
         p_account_id: accountId,
-        p_start_date: period.start,
-        p_end_date: period.end,
+        p_start_date: dateRange.start,
+        p_end_date: dateRange.end,
     });
 
-    ensureSupabaseSuccess(error, 'Failed to fetch general ledger entries');
-
-    if (!data) {
-        return [];
-    }
-
-    return (data as any[]).map(row => ({
+    ensureSupabaseSuccess(error, 'Failed to fetch general ledger');
+    
+    // ガードレール：posted仕訳のみを許可
+    const postedData = (data || []).filter(entry => 
+        entry.status === 'posted' && 
+        entry.accounting_status === 'posted'
+    );
+    
+    return postedData.map(row => ({
         id: row.id,
         date: row.date,
         voucherNo: row.voucher_no,
