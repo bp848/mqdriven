@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ApplicationList from '../ApplicationList';
 import ApplicationDetailModal from '../ApplicationDetailModal';
-import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft } from '../../services/dataService';
+import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft, createJournalFromApplication } from '../../services/dataService';
 import SMTPEmailService from '../../services/smtpEmailService';
 // FIX: Import AllocationDivision type.
 import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
@@ -311,7 +311,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     const handleDeleteDraft = async (application: ApplicationWithDetails) => {
         if (!currentUser) return;
         if (application.status !== 'draft') return;
-        if (application.applicantId !== currentUser.id) {
+        if (application.applicant_id !== currentUser.id) {
             addToast('自分の下書きのみ削除できます。', 'error');
             return;
         }
@@ -327,6 +327,32 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             await fetchListData();
         } catch (err: any) {
             addToast(`エラー: ${err.message || '下書きの削除に失敗しました。'}`, 'error');
+        }
+    };
+
+    const handleCreateJournal = async (application: ApplicationWithDetails) => {
+        if (!currentUser) {
+            addToast('ログインが必要です。', 'error');
+            return;
+        }
+        
+        if (application.status !== 'approved') {
+            addToast('承認済みの申請のみ仕訳を作成できます。', 'error');
+            return;
+        }
+
+        if (application.accounting_status && application.accounting_status !== 'none') {
+            addToast('この申請は既に仕訳が作成されています。', 'error');
+            return;
+        }
+
+        try {
+            await createJournalFromApplication(application.id, currentUser.id);
+            addToast('仕訳が正常に作成されました。', 'success');
+            await fetchListData(); // データを更新してステータスを反映
+        } catch (error: any) {
+            console.error('仕訳作成エラー:', error);
+            addToast(`仕訳の作成に失敗しました: ${error.message}`, 'error');
         }
     };
     
@@ -531,6 +557,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                             currentUserId={currentUser?.id}
                             onCancelApplication={handleCancelApplication}
                             onDeleteDraft={activeTab === 'drafts' ? handleDeleteDraft : undefined}
+                            onCreateJournal={activeTab === 'completed' ? handleCreateJournal : undefined}
                             resubmittedParentIds={resubmissionInfo.parentIds}
                             resubmissionChildrenMap={resubmissionInfo.childMap}
                         />

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ApplicationWithDetails, SortConfig } from '../types';
 import ApplicationStatusBadge from './ApplicationStatusBadge';
-import { ArrowUpDown, ChevronDown, Eye, RefreshCw, Trash2, X } from './Icons';
+import { ArrowUpDown, ChevronDown, Eye, RefreshCw, Trash2, X, FileText } from './Icons';
 import { formatDateTime, formatJPY } from '../utils';
 
 interface ApplicationListProps {
@@ -12,6 +12,7 @@ interface ApplicationListProps {
   currentUserId?: string | null;
   onCancelApplication?: (app: ApplicationWithDetails) => void;
   onDeleteDraft?: (app: ApplicationWithDetails) => void;
+  onCreateJournal?: (app: ApplicationWithDetails) => void;
   resubmittedParentIds?: string[];
   resubmissionChildrenMap?: Record<string, string>;
 }
@@ -97,6 +98,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
   currentUserId,
   onCancelApplication,
   onDeleteDraft,
+  onCreateJournal,
   resubmittedParentIds,
   resubmissionChildrenMap,
 }) => {
@@ -193,6 +195,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
               const canCancel =
                 Boolean(onCancelApplication) && currentUserId === app.applicantId && app.status === 'pending_approval';
               const canDeleteDraft = Boolean(onDeleteDraft) && app.status === 'draft' && currentUserId === app.applicantId;
+              const canCreateJournal = Boolean(onCreateJournal) && app.status === 'approved' && (!app.accounting_status || app.accounting_status === 'none');
               const isResubmissionChild = Boolean(resubmissionChildLookup[app.id]);
               const isResubmittedParent = resubmittedParentIdSet.has(app.id);
 
@@ -284,6 +287,18 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                       >
                         <Trash2 className="w-4 h-4" />
                         <span>下書きを削除</span>
+                      </button>
+                    )}
+                    {canCreateJournal && (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onCreateJournal?.(app);
+                        }}
+                        className="flex items-center justify-center gap-1.5 w-full text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>仕訳レビューへ</span>
                       </button>
                     )}
                   </div>
