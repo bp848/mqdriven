@@ -1,10 +1,15 @@
 
 import React from 'react';
-import PlaceholderPage from '../PlaceholderPage';
+import ExpenseManagement from './ExpenseManagement';
 
-const ExpenseManagementPage: React.FC = () => {
+interface ExpenseManagementPageProps {
+  addToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+  isAIOff: boolean;
+}
+
+const ExpenseManagementPage: React.FC<ExpenseManagementPageProps> = ({ addToast, isAIOff }) => {
     return (
-        <PlaceholderPage title="経費管理" />
+        <ExpenseManagement addToast={addToast} isAIOff={isAIOff} />
     );
 };
 
