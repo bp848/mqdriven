@@ -404,7 +404,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                                     const handlingStatus = normalizeHandlingStatus((app as any).handlingStatus);
                                     const isHandlingUpdating = isUpdatingHandlingFor === app.id;
 		                                const accountingStatus = app.accountingStatus ?? 'none';
-		                                const canCreateJournal = accountingStatus === 'none' && amount !== null && amount > 0;
+		                                const canCreateJournal = (accountingStatus === 'none' || accountingStatus === 'pending') && amount !== null && amount > 0;
 		                                const isDrafted = accountingStatus === 'drafted';
 		                                const isPosted = accountingStatus === 'posted';
 	                                return (

@@ -2633,6 +2633,14 @@ export const approveApplication = async (app: ApplicationWithDetails, currentUse
 
     try {
         if (isFinalStep) {
+            // 承認完了時に仕訳を自動生成（draft）
+            try {
+                await createJournalFromApplication(app.id, currentUser.id);
+            } catch (journalError) {
+                console.warn('[approveApplication] Failed to create journal automatically', journalError);
+                // 仕訳作成失敗しても承認処理は続行する
+            }
+            
             await sendApprovalNotification({
                 type: 'approved',
                 application: updatedApplication,
@@ -3757,12 +3765,32 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
 
 export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.rpc('get_journal_drafts');
+    // 直接 public.journal_entries から draft を取得
+    const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .eq('status', 'draft')
+        .order('date', { ascending: false });
 
     ensureSupabaseSuccess(error, '仕訳下書きの取得に失敗しました。');
 
-    // The RPC returns data in the shape of DraftJournalEntry[], so we can cast it.
-    return (data as any[] as DraftJournalEntry[]) || [];
+    // 取得したデータを DraftJournalEntry 形式に変換
+    return (data || []).map(entry => ({
+        batch_id: entry.id,
+        entry_id: entry.id,
+        status: entry.status,
+        date: entry.date,
+        description: entry.description,
+        source_name: '申請経費',
+        lines: [{
+            lineId: entry.id,
+            accountId: entry.account,
+            accountCode: entry.account,
+            accountName: entry.account,
+            debit: entry.debit,
+            credit: entry.credit
+        }]
+    }));
 };
 
 export const approveJournalBatch = async (batchId: string): Promise<void> => {
