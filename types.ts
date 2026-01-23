@@ -694,5 +694,3 @@ export interface JournalEntryLine {
 
 // Helper types
 export type TabId = 'approvals' | 'drafts' | 'submitted' | 'completed';
-
-export default types;
