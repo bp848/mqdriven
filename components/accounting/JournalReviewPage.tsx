@@ -166,8 +166,15 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
           <div className="flex items-center justify-center h-full text-slate-500">
             <div className="text-center">
               <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
-              <h3 className="text-lg font-semibold mb-2">すべて処理済みです</h3>
-              <p>現在、仕訳レビュー待ちの申請はありません</p>
+              <h3 className="text-lg font-semibold mb-2">仕訳レビュー待ちの申請はありません</h3>
+              <p className="mb-2">現在、会計処理が必要な承認済申請はありません</p>
+              <div className="text-sm text-slate-400 bg-slate-50 rounded-lg p-3 mt-4">
+                <p>💡 承認済申請が仕訳レビューに表示されるには：</p>
+                <ul className="text-left mt-2 space-y-1">
+                  <li>• 申請が承認されていること</li>
+                  <li>• まだ会計処理が開始されていないこと</li>
+                </ul>
+              </div>
             </div>
           </div>
         ) : (
