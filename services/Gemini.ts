@@ -77,7 +77,18 @@ const logGeminiEnvDebug = () => {
   });
 };
 
-logGeminiEnvDebug();
+const shouldLogGeminiEnv = (() => {
+  const raw =
+    resolveEnvValue('VITE_DEBUG_GEMINI_ENV') ??
+    resolveEnvValue('DEBUG_GEMINI_ENV') ??
+    '';
+  const flag = String(raw).toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
+})();
+
+if (shouldLogGeminiEnv) {
+  logGeminiEnvDebug();
+}
 
 const aiOffRaw =
   resolveEnvValue('VITE_AI_OFF') ??
