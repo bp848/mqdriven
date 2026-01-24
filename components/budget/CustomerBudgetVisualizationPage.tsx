@@ -300,7 +300,7 @@ const CustomerBudgetVisualizationPage: React.FC = () => {
                                         <Tooltip 
                                             formatter={(value, name) => {
                                                 if (name === '予算' || name === '実績' || name === '原価') {
-                                                    return [`${name}: ${formatCurrency(value)}`];
+                                                    return [`${name}: ${formatCurrency(Number(value))}`];
                                                 }
                                                 return [`${name}: ${value}%`];
                                             }}
@@ -333,7 +333,7 @@ const CustomerBudgetVisualizationPage: React.FC = () => {
                                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                                             ))}
                                         </Pie>
-                                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>

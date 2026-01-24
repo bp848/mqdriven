@@ -85,18 +85,18 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
     // 平均MQ率を計算
     customerMap.forEach(analysis => {
       const validEstimates = analysis.estimates.filter(e => {
-        const sales = e.total || e.subtotal || 0;
-        const cost = e.variableCostAmount || 0;
+        const sales = Number(e.total || e.subtotal || 0);
+        const cost = Number(e.variableCostAmount || 0);
         return sales > 0;
       });
       
       if (validEstimates.length > 0) {
         const totalMq = validEstimates.reduce((sum, e) => {
-          const sales = e.total || e.subtotal || 0;
-          const cost = e.variableCostAmount || 0;
+          const sales = Number(e.total || e.subtotal || 0);
+          const cost = Number(e.variableCostAmount || 0);
           return sum + (sales - cost);
         }, 0);
-        const totalSales = validEstimates.reduce((sum, e) => sum + (e.total || e.subtotal || 0), 0);
+        const totalSales = validEstimates.reduce((sum, e) => sum + Number(e.total || e.subtotal || 0), 0);
         analysis.avgMqRate = totalSales > 0 ? (totalMq / totalSales) * 100 : 0;
       }
 

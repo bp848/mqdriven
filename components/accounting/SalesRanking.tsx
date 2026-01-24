@@ -132,7 +132,7 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
     }, [fetchSummaries, filters]);
 
     const groupedCustomerData = useMemo(() => {
-        const data = summaries.reduce((acc: Record<string, CustomerSalesData>, summary) => {
+        const data = summaries.reduce<Record<string, CustomerSalesData>>((acc, summary) => {
             if (summary.status === JobStatus.Cancelled) return acc;
             const { key, name } = resolveCustomerIdentity(summary);
             if (!acc[key]) {
@@ -148,7 +148,7 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
             return acc;
         }, {});
 
-        return Object.values(data).sort((a, b) => b.totalSales - a.totalSales);
+        return (Object.values(data) as CustomerSalesData[]).sort((a, b) => b.totalSales - a.totalSales);
     }, [summaries, resolveCustomerIdentity]);
 
     const customerData = useMemo(

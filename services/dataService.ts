@@ -1,10 +1,11 @@
-import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
+﻿import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from './notificationService';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
     EmployeeUser,
+    AccountingStatus,
     Job,
     JobCreationPayload,
     JobStatus,
@@ -12,6 +13,7 @@ import {
     Customer,
     CustomerInfo,
     JournalEntry,
+    JournalEntryLine,
     User,
     AccountItem,
     Lead,
@@ -53,6 +55,7 @@ import {
     CashScheduleData,
     GeneralLedgerEntry,
     CustomerBudgetSummary,
+    AnalysisHistory,
 } from '../types';
 import type { CalendarEvent } from '../types';
 
@@ -72,7 +75,7 @@ const mapOrderStatus = (status?: string | null): PurchaseOrderStatus => {
     if (status && poStatusValues.has(status)) {
         return status as PurchaseOrderStatus;
     }
-    // Fallback to the standard “発注済” state so UI badges remain consistent.
+    // Fallback to the standard 窶懃匱豕ｨ貂遺・state so UI badges remain consistent.
     return PurchaseOrderStatus.Ordered;
 };
 
@@ -83,7 +86,7 @@ const parseNumericValue = (value: unknown): number | null => {
     }
     const cleaned = String(value)
         .trim()
-        .replace(/[¥￥円,]/g, '')
+        .replace(/[ﾂ･・･蜀・]/g, '')
         .replace(/\s+/g, '')
         .replace(/[^\d.\-]/g, '');
     if (!cleaned || cleaned === '-' || cleaned === '.' || cleaned === '-.') return null;
@@ -185,7 +188,7 @@ const mapDbBulletinComment = (row: any): BulletinComment => ({
     id: row.id,
     postId: row.thread_id || row.postId || row.post_id || '',
     authorId: row.author_id ?? row.user_id ?? '',
-    authorName: row.author?.name ?? row.user?.name ?? row.author_name ?? '不明なユーザー',
+    authorName: row.author?.name ?? row.user?.name ?? row.author_name ?? '荳肴・縺ｪ繝ｦ繝ｼ繧ｶ繝ｼ',
     authorDepartment:
         row.author?.department ??
         row.author?.department_id ??
@@ -202,7 +205,7 @@ const mapDbBulletinThread = (row: any): BulletinThread => ({
     title: row.title ?? row.subject ?? '',
     body: row.body ?? row.content ?? '',
     authorId: row.author_id ?? row.created_by ?? '',
-    authorName: row.author?.name ?? row.author_name ?? '不明なユーザー',
+    authorName: row.author?.name ?? row.author_name ?? '荳肴・縺ｪ繝ｦ繝ｼ繧ｶ繝ｼ',
     authorDepartment:
         row.author?.department ??
         row.author?.department_id ??
@@ -528,7 +531,7 @@ const customerToDbCustomer = (customer: Partial<Customer>): any => {
             continue;
         }
         if (camelKey === 'infoSalesActivity') continue;
-        const snakeKey = CUSTOMER_FIELD_OVERRIDES[camelKey] ?? camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        const snakeKey = CUSTOMER_FIELD_OVERRIDES[camelKey] ?? String(camelKey).replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
         dbData[snakeKey] = customer[camelKey];
     }
     return dbData;
@@ -609,7 +612,7 @@ const customerInfoToDbCustomerInfo = (info: Partial<CustomerInfo>): Record<strin
         if (camelKey === 'id' || camelKey === 'createdAt' || camelKey === 'updatedAt') continue;
         const value = info[camelKey];
         if (value === undefined) continue;
-        const snakeKey = camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        const snakeKey = String(camelKey).replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
         dbData[snakeKey] = value === '' ? null : value;
     }
     return dbData;
@@ -709,7 +712,7 @@ const dbLeadToLead = (dbLead: any): Lead => {
 
     if (dbLead.ai_investigation) {
         let raw = dbLead.ai_investigation as any;
-        // ai_investigation が JSON 文字列として保存されている場合も考慮
+        // ai_investigation 縺・JSON 譁・ｭ怜・縺ｨ縺励※菫晏ｭ倥＆繧後※縺・ｋ蝣ｴ蜷医ｂ閠・・
         if (typeof raw === 'string') {
             try {
                 raw = JSON.parse(raw);
@@ -776,7 +779,7 @@ const leadToDbLead = (lead: Partial<Lead>): any => {
     const dbData: { [key: string]: any } = {};
     for (const key in lead) {
         const camelKey = key as keyof Lead;
-        const snakeKey = camelKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        const snakeKey = String(camelKey).replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
         dbData[snakeKey] = lead[camelKey];
     }
     return dbData;
@@ -831,6 +834,13 @@ const dbApplicationCodeToApplicationCode = (d: any): ApplicationCode => ({
     createdAt: d.created_at,
 });
 
+const normalizeAccountingStatus = (value: any): AccountingStatus => {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (raw === 'drafted' || raw === 'draft') return AccountingStatus.DRAFT;
+    if (raw === 'posted') return AccountingStatus.POSTED;
+    return AccountingStatus.NONE;
+};
+
 const dbApplicationToApplication = (app: any): Application => ({
     id: app.id,
     applicantId: app.applicant_id,
@@ -838,7 +848,8 @@ const dbApplicationToApplication = (app: any): Application => ({
     formData: app.form_data,
     documentUrl: app.document_url ?? app.form_data?.documentUrl ?? null,
     status: app.status,
-    accountingStatus: app.accounting_status ?? 'none',
+    accountingStatus: normalizeAccountingStatus(app.accounting_status),
+    accounting_status: normalizeAccountingStatus(app.accounting_status),
     handlingStatus: app.handling_status ?? 'unhandled',
     handlingUpdatedAt: app.handling_updated_at ?? null,
     handlingUpdatedBy: app.handling_updated_by ?? null,
@@ -1366,7 +1377,7 @@ export const getProjectBudgetSummaries = async (filters: ProjectBudgetFilter = {
     return summaries;
 };
 
-export const getJobsWithAggregation = async (): Promise<Job[]> => {
+export const getJobsWithAggregation = async (): Promise<ProjectBudgetSummary[]> => {
     return getProjectBudgetSummaries();
 };
 
@@ -1407,7 +1418,7 @@ export const getCustomerBudgetSummaries = async (): Promise<CustomerBudgetSummar
     const supabase = getSupabase();
     
     try {
-        // 方案1: 顧客別予算ビューを使用
+        // 譁ｹ譯・: 鬘ｧ螳｢蛻･莠育ｮ励ン繝･繝ｼ繧剃ｽｿ逕ｨ
         const { data, error } = await supabase
             .from('customer_budget_summary_view')
             .select('*')
@@ -1420,14 +1431,14 @@ export const getCustomerBudgetSummaries = async (): Promise<CustomerBudgetSummar
         console.warn('Customer budget view not available, using fallback:', err.message);
     }
     
-    // 方案2: 手動集計
+    // Fallback: calculate manually when view is unavailable.
     return await calculateCustomerBudgetsManually();
 };
 
 const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary[]> => {
     const supabase = getSupabase();
     
-    // プロジェクトと顧客データを取得
+    // Load projects and customers.
     const [
         { data: projectRows, error: projectsError },
         { data: customerRows, error: customersError },
@@ -1440,7 +1451,7 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
     const projects = projectRows || [];
     const customers = customerRows || [];
     
-    // 注文データを取得
+    // Collect project IDs.
     const projectIds = projects.map((p: any) => p.id).filter(Boolean);
     const validProjectIds = filterUuidValues(projectIds);
     const { data: orderRows, error: ordersError } = validProjectIds.length
@@ -1452,7 +1463,7 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
     ensureSupabaseSuccess(ordersError as any, 'Failed to load orders for customer budgets');
     const orders = orderRows || [];
     
-    // 顧客別にデータを集計
+    // Build customer lookup.
     const customerMap = new Map<any, any>();
     customers.forEach((customer: any) => {
         customerMap.set(customer.id, customer);
@@ -1480,7 +1491,7 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
         ordersByProject.get(order.project_id).push(order);
     });
     
-    // 顧客別集計を作成
+    // 鬘ｧ螳｢蛻･髮・ｨ医ｒ菴懈・
     const customerBudgets: CustomerBudgetSummary[] = [];
     
     for (const [customerKey, customerProjects] of projectByCustomer) {
@@ -1548,7 +1559,7 @@ const mapCustomerBudgetSummary = (row: any): CustomerBudgetSummary => ({
 
 export const getCustomers = async (): Promise<Customer[]> => {
     const supabase = getSupabase();
-    // 新しいものを上に表示するため created_at 降順で取得
+    // Fetch customers ordered by latest created_at.
     const { data, error } = await supabase
         .from('customers')
         .select('*')
@@ -1604,23 +1615,80 @@ export const saveCustomerInfo = async (customerId: string, updates: Partial<Cust
 };
 
 
-export const getJournalEntries = async (): Promise<JournalEntry[]> => {
+export const getJournalEntries = async (status?: string): Promise<JournalEntry[]> => {
+    const supabase = getSupabase();
+    let query = supabase.from('journal_entries').select('*');
+    if (status) {
+        query = query.eq('status', status);
+    } else {
+        query = query.eq('status', 'posted');
+    }
+    const { data, error } = await query.order('date', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
+    return data || [];
+};
+
+export const getJournalEntriesByStatus = async (status: string): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
         .from('journal_entries')
-        .select('*')
-        .eq('status', 'posted')
-        .order('date', { ascending: false });
+        .select(`
+            *,
+            journal_entry_lines (
+                id,
+                account_id,
+                account_code,
+                account_name,
+                debit_amount,
+                credit_amount,
+                description
+            )
+        `)
+        .eq('status', status)
+        .order('created_at', { ascending: false });
     ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
     return data || [];
+};
+
+export const updateJournalEntryStatus = async (journalEntryId: string, status: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { data: entry, error: entryError } = await supabase
+        .from('journal_entries')
+        .select('id, application_id')
+        .eq('id', journalEntryId)
+        .single();
+    ensureSupabaseSuccess(entryError, 'Failed to fetch journal entry');
+
+    const { error } = await supabase
+        .from('journal_entries')
+        .update({
+            status,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', journalEntryId);
+    ensureSupabaseSuccess(error, 'Failed to update journal entry status');
+
+    if (entry?.application_id && (status === 'posted' || status === 'draft')) {
+        const { error: appError } = await supabase
+            .from('applications')
+            .update({ accounting_status: status })
+            .eq('id', entry.application_id);
+        ensureSupabaseSuccess(appError, 'Failed to update application accounting status');
+    }
 };
 
 export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>): Promise<JournalEntry> => {
     const supabase = getSupabase();
     // Always create journal entries with 'draft' status
-    const draftEntryData = { ...entryData, status: 'draft' };
+    const draftEntryData = { 
+        ...entryData, 
+        status: 'draft',
+        date: new Date().toISOString().split('T')[0] // Add current date
+    };
     const { data, error } = await supabase.from('journal_entries').insert(draftEntryData).select().single();
     ensureSupabaseSuccess(error, 'Failed to add journal entry');
+    
+    // The trigger will automatically create journal_entry_lines
     return data;
 };
 
@@ -1697,7 +1765,7 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
 
         return {
             id: user.id,
-            name: user.name || '（未設定）',
+            name: user.name || '未設定',
             department: departmentName,
             title: titleName,
             email: user.email || '',
@@ -1884,31 +1952,105 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         query.in('application_code.code', codes);
     }
     const { data, error } = await query;
-        
+
     ensureSupabaseSuccess(error, 'Failed to fetch approved applications');
-    return (data || []).map(app => ({
-        ...dbApplicationToApplication(app),
-        applicant: app.applicant,
-        applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
-        approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
-    }));
-};
 
-export const createJournalFromApplication = async (
-    applicationId: string,
-    userId: string
-): Promise<string> => {
-    if (!applicationId) throw new Error('applicationId is required');
-    if (!userId) throw new Error('userId is required');
+    const apps = data || [];
+    const appIds = apps.map(app => app.id).filter(Boolean);
+    if (appIds.length === 0) {
+        return apps.map(app => ({
+            ...dbApplicationToApplication(app),
+            applicant: app.applicant,
+            application_code: app.application_code,
+            applicationCode: app.application_code,
+        }));
+    }
 
-    const supabase = getSupabase();
-    const { data, error } = await supabase.rpc('create_journal_from_application', {
-        p_application_id: applicationId,
-        p_user_id: userId,
+    const { data: journalEntries, error: journalError } = await supabase
+        .from('journal_entries')
+        .select('id, application_id, status, date, description, created_at')
+        .in('application_id', appIds);
+    ensureSupabaseSuccess(journalError, 'Failed to fetch journal entries for approved applications');
+
+    const entryByAppId = new Map<string, any>();
+    (journalEntries || []).forEach(entry => {
+        if (!entry?.application_id) return;
+        const existing = entryByAppId.get(entry.application_id);
+        if (!existing) {
+            entryByAppId.set(entry.application_id, entry);
+            return;
+        }
+        const existingTime = existing?.created_at ? new Date(existing.created_at).getTime() : 0;
+        const nextTime = entry?.created_at ? new Date(entry.created_at).getTime() : 0;
+        if (nextTime >= existingTime) {
+            entryByAppId.set(entry.application_id, entry);
+        }
     });
 
-    ensureSupabaseSuccess(error, 'Failed to create journal from application');
-    return String(data);
+    const entryIds = Array.from(entryByAppId.values()).map(entry => entry.id).filter(Boolean);
+    const linesByEntryId = new Map<string, any[]>();
+    if (entryIds.length > 0) {
+        const { data: journalLines, error: linesError } = await supabase
+            .from('journal_entry_lines')
+            .select(`
+                id,
+                journal_entry_id,
+                account_id,
+                debit_amount,
+                credit_amount,
+                description,
+                account_items (
+                    code,
+                    name
+                )
+            `)
+            .in('journal_entry_id', entryIds);
+        ensureSupabaseSuccess(linesError, 'Failed to fetch journal entry lines');
+        (journalLines || []).forEach(line => {
+            const key = line.journal_entry_id;
+            if (!key) return;
+            if (!linesByEntryId.has(key)) {
+                linesByEntryId.set(key, []);
+            }
+            linesByEntryId.get(key)!.push(line);
+        });
+    }
+
+    return apps.map(app => {
+        const base = dbApplicationToApplication(app) as ApplicationWithDetails;
+        const entry = entryByAppId.get(app.id);
+        const normalizedStatus = entry ? normalizeAccountingStatus(entry.status) : AccountingStatus.NONE;
+        const lines = entry ? (linesByEntryId.get(entry.id) || []) : [];
+        const mappedCode = app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined;
+        const mappedLines: JournalEntryLine[] = lines.map(line => ({
+            id: line.id,
+            journal_entry_id: line.journal_entry_id,
+            account_id: line.account_id,
+            account_code: line.account_items?.code ?? line.account_code,
+            account_name: line.account_items?.name ?? line.account_name,
+            description: line.description ?? undefined,
+            debit_amount: line.debit_amount ?? undefined,
+            credit_amount: line.credit_amount ?? undefined,
+            created_at: line.created_at ?? undefined,
+        }));
+
+        return {
+            ...base,
+            applicant: app.applicant,
+            application_code: mappedCode,
+            applicationCode: mappedCode,
+            accountingStatus: normalizedStatus,
+            accounting_status: normalizedStatus,
+            journalEntry: entry
+                ? {
+                      id: entry.id,
+                      status: entry.status,
+                      date: entry.date,
+                      lines: mappedLines,
+                  }
+                : undefined,
+        };
+    });
 };
 
 export const updateApplicationAccountingStatus = async (
@@ -1996,17 +2138,17 @@ export const syncApprovedLeaveToCalendars = async (): Promise<{ created: number;
         const endDate = new Date(`${end}T00:00:00.000Z`);
         endDate.setUTCDate(endDate.getUTCDate() + 1); // all-day end is exclusive
 
-        const leaveType = app.form_data?.leaveType || '休暇';
+        const leaveType = app.form_data?.leaveType || '莨第嚊';
         const applicantField: any = (app as any).applicant;
         const applicantName =
-            (!Array.isArray(applicantField) ? applicantField?.name : applicantField?.[0]?.name) || '申請者不明';
+            (!Array.isArray(applicantField) ? applicantField?.name : applicantField?.[0]?.name) || '逕ｳ隲玖・ｸ肴・';
 
         for (const user of safeUsers) {
             const key = toKey(app.id, user.id);
             if (existingSet.has(key)) continue;
             rows.push({
                 user_id: user.id,
-                title: `【休暇】${applicantName} (${leaveType})`,
+                title: `縲蝉ｼ第嚊縲・{applicantName} (${leaveType})`,
                 description: `application_id=${app.id}`,
                 start_at: startDate.toISOString(),
                 end_at: endDate.toISOString(),
@@ -2120,26 +2262,26 @@ export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
     return (data || []).map(dbApplicationCodeToApplicationCode);
 };
 export const submitApplication = async (appData: any, applicantId: string): Promise<Application> => {
-    console.log('[submitApplication] 申請送信開始', { applicationCodeId: appData.applicationCodeId, applicantId });
+    console.log('[submitApplication] payload', { applicationCodeId: appData.applicationCodeId, applicantId });
     const supabase = getSupabase();
 
-    // 認証状態を確認
+    // Ensure the session is available.
     const { data: authData } = await supabase.auth.getSession();
     if (!authData.session) {
-        throw new Error('認証が必要です。再度ログインしてください。');
+        throw new Error('セッションがありません。再ログインしてください。');
     }
 
     const { data: routeData, error: routeError } = await supabase.from('approval_routes').select('route_data').eq('id', appData.approvalRouteId).single();
     if (routeError) {
-        console.error('[submitApplication] 承認ルート取得エラー:', routeError);
-        throw formatSupabaseError('承認ルートの取得に失敗しました', routeError);
+        console.error('[submitApplication] 謇ｿ隱阪Ν繝ｼ繝亥叙蠕励お繝ｩ繝ｼ:', routeError);
+        throw formatSupabaseError('謇ｿ隱阪Ν繝ｼ繝医・蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆', routeError);
     }
     if (!routeData?.route_data?.steps || routeData.route_data.steps.length === 0) {
-        throw new Error('選択された承認ルートに承認者が設定されていません。');
+        throw new Error('承認ルートに承認者が設定されていません。');
     }
 
     const firstApproverId = routeData.route_data.steps[0].approver_id;
-    console.log('[submitApplication] 初期承認者:', firstApproverId);
+    console.log('[submitApplication] 蛻晄悄謇ｿ隱崎・', firstApproverId);
 
     const applicationData = {
         application_code_id: appData.applicationCodeId,
@@ -2153,16 +2295,16 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
         approver_id: firstApproverId,
     };
 
-    console.log('[submitApplication] 申請データ:', applicationData);
+    console.log('[submitApplication] 逕ｳ隲九ョ繝ｼ繧ｿ:', applicationData);
 
     const { data, error } = await supabase.from('applications').insert(applicationData).select().single();
 
     if (error) {
-        console.error('[submitApplication] 申請登録エラー:', error);
-        throw formatSupabaseError('申請の登録に失敗しました', error);
+        console.error('[submitApplication] 逕ｳ隲狗匳骭ｲ繧ｨ繝ｩ繝ｼ:', error);
+        throw formatSupabaseError('逕ｳ隲九・逋ｻ骭ｲ縺ｫ螟ｱ謨励＠縺ｾ縺励◆', error);
     }
 
-    console.log('[submitApplication] 申請登録成功:', data);
+    console.log('[submitApplication] 逕ｳ隲狗匳骭ｲ謌仙粥:', data);
     const createdApplication = dbApplicationToApplication(data);
 
     try {
@@ -2609,7 +2751,7 @@ export const approveApplication = async (app: ApplicationWithDetails, currentUse
         nextLevel = currentLevel + 1;
         nextApproverId = approverSequence[nextLevel - 1] ?? null;
         if (!nextApproverId) {
-            throw new Error('承認ルートの設定に問題があります。');
+            throw new Error('承認ルートの承認者が見つかりません。');
         }
         updates.status = 'pending_approval';
         updates.current_level = nextLevel;
@@ -2633,14 +2775,6 @@ export const approveApplication = async (app: ApplicationWithDetails, currentUse
 
     try {
         if (isFinalStep) {
-            // 承認完了時に仕訳を自動生成（draft）
-            try {
-                await createJournalFromApplication(app.id, currentUser.id);
-            } catch (journalError) {
-                console.warn('[approveApplication] Failed to create journal automatically', journalError);
-                // 仕訳作成失敗しても承認処理は続行する
-            }
-            
             await sendApprovalNotification({
                 type: 'approved',
                 application: updatedApplication,
@@ -2670,7 +2804,7 @@ export const approveApplication = async (app: ApplicationWithDetails, currentUse
 };
 export const rejectApplication = async (app: ApplicationWithDetails, reason: string, currentUser: User): Promise<void> => {
     if (app.approverId !== currentUser.id) {
-        throw new Error('この申請を差し戻す権限がありません。');
+        throw new Error('この申請を却下する権限がありません。');
     }
     if (app.status !== 'pending_approval') {
         throw new Error('承認待ちの申請ではありません。');
@@ -2725,10 +2859,10 @@ export const rejectApplication = async (app: ApplicationWithDetails, reason: str
 
 export const cancelApplication = async (app: ApplicationWithDetails, currentUser: User): Promise<void> => {
     if (app.applicantId !== currentUser.id) {
-        throw new Error('自分が申請した案件のみ取り消せます。');
+        throw new Error('この申請を取り下げる権限がありません。');
     }
     if (app.status !== 'pending_approval') {
-        throw new Error('承認待ちの申請のみ取り消せます。');
+        throw new Error('承認待ちの申請のみ取り下げ可能です。');
     }
 
     const supabase = getSupabase();
@@ -2738,7 +2872,7 @@ export const cancelApplication = async (app: ApplicationWithDetails, currentUser
         .update({
             status: 'cancelled',
             approver_id: null,
-            rejection_reason: '申請者による取り消し',
+            rejection_reason: '逕ｳ隲玖・↓繧医ｋ蜿悶ｊ豸医＠',
             rejected_at: now,
             approved_at: null,
         })
@@ -2765,25 +2899,25 @@ export const saveAccountItem = async (item: Partial<AccountItem>): Promise<void>
     const supabase = getSupabase();
     const dbItem = { code: item.code, name: item.name, category_code: item.categoryCode, is_active: item.isActive, sort_order: item.sortOrder };
     const { error } = await supabase.from('account_items').upsert({ id: item.id, ...dbItem });
-    ensureSupabaseSuccess(error, '勘定科目の保存に失敗しました');
+    ensureSupabaseSuccess(error, '蜍伜ｮ夂ｧ醍岼縺ｮ菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 export const deactivateAccountItem = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('account_items').update({ is_active: false }).eq('id', id);
-    ensureSupabaseSuccess(error, '勘定科目の無効化に失敗しました');
+    ensureSupabaseSuccess(error, '蜍伜ｮ夂ｧ醍岼縺ｮ辟｡蜉ｹ蛹悶↓螟ｱ謨励＠縺ｾ縺励◆');
 };
 
-// デバッグ用：サービスロールキーで直接クエリを実行
+// Debug helper for payment recipients with service role.
 export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRecipient[]> => {
-    console.log(`[debugPaymentRecipientsWithServiceRole] サービスロールキーでクエリ実行`);
+    console.log('[debugPaymentRecipientsWithServiceRole] Running service role diagnostics');
     
-    // サービスロールキーで新しいクライアントを作成
+    // 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ繧ｭ繝ｼ縺ｧ譁ｰ縺励＞繧ｯ繝ｩ繧､繧｢繝ｳ繝医ｒ菴懈・
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     
     if (!serviceRoleKey || !supabaseUrl) {
-        console.error('[debugPaymentRecipientsWithServiceRole] サービスロールキーが見つかりません');
+        console.error('[debugPaymentRecipientsWithServiceRole] 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ繧ｭ繝ｼ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ');
         return [];
     }
     
@@ -2806,25 +2940,25 @@ export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRe
             .limit(10);
             
         if (error) {
-            console.error('[debugPaymentRecipientsWithServiceRole] サービスロールクエリエラー:', error);
+            console.error('[debugPaymentRecipientsWithServiceRole] 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ繧ｯ繧ｨ繝ｪ繧ｨ繝ｩ繝ｼ:', error);
             return [];
         }
         
-        console.log(`[debugPaymentRecipientsWithServiceRole] サービスロールで取得: ${data?.length || 0}件`, data);
+        console.log(`[debugPaymentRecipientsWithServiceRole] 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ縺ｧ蜿門ｾ・ ${data?.length || 0}莉ｶ`, data);
         return (data || []).map(mapDbPaymentRecipient);
     } catch (err) {
-        console.error('[debugPaymentRecipientsWithServiceRole] 例外:', err);
+        console.error('[debugPaymentRecipientsWithServiceRole] 萓句､・', err);
         return [];
     }
 };
 
 export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
-    console.log(`[getPaymentRecipients] 開始 - 検索クエリ: "${q}"`);
+    console.log(`[getPaymentRecipients] 髢句ｧ・- 讀懃ｴ｢繧ｯ繧ｨ繝ｪ: "${q}"`);
     const supabase = getSupabase();
     
-    // 認証状態を確認
+    // Ensure the session is available.
     const { data: authData } = await supabase.auth.getSession();
-    console.log(`[getPaymentRecipients] 認証状態:`, { 
+    console.log(`[getPaymentRecipients] 隱崎ｨｼ迥ｶ諷・`, { 
         hasSession: !!authData.session,
         userId: authData.session?.user?.id,
         userEmail: authData.session?.user?.email 
@@ -2837,32 +2971,32 @@ export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient
             .order('company_name', { ascending: true })
             .order('recipient_name', { ascending: true });
         
-        // 検索クエリがある場合は複数カラムを対象に検索
+        // 讀懃ｴ｢繧ｯ繧ｨ繝ｪ縺後≠繧句ｴ蜷医・隍・焚繧ｫ繝ｩ繝繧貞ｯｾ雎｡縺ｫ讀懃ｴ｢
         if (q && q.trim()) {
             const searchTerm = `%${q.trim()}%`;
             query = query.or(`company_name.ilike.${searchTerm},recipient_name.ilike.${searchTerm},recipient_code.ilike.${searchTerm}`);
-            console.log(`[getPaymentRecipients] 検索条件適用: ${searchTerm}`);
+            console.log(`[getPaymentRecipients] 讀懃ｴ｢譚｡莉ｶ驕ｩ逕ｨ: ${searchTerm}`);
         }
         
         return query.limit(1000);
     };
 
-    console.log(`[getPaymentRecipients] プライマリクエリ実行`);
+    console.log('[getPaymentRecipients] Querying payment recipients');
     let { data, error } = await buildQuery(PAYMENT_RECIPIENT_SELECT);
     
     if (error && isMissingColumnError(error)) {
         console.warn('payment_recipients table missing extended columns; falling back to legacy schema', error);
-        console.log(`[getPaymentRecipients] レガシークエリ実行`);
+        console.log('[getPaymentRecipients] Retrying with legacy schema');
         ({ data, error } = await buildQuery(PAYMENT_RECIPIENT_LEGACY_SELECT));
     }
     
     if (error) {
-        console.error(`[getPaymentRecipients] エラー:`, error);
+        console.error(`[getPaymentRecipients] 繧ｨ繝ｩ繝ｼ:`, error);
         throw error;
     }
     
     const result = (data || []).map(mapDbPaymentRecipient);
-    console.log(`[getPaymentRecipients] 完了 - 取得件数: ${result.length}件`, { 
+    console.log(`[getPaymentRecipients] 螳御ｺ・- 蜿門ｾ嶺ｻｶ謨ｰ: ${result.length}莉ｶ`, { 
         searchQuery: q, 
         rawDataCount: data?.length || 0,
         firstFewItems: result.slice(0, 3).map(r => ({ id: r.id, name: r.companyName || r.recipientName }))
@@ -2880,9 +3014,9 @@ export const savePaymentRecipient = async (item: Partial<PaymentRecipient>): Pro
         const { error: fallbackError } = await supabase
             .from('payment_recipients')
             .upsert({ id: item.id, ...legacyPayload });
-        ensureSupabaseSuccess(fallbackError, '支払先の保存に失敗しました');
+        ensureSupabaseSuccess(fallbackError, '謾ｯ謇募・縺ｮ菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
     } else {
-        ensureSupabaseSuccess(error, '支払先の保存に失敗しました');
+        ensureSupabaseSuccess(error, '謾ｯ謇募・縺ｮ菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
     }
 };
 
@@ -2896,7 +3030,7 @@ export const getGeneralLedger = async (accountId: string, dateRange: { start: st
 
     ensureSupabaseSuccess(error, 'Failed to fetch general ledger');
     
-    // ガードレール：posted仕訳のみを許可
+    // 繧ｬ繝ｼ繝峨Ξ繝ｼ繝ｫ・嗔osted莉戊ｨｳ縺ｮ縺ｿ繧定ｨｱ蜿ｯ
     const postedData = (data || []).filter(entry => 
         entry.status === 'posted' && 
         entry.accounting_status === 'posted'
@@ -2912,14 +3046,14 @@ export const getGeneralLedger = async (accountId: string, dateRange: { start: st
         credit: row.credit,
         balance: row.balance,
         // The 'type' is for UI display only and can be derived on the client
-        type: row.debit > 0 ? '借' : (row.credit > 0 ? '貸' : '繰'),
+        type: row.debit > 0 ? '借方' : (row.credit > 0 ? '貸方' : 'その他'),
     }));
 };
 
 
 export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): Promise<PaymentRecipient> => {
     if (!item.companyName && !item.recipientName) {
-        throw new Error('支払先の名称を入力してください。');
+        throw new Error('支払先名を入力してください。');
     }
     const supabase = getSupabase();
     const hydratedItem: Partial<PaymentRecipient> = {
@@ -2946,33 +3080,47 @@ export const createPaymentRecipient = async (item: Partial<PaymentRecipient>): P
             .single());
     }
 
-    ensureSupabaseSuccess(error, '支払先の登録に失敗しました');
+    ensureSupabaseSuccess(error, '謾ｯ謇募・縺ｮ逋ｻ骭ｲ縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
     return mapDbPaymentRecipient(data);
 };
 
 export const deletePaymentRecipient = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('payment_recipients').delete().eq('id', id);
-    ensureSupabaseSuccess(error, '支払先の削除に失敗しました');
+    ensureSupabaseSuccess(error, '謾ｯ謇募・縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
+};
+
+// Analysis history helpers (legacy/no-op fallbacks).
+export const getAnalysisHistory = async (): Promise<AnalysisHistory[]> => {
+    return [];
+};
+
+export const addAnalysisHistory = async (_entry: AnalysisHistory): Promise<void> => {
+    return;
+};
+
+// Project creation fallback (no-op placeholder for UI callers).
+export const addProject = async (_project: Partial<Project>, _files?: any[]): Promise<Project | null> => {
+    return null;
 };
 
 export const getAllocationDivisions = async (): Promise<AllocationDivision[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('allocation_divisions').select('*').order('name');
-    ensureSupabaseSuccess(error, '振分区分の取得に失敗しました');
+    ensureSupabaseSuccess(error, '謖ｯ蛻・玄蛻・・蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆');
     return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
 };
 
 export const saveAllocationDivision = async (item: Partial<AllocationDivision>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('allocation_divisions').upsert({ id: item.id, name: item.name, is_active: item.isActive });
-    ensureSupabaseSuccess(error, '振分区分の保存に失敗しました');
+    ensureSupabaseSuccess(error, '謖ｯ蛻・玄蛻・・菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 export const deleteAllocationDivision = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('allocation_divisions').delete().eq('id', id);
-    ensureSupabaseSuccess(error, '振分区分の削除に失敗しました');
+    ensureSupabaseSuccess(error, '謖ｯ蛻・玄蛻・・蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 export const getDepartments = async (): Promise<Department[]> => {
@@ -2985,32 +3133,32 @@ export const getDepartments = async (): Promise<Department[]> => {
 export const saveDepartment = async (item: Partial<Department>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('departments').upsert({ id: item.id, name: item.name });
-    ensureSupabaseSuccess(error, '部署の保存に失敗しました');
+    ensureSupabaseSuccess(error, '驛ｨ鄂ｲ縺ｮ菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 export const deleteDepartment = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('departments').delete().eq('id', id);
-    ensureSupabaseSuccess(error, '部署の削除に失敗しました');
+    ensureSupabaseSuccess(error, '驛ｨ鄂ｲ縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 export const getTitles = async (): Promise<Title[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('employee_titles').select('*').order('name');
-    ensureSupabaseSuccess(error, '役職の取得に失敗しました');
+    ensureSupabaseSuccess(error, '蠖ｹ閨ｷ縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆');
     return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
 };
 
 export const saveTitle = async (item: Partial<Title>): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('employee_titles').upsert({ id: item.id, name: item.name, is_active: item.isActive });
-    ensureSupabaseSuccess(error, '役職の保存に失敗しました');
+    ensureSupabaseSuccess(error, '蠖ｹ閨ｷ縺ｮ菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 export const deleteTitle = async (id: string): Promise<void> => {
     const supabase = getSupabase();
     const { error } = await supabase.from('employee_titles').delete().eq('id', id);
-    ensureSupabaseSuccess(error, '役職の削除に失敗しました');
+    ensureSupabaseSuccess(error, '蠖ｹ閨ｷ縺ｮ蜑企勁縺ｫ螟ｱ謨励＠縺ｾ縺励◆');
 };
 
 
@@ -3069,7 +3217,9 @@ export const getBugReports = async (): Promise<BugReport[]> => {
 };
 export const addBugReport = async (report: any): Promise<void> => {
     const supabase = getSupabase();
-    const { error } = await supabase.from('bug_reports').insert({ ...bugReportToDbBugReport(report), status: '未対応' });
+    const { error } = await supabase
+        .from('bug_reports')
+        .insert({ ...bugReportToDbBugReport(report), status: BugReportStatus.Open });
     ensureSupabaseSuccess(error, 'Failed to add bug report');
 };
 export const updateBugReport = async (id: string, updates: Partial<BugReport>): Promise<void> => {
@@ -3119,10 +3269,10 @@ const mapEstimateRow = (row: any): Estimate => {
     
     // Project and customer names
     const projectName = toStringOrNull(row.project_name) || toStringOrNull(row.pattern_name);
-    const customerName = toStringOrNull(row.customer_name) || projectName || `顧客${row.estimates_id || row.id || '不明'}`;
+    const customerName = toStringOrNull(row.customer_name) || projectName || `鬘ｧ螳｢${row.estimates_id || row.id || '荳肴・'}`;
     
     // Display name
-    const displayName = projectName || toStringOrNull(row.specification) || `見積#${row.estimates_id || row.id}`;
+    const displayName = projectName || toStringOrNull(row.specification) || `隕狗ｩ・${row.estimates_id || row.id}`;
     
     // Dates
     const createdAt = toStringOrNull(row.created_at) || toStringOrNull(row.create_date) || new Date().toISOString();
@@ -3317,7 +3467,7 @@ const buildEstimatePayload = (estimateData: Partial<Estimate>, mode: 'insert' | 
 export const getEstimates = async (): Promise<Estimate[]> => {
     const supabase = getSupabase();
 
-    // 強制JOIN: estimates→projects→customers
+    // 蠑ｷ蛻ｶJOIN: estimates竊恥rojects竊団ustomers
     const { data, error } = await supabase
         .from('estimates')
         .select(`
@@ -3331,7 +3481,7 @@ export const getEstimates = async (): Promise<Estimate[]> => {
     if (error) {
         console.warn('Direct JOIN failed, trying fallback:', error);
         
-        // フォールバック: 個別取得
+        // Fallback: fetch estimates without joins.
         const { data: estimates, error: estimatesError } = await supabase
             .from('estimates')
             .select('*')
@@ -3341,12 +3491,12 @@ export const getEstimates = async (): Promise<Estimate[]> => {
         if (estimatesError) throw estimatesError;
         if (!estimates || estimates.length === 0) return [];
 
-        // 全プロジェクト取得
+        // Fetch projects for lookup.
         const { data: projects } = await supabase
             .from('projects')
             .select('id, project_code, project_name, customer_id, customer_code');
 
-        // 全顧客取得
+        // Fetch customers for lookup.
         const { data: customers } = await supabase
             .from('customers')
             .select('id, customer_name, customer_code');
@@ -3377,7 +3527,7 @@ export const getEstimates = async (): Promise<Estimate[]> => {
         });
     }
 
-    // JOIN成功時の処理
+    // Map JOIN results.
     return (data || []).map(row => ({
         ...row,
         project_name: row.project?.project_name,
@@ -3390,7 +3540,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const from = Math.max(0, (page - 1) * pageSize);
     const to = from + pageSize - 1;
     
-    // 優先: 顧客名/案件名が解決済みのビューを利用
+    // 蜆ｪ蜈・ 鬘ｧ螳｢蜷・譯井ｻｶ蜷阪′隗｣豎ｺ貂医∩縺ｮ繝薙Η繝ｼ繧貞茜逕ｨ
     console.log('Fetching from estimates_working_view...');
     const { data, error, count } = await supabase
         .from('estimates_working_view')
@@ -3440,7 +3590,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         throw fallbackError;
     }
 
-    // プロジェクト/顧客は全件ロードして project_id / project_code / id で紐付け（UUID制約なし）
+    // Build project lookup by project_id / project_code / id.
     let projectMap: Record<string, any> = {};
     {
         const { data: projects, error: projectError } = await supabase
@@ -3448,7 +3598,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
             .select('id, project_id, project_name, customer_id, customer_code, project_code');
 
         if (projectError) {
-            console.error('プロジェクト検索エラー:', projectError);
+            console.error('繝励Ο繧ｸ繧ｧ繧ｯ繝域､懃ｴ｢繧ｨ繝ｩ繝ｼ:', projectError);
         } else {
             projectMap = (projects || []).reduce((acc, project) => {
                 const keys = [
@@ -3469,7 +3619,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
             .select('id, customer_name, customer_code');
 
         if (customerError) {
-            console.error('顧客検索エラー:', customerError);
+            console.error('鬘ｧ螳｢讀懃ｴ｢繧ｨ繝ｩ繝ｼ:', customerError);
         } else {
             customerMap = (customers || []).reduce((acc, customer) => {
                 const keys = [
@@ -3765,32 +3915,51 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
 
 export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => {
     const supabase = getSupabase();
-    // 直接 public.journal_entries から draft を取得
+    // Only get drafts that have journal entry lines
     const { data, error } = await supabase
         .from('journal_entries')
-        .select('*')
+        .select(`
+            id,
+            date,
+            description,
+            status,
+            journal_entry_lines (
+                account_id,
+                account_items (
+                    code,
+                    name
+                ),
+                debit_amount,
+                credit_amount,
+                description,
+                line_order
+            )
+        `)
         .eq('status', 'draft')
+        .not('journal_entry_lines', 'is', null)
         .order('date', { ascending: false });
 
     ensureSupabaseSuccess(error, '仕訳下書きの取得に失敗しました。');
 
-    // 取得したデータを DraftJournalEntry 形式に変換
-    return (data || []).map(entry => ({
-        batch_id: entry.id,
-        entry_id: entry.id,
-        status: entry.status,
-        date: entry.date,
-        description: entry.description,
-        source_name: '申請経費',
-        lines: [{
-            lineId: entry.id,
-            accountId: entry.account,
-            accountCode: entry.account,
-            accountName: entry.account,
-            debit: entry.debit,
-            credit: entry.credit
-        }]
-    }));
+    // Transform to DraftJournalEntry format
+    return (data || []).map((entry: any) => {
+        const lines = entry.journal_entry_lines || [];
+        const debitLine = lines.find((l: any) => l.debit_amount > 0);
+        const creditLine = lines.find((l: any) => l.credit_amount > 0);
+
+        return {
+            batchId: entry.id,
+            date: entry.date,
+            description: entry.description,
+            status: entry.status,
+            debitAccount: debitLine?.account_items?.name || '譛ｪ逕滓・',
+            creditAccount: creditLine?.account_items?.name || '譛ｪ逕滓・',
+            debitAmount: debitLine?.debit_amount || null,
+            creditAmount: creditLine?.credit_amount || null,
+            source: 'application',
+            confidence: lines.length > 0 ? 0.8 : 0,
+        };
+    });
 };
 
 export const approveJournalBatch = async (batchId: string): Promise<void> => {
@@ -4118,3 +4287,53 @@ export const getCashSchedule = async (period: { startDate: string, endDate: stri
         closing_balance: Number(row.closing_balance ?? 0),
     }));
 };
+
+export const generateJournalLinesFromApplication = async (applicationId: string): Promise<{
+    journalEntryId: string;
+    lines: Array<{
+        id: string;
+        accountId: string;
+        accountCode: string;
+        accountName: string;
+        debitAmount?: number;
+        creditAmount?: number;
+        description: string;
+    }>;
+}> => {
+    const supabase = getSupabase();
+
+    // RPCで作成/取得（既存でもエラーにしない）
+    const { data, error } = await supabase.rpc('generate_journal_lines_from_application', {
+        application_id: applicationId,
+    });
+
+    if (error) {
+        throw new Error(`Failed to generate journal lines: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+        throw new Error('No journal lines were generated');
+    }
+
+    const journalEntryId = (data as any)[0].journal_entry_id;
+    const lines = (data as any).map((row: any) => ({
+        id: row.line_id,
+        accountId: row.account_id,
+        accountCode: row.account_code,
+        accountName: row.account_name,
+        debitAmount: Number(row.debit_amount || 0),
+        creditAmount: Number(row.credit_amount || 0),
+        description: row.description,
+    }));
+
+    return { journalEntryId, lines };
+};
+
+// Legacy alias used by older screens.
+export const createJournalFromApplication = async (
+    applicationId: string,
+    _userId?: string
+): Promise<{ journalEntryId: string; lines: any[] }> => {
+    return generateJournalLinesFromApplication(applicationId);
+};
+

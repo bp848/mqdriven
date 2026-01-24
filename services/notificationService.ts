@@ -325,7 +325,7 @@ export const sendApprovalRouteCreatedNotification = async (route: ApprovalRoute)
 
     const recipients = await Promise.all(
         uniqueApproverIds.map(async approverId => {
-            const summary = await resolveUserById(supabase, approverId);
+            const summary = await resolveUserById(supabase, String(approverId));
             return summary?.email ?? null;
         })
     );

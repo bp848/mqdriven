@@ -363,7 +363,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                             multiple
                             value={newPostAssignees}
                             onChange={(e) => {
-                                const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                                const selected = Array.from((e.target as HTMLSelectElement).selectedOptions).map(option => option.value);
                                 setNewPostAssignees(selected);
                             }}
                             className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[120px]"
@@ -498,7 +498,7 @@ const BulletinBoardPage: React.FC<BulletinBoardPageProps> = ({ currentUser, addT
                                                 multiple
                                                 value={editingDraft.assigneeIds}
                                                 onChange={(e) => {
-                                                    const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                                                    const selected = Array.from((e.target as HTMLSelectElement).selectedOptions).map(option => option.value);
                                                     setEditingDraft(prev => ({ ...prev, assigneeIds: selected }));
                                                 }}
                                                 className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm min-h-[120px]"

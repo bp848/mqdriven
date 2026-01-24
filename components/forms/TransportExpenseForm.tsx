@@ -98,22 +98,61 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 }
             }
 
-            if (newDetails.length > 0) {
-                setDetails(prev => [...prev.filter(d => d.departure || d.arrival), ...newDetails]);
+            // Check for duplicates before adding
+            const uniqueNewDetails = newDetails.filter(newDetail => {
+                const isDuplicate = details.some(existing => 
+                    existing.travelDate === newDetail.travelDate &&
+                    existing.departure === newDetail.departure &&
+                    existing.arrival === newDetail.arrival &&
+                    existing.amount === newDetail.amount
+                );
+                return !isDuplicate;
+            });
+
+            if (uniqueNewDetails.length > 0) {
+                setDetails(prev => [...prev.filter(d => d.departure || d.arrival), ...uniqueNewDetails]);
                 setError('');
+                if (uniqueNewDetails.length < newDetails.length) {
+                    setError(`${newDetails.length - uniqueNewDetails.length}件の重複データを除外しました。`);
+                }
+            } else {
+                setError('貼り付けデータが重複しているか、有効なデータが見つかりませんでした。');
             }
         } catch (err) {
             setError('貼り付けデータの解析に失敗しました。タブ区切りのデータを貼り付けてください。');
         }
     };
 
-    // Handle Excel file upload
+    // Handle Excel file upload with proper encoding detection
     const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         try {
-            const text = await file.text();
+            let text: string;
+            
+            // Handle different file types
+            if (file.name.endsWith('.csv')) {
+                // For CSV files, detect encoding
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // Check if it's likely Shift-JIS (contains Japanese characters in high bytes)
+                const isLikelyShiftJIS = Array.from(uint8Array.slice(0, 1024)).some(byte => byte >= 0x80 && byte <= 0x9F || byte >= 0xE0 && byte <= 0xEF);
+                
+                if (isLikelyShiftJIS) {
+                    // Use TextDecoder with Shift-JIS
+                    const decoder = new TextDecoder('shift-jis');
+                    text = decoder.decode(uint8Array);
+                } else {
+                    // Fallback to UTF-8
+                    text = new TextDecoder('utf-8').decode(uint8Array);
+                }
+            } else {
+                // For .xlsx/.xls files, we'd need a library like xlsx
+                setError('Excelファイル(.xlsx/.xls)は現在対応していません。CSV形式で保存してください。');
+                return;
+            }
             const lines = text.split('\n').filter(line => line.trim());
             const newDetails: TransportDetail[] = [];
 
@@ -139,11 +178,25 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 }
             }
 
-            if (newDetails.length > 0) {
-                setDetails(prev => [...prev.filter(d => d.departure || d.arrival), ...newDetails]);
+            // Check for duplicates before adding
+            const uniqueNewDetails = newDetails.filter(newDetail => {
+                const isDuplicate = details.some(existing => 
+                    existing.travelDate === newDetail.travelDate &&
+                    existing.departure === newDetail.departure &&
+                    existing.arrival === newDetail.arrival &&
+                    existing.amount === newDetail.amount
+                );
+                return !isDuplicate;
+            });
+
+            if (uniqueNewDetails.length > 0) {
+                setDetails(prev => [...prev.filter(d => d.departure || d.arrival), ...uniqueNewDetails]);
                 setError('');
+                if (uniqueNewDetails.length < newDetails.length) {
+                    setError(`${newDetails.length - uniqueNewDetails.length}件の重複データを除外しました。`);
+                }
             } else {
-                setError('Excelファイルから有効なデータが見つかりませんでした。');
+                setError('Excelファイルから有効なデータが見つからなかったか、すべて重複していました。');
             }
         } catch (err) {
             setError('Excelファイルの読み込みに失敗しました。CSV形式のファイルを確認してください。');
@@ -337,9 +390,9 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                                 <label htmlFor="excel-upload" className="relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer">
                                     <Upload className="w-5 h-5" />
                                     <span>Excel/CSVファイル選択</span>
-                                    <input id="excel-upload" type="file" className="sr-only" onChange={handleExcelUpload} accept=".csv,.xlsx,.xls" disabled={isDisabled} />
+                                    <input id="excel-upload" type="file" className="sr-only" onChange={handleExcelUpload} accept=".csv" disabled={isDisabled} />
                                 </label>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">CSV/Excelファイルから交通費データを一括読み込み</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">CSVファイルから交通費データを一括読み込み（Shift-JIS/UTF-8自動判定）</p>
                             </div>
                         </div>
                         

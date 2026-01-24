@@ -8,6 +8,7 @@ const summarizeValue = (value: unknown) => {
 
 const readLocalStorageValue = (key: string): string | undefined => {
   if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return undefined;
+  if (typeof window.localStorage.getItem !== 'function') return undefined;
   const val = window.localStorage.getItem(key);
   return val === null ? undefined : val;
 };
@@ -49,7 +50,7 @@ const logGeminiEnvDebug = () => {
   const processEnv = typeof process !== 'undefined' ? process.env ?? {} : {};
   const localStorageKeys =
     typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-      ? Object.keys(window.localStorage)
+      ? Object.keys(window.localStorage as Record<string, unknown>)
       : [];
 
   console.log('[Gemini] Env debug', {
@@ -65,14 +66,8 @@ const logGeminiEnvDebug = () => {
       importGemini: summarizeValue((importEnv as any)?.GEMINI_API_KEY),
       importApi: summarizeValue((importEnv as any)?.API_KEY),
       processGemini: summarizeValue((processEnv as any)?.GEMINI_API_KEY),
-      localViteGemini:
-        typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-          ? summarizeValue(window.localStorage.getItem('VITE_GEMINI_API_KEY'))
-          : 'missing',
-      localGemini:
-        typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-          ? summarizeValue(window.localStorage.getItem('GEMINI_API_KEY'))
-          : 'missing',
+      localViteGemini: summarizeValue(readLocalStorageValue('VITE_GEMINI_API_KEY')),
+      localGemini: summarizeValue(readLocalStorageValue('GEMINI_API_KEY')),
     },
     aiFlags: {
       VITE_AI_OFF: resolveEnvValue('VITE_AI_OFF') ?? null,

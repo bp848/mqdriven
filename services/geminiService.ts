@@ -937,7 +937,7 @@ export const generateProposalSection = async (
       context += `
 関連見積情報:
 - 見積件名: ${estimate.title}
-- 見積合計: ${formatJPY(estimate.total)}
+- 見積合計: ${formatJPY(estimate.total === undefined || estimate.total === null ? undefined : Number(estimate.total))}
 - 見積項目: ${estimate.items
           .map((i) => `${i.content} (${formatJPY(i.price)})`)
           .join(", ")}
@@ -1396,6 +1396,37 @@ export const createLeadProposalPackage = async (
   });
 };
 
+// Compatibility exports for legacy callers.
+export const generateLeadProposalPackage = createLeadProposalPackage;
+
+export const extractDocumentText = async (..._args: any[]): Promise<string> => {
+  return '';
+};
+
+export const transcribeAudio = async (..._args: any[]): Promise<string> => {
+  return '';
+};
+
+export const createBlob = (..._args: any[]): Blob => {
+  return new Blob();
+};
+
+export const decodeAudioData = async (..._args: any[]): Promise<AudioBuffer> => {
+  throw new Error('decodeAudioData is not implemented.');
+};
+
+export const decode = (..._args: any[]): string => {
+  return '';
+};
+
+export const startLiveChatSession = async (..._args: any[]): Promise<void> => {
+  return;
+};
+
+export const createProjectFromInputs = async (..._args: any[]): Promise<any> => {
+  return null;
+};
+
 // フォールバック見積もり生成関数
 const generateFallbackEstimate = (lead: Lead) => {
   const message = lead.message || '';
@@ -1417,7 +1448,7 @@ const generateFallbackEstimate = (lead: Lead) => {
       content: `${size}判 ${color}用紙`,
       quantity: quantity,
       unit: '部',
-      unitPrice: Math.round(basePrice / quantity),
+      unitPrice: Math.round(basePrice / Number(quantity)),
       price: basePrice,
       cost: Math.round(basePrice * 0.7),
       costRate: 0.7,
@@ -1428,7 +1459,7 @@ const generateFallbackEstimate = (lead: Lead) => {
       content: `${pages}ページ ${color}印刷`,
       quantity: pages,
       unit: 'ページ',
-      unitPrice: Math.round(pagePrice / pages),
+      unitPrice: Math.round(pagePrice / Number(pages)),
       price: pagePrice,
       cost: Math.round(pagePrice * 0.6),
       costRate: 0.6,

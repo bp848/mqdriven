@@ -63,7 +63,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects 
   const groupStats = useMemo(() => {
     const stats: Record<string, { totalAmount: number; totalCost: number; avgMargin: number }> = {};
     
-    Object.entries(groupedProjects).forEach(([groupKey, groupProjects]) => {
+    (Object.entries(groupedProjects) as Array<[string, Project[]]>).forEach(([groupKey, groupProjects]) => {
       const totalAmount = groupProjects.reduce((sum, p) => sum + (p.amount || 0), 0);
       const totalCost = groupProjects.reduce((sum, p) => sum + (p.totalCost || 0), 0);
       const avgMargin = totalAmount > 0 ? ((totalAmount - totalCost) / totalAmount) * 100 : 0;
@@ -127,7 +127,7 @@ const ProjectManagementPage: React.FC<ProjectManagementPageProps> = ({ projects 
           )}
 
           <div className="space-y-3 max-h-[720px] overflow-y-auto pr-1">
-            {Object.entries(groupedProjects).map(([groupKey, groupProjects]) => (
+            {(Object.entries(groupedProjects) as Array<[string, Project[]]>).map(([groupKey, groupProjects]) => (
               <div key={groupKey} className="space-y-2">
                 <div className="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
                   <div className="flex items-center gap-2">

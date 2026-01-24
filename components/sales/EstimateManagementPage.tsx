@@ -128,17 +128,17 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
         if (estimateToEdit) {
             setForm({
                 id: estimateToEdit.id,
-                projectId: estimateToEdit.projectId ?? '',
-                patternNo: estimateToEdit.patternNo ?? (estimateToEdit.estimateNumber ? String(estimateToEdit.estimateNumber) : ''),
+                projectId: estimateToEdit.project_id ?? '',
+                patternNo: estimateToEdit.pattern_no ?? (estimateToEdit.estimateNumber ? String(estimateToEdit.estimateNumber) : ''),
                 patternName: estimateToEdit.title ?? '',
-                specification: estimateToEdit.deliveryTerms ?? estimateToEdit.notes ?? '',
-                copies: estimateToEdit.copies ?? estimateToEdit.items?.[0]?.quantity ?? 0,
-                unitPrice: estimateToEdit.unitPrice ?? estimateToEdit.items?.[0]?.unitPrice ?? 0,
-                taxRate: estimateToEdit.taxRate ?? 10,
-                deliveryPlace: estimateToEdit.deliveryMethod ?? '',
-                transactionMethod: estimateToEdit.paymentTerms ?? '',
-                deliveryDate: estimateToEdit.deliveryDate ?? '',
-                expirationDate: estimateToEdit.expirationDate ?? '',
+                specification: estimateToEdit.specification ?? estimateToEdit.notes ?? '',
+                copies: Number(estimateToEdit.copies) ?? estimateToEdit.items?.[0]?.quantity ?? 0,
+                unitPrice: Number(estimateToEdit.unit_price) ?? estimateToEdit.items?.[0]?.unitPrice ?? 0,
+                taxRate: Number(estimateToEdit.tax_rate) ?? 10,
+                deliveryPlace: estimateToEdit.delivery_place ?? '',
+                transactionMethod: estimateToEdit.transaction_method ?? '',
+                deliveryDate: estimateToEdit.delivery_date ?? '',
+                expirationDate: estimateToEdit.expiration_date ?? '',
                 note: estimateToEdit.notes ?? '',
                 status: estimateToEdit.status ?? EstimateStatus.Draft,
             });
@@ -172,25 +172,22 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
         }
         const payload: Partial<Estimate> = {
             id: form.id,
-            projectId: form.projectId || null,
-            patternNo: form.patternNo || null,
+            project_id: form.projectId || null,
+            pattern_no: form.patternNo || null,
             title: form.patternName,
-            deliveryTerms: form.specification,
-            deliveryMethod: form.deliveryPlace,
-            paymentTerms: form.transactionMethod,
-            deliveryDate: form.deliveryDate || null,
-            expirationDate: form.expirationDate || null,
+            specification: form.specification,
+            delivery_place: form.deliveryPlace,
+            transaction_method: form.transactionMethod,
+            delivery_date: form.deliveryDate || null,
+            expiration_date: form.expirationDate || null,
             notes: form.note,
             status: form.status,
-            version: Number(form.patternNo) || 1,
-            userId: currentUser?.id ?? estimateToEdit?.userId ?? '',
-            createdAt: estimateToEdit?.createdAt ?? new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            subtotal,
-            taxRate: form.taxRate,
-            consumption: taxAmount,
-            total,
-            grandTotal: total,
+            copies: String(form.copies),
+            unit_price: String(form.unitPrice),
+            tax_rate: String(form.taxRate),
+            subtotal: String(subtotal),
+            consumption: String(taxAmount),
+            total: String(total),
             estimateNumber: Number(form.patternNo || estimateToEdit?.estimateNumber || Date.now()),
             customerName: form.projectId ? `案件${form.projectId}` : estimateToEdit?.customerName ?? '未設定',
             items: [
@@ -201,8 +198,6 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
                     unit: '式',
                     unitPrice: form.unitPrice,
                     price: subtotal,
-                    cost: 0,
-                    costRate: 0,
                     subtotal,
                 },
             ],
@@ -370,24 +365,23 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const pageEnd = useMemo(() => estimateTotalCount > 0 ? Math.min(estimateTotalCount, estimatePage * estimatePageSize) : 0, [estimatePage, estimatePageSize, estimateTotalCount]);
 
     const resolveSalesAmount = (est: Estimate): number | null => {
-        const candidates = [est.salesAmount, est.subtotal, est.total];
+        const candidates = [Number(est.total), Number(est.subtotal), Number(est.salesAmount)];
         for (const candidate of candidates) {
             if (candidate === null || candidate === undefined) continue;
-            const num = Number(candidate);
-            if (Number.isFinite(num)) return num;
+            if (Number.isFinite(candidate)) return candidate;
         }
         return null;
     };
 
     const resolveVariableCost = (est: Estimate): number | null => {
-        if (est.variableCostAmount === null || est.variableCostAmount === undefined) return null;
-        const num = Number(est.variableCostAmount);
+        if (est.variable_cost_amount === null || est.variable_cost_amount === undefined) return null;
+        const num = Number(est.variable_cost_amount);
         return Number.isFinite(num) ? num : null;
     };
 
     const resolveMqAmount = (est: Estimate, salesAmount?: number | null, variableCost?: number | null): number | null => {
-        if (est.mqAmount !== undefined && est.mqAmount !== null && Number.isFinite(Number(est.mqAmount))) {
-            return Number(est.mqAmount);
+        if ((est as any).mqAmount !== undefined && (est as any).mqAmount !== null && Number.isFinite(Number((est as any).mqAmount))) {
+            return Number((est as any).mqAmount);
         }
         const sales = salesAmount ?? resolveSalesAmount(est);
         const cost = variableCost ?? resolveVariableCost(est);
@@ -399,8 +393,8 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     };
 
     const resolveMqRate = (est: Estimate, salesAmount?: number | null, mqAmount?: number | null): number | null => {
-        if (est.mqRate !== undefined && est.mqRate !== null && Number.isFinite(Number(est.mqRate))) {
-            return Number(est.mqRate);
+        if ((est as any).mqRate !== undefined && (est as any).mqRate !== null && Number.isFinite(Number((est as any).mqRate))) {
+            return Number((est as any).mqRate);
         }
         const sales = salesAmount ?? resolveSalesAmount(est);
         const mq = mqAmount ?? resolveMqAmount(est, sales, resolveVariableCost(est));
@@ -469,12 +463,12 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         };
 
         let rows = estimates.filter(est => {
-            if (!matchesDate(est.deliveryDate)) return false;
+            if (!matchesDate(est.delivery_date)) return false;
 
             if (mqFilter !== 'all' && (est.mqMissingReason ?? 'OK') !== mqFilter) return false;
 
             if (statusFilter.length) {
-                const normalizedStatus = normalizeStatus(est.statusLabel ?? est.status);
+                const normalizedStatus = normalizeStatus(est.status);
                 if (!statusFilter.includes(normalizedStatus)) return false;
             }
 
@@ -511,9 +505,9 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                 est.title,
                 est.customerName,
                 est.projectName,
-                est.projectId,
+                est.project_id,
                 est.id,
-                est.patternNo,
+                est.pattern_no,
                 est.notes,
             ];
             return candidates.some(value =>
@@ -569,7 +563,8 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
 
     const getSortValue = (estimate: Estimate, key: string) => {
         if (key === 'deliveryDate' || key === 'createdAt' || key === 'updatedAt') {
-            const raw = (estimate as any)[key] as string | undefined;
+            const dateKey = key === 'deliveryDate' ? 'delivery_date' : key === 'createdAt' ? 'created_at' : 'updated_at';
+            const raw = (estimate as any)[dateKey] as string | undefined;
             if (!raw) return null;
             const ts = new Date(raw).getTime();
             return Number.isFinite(ts) ? ts : null;
@@ -585,7 +580,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
         }
         if (key === 'statusLabel') {
             const priority: Record<string, number> = { ordered: 0, draft: 1, submitted: 2, lost: 3 };
-            const normalized = (estimate.statusLabel ?? estimate.status ?? '').toString().toLowerCase();
+            const normalized = (estimate.status ?? '').toString().toLowerCase();
             return priority[normalized] ?? 99;
         }
         return (estimate as any)[key] ?? null;
@@ -649,7 +644,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             count += 1;
             const salesAmount = resolveSalesAmount(est);
             if (salesAmount !== null) totalSales += salesAmount;
-            const normalizedStatus = normalizeStatus(est.statusLabel ?? est.status);
+            const normalizedStatus = normalizeStatus(est.status);
             if (normalizedStatus === 'ordered') orderedCount += 1;
             const reason = (est.mqMissingReason ?? 'OK') as 'OK' | 'A' | 'B';
             if (reason === 'OK') {
@@ -729,7 +724,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
     const monthlyTotals = useMemo(() => {
         const buckets = new Map<string, { name: string; total: number; count: number }>();
         for (const est of filteredEstimates) {
-            const date = est.deliveryDate || est.createdAt;
+            const date = est.delivery_date || est.created_at;
             if (!date) continue;
             const d = new Date(date);
             if (Number.isNaN(d.getTime())) continue;
@@ -744,6 +739,32 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             .sort((a, b) => (a[0] < b[0] ? -1 : 1))
             .map(([, value]) => value);
     }, [filteredEstimates]);
+
+    const buildQuickViewSource = (est: Estimate | null) => {
+        if (!est) return null;
+        const raw = (est as any)?.raw ?? {};
+        return {
+            ...raw,
+            ...est,
+            delivery_date: est.delivery_date ?? raw.delivery_date,
+            expiration_date: est.expiration_date ?? raw.expiration_date,
+            status_label: est.status ?? raw.status,
+            mq_missing_reason: (est as any).mqMissingReason ?? raw.mq_missing_reason,
+            sales_amount: resolveSalesAmount(est),
+            variable_cost_amount: resolveVariableCost(est),
+            mq_amount: resolveMqAmount(est),
+            mq_rate: resolveMqRate(est),
+            detail_count: est.detail_count ?? raw.detail_count,
+            customer_name: est.customerName ?? raw.customer_name,
+            project_name: est.projectName ?? raw.project_name,
+            order_id: raw.order_id ?? null,
+            note: est.notes ?? raw.note,
+            create_date: est.create_date ?? est.created_at,
+            update_date: est.update_date ?? est.updated_at,
+            delivery_place: est.delivery_place ?? est.delivery_place,
+            transaction_method: est.transaction_method ?? raw.transaction_method,
+        };
+    };
 
     const quickViewSource = useMemo(() => buildQuickViewSource(quickViewEstimate), [quickViewEstimate]);
 
@@ -885,32 +906,6 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
             ))}
         </dl>
     );
-
-    const buildQuickViewSource = (est: Estimate | null) => {
-        if (!est) return null;
-        const raw = (est as any)?.raw ?? {};
-        return {
-            ...raw,
-            ...est,
-            delivery_date: est.deliveryDate ?? raw.delivery_date,
-            expiration_date: est.expirationDate ?? raw.expiration_date,
-            status_label: est.statusLabel ?? raw.status_label,
-            mq_missing_reason: est.mqMissingReason ?? raw.mq_missing_reason,
-            sales_amount: resolveSalesAmount(est),
-            variable_cost_amount: resolveVariableCost(est),
-            mq_amount: resolveMqAmount(est),
-            mq_rate: resolveMqRate(est),
-            detail_count: est.detailCount ?? raw.detail_count,
-            customer_name: est.customerName ?? raw.customer_name,
-            project_name: est.projectName ?? raw.project_name,
-            order_id: raw.order_id ?? null,
-            note: est.notes ?? raw.note,
-            create_date: raw.create_date ?? est.createdAt,
-            update_date: raw.update_date ?? est.updatedAt,
-            delivery_place: raw.delivery_place ?? est.deliveryMethod,
-            transaction_method: raw.transaction_method ?? est.paymentTerms,
-        };
-    };
 
     const handleDetailInputChange = (field: keyof EstimateDetail, value: string) => {
         setDetailForm(prev => ({
@@ -1147,18 +1142,7 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
 
                 {activeTab === 'list' && (
                     <div className="p-6">
-                        {loading ? (
-                            <div className="flex justify-center py-8">
-                                <Loader className="w-8 h-8 animate-spin text-blue-600" />
-                            </div>
-                        ) : error ? (
-                            <div className="text-center py-8">
-                                <p className="text-red-600">{error}</p>
-                                <button onClick={() => window.location.reload()} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg">
-                                    再読み込み
-                                </button>
-                            </div>
-                        ) : estimates.length === 0 ? (
+                        {estimates.length === 0 ? (
                             <div className="text-center py-8">
                                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                                 <p className="text-slate-500 mb-4">見積データがありません</p>
@@ -1326,10 +1310,10 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                 <p className="text-xs text-slate-500">全項目クイック表示（読み取り専用）</p>
                                 <h3 className="text-xl font-bold text-slate-900 dark:text-white">{quickViewEstimate.displayName ?? quickViewEstimate.title}</h3>
                                 <p className="text-xs text-slate-500 mt-1">
-                                    {quickViewEstimate.customerName || '取引先不明'}・案件ID: {quickViewEstimate.projectId ?? '—'}・見積ID: {quickViewEstimate.id}
+                                    {quickViewEstimate.customerName || '取引先不明'}・案件ID: {quickViewEstimate.project_id ?? '—'}・見積ID: {quickViewEstimate.id}
                                 </p>
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                    {renderStatusBadge(quickViewEstimate.statusLabel ?? quickViewEstimate.status)}
+                                    {renderStatusBadge(quickViewEstimate.status)}
                                     {renderMqMissingBadge(quickViewEstimate.mqMissingReason)}
                                 </div>
                                 <p className="text-[11px] text-slate-500">編集は従来の詳細画面から行ってください。</p>

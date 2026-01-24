@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ApplicationList from '../ApplicationList';
 import ApplicationDetailModal from '../ApplicationDetailModal';
-import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft, createJournalFromApplication } from '../../services/dataService';
+import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft, generateJournalLinesFromApplication } from '../../services/dataService';
 import SMTPEmailService from '../../services/smtpEmailService';
 // FIX: Import AllocationDivision type.
 import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
@@ -263,7 +263,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
     const handleReject = async (application: ApplicationWithDetails, reason: string) => {
         if (!currentUser || !emailService) return;
         try {
-            await rejectApplication(application, currentUser as any, reason);
+            await rejectApplication(application, reason, currentUser as any);
             addToast('申請を差し戻しました。', 'success');
             
             // Send rejection notification via SMTP
@@ -347,7 +347,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
         }
 
         try {
-            await createJournalFromApplication(application.id, currentUser.id);
+            await generateJournalLinesFromApplication(application.id);
             addToast('仕訳が正常に作成されました。', 'success');
             await fetchListData(); // データを更新してステータスを反映
         } catch (error: any) {
@@ -514,7 +514,9 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             <div className="flex flex-col gap-6">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     {TAB_ORDER.map(tabId => (
-                        <TabCard key={tabId} id={tabId} />
+                        <React.Fragment key={tabId}>
+                            <TabCard id={tabId} />
+                        </React.Fragment>
                     ))}
                 </div>
 

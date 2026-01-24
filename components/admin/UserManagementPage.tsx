@@ -127,7 +127,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                 await addUser({
                     name: userData.name || '',
                     email: userData.email || null,
-                    role: userData.role || 'user',
+                    role: userData.role === 'admin' ? 'admin' : 'user',
                     isActive: userData.isActive ?? true,
                 });
                 addToast('新規ユーザーが追加されました。', 'success');

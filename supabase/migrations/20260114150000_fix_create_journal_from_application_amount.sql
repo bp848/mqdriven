@@ -1,4 +1,4 @@
--- Fix amount parsing in create_journal_from_application (handle JSON string amounts like "2,200")
+﻿-- Fix amount parsing in create_journal_from_application (handle JSON string amounts like "2,200")
 CREATE OR REPLACE FUNCTION public.create_journal_from_application(
     p_application_id uuid,
     p_user_id uuid
@@ -20,8 +20,7 @@ DECLARE
     v_tmp_name text;
     v_tmp_category text;
 BEGIN
-    -- 1. 申請内容を取得
-    SELECT * INTO v_application
+    -- 1. 逕ｳ隲句・螳ｹ繧貞叙蠕・    SELECT * INTO v_application
     FROM public.applications
     WHERE id = p_application_id;
 
@@ -29,13 +28,18 @@ BEGIN
         RAISE EXCEPTION 'Application not found: %', p_application_id;
     END IF;
 
-    -- 2. 既に仕訳が作成済みかチェック
-    IF v_application.accounting_status IS NOT NULL AND v_application.accounting_status <> 'none' THEN
-        RAISE EXCEPTION 'Journal has already been created for this application: %', p_application_id;
+    -- 2. 譌｢縺ｫ莉戊ｨｳ縺御ｽ懈・貂医∩縺九メ繧ｧ繝・け
+    SELECT id INTO v_batch_id
+    FROM accounting.journal_batches
+    WHERE source_application_id = p_application_id
+    ORDER BY created_at DESC
+    LIMIT 1;
+
+    IF v_batch_id IS NOT NULL THEN
+        RETURN v_batch_id;
     END IF;
 
-    -- 3. 申請データに基づき、仕訳内容を決定（マッピングロジック）
-    v_amount_text := COALESCE(
+    -- 3. 逕ｳ隲九ョ繝ｼ繧ｿ縺ｫ蝓ｺ縺･縺阪∽ｻ戊ｨｳ蜀・ｮｹ繧呈ｱｺ螳夲ｼ医・繝・ヴ繝ｳ繧ｰ繝ｭ繧ｸ繝・け・・    v_amount_text := COALESCE(
         v_application.form_data->>'totalAmount',
         v_application.form_data->>'amount',
         v_application.form_data->>'requestedAmount',
@@ -48,11 +52,10 @@ BEGIN
         RAISE EXCEPTION 'Could not determine a valid amount from application form_data.';
     END IF;
 
-    v_description := COALESCE(v_application.form_data->>'title', v_application.form_data->>'subject', '承認済み申請');
+    v_description := COALESCE(v_application.form_data->>'title', v_application.form_data->>'subject', '謇ｿ隱肴ｸ医∩逕ｳ隲・);
     v_entry_date := COALESCE((v_application.form_data->>'paymentDate')::date, CURRENT_DATE);
 
-    -- 申請コードに基づいて勘定科目を決定
-    DECLARE
+    -- 逕ｳ隲九さ繝ｼ繝峨↓蝓ｺ縺･縺・※蜍伜ｮ夂ｧ醍岼繧呈ｱｺ螳・    DECLARE
         v_app_code text;
     BEGIN
         SELECT code INTO v_app_code
@@ -60,8 +63,7 @@ BEGIN
         WHERE id = v_application.application_code_id;
 
         CASE v_app_code
-            WHEN 'EXP' THEN -- 経費精算
-                SELECT id INTO v_debit_account_id FROM accounting.accounts WHERE code = '6201'; -- 旅費交通費
+            WHEN 'EXP' THEN -- 邨瑚ｲｻ邊ｾ邂・                SELECT id INTO v_debit_account_id FROM accounting.accounts WHERE code = '6201'; -- 譌・ｲｻ莠､騾夊ｲｻ
                 IF v_debit_account_id IS NULL THEN
                     SELECT name, category_code INTO v_tmp_name, v_tmp_category FROM public.account_items WHERE code = '6201';
                     IF v_tmp_name IS NOT NULL THEN
@@ -72,7 +74,7 @@ BEGIN
                     END IF;
                 END IF;
 
-                SELECT id INTO v_credit_account_id FROM accounting.accounts WHERE code = '2120'; -- 未払金
+                SELECT id INTO v_credit_account_id FROM accounting.accounts WHERE code = '2120'; -- 譛ｪ謇暮≡
                 IF v_credit_account_id IS NULL THEN
                     SELECT name, category_code INTO v_tmp_name, v_tmp_category FROM public.account_items WHERE code = '2120';
                     IF v_tmp_name IS NOT NULL THEN
@@ -82,8 +84,8 @@ BEGIN
                         RETURNING id INTO v_credit_account_id;
                     END IF;
                 END IF;
-            WHEN 'APL' THEN -- 稟議書 (購買申請などを想定)
-                SELECT id INTO v_debit_account_id FROM accounting.accounts WHERE code = '5100'; -- 売上原価 (仕入の代替)
+            WHEN 'APL' THEN -- 遞溯ｭｰ譖ｸ (雉ｼ雋ｷ逕ｳ隲九↑縺ｩ繧呈Φ螳・
+                SELECT id INTO v_debit_account_id FROM accounting.accounts WHERE code = '5100'; -- 螢ｲ荳雁次萓｡ (莉募・縺ｮ莉｣譖ｿ)
                 IF v_debit_account_id IS NULL THEN
                     SELECT name, category_code INTO v_tmp_name, v_tmp_category FROM public.account_items WHERE code = '5100';
                     IF v_tmp_name IS NOT NULL THEN
@@ -94,7 +96,7 @@ BEGIN
                     END IF;
                 END IF;
 
-                SELECT id INTO v_credit_account_id FROM accounting.accounts WHERE code = '2110'; -- 買掛金
+                SELECT id INTO v_credit_account_id FROM accounting.accounts WHERE code = '2110'; -- 雋ｷ謗幃≡
                 IF v_credit_account_id IS NULL THEN
                     SELECT name, category_code INTO v_tmp_name, v_tmp_category FROM public.account_items WHERE code = '2110';
                     IF v_tmp_name IS NOT NULL THEN
@@ -105,8 +107,8 @@ BEGIN
                     END IF;
                 END IF;
             ELSE
-                -- デフォルトのマッピング
-                SELECT id INTO v_debit_account_id FROM accounting.accounts WHERE code = '6200'; -- 経費
+                -- 繝・ヵ繧ｩ繝ｫ繝医・繝槭ャ繝斐Φ繧ｰ
+                SELECT id INTO v_debit_account_id FROM accounting.accounts WHERE code = '6200'; -- 邨瑚ｲｻ
                 IF v_debit_account_id IS NULL THEN
                     SELECT name, category_code INTO v_tmp_name, v_tmp_category FROM public.account_items WHERE code = '6200';
                     IF v_tmp_name IS NOT NULL THEN
@@ -117,7 +119,7 @@ BEGIN
                     END IF;
                 END IF;
 
-                SELECT id INTO v_credit_account_id FROM accounting.accounts WHERE code = '2120'; -- 未払金
+                SELECT id INTO v_credit_account_id FROM accounting.accounts WHERE code = '2120'; -- 譛ｪ謇暮≡
                 IF v_credit_account_id IS NULL THEN
                     SELECT name, category_code INTO v_tmp_name, v_tmp_category FROM public.account_items WHERE code = '2120';
                     IF v_tmp_name IS NOT NULL THEN
@@ -134,7 +136,7 @@ BEGIN
         END IF;
     END;
 
-    -- 4. 仕訳バッチ、ヘッダ、明細を作成
+    -- 4. 莉戊ｨｳ繝舌ャ繝√√・繝・ム縲∵・邏ｰ繧剃ｽ懈・
     INSERT INTO accounting.journal_batches (source_application_id, status, created_by)
     VALUES (p_application_id, 'draft', p_user_id)
     RETURNING id INTO v_batch_id;
@@ -143,20 +145,21 @@ BEGIN
     VALUES (v_batch_id, v_entry_date, v_description)
     RETURNING id INTO v_entry_id;
 
-    -- 借方
+    -- 蛟滓婿
     INSERT INTO accounting.journal_lines (journal_entry_id, account_id, debit, description)
     VALUES (v_entry_id, v_debit_account_id, v_amount, v_description);
 
-    -- 貸方
+    -- 雋ｸ譁ｹ
     INSERT INTO accounting.journal_lines (journal_entry_id, account_id, credit, description)
     VALUES (v_entry_id, v_credit_account_id, v_amount, v_description);
 
-    -- 5. 元の申請テーブルのステータスを更新
+    -- 5. 蜈・・逕ｳ隲九ユ繝ｼ繝悶Ν縺ｮ繧ｹ繝・・繧ｿ繧ｹ繧呈峩譁ｰ
     UPDATE public.applications
-    SET accounting_status = 'drafted'
+    SET accounting_status = 'draft'
     WHERE id = p_application_id;
 
-    -- 6. 作成したバッチIDを返す
+    -- 6. 菴懈・縺励◆繝舌ャ繝！D繧定ｿ斐☆
     RETURN v_batch_id;
 END;
 $$;
+

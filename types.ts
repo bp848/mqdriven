@@ -1,7 +1,8 @@
-// Database-aligned Types for mqdriven ERP System
+﻿// Database-aligned Types for mqdriven ERP System
 // Based on actual Supabase schema
 
 export type Page =
+  | 'analysis_dashboard'
   | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
   | 'sales_estimates' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
@@ -33,6 +34,11 @@ export type Page =
   | 'prompt_management'
   | 'newsletter'
   | 'simple_estimates';
+
+// Allow loose typing for legacy camelCase usage across the app.
+export interface LooseRecord {
+  [key: string]: any;
+}
 
 // Enums based on database constraints
 export enum JobStatus {
@@ -94,15 +100,15 @@ export enum InboxItemStatus {
 }
 
 // Database-aligned interfaces
-export interface User {
+export interface User extends LooseRecord {
   id: string;
   name: string;
   email?: string;
   employee_number?: string;
   department_id?: string;
   position_id?: string;
-  created_at: string;
-  role: string;
+  created_at?: string;
+  role?: string;
   can_use_anything_analysis?: boolean;
   auth_user_id?: string;
   start_date?: string;
@@ -111,7 +117,7 @@ export interface User {
   is_active?: boolean;
 }
 
-export interface Customer {
+export interface Customer extends LooseRecord {
   id: string;
   customer_code?: string;
   customer_name?: string;
@@ -165,7 +171,7 @@ export interface Customer {
   ai_analysis?: string;
 }
 
-export interface Lead {
+export interface Lead extends LooseRecord {
   id: string;
   name?: string;
   email?: string;
@@ -188,7 +194,7 @@ export interface Lead {
   actual_value?: number;
   lost_reason?: string;
   notes?: string;
-  tags?: string;
+  tags?: string | string[];
   contact_frequency?: string;
   last_contact_date?: string;
   next_follow_up_date?: string;
@@ -232,7 +238,7 @@ export interface Lead {
   estimate_sent_at?: string;
 }
 
-export interface Estimate {
+export interface Estimate extends LooseRecord {
   id: string;
   estimates_id?: string;
   project_id?: string;
@@ -242,9 +248,9 @@ export interface Estimate {
   transaction_method?: string;
   expiration_date?: string;
   specification?: string;
-  copies?: string;
-  unit_price?: string;
-  tax_rate?: string;
+  copies?: string | number;
+  unit_price?: string | number;
+  tax_rate?: string | number;
   note?: string;
   fraction?: string;
   approval1?: string;
@@ -255,10 +261,10 @@ export interface Estimate {
   approval_status2?: string;
   approval_status3?: string;
   approval_status4?: string;
-  subtotal?: string;
-  consumption?: string;
-  total?: string;
-  valiable_cost?: string;
+  subtotal?: string | number;
+  consumption?: string | number;
+  total?: string | number;
+  valiable_cost?: string | number;
   delivery_date?: string;
   create_date?: string;
   create_id?: string;
@@ -288,7 +294,7 @@ export interface Estimate {
   userId?: string;
 }
 
-export interface EstimateItem {
+export interface EstimateItem extends LooseRecord {
   division?: string;
   content?: string;
   quantity?: number;
@@ -300,10 +306,10 @@ export interface EstimateItem {
   subtotal?: number;
 }
 
-export interface Project {
+export interface Project extends LooseRecord {
   id: string;
-  project_code: string;
-  customer_code: string;
+  project_code?: string;
+  customer_code?: string;
   customer_id?: string;
   sales_user_code?: string;
   sales_user_id?: string;
@@ -311,15 +317,15 @@ export interface Project {
   estimate_code?: string;
   order_id?: string;
   order_code?: string;
-  project_name: string;
-  project_status: string;
+  project_name?: string;
+  project_status?: string;
   classification_id?: string;
   section_code_id?: string;
   product_class_id?: string;
-  create_date: string;
+  create_date?: string;
   create_user_id?: string;
-  create_user_code: string;
-  update_date: string;
+  create_user_code?: string;
+  update_date?: string;
   update_user_id?: string;
   update_user_code?: string;
   project_id?: string;
@@ -328,29 +334,29 @@ export interface Project {
   subamount?: number;
   total_cost?: number;
   delivery_date?: string;
-  quantity?: string;
+  quantity?: string | number;
 }
 
-export interface Job {
+export interface Job extends LooseRecord {
   id: string;
-  jobNumber: number;
+  jobNumber?: number;
   projectCode?: string | number | null;
-  clientName: string;
+  clientName?: string;
   customerId?: string | null;
   customerCode?: string | null;
-  title: string;
-  status: JobStatus;
-  dueDate: string;
-  quantity: number;
-  paperType: string;
-  finishing: string;
-  details: string;
-  createdAt: string;
-  updatedAt: string;
+  title?: string;
+  status?: JobStatus;
+  dueDate?: string;
+  quantity?: number;
+  paperType?: string;
+  finishing?: string;
+  details?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Additional interfaces from database
-export interface ApplicationCode {
+export interface ApplicationCode extends LooseRecord {
   id: string;
   code: string;
   name: string;
@@ -360,32 +366,54 @@ export interface ApplicationCode {
   updated_at?: string;
 }
 
-// 会計ステータスの明確な定義
+// 莨夊ｨ医せ繝・・繧ｿ繧ｹ縺ｮ譏守｢ｺ縺ｪ螳夂ｾｩ
 export enum AccountingStatus {
-  NONE = 'none',              // 会計処理対象外
-  PENDING = 'pending',        // 仕訳レビュー待ち
-  DRAFT = 'draft',            // 仕訳作成済み（未確定）
-  POSTED = 'posted',          // 仕訳確定済み
-  LOCKED = 'locked',          // 締処理済み（修正不可）
+  NONE = 'none',              // 未生成
+  DRAFT = 'draft',            // 仕訳下書き
+  POSTED = 'posted',          // 仕訳確定
 }
 
-// 申請ステータス
+// 逕ｳ隲九せ繝・・繧ｿ繧ｹ
 export enum ApplicationStatus {
   DRAFT = 'draft',
   PENDING_APPROVAL = 'pending_approval',
-  APPROVED = 'approved',      // 業務承認済み
+  APPROVED = 'approved',      // 讌ｭ蜍呎価隱肴ｸ医∩
   REJECTED = 'rejected',
   CANCELLED = 'cancelled',
 }
 
-// 正しい流れの型定義
-export interface ApplicationWithDetails {
+export interface Application extends LooseRecord {
+  id: string;
+  applicantId?: string;
+  applicant_id?: string;
+  applicationCodeId?: string;
+  application_code_id?: string;
+  formData?: any;
+  status?: ApplicationStatus | string;
+  accountingStatus?: AccountingStatus;
+  accounting_status?: AccountingStatus;
+  handlingStatus?: string;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  currentLevel?: number;
+  approverId?: string | null;
+  rejectionReason?: string | null;
+  approvalRouteId?: string;
+  createdAt?: string;
+  updatedAt?: string | null;
+  documentUrl?: string | null;
+}
+
+// 豁｣縺励＞豬√ｌ縺ｮ蝙句ｮ夂ｾｩ
+export interface ApplicationWithDetails extends Application {
   id: string;
   application_code_id?: string;
   applicant_id?: string;
   applicant?: User;
   application_code?: ApplicationCode;
-  status?: ApplicationStatus;  // 業務ステータス
+  applicationCode?: ApplicationCode;
+  status?: ApplicationStatus | string;  // 讌ｭ蜍吶せ繝・・繧ｿ繧ｹ
   current_level?: number;
   approver_id?: string;
   rejection_reason?: string;
@@ -396,55 +424,62 @@ export interface ApplicationWithDetails {
   approved_at?: string;
   rejected_at?: string;
   formData?: any;
-  accounting_status?: AccountingStatus;  // 会計ステータス（別管理）
+  accounting_status?: AccountingStatus;  // DB: accounting_status
+  accountingStatus?: AccountingStatus;   // UI: accountingStatus (camel)
+  journalEntry?: {
+    id: string;
+    status: 'draft' | 'posted';
+    date?: string;
+    lines?: JournalEntryLine[];
+  };
 }
 
-export interface ApprovalRoute {
+export interface ApprovalRoute extends LooseRecord {
   id: string;
   name: string;
-  route_data: any;
+  route_data?: any;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface AccountItem {
+export interface AccountItem extends LooseRecord {
   id: string;
   code: string;
   name: string;
-  account_type: string;
+  account_type?: string;
   parent_id?: string;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface PurchaseOrder {
+export interface PurchaseOrder extends LooseRecord {
   id: string;
-  order_number: string;
+  order_number?: string;
   supplier_id?: string;
-  status: PurchaseOrderStatus;
-  total_amount: number;
-  order_date: string;
+  status?: PurchaseOrderStatus;
+  total_amount?: number;
+  order_date?: string;
   expected_delivery_date?: string;
   notes?: string;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface InventoryItem {
+export interface InventoryItem extends LooseRecord {
   id: string;
-  item_code: string;
-  name: string;
+  item_code?: string;
+  name?: string;
   description?: string;
-  quantity_on_hand: number;
-  reorder_level: number;
-  unit_cost: number;
+  quantity_on_hand?: number;
+  reorder_level?: number;
+  unit_cost?: number;
   location?: string;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface Employee {
+export interface Employee extends LooseRecord {
   id: string;
   user_id?: string;
   employee_number?: string;
@@ -458,7 +493,7 @@ export interface Employee {
   updated_at?: string;
 }
 
-export interface Department {
+export interface Department extends LooseRecord {
   id: string;
   name: string;
   parent_id?: string;
@@ -467,9 +502,9 @@ export interface Department {
   updated_at?: string;
 }
 
-export interface PaymentRecipient {
+export interface PaymentRecipient extends LooseRecord {
   id: string;
-  name: string;
+  name?: string;
   bank_name?: string;
   account_number?: string;
   account_holder?: string;
@@ -480,7 +515,7 @@ export interface PaymentRecipient {
   updated_at?: string;
 }
 
-export interface MasterAccountItem {
+export interface MasterAccountItem extends LooseRecord {
   id: string;
   code: string;
   name: string;
@@ -490,7 +525,7 @@ export interface MasterAccountItem {
   updated_at?: string;
 }
 
-export interface AllocationDivision {
+export interface AllocationDivision extends LooseRecord {
   id: string;
   name: string;
   description?: string;
@@ -499,7 +534,7 @@ export interface AllocationDivision {
   updated_at?: string;
 }
 
-export interface Title {
+export interface Title extends LooseRecord {
   id: string;
   name: string;
   level?: number;
@@ -509,14 +544,14 @@ export interface Title {
   updated_at?: string;
 }
 
-export interface ProjectBudgetSummary {
-  project_id: string;
-  project_name: string;
-  budgeted_amount: number;
-  actual_amount: number;
-  variance_amount: number;
-  variance_percentage: number;
-  period: string;
+export interface ProjectBudgetSummary extends LooseRecord {
+  project_id?: string;
+  project_name?: string;
+  budgeted_amount?: number;
+  actual_amount?: number;
+  variance_amount?: number;
+  variance_percentage?: number;
+  period?: string;
 }
 
 export interface DailyReportPrefill {
@@ -528,7 +563,7 @@ export interface DailyReportPrefill {
   next_day_plan?: string;
 }
 
-export interface Invoice {
+export interface Invoice extends LooseRecord {
   id: string;
   invoice_code?: string;
   order_id?: string;
@@ -544,13 +579,13 @@ export interface Invoice {
   updated_at?: string;
 }
 
-export interface InvoiceData {
-  vendorName: string;
-  invoiceDate: string;
-  totalAmount: number;
-  description: string;
-  costType: 'V' | 'F';
-  account: string;
+export interface InvoiceData extends LooseRecord {
+  vendorName?: string;
+  invoiceDate?: string;
+  totalAmount?: number;
+  description?: string;
+  costType?: 'V' | 'F';
+  account?: string;
   relatedCustomer?: string;
   project?: string;
 }
@@ -569,7 +604,7 @@ export interface InboxItem {
 
 // UI-specific types
 export interface Toast {
-  id?: string;
+  id?: string | number;
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
   duration?: number;
@@ -584,12 +619,12 @@ export interface ConfirmationDialogProps {
   cancelText?: string;
 }
 
-export interface BugReport {
+export interface BugReport extends LooseRecord {
   id: string;
-  title: string;
-  description: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  status: BugReportStatus;
+  title?: string;
+  description?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  status?: BugReportStatus;
   reporter_id?: string;
   assignee_id?: string;
   created_at?: string;
@@ -666,24 +701,40 @@ export interface EmployeeUser extends User {
 }
 
 // Journal entry types
-export interface JournalEntry {
-  id: string;
-  entry_number: string;
-  entry_date: string;
+export interface DraftJournalEntry {
+  batchId: string;
+  date: string;
   description: string;
+  status: 'draft' | 'posted';
+  debitAccount: string;
+  creditAccount: string;
+  debitAmount: number | null;
+  creditAmount: number | null;
+  source: string;
+  confidence: number;
+}
+
+export interface JournalEntry extends LooseRecord {
+  application_id?: string;
+  reference_id?: string;
+  id: string | number;
+  entry_number?: string;
+  entry_date?: string;
+  date?: string;
+  description?: string;
   status?: string;
-  total_debit: number;
-  total_credit: number;
+  total_debit?: number;
+  total_credit?: number;
   created_by?: string;
   created_at?: string;
   updated_at?: string;
   lines?: JournalEntryLine[];
 }
 
-export interface JournalEntryLine {
-  id: string;
-  journal_entry_id: string;
-  account_id: string;
+export interface JournalEntryLine extends LooseRecord {
+  id: string | number;
+  journal_entry_id?: string;
+  account_id?: string;
   account_code?: string;
   account_name?: string;
   description?: string;
@@ -694,3 +745,313 @@ export interface JournalEntryLine {
 
 // Helper types
 export type TabId = 'approvals' | 'drafts' | 'submitted' | 'completed';
+
+// Legacy/extended types used across the UI.
+export interface SortConfig extends LooseRecord {
+  key: string;
+  direction: 'asc' | 'desc';
+}
+
+export interface JobCreationPayload extends LooseRecord {
+  status?: JobStatus;
+  invoiceStatus?: InvoiceStatus;
+  manufacturingStatus?: ManufacturingStatus;
+  clientName?: string;
+  customerId?: string | null;
+  customerCode?: string | null;
+  title?: string;
+  quantity?: number;
+  paperType?: string;
+  finishing?: string;
+  details?: string;
+  dueDate?: string;
+  price?: number;
+  variableCost?: number;
+  initialOrder?: {
+    orderDate: string;
+    quantity: number;
+    unitPrice: number;
+  };
+}
+
+export interface GeneralLedgerEntry extends LooseRecord {
+  id: string;
+  accountId?: string | null;
+  date?: string;
+  description?: string;
+  debit?: number | null;
+  credit?: number | null;
+  balance?: number | null;
+  jobId?: string | null;
+  voucherNo?: string | null;
+  partner?: string | null;
+  type?: string | null;
+}
+
+export interface BusinessCardContact extends LooseRecord {
+  companyName?: string;
+  personName?: string;
+  personNameKana?: string;
+  department?: string;
+  title?: string;
+  phoneNumber?: string;
+  email?: string;
+  address?: string;
+  website?: string;
+  note?: string;
+}
+
+export interface CustomerInfo extends LooseRecord {
+  id?: string;
+  customerId?: string;
+  customerCode?: string;
+  customerName?: string;
+  address?: string;
+  phoneNumber?: string;
+  memo?: string;
+  updatedAt?: string;
+}
+
+export interface AISuggestions extends LooseRecord {
+  summary?: string;
+  suggestions?: string[];
+}
+
+export interface CompanyInvestigation extends LooseRecord {
+  summary?: string;
+  sources?: { uri: string; title: string }[];
+}
+
+export interface AIJournalSuggestion extends LooseRecord {
+  debitAccount?: string;
+  creditAccount?: string;
+  amount?: number;
+  confidence?: number;
+  reasoning?: string;
+}
+
+export interface LeadScore extends LooseRecord {
+  score?: number;
+  rationale?: string;
+}
+
+export interface BusinessPlan extends LooseRecord {
+  id?: string;
+  title?: string;
+  content?: string;
+  createdAt?: string;
+}
+
+export interface BulletinThread extends LooseRecord {
+  id: string;
+  title?: string;
+  body?: string;
+  authorId?: string;
+  authorName?: string;
+  authorDepartment?: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  assigneeIds?: string[];
+  createdAt?: string;
+}
+
+export interface KnowledgeArticle extends LooseRecord {
+  id: string;
+  title?: string;
+  content?: string;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ClosingChecklistItem extends LooseRecord {
+  id: string;
+  title?: string;
+  status?: string;
+}
+
+export interface PayableItem extends LooseRecord {
+  id: string;
+  supplier?: string;
+  amount?: number;
+  dueDate?: string;
+  status?: string;
+}
+
+export interface ReceivableItem extends LooseRecord {
+  id: string;
+  customer?: string;
+  amount?: number;
+  dueDate?: string;
+  status?: string;
+}
+
+export interface CashScheduleData extends LooseRecord {
+  id: string;
+  date?: string;
+  inflow?: number;
+  outflow?: number;
+  balance?: number;
+}
+
+export interface CustomProposalContent extends LooseRecord {
+  title?: string;
+  content?: string;
+}
+
+export interface LeadProposalPackage extends LooseRecord {
+  proposal?: CustomProposalContent;
+  summary?: string;
+}
+
+export interface MarketResearchReport extends LooseRecord {
+  summary?: string;
+  sources?: { uri: string; title: string }[];
+}
+
+export interface ProposalFormData extends LooseRecord {
+  id?: string;
+  title?: string;
+  slides?: any[];
+}
+
+export interface ProposalSlideGraph extends LooseRecord {
+  type?: string;
+  data?: any;
+}
+
+export interface ProposalPresentation extends LooseRecord {
+  id?: string;
+  title?: string;
+  slides?: any[];
+}
+
+export interface CustomerBudgetSummary extends LooseRecord {
+  customerId?: string;
+  customerCode?: string;
+  customerName?: string;
+  totalBudget?: number;
+  totalActual?: number;
+  totalCost?: number;
+  projectCount?: number;
+}
+
+export interface ProjectBudgetFilter extends LooseRecord {
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface BulletinComment extends LooseRecord {
+  id: string;
+  postId?: string;
+  authorId?: string;
+  authorName?: string;
+  authorDepartment?: string | null;
+  body?: string;
+  createdAt?: string;
+}
+
+export interface CalendarEvent extends LooseRecord {
+  id: string;
+  userId?: string;
+  title?: string;
+  description?: string | null;
+  startAt?: string;
+  endAt?: string;
+  allDay?: boolean;
+  source?: string | null;
+  googleEventId?: string | null;
+  updatedBySource?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface FaxIntake extends LooseRecord {
+  id: string;
+  status?: string;
+  file_path?: string;
+  filePath?: string;
+  uploaded_at?: string;
+}
+
+export interface BankAccountInfo extends LooseRecord {
+  bankName?: string;
+  branchName?: string;
+  accountType?: string;
+  accountNumber?: string;
+  accountHolder?: string;
+}
+
+export enum ProjectStatus {
+  Draft = 'draft',
+  New = 'new',
+  InProgress = 'in_progress',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
+  Archived = 'archived',
+}
+
+export interface ProposalSource extends LooseRecord {
+  uri: string;
+  title: string;
+}
+
+export interface ProposalGenerationResult extends LooseRecord {
+  presentation: ProposalPresentation;
+  sources?: ProposalSource[] | null;
+}
+
+export interface AnalysisResult extends LooseRecord {
+  id?: string;
+  summary?: string;
+  createdAt?: string;
+}
+
+export interface AnalysisHistory extends LooseRecord {
+  id?: string;
+  query?: string;
+  result?: AnalysisResult;
+  createdAt?: string;
+}
+
+export interface DailyReportData extends LooseRecord {
+  reportDate?: string;
+  startTime?: string;
+  endTime?: string;
+  customerName?: string;
+  activityContent?: string;
+  nextDayPlan?: string;
+}
+
+export interface ScheduleItem extends LooseRecord {
+  id: string;
+  start: string;
+  end: string;
+  description: string;
+}
+
+export interface InvoiceItem extends LooseRecord {
+  id?: string;
+  invoiceId?: string;
+  description?: string;
+  quantity?: number;
+  unit?: string;
+  unitPrice?: number;
+  lineTotal?: number;
+}
+
+export interface EstimateDetail extends LooseRecord {
+  id?: string | null;
+  detailId?: string | null;
+  estimateId: string;
+  itemName: string;
+  quantity: number | null;
+  unitPrice: number | null;
+  amount: number | null;
+  variableCost: number | null;
+  mqAmount?: number | null;
+  mqRate?: number | null;
+  note?: string | null;
+}
+
+

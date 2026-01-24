@@ -174,6 +174,9 @@ const loadSMTPConfig = (): any => {
   if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return null;
   }
+  if (typeof window.localStorage.getItem !== 'function') {
+    return null;
+  }
   try {
     const rawNotification = window.localStorage.getItem('emailNotificationSettings');
     const notificationSettings = rawNotification ? JSON.parse(rawNotification) : null;
