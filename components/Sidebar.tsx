@@ -37,6 +37,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: PieChart,
     items: [
       { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
+      { page: 'strac_analysis', name: 'STRAC分析', icon: PieChart },
     ],
   },
   {
@@ -48,6 +49,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
       { page: 'simple_estimates', name: 'AI見積もり作成', adminOnly: false },
+      { page: 'print_estimate_app', name: '基幹見積システム', adminOnly: false },
       { page: 'sales_estimates', name: '見積管理', adminOnly: false },
       { page: 'sales_orders', name: '受注・予算管理' },
       { page: 'project_management', name: 'プロジェクト管理' },

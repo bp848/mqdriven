@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Calculator, 
   Upload, 
@@ -18,20 +18,25 @@ import {
   Leaf, 
   AlertTriangle, 
   FileText, 
-  Link2 
+  Link2,
+  Loader
 } from 'lucide-react';
-import { PrintSpec, EstimationResult, StrategyOption } from '../../types';
-import { MOCK_CLIENTS, INTEGRATION_MANIFESTO, CATEGORIES } from '../../constants';
+import { PrintSpec, EstimationResult, StrategyOption, Customer } from '../../types';
+import { INTEGRATION_MANIFESTO, CATEGORIES } from '../../constants';
 import { calculateEstimation, extractSpecFromInput } from '../../services/geminiService';
+import { getCustomers } from '../../services/dataService';
 
 const PrintEstimateApp: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [inputText, setInputText] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [showManifesto, setShowManifesto] = useState(false);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [customersError, setCustomersError] = useState<string | null>(null);
   
   const [spec, setSpec] = useState<PrintSpec>({
-    clientName: MOCK_CLIENTS[0].name,
+    clientName: '',
     projectName: '',
     category: CATEGORIES[0],
     quantity: 0,
@@ -46,6 +51,34 @@ const PrintEstimateApp: React.FC = () => {
   const [estimationData, setEstimationData] = useState<EstimationResult | null>(null);
   const [selectedOption, setSelectedOption] = useState<StrategyOption | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Supabaseから顧客データを取得
+  useEffect(() => {
+    let active = true;
+    setIsLoadingCustomers(true);
+    setCustomersError(null);
+    
+    getCustomers()
+      .then((customerList) => {
+        if (!active) return;
+        setCustomers(customerList);
+        if (customerList.length > 0 && !spec.clientName) {
+          setSpec(prev => ({ ...prev, clientName: customerList[0].customer_name || customerList[0].customerName || '' }));
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error('顧客データの取得に失敗しました:', error);
+        setCustomersError(error instanceof Error ? error.message : '顧客データの取得に失敗しました');
+      })
+      .finally(() => {
+        if (active) setIsLoadingCustomers(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleRunAi = async () => {
     if (!inputText && !imagePreview) return;
@@ -174,13 +207,33 @@ const PrintEstimateApp: React.FC = () => {
 
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-600">顧客マスター（基幹同期）</label>
-              <select 
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-blue-600 transition-all cursor-pointer"
-                value={spec.clientName}
-                onChange={(e) => setSpec({...spec, clientName: e.target.value})}
-              >
-                {MOCK_CLIENTS.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
+              {isLoadingCustomers ? (
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+                  <Loader className="w-4 h-4 animate-spin text-blue-600" />
+                  <span className="text-slate-500">顧客データを読み込み中...</span>
+                </div>
+              ) : customersError ? (
+                <div className="w-full bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-600">
+                  <AlertTriangle className="w-4 h-4 inline mr-2" />
+                  {customersError}
+                </div>
+              ) : customers.length === 0 ? (
+                <div className="w-full bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-sm text-yellow-600">
+                  顧客データが見つかりません
+                </div>
+              ) : (
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-blue-600 transition-all cursor-pointer"
+                  value={spec.clientName}
+                  onChange={(e) => setSpec({...spec, clientName: e.target.value})}
+                >
+                  {customers.map(c => (
+                    <option key={c.id} value={c.customer_name || c.customerName || ''}>
+                      {c.customer_name || c.customerName || '顧客名不明'}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="space-y-1.5">
