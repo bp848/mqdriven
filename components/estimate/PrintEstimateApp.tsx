@@ -197,33 +197,33 @@ const PrintEstimateApp: React.FC = () => {
 
       <main className="flex-1 grid grid-cols-12 overflow-hidden">
         {/* 左側：パラメータ入力 */}
-        <section className="col-span-3 border-r border-slate-300 bg-white overflow-y-auto p-6 space-y-8 shadow-inner">
+        <section className="col-span-5 border-r border-slate-300 bg-white overflow-y-auto p-8 space-y-6 shadow-inner">
           <div className="space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <FileText className="w-4 h-4" /> 案件引き合いパラメータ
+            <div className="flex justify-between items-center border-b-2 border-slate-200 pb-4">
+              <h2 className="text-sm font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                <FileText className="w-5 h-5" /> 案件引き合いパラメータ
               </h2>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-600">顧客マスター（基幹同期）</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">顧客マスター（基幹同期）</label>
               {isLoadingCustomers ? (
-                <div className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+                <div className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
                   <Loader className="w-4 h-4 animate-spin text-blue-600" />
                   <span className="text-slate-500">顧客データを読み込み中...</span>
                 </div>
               ) : customersError ? (
-                <div className="w-full bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-600">
+                <div className="w-full bg-red-50 border-2 border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
                   <AlertTriangle className="w-4 h-4 inline mr-2" />
                   {customersError}
                 </div>
               ) : customers.length === 0 ? (
-                <div className="w-full bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-sm text-yellow-600">
+                <div className="w-full bg-yellow-50 border-2 border-yellow-200 rounded-lg px-4 py-3 text-sm text-yellow-600">
                   顧客データが見つかりません
                 </div>
               ) : (
                 <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-blue-600 transition-all cursor-pointer"
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-3 text-sm font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer"
                   value={spec.clientName}
                   onChange={(e) => setSpec({...spec, clientName: e.target.value})}
                 >
@@ -236,10 +236,10 @@ const PrintEstimateApp: React.FC = () => {
               )}
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-600">印刷品目カテゴリ</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">印刷品目カテゴリ</label>
               <select 
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-blue-600 transition-all cursor-pointer"
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-3 text-sm font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer"
                 value={spec.category}
                 onChange={(e) => setSpec({...spec, category: e.target.value})}
               >
@@ -248,22 +248,22 @@ const PrintEstimateApp: React.FC = () => {
             </div>
 
             <div 
-              className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all group ${
-                imagePreview ? 'border-blue-200 bg-blue-50/20' : 'border-slate-100 hover:border-blue-300 hover:bg-slate-50 shadow-inner'
+              className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                imagePreview ? 'border-blue-300 bg-blue-50/30' : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50/20 shadow-sm'
               }`}
               onClick={() => fileInputRef.current?.click()}
             >
               {imagePreview ? (
                 <div className="relative group">
-                  <img src={imagePreview} className="max-h-24 object-contain rounded border border-slate-200 shadow-sm" alt="スキャン資料" />
+                  <img src={imagePreview} className="max-h-32 object-contain rounded border-2 border-slate-200 shadow-md" alt="スキャン資料" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
-                    <span className="text-[10px] text-white font-bold">画像を変更</span>
+                    <span className="text-xs text-white font-bold bg-blue-600 px-3 py-1 rounded">画像を変更</span>
                   </div>
                 </div>
               ) : (
-                <div className="text-center space-y-2">
-                  <Upload className="w-5 h-5 text-slate-300 group-hover:text-blue-500 mx-auto" />
-                  <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+                <div className="text-center space-y-3">
+                  <Upload className="w-8 h-8 text-slate-400 group-hover:text-blue-600 mx-auto transition-colors" />
+                  <p className="text-xs font-bold text-slate-500 leading-relaxed">
                     過去の見積書・仕様書を解析<br />（Drive内を自動検索）
                   </p>
                 </div>
@@ -271,10 +271,10 @@ const PrintEstimateApp: React.FC = () => {
               <input type="file" ref={fileInputRef} onChange={onFileChange} className="hidden" accept="image/*" />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-600">案件詳細・フリーメモ</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">案件詳細・フリーメモ</label>
               <textarea 
-                className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-bold text-slate-700 outline-none focus:border-blue-600 focus:bg-white resize-none transition-all shadow-inner leading-relaxed"
+                className="w-full h-48 bg-slate-50 border-2 border-slate-200 rounded-lg p-4 text-sm font-bold text-slate-700 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200 focus:bg-white resize-none transition-all shadow-sm leading-relaxed"
                 placeholder="例：昨年の周年記念誌と同等の仕様。部数を500部に変更し、表紙にマットPP加工を追加したい。過去の類似案件の金額を参考に算出してほしい..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -284,8 +284,8 @@ const PrintEstimateApp: React.FC = () => {
             <button 
               onClick={handleRunAi}
               disabled={loading || (!inputText && !imagePreview)}
-              className={`w-full py-4 rounded-xl font-bold text-xs flex items-center justify-center gap-3 transition-all shadow-md ${
-                loading ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-[#1a252f] text-white hover:bg-blue-600 active:scale-95'
+              className={`w-full py-5 rounded-xl font-bold text-sm flex items-center justify-center gap-3 transition-all shadow-lg ${
+                loading ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-[#1a252f] text-white hover:bg-blue-600 active:scale-[0.98]'
               }`}
             >
               {loading ? (
@@ -304,7 +304,7 @@ const PrintEstimateApp: React.FC = () => {
         </section>
 
         {/* 右側：見積結果出力 */}
-        <section className="col-span-9 flex flex-col bg-[#f8fafc] relative overflow-hidden">
+        <section className="col-span-7 flex flex-col bg-[#f8fafc] relative overflow-hidden">
           {!estimationData && !loading && (
             <div className="h-full flex flex-col items-center justify-center opacity-20 grayscale p-12 text-center select-none">
               <Server className="w-40 h-40 mb-6" />
