@@ -15,7 +15,11 @@
   "dependencies": {
     "@google/genai": "^1.15.0",
     "@supabase/supabase-js": "^2.89.0",
+    "axios": "^1.13.3",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
     "google-auth-library": "^9.15.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.556.0",

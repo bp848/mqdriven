@@ -37,6 +37,7 @@ if (!supabaseUrl || !supabaseKey) {
     console.error("Warning: Supabase environment variables are not fully configured (need URL + key). Application API functionality will be disabled.");
 }
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+const registerAiRoutes = require('./aiRoutes');
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 const BOARD_VISIBILITY_VALUES = new Set(['all', 'public', 'private', 'assigned']);
@@ -110,6 +111,7 @@ else {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({extended: true, limit: '50mb'}));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
+registerAiRoutes(app, supabase);
 
 // --- Google OAuth Setup ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

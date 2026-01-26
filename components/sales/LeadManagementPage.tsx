@@ -28,9 +28,10 @@ interface LeadManagementPageProps {
   onAddEstimate: (estimate: any) => Promise<void>;
   customers: Customer[]; // 既存顧客リスト
   onCreateExistingCustomerLead: (leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onNavigate?: (page: string) => void; // ナビゲーション用
 }
 
-const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff, onAddEstimate, customers, onCreateExistingCustomerLead }) => {
+const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff, onAddEstimate, customers, onCreateExistingCustomerLead, onNavigate }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -656,6 +657,14 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                     // 見積もり作成後にリード一覧を更新
                     console.log('Estimate created callback triggered, refreshing leads...');
                     onRefresh();
+                }}
+                onShowAiEstimate={() => {
+                    // AI見積作成ページへ遷移
+                    if (onNavigate) {
+                        onNavigate('simple_estimates');
+                    } else {
+                        window.location.href = '#/simple_estimates';
+                    }
                 }}
                 initialAiTab={initialAiTab}
             />

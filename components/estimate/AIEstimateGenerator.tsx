@@ -1,39 +1,113 @@
-// components/estimate/AIEstimateGenerator.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader, FileText, Upload, AlertCircle, CheckCircle } from 'lucide-react';
-import { generateLeadProposalPackage } from '../../services/geminiService';
-import { saveEstimateToManagement } from '../../services/estimateManagementService';
-import { Lead, Estimate } from '../../types';
+import { Lead, EstimationResult, PrintSpec } from '../../types';
+import {
+  fetchAiCustomers,
+  fetchAiCategories,
+  createAiEstimate,
+  AiCustomer,
+  AiCategory,
+} from '../../services/integrationService';
 
 interface AIEstimateGeneratorProps {
   lead: Lead;
-  onEstimateGenerated?: (estimate: Estimate) => void;
+  onEstimateGenerated?: (estimate: EstimationResult) => void;
   onError?: (error: string) => void;
 }
+
+const formatCurrency = (value: number) => `¥${value.toLocaleString()}`;
 
 export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
   lead,
   onEstimateGenerated,
-  onError
+  onError,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedEstimate, setGeneratedEstimate] = useState<any>(null);
+  const [generatedEstimate, setGeneratedEstimate] = useState<EstimationResult | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [customers, setCustomers] = useState<AiCustomer[]>([]);
+  const [categories, setCategories] = useState<AiCategory[]>([]);
+  const [isMetadataLoading, setIsMetadataLoading] = useState(true);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState<number>(lead.estimated_value ? Number(lead.estimated_value) : 100);
+
+  useEffect(() => {
+    let active = true;
+    setIsMetadataLoading(true);
+    setMetadataError(null);
+    Promise.all([fetchAiCustomers(), fetchAiCategories()])
+      .then(([customerRows, categoryRows]) => {
+        if (!active) return;
+        setCustomers(customerRows);
+        setCategories(categoryRows);
+        setSelectedCustomerId(customerRows[0]?.id || null);
+        setSelectedCategoryId(categoryRows[0]?.id || null);
+      })
+      .catch((loadError) => {
+        if (!active) return;
+        setMetadataError(
+          loadError instanceof Error
+            ? loadError.message
+            : '顧客・カテゴリマスタの取得に失敗しました。'
+        );
+      })
+      .finally(() => {
+        if (active) setIsMetadataLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const selectedCustomer =
+    customers.find((c) => c.id === selectedCustomerId) ||
+    customers.find((c) => lead.company && c.name.includes(lead.company || '')) ||
+    customers[0];
+  const selectedCategory =
+    categories.find((cat) => cat.id === selectedCategoryId) || categories[0];
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    setUploadedFiles(prev => [...prev, ...files]);
+    setUploadedFiles((prev) => [...prev, ...files]);
     setError(null);
   };
 
   const removeFile = (index: number) => {
-    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
+
+  const handleQuantityChange = (value: number) => {
+    setQuantity(Math.max(1, value));
+  };
+
+  const buildSpec = (): PrintSpec => ({
+    clientName: selectedCustomer?.name || lead.company || '顧客名未設定',
+    projectName: lead.message?.slice(0, 70) || 'AI見積',
+    category: selectedCategory?.name || '商業印刷（チラシ・パンフレット・ポスター）',
+    quantity,
+    size: 'A4',
+    paperType: 'コート135kg',
+    pages: 32,
+    colors: '4/4',
+    finishing: [],
+    requestedDelivery: '30日以内',
+  });
 
   const generateEstimate = async () => {
     if (!lead.message?.trim()) {
-      setError('問い合わせ内容が必要です');
+      const message = '蝠上＞蜷医ｏ縺帛・螳ｹ縺悟ｿ・ｦ√〒縺・';
+      setError(message);
+      onError?.(message);
+      return;
+    }
+
+    if (!selectedCustomer?.id) {
+      const message = '顧客マスタが登録されていません。';
+      setError(message);
+      onError?.(message);
       return;
     }
 
@@ -41,54 +115,19 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
     setError(null);
 
     try {
-      // AIで見積もりを生成
-      const proposalPackage = await generateLeadProposalPackage(lead);
-      
-      if (!proposalPackage.estimate || proposalPackage.estimate.length === 0) {
-        throw new Error('見積データの生成に失敗しました');
-      }
-
-      // 見積もり管理に保存
-      const totalAmount = proposalPackage.estimate.reduce((sum, item) => 
-        sum + Math.round((item.quantity || 1) * (item.unitPrice || 0)), 0
-      );
-
-      const estimateData = {
-        title: proposalPackage.proposal?.coverTitle || `【見積】${lead.company}`,
-        items: proposalPackage.estimate.map(item => ({
-          name: item.content || item.name || '',
-          description: item.description || '',
-          quantity: item.quantity || 1,
-          unit: item.unit || '個',
-          unitPrice: item.unitPrice || 0,
-          subtotal: Math.round((item.quantity || 1) * (item.unitPrice || 0))
-        })),
-        subtotal: totalAmount,
-        taxRate: 0.10,
-        taxAmount: Math.round(totalAmount * 0.10),
-        totalAmount: Math.round(totalAmount * 1.10),
-        validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        notes: `AIによる自動生成見積です。\n\n${proposalPackage.proposal?.summary || ''}`,
-      };
-
-      const savedEstimate = await saveEstimateToManagement({
-        leadId: lead.id,
-        estimateData,
-        customerInfo: {
-          name: lead.company,
-          email: lead.email || '',
-          phone: lead.phone || '',
-          address: lead.address || '',
-        }
+      const spec = buildSpec();
+      const estimateResult = await createAiEstimate({
+        spec,
+        customerId: selectedCustomer.id,
+        categoryId: selectedCategory?.id || '',
       });
-
-      setGeneratedEstimate(savedEstimate);
-      onEstimateGenerated?.(savedEstimate);
-
+      setGeneratedEstimate(estimateResult);
+      onEstimateGenerated?.(estimateResult);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '見積の生成に失敗しました';
-      setError(errorMessage);
-      onError?.(errorMessage);
+      const message =
+        err instanceof Error ? err.message : 'AI見積生成中に予期せぬエラーが発生しました。';
+      setError(message);
+      onError?.(message);
     } finally {
       setIsGenerating(false);
     }
@@ -101,10 +140,9 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
         <h3 className="text-lg font-semibold">AI見積もり自動生成</h3>
       </div>
 
-      {/* ファイルアップロード */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          仕様書・資料のアップロード（任意）
+          過去資料・指示書添付 (任意)
         </label>
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
           <input
@@ -115,23 +153,14 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
             className="hidden"
             id="file-upload"
           />
-          <label
-            htmlFor="file-upload"
-            className="cursor-pointer inline-flex items-center"
-          >
+          <label htmlFor="file-upload" className="cursor-pointer inline-flex items-center">
             <Upload className="w-8 h-8 text-gray-400 mb-2" />
             <div>
-              <p className="text-sm text-gray-600">
-                クリックしてファイルをアップロード
-              </p>
-              <p className="text-xs text-gray-500">
-                PDF, Word, Excel, 画像 (最大10MB)
-              </p>
+              <p className="text-sm text-gray-600">仕様書や過去見積などを添付します。</p>
+              <p className="text-xs text-gray-500">PDF, Word, Excel, 画像 (10MBまで)</p>
             </div>
           </label>
         </div>
-
-        {/* アップロードされたファイル一覧 */}
         {uploadedFiles.length > 0 && (
           <div className="mt-4 space-y-2">
             {uploadedFiles.map((file, index) => (
@@ -142,7 +171,7 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
                 <span className="text-sm text-gray-700">{file.name}</span>
                 <button
                   onClick={() => removeFile(index)}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-red-500 hover:text-red-700 text-xs"
                 >
                   削除
                 </button>
@@ -152,56 +181,109 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
         )}
       </div>
 
-      {/* 問い合わせ内容 */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          問い合わせ内容
-        </label>
-        <div className="bg-gray-50 p-3 rounded text-sm text-gray-700">
-          {lead.message || '問い合わせ内容がありません'}
-        </div>
-      </div>
-
-      {/* エラー表示 */}
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-          <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 text-red-500 mr-2" />
-            <span className="text-sm text-red-700">{error}</span>
-          </div>
+      {metadataError && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-700">
+          <AlertCircle className="w-4 h-4 inline mr-1" />
+          {metadataError}
         </div>
       )}
 
-      {/* 生成ボタン */}
+      {isMetadataLoading ? (
+        <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
+          <Loader className="w-4 h-4 animate-spin" />
+          顧客・カテゴリマスタを読み込み中…
+        </div>
+      ) : (
+        <>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">対象顧客</label>
+            <select
+              value={selectedCustomerId || ''}
+              onChange={(event) => setSelectedCustomerId(event.target.value)}
+              className="w-full border border-gray-300 rounded p-2 text-sm"
+            >
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">印刷カテゴリ</label>
+            <select
+              value={selectedCategoryId || ''}
+              onChange={(event) => setSelectedCategoryId(event.target.value)}
+              className="w-full border border-gray-300 rounded p-2 text-sm"
+            >
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">数量 / 部数</label>
+            <input
+              type="number"
+              min={1}
+              value={quantity}
+              onChange={(event) => handleQuantityChange(Number(event.target.value))}
+              className="w-full border border-gray-300 rounded p-2 text-sm"
+            />
+          </div>
+        </>
+      )}
+
+      {(error || (!isMetadataLoading && !selectedCustomer)) && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+          <AlertCircle className="w-4 h-4 inline mr-1" />
+          {error || '顧客情報が準備できていません。'}
+        </div>
+      )}
+
       <button
         onClick={generateEstimate}
-        disabled={isGenerating}
+        disabled={isGenerating || isMetadataLoading}
         className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center justify-center"
       >
         {isGenerating ? (
           <>
             <Loader className="w-4 h-4 mr-2 animate-spin" />
-            AI見積もりを生成中...
+            AI見積を生成中…
           </>
         ) : (
           <>
             <FileText className="w-4 h-4 mr-2" />
-            AI見積もりを生成
+            AI見積を生成
           </>
         )}
       </button>
 
-      {/* 生成結果 */}
       {generatedEstimate && (
-        <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center mb-2">
-            <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-            <h4 className="font-semibold text-green-800">見積もりが生成されました</h4>
+        <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4 space-y-3 text-sm text-slate-800">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <span className="font-semibold">AI見積が生成されました</span>
           </div>
-          <div className="text-sm text-green-700">
-            <p>見積番号: {generatedEstimate.documentNumber}</p>
-            <p>合計金額: ¥{generatedEstimate.totalAmount?.toLocaleString()}</p>
-            <p>見積管理一覧に保存されました</p>
+          <p className="text-xs text-slate-600">{generatedEstimate.aiReasoning}</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {generatedEstimate.options.map((option) => (
+              <div key={option.id} className="bg-white border border-green-100 rounded p-3 text-xs space-y-1">
+                <div className="font-semibold text-green-600">{option.label}</div>
+                <div>御見積総額: {formatCurrency(option.pq)}</div>
+                <div>限界利益: {formatCurrency(option.mq)}</div>
+                <div>成約率: {option.probability}%</div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-slate-600">
+            <div>CO2削減効果見込み: {generatedEstimate.co2Reduction.toLocaleString()}g</div>
+            <div>
+              過去平均: {formatCurrency(generatedEstimate.comparisonWithPast.averagePrice)} (
+              {generatedEstimate.comparisonWithPast.differencePercentage}%)
+            </div>
           </div>
         </div>
       )}

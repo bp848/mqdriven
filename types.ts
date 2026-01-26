@@ -1,4 +1,4 @@
-﻿// Database-aligned Types for mqdriven ERP System
+// Database-aligned Types for mqdriven ERP System
 // Based on actual Supabase schema
 
 export type Page =
@@ -33,7 +33,8 @@ export type Page =
   | 'dtp_tools'
   | 'prompt_management'
   | 'newsletter'
-  | 'simple_estimates';
+  | 'simple_estimates'
+  | 'print_estimate_app';
 
 // Allow loose typing for legacy camelCase usage across the app.
 export interface LooseRecord {
@@ -717,6 +718,7 @@ export interface DraftJournalEntry {
 export interface JournalEntry extends LooseRecord {
   application_id?: string;
   reference_id?: string;
+  batch_id?: string;
   id: string | number;
   entry_number?: string;
   entry_date?: string;
@@ -1055,3 +1057,64 @@ export interface EstimateDetail extends LooseRecord {
 }
 
 
+// AI見積もり用型
+export interface PrintSpec {
+  clientName: string;
+  projectName: string;
+  category: string;
+  quantity: number;
+  size: string;
+  paperType: string;
+  pages: number;
+  colors: '4/4' | '4/0' | '1/1' | '1/0';
+  finishing: string[];
+  requestedDelivery: string;
+}
+
+export interface StrategyOption {
+  id: 'must_win' | 'average' | 'profit_max';
+  label: string;
+  pq: number; // 売上高 (Price * Quantity)
+  vq: number; // 変動費計 (Variable cost * Quantity)
+  mq: number; // 限界利益 (Marginal Profit)
+  f: number;  // 固定費配分 (Fixed cost allocation)
+  g: number;  // 経常利益 (Gain)
+  mRatio: number; // 限界利益率
+  estimatedLeadTime: string;
+  probability: number;
+  description: string;
+}
+
+export interface EstimationResult {
+  options: StrategyOption[];
+  aiReasoning: string;
+  co2Reduction: number;
+  comparisonWithPast: {
+    averagePrice: number;
+    differencePercentage: number;
+  };
+}
+
+// AI見積もりアプリ用の型
+export interface MockClient {
+  id: string;
+  name: string;
+  pastOrders: number;
+  reliability: 'High' | 'Normal' | 'New';
+}
+
+export interface PastEstimate {
+  id: string;
+  clientName: string;
+  projectName: string;
+  date: string;
+  totalAmount: number;
+  specs: {
+    category: string;
+    quantity: number;
+    size: string;
+    paperType: string;
+    pages: number;
+    colors: string;
+  };
+}

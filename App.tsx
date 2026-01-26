@@ -46,6 +46,8 @@ import MarketResearchPage from './components/MarketResearchPage';
 import MeetingMinutesIframe from './components/MeetingMinutesIframe';
 import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
+import AIEstimatePage from './components/estimate/AIEstimatePage';
+import PrintEstimateApp from './components/estimate/PrintEstimateApp';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SalesDashboard from './components/sales/SalesDashboard';
@@ -147,74 +149,75 @@ type PredictiveSuggestion = {
 };
 
 const PAGE_TITLES: Record<Page, string> = {
-    analysis_dashboard: 'ダッシュボード',
+    analysis_dashboard: '分析ダッシュボード',
     my_schedule: '日報タスクカレンダー',
-    sales_dashboard: '販売状況',
+    sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
-    sales_customers: '取引先/お客様カルテ',
-    sales_pipeline: '進捗管理',
+    sales_customers: '顧客/取引先',
+    sales_pipeline: 'パイプライン',
     sales_estimates: '見積管理',
-    sales_orders: '予算管理',
+    sales_orders: '受発注管理',
     project_management: 'プロジェクト管理',
-    sales_billing: '売上請求（AR）',
-    fax_ocr_intake: '何でも取り込み',
+    sales_billing: '請求管理',
+    fax_ocr_intake: 'FAX取込',
     analysis_ranking: '売上ランキング',
-    purchasing_orders: '受注一覧',
-    purchasing_invoices: '仕入計上 (AP)',
+    purchasing_orders: '購買発注',
+    purchasing_invoices: '仕入請求(AP)',
     purchasing_payments: '支払管理',
     inventory_management: '在庫管理',
-    manufacturing_orders: '製造指示',
-    manufacturing_progress: '製造パイプライン',
+    manufacturing_orders: '製造指図',
+    manufacturing_progress: '製造進捗',
     manufacturing_cost: '製造原価',
-    simple_estimates: '見積管理',
+    simple_estimates: 'AI見積もり作成',
+    print_estimate_app: '基幹見積システム',
     hr_attendance: '勤怠',
     hr_man_hours: '工数',
-    hr_labor_cost: '人件費配賦',
+    hr_labor_cost: '人件費',
     approval_list: '承認一覧',
-    approval_form_expense: '経費精算',
-    approval_form_transport: '交通費精算',
+    approval_form_expense: '経費申請',
+    approval_form_transport: '交通費申請',
     approval_form_leave: '休暇申請',
     approval_form_approval: '稟議申請',
     approval_form_daily: '日報',
     approval_form_weekly: '週報',
-    accounting_journal: '仕訳帳',
+    accounting_journal: '仕訳',
     accounting_general_ledger: '総勘定元帳',
     accounting_trial_balance: '試算表',
     accounting_tax_summary: '消費税集計',
-    accounting_period_closing: '締処理',
+    accounting_period_closing: '月次締め',
     accounting_business_plan: '経営計画',
     accounting_dashboard: '会計ダッシュボード',
     accounting_journal_review: '仕訳レビュー',
-    accounting_payables: '支払管理',
-    accounting_receivables: '売掛金管理',
-    accounting_cash_schedule: '資金繰り表',
+    accounting_payables: '買掛管理',
+    accounting_receivables: '売掛管理',
+    accounting_cash_schedule: '資金繰り',
     accounting_approved_applications: '承認済み申請',
-    accounting_approved_unhandled: '未対応管理',
-    accounting_approved_expense: '承認済み（経費）',
-    accounting_approved_transport: '承認済み（交通費）',
-    accounting_approved_leave: '承認済み（休暇）',
-    accounting_approved_apl: '承認済み（稟議）',
-    accounting_approved_dly: '承認済み（日報）',
-    accounting_approved_wkr: '承認済み（週報）',
-    document_creation_tools: '資料作成',
-    proposal_ai: '提案書作成AI',
+    accounting_approved_unhandled: '未処理',
+    accounting_approved_expense: '経費',
+    accounting_approved_transport: '交通費',
+    accounting_approved_leave: '休暇',
+    accounting_approved_apl: '稟議',
+    accounting_approved_dly: '日報',
+    accounting_approved_wkr: '週報',
+    document_creation_tools: 'ドキュメント作成',
+    proposal_ai: '提案書AI',
     pdf_editing_tools: 'PDF編集AI',
-    dtp_tools: 'DTP自動組版AI',
-    ai_business_consultant: 'AI経営相談',
+    dtp_tools: 'DTP支援AI',
+    ai_business_consultant: 'AI業務相談',
     ai_market_research: 'AI市場調査',
-    meeting_minutes: '議事録支援',
+    meeting_minutes: '議事録',
     admin_audit_log: '監査ログ',
-    admin_journal_queue: 'ジャーナル・キュー',
+    admin_journal_queue: '仕訳キュー',
     admin_user_management: 'ユーザー管理',
     admin_route_management: '承認ルート管理',
-    admin_master_management: 'マスタ管理',
+    admin_master_management: 'マスター管理',
     admin_action_console: 'アクションコンソール',
-    admin_bug_reports: 'バグ・改善報告',
-    bulletin_board: '議事録/掲示板',
+    admin_bug_reports: 'バグ報告',
+    bulletin_board: '掲示板',
     knowledge_base: 'ナレッジベース',
     settings: '設定',
     prompt_management: 'プロンプト管理',
-    newsletter: 'メールマガジン',
+    newsletter: 'ニュースレター',
 };
 
 const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
@@ -1160,7 +1163,7 @@ useEffect(() => {
                 setIsCreateInventoryItemModalOpen(true);
                 break;
             case 'sales_estimates':
-                // TODO: Open create estimate modal
+                handleNavigate('simple_estimates');
                 break;
             default:
                 break;
@@ -1264,6 +1267,7 @@ useEffect(() => {
                     isAIOff={isAIOff} 
                     onAddEstimate={handleAddEstimate} 
                     customers={customers}
+                    onNavigate={handleNavigate}
                     onCreateExistingCustomerLead={async (leadData) => {
                         await dataService.addLead(leadData);
                         await loadAllData();
@@ -1314,6 +1318,14 @@ useEffect(() => {
             case 'purchasing_orders':
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders || []} jobs={jobs || []} />;
             case 'simple_estimates':
+                return (
+                    <AIEstimatePage
+                        lead={leads?.[0] ?? null}
+                        onGenerated={() => handleNavigate('sales_estimates')}
+                    />
+                );
+            case 'print_estimate_app':
+                return <PrintEstimateApp />;
             case 'sales_estimates':
                 return <EstimateManagementPage
                     estimates={estimates || []}
@@ -1324,6 +1336,7 @@ useEffect(() => {
                     customers={customers || []}
                     allUsers={allUsers || []}
                     onAddEstimate={handleAddEstimate}
+                    onShowAiEstimate={() => handleNavigate('simple_estimates')}
                     addToast={addToast}
                     currentUser={currentUser}
                     searchTerm={searchTerm}

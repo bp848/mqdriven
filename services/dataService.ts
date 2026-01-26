@@ -1,4 +1,4 @@
-﻿import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
+import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from './notificationService';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js';
@@ -1617,79 +1617,182 @@ export const saveCustomerInfo = async (customerId: string, updates: Partial<Cust
 
 export const getJournalEntries = async (status?: string): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
-    let query = supabase.from('journal_entries').select('*');
-    if (status) {
-        query = query.eq('status', status);
-    } else {
-        query = query.eq('status', 'posted');
+    const targetStatus = status || 'posted';
+    // accountingスキーマのjournal_batchesとjournal_entriesを使用
+    const { data: batches, error: batchesError } = await supabase
+        .schema('accounting')
+        .from('journal_batches')
+        .select('id, status')
+        .eq('status', targetStatus);
+    
+    if (batchesError) {
+        console.warn('Failed to fetch journal batches:', batchesError);
+        return [];
     }
-    const { data, error } = await query.order('date', { ascending: false });
-    ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
-    return data || [];
+    
+    if (!batches || batches.length === 0) {
+        return [];
+    }
+    
+    const batchIds = batches.map(b => b.id).filter(Boolean);
+    const { data: entries, error: entriesError } = await supabase
+        .schema('accounting')
+        .from('journal_entries')
+        .select('id, batch_id, entry_date, description, created_at')
+        .in('batch_id', batchIds)
+        .order('entry_date', { ascending: false });
+    
+    ensureSupabaseSuccess(entriesError, 'Failed to fetch journal entries');
+    
+    const batchStatusMap = new Map<string, string>();
+    batches.forEach(batch => {
+        batchStatusMap.set(batch.id, batch.status);
+    });
+    
+    return (entries || []).map(entry => ({
+        ...entry,
+        date: entry.entry_date,
+        status: batchStatusMap.get(entry.batch_id) || targetStatus,
+    })) as JournalEntry[];
 };
 
 export const getJournalEntriesByStatus = async (status: string): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase
+    // accountingスキーマのjournal_batchesとjournal_entriesを使用
+    const { data: batches, error: batchesError } = await supabase
+        .schema('accounting')
+        .from('journal_batches')
+        .select('id, status')
+        .eq('status', status);
+    
+    if (batchesError) {
+        console.warn('Failed to fetch journal batches:', batchesError);
+        return [];
+    }
+    
+    if (!batches || batches.length === 0) {
+        return [];
+    }
+    
+    const batchIds = batches.map(b => b.id).filter(Boolean);
+    const { data: entries, error: entriesError } = await supabase
+        .schema('accounting')
         .from('journal_entries')
-        .select(`
-            *,
-            journal_entry_lines (
-                id,
-                account_id,
-                account_code,
-                account_name,
-                debit_amount,
-                credit_amount,
-                description
-            )
-        `)
-        .eq('status', status)
+        .select('id, batch_id, entry_date, description, created_at')
+        .in('batch_id', batchIds)
         .order('created_at', { ascending: false });
-    ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
-    return data || [];
+    ensureSupabaseSuccess(entriesError, 'Failed to fetch journal entries');
+    
+    if (!entries || entries.length === 0) {
+        return [];
+    }
+    
+    const entryIds = entries.map(e => e.id).filter(Boolean);
+    const { data: lines, error: linesError } = await supabase
+        .schema('accounting')
+        .from('journal_lines')
+        .select('id, journal_entry_id, account_id, debit, credit, description')
+        .in('journal_entry_id', entryIds);
+    
+    if (linesError) {
+        console.warn('Failed to fetch journal entry lines:', linesError);
+    }
+    
+    const linesByEntryId = new Map<string, JournalEntryLine[]>();
+    (lines || []).forEach(line => {
+        const entryId = String(line.journal_entry_id || '');
+        if (!linesByEntryId.has(entryId)) {
+            linesByEntryId.set(entryId, []);
+        }
+        linesByEntryId.get(entryId)!.push({
+            id: line.id,
+            journal_entry_id: line.journal_entry_id,
+            account_id: line.account_id,
+            debit_amount: line.debit,
+            credit_amount: line.credit,
+            description: line.description,
+        });
+    });
+    
+    const batchStatusMap = new Map<string, string>();
+    batches.forEach(batch => {
+        batchStatusMap.set(batch.id, batch.status);
+    });
+    
+    return (entries || []).map(entry => ({
+        ...entry,
+        date: entry.entry_date,
+        status: batchStatusMap.get(entry.batch_id) || status,
+        lines: linesByEntryId.get(String(entry.id)) || [],
+    })) as JournalEntry[];
 };
 
 export const updateJournalEntryStatus = async (journalEntryId: string, status: string): Promise<void> => {
     const supabase = getSupabase();
+    // accountingスキーマのjournal_entriesとjournal_batchesを使用
     const { data: entry, error: entryError } = await supabase
+        .schema('accounting')
         .from('journal_entries')
-        .select('id, application_id')
+        .select('id, batch_id, journal_batches!inner(source_application_id)')
         .eq('id', journalEntryId)
         .single();
     ensureSupabaseSuccess(entryError, 'Failed to fetch journal entry');
 
-    const { error } = await supabase
-        .from('journal_entries')
+    // journal_batchesのstatusを更新
+    const { error: batchError } = await supabase
+        .schema('accounting')
+        .from('journal_batches')
         .update({
             status,
-            updated_at: new Date().toISOString(),
+            posted_at: status === 'posted' ? new Date().toISOString() : null,
         })
-        .eq('id', journalEntryId);
-    ensureSupabaseSuccess(error, 'Failed to update journal entry status');
+        .eq('id', entry.batch_id);
+    ensureSupabaseSuccess(batchError, 'Failed to update journal batch status');
 
-    if (entry?.application_id && (status === 'posted' || status === 'draft')) {
+    const sourceApplicationId = (entry as any)?.journal_batches?.source_application_id;
+    if (sourceApplicationId && (status === 'posted' || status === 'draft')) {
         const { error: appError } = await supabase
             .from('applications')
             .update({ accounting_status: status })
-            .eq('id', entry.application_id);
+            .eq('id', sourceApplicationId);
         ensureSupabaseSuccess(appError, 'Failed to update application accounting status');
     }
 };
 
 export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>): Promise<JournalEntry> => {
     const supabase = getSupabase();
-    // Always create journal entries with 'draft' status
-    const draftEntryData = { 
-        ...entryData, 
-        status: 'draft',
-        date: new Date().toISOString().split('T')[0] // Add current date
-    };
-    const { data, error } = await supabase.from('journal_entries').insert(draftEntryData).select().single();
+    // accountingスキーマを使用
+    // まずjournal_batchを作成
+    const { data: batch, error: batchError } = await supabase
+        .schema('accounting')
+        .from('journal_batches')
+        .insert({
+            status: 'draft',
+            created_by: entryData.created_by || null,
+        })
+        .select('id')
+        .single();
+    ensureSupabaseSuccess(batchError, 'Failed to create journal batch');
+    
+    // journal_entryを作成
+    const entryDate = entryData.date || new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+        .schema('accounting')
+        .from('journal_entries')
+        .insert({
+            batch_id: batch.id,
+            entry_date: entryDate,
+            description: entryData.description || null,
+        })
+        .select('id, batch_id, entry_date, description, created_at')
+        .single();
     ensureSupabaseSuccess(error, 'Failed to add journal entry');
     
-    // The trigger will automatically create journal_entry_lines
-    return data;
+    return {
+        ...data,
+        date: data.entry_date,
+        status: 'draft',
+    } as JournalEntry;
 };
 
 const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUser[]> => {
@@ -1956,50 +2059,85 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
     ensureSupabaseSuccess(error, 'Failed to fetch approved applications');
 
     const apps = data || [];
-    const appIds = apps.map(app => app.id).filter(Boolean);
-    if (appIds.length === 0) {
-        return apps.map(app => ({
+    const mapAppsWithoutJournal = () =>
+        apps.map(app => ({
             ...dbApplicationToApplication(app),
             applicant: app.applicant,
             application_code: app.application_code,
             applicationCode: app.application_code,
         }));
+    const appIds = apps.map(app => app.id).filter(Boolean);
+    if (appIds.length === 0) {
+        return mapAppsWithoutJournal();
     }
 
+    // accountingスキーマのjournal_batchesテーブルを使用
+    const { data: batches, error: batchesError } = await supabase
+        .schema('accounting')
+        .from('journal_batches')
+        .select('id, source_application_id, status')
+        .in('source_application_id', appIds);
+    ensureSupabaseSuccess(batchesError, 'Failed to fetch journal batches for approved applications');
+
+    const batchIdToAppId = new Map<string, string>();
+    const batchIdToStatus = new Map<string, string>();
+    (batches || []).forEach(batch => {
+        if (!batch?.id || !batch.source_application_id) return;
+        batchIdToAppId.set(batch.id, batch.source_application_id);
+        batchIdToStatus.set(batch.id, batch.status || 'draft');
+    });
+
+    const batchIds = Array.from(batchIdToAppId.keys());
+    if (batchIds.length === 0) {
+        return mapAppsWithoutJournal();
+    }
+
+    // accountingスキーマのjournal_entriesテーブルを使用
     const { data: journalEntries, error: journalError } = await supabase
+        .schema('accounting')
         .from('journal_entries')
-        .select('id, application_id, status, date, description, created_at')
-        .in('application_id', appIds);
+        .select('id, batch_id, entry_date, description, created_at')
+        .in('batch_id', batchIds);
     ensureSupabaseSuccess(journalError, 'Failed to fetch journal entries for approved applications');
 
-    const entryByAppId = new Map<string, any>();
+    const entryByAppId = new Map<string, JournalEntry>();
     (journalEntries || []).forEach(entry => {
-        if (!entry?.application_id) return;
-        const existing = entryByAppId.get(entry.application_id);
+        if (!entry?.batch_id) return;
+        const applicationId = batchIdToAppId.get(entry.batch_id);
+        if (!applicationId) return;
+        const journalEntry = {
+            ...entry,
+            date: entry.entry_date,
+            status: batchIdToStatus.get(entry.batch_id) || 'draft',
+        } as JournalEntry;
+        journalEntry.reference_id = applicationId;
+        const existing = entryByAppId.get(applicationId);
         if (!existing) {
-            entryByAppId.set(entry.application_id, entry);
+            entryByAppId.set(applicationId, journalEntry);
             return;
         }
         const existingTime = existing?.created_at ? new Date(existing.created_at).getTime() : 0;
-        const nextTime = entry?.created_at ? new Date(entry.created_at).getTime() : 0;
+        const nextTime = journalEntry?.created_at ? new Date(journalEntry.created_at).getTime() : 0;
         if (nextTime >= existingTime) {
-            entryByAppId.set(entry.application_id, entry);
+            entryByAppId.set(applicationId, journalEntry);
         }
     });
 
     const entryIds = Array.from(entryByAppId.values()).map(entry => entry.id).filter(Boolean);
     const linesByEntryId = new Map<string, any[]>();
     if (entryIds.length > 0) {
+        // accountingスキーマのjournal_linesテーブルを使用（account_itemsはaccounting.accountsを参照）
         const { data: journalLines, error: linesError } = await supabase
-            .from('journal_entry_lines')
+            .schema('accounting')
+            .from('journal_lines')
             .select(`
                 id,
                 journal_entry_id,
                 account_id,
-                debit_amount,
-                credit_amount,
+                debit,
+                credit,
                 description,
-                account_items (
+                accounts:account_id (
                     code,
                     name
                 )
@@ -2007,7 +2145,7 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
             .in('journal_entry_id', entryIds);
         ensureSupabaseSuccess(linesError, 'Failed to fetch journal entry lines');
         (journalLines || []).forEach(line => {
-            const key = line.journal_entry_id;
+            const key = String(line.journal_entry_id || '');
             if (!key) return;
             if (!linesByEntryId.has(key)) {
                 linesByEntryId.set(key, []);
@@ -2019,24 +2157,24 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
     return apps.map(app => {
         const base = dbApplicationToApplication(app) as ApplicationWithDetails;
         const entry = entryByAppId.get(app.id);
-        const normalizedStatus = entry ? normalizeAccountingStatus(entry.status) : AccountingStatus.NONE;
-        const lines = entry ? (linesByEntryId.get(entry.id) || []) : [];
+        const normalizedStatus = entry ? normalizeAccountingStatus(entry.status || 'draft') : AccountingStatus.NONE;
+        const lines = entry ? (linesByEntryId.get(String(entry.id)) || []) : [];
         const mappedCode = app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined;
         const mappedLines: JournalEntryLine[] = lines.map(line => ({
             id: line.id,
             journal_entry_id: line.journal_entry_id,
             account_id: line.account_id,
-            account_code: line.account_items?.code ?? line.account_code,
-            account_name: line.account_items?.name ?? line.account_name,
+            account_code: line.accounts?.code ?? line.account_code,
+            account_name: line.accounts?.name ?? line.account_name,
             description: line.description ?? undefined,
-            debit_amount: line.debit_amount ?? undefined,
-            credit_amount: line.credit_amount ?? undefined,
+            debit_amount: line.debit ?? line.debit_amount ?? undefined,
+            credit_amount: line.credit ?? line.credit_amount ?? undefined,
             created_at: line.created_at ?? undefined,
         }));
 
         return {
             ...base,
-            applicant: app.applicant,
+            applicant: app.applicant as User | undefined,
             application_code: mappedCode,
             applicationCode: mappedCode,
             accountingStatus: normalizedStatus,
@@ -2049,7 +2187,7 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
                       lines: mappedLines,
                   }
                 : undefined,
-        };
+        } as ApplicationWithDetails;
     });
 };
 
@@ -3915,51 +4053,90 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
 
 export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => {
     const supabase = getSupabase();
-    // Only get drafts that have journal entry lines
-    const { data, error } = await supabase
+    // accountingスキーマのjournal_batchesとjournal_entriesを使用
+    const { data: batches, error: batchesError } = await supabase
+        .schema('accounting')
+        .from('journal_batches')
+        .select('id, status')
+        .eq('status', 'draft');
+    
+    if (batchesError) {
+        console.warn('Failed to fetch journal batches:', batchesError);
+        return [];
+    }
+    
+    if (!batches || batches.length === 0) {
+        return [];
+    }
+    
+    const batchIds = batches.map(b => b.id).filter(Boolean);
+    const { data: entries, error: entriesError } = await supabase
+        .schema('accounting')
         .from('journal_entries')
+        .select('id, batch_id, entry_date, description')
+        .in('batch_id', batchIds)
+        .order('entry_date', { ascending: false });
+
+    ensureSupabaseSuccess(entriesError, '仕訳下書きの取得に失敗しました。');
+
+    if (!entries || entries.length === 0) {
+        return [];
+    }
+
+    const entryIds = entries.map(e => e.id).filter(Boolean);
+    const { data: lines, error: linesError } = await supabase
+        .schema('accounting')
+        .from('journal_lines')
         .select(`
-            id,
-            date,
+            journal_entry_id,
+            account_id,
+            debit,
+            credit,
             description,
-            status,
-            journal_entry_lines (
-                account_id,
-                account_items (
-                    code,
-                    name
-                ),
-                debit_amount,
-                credit_amount,
-                description,
-                line_order
+            accounts:account_id (
+                code,
+                name
             )
         `)
-        .eq('status', 'draft')
-        .not('journal_entry_lines', 'is', null)
-        .order('date', { ascending: false });
+        .in('journal_entry_id', entryIds);
 
-    ensureSupabaseSuccess(error, '仕訳下書きの取得に失敗しました。');
+    if (linesError) {
+        console.warn('Failed to fetch journal entry lines:', linesError);
+    }
+
+    const linesByEntryId = new Map<string, any[]>();
+    (lines || []).forEach(line => {
+        const entryId = String(line.journal_entry_id || '');
+        if (!linesByEntryId.has(entryId)) {
+            linesByEntryId.set(entryId, []);
+        }
+        linesByEntryId.get(entryId)!.push(line);
+    });
 
     // Transform to DraftJournalEntry format
-    return (data || []).map((entry: any) => {
-        const lines = entry.journal_entry_lines || [];
-        const debitLine = lines.find((l: any) => l.debit_amount > 0);
-        const creditLine = lines.find((l: any) => l.credit_amount > 0);
+    return entries
+        .filter(entry => {
+            const entryLines = linesByEntryId.get(String(entry.id)) || [];
+            return entryLines.length > 0;
+        })
+        .map((entry: any) => {
+            const entryLines = linesByEntryId.get(String(entry.id)) || [];
+            const debitLine = entryLines.find((l: any) => (l.debit || l.debit_amount) > 0);
+            const creditLine = entryLines.find((l: any) => (l.credit || l.credit_amount) > 0);
 
-        return {
-            batchId: entry.id,
-            date: entry.date,
-            description: entry.description,
-            status: entry.status,
-            debitAccount: debitLine?.account_items?.name || '譛ｪ逕滓・',
-            creditAccount: creditLine?.account_items?.name || '譛ｪ逕滓・',
-            debitAmount: debitLine?.debit_amount || null,
-            creditAmount: creditLine?.credit_amount || null,
-            source: 'application',
-            confidence: lines.length > 0 ? 0.8 : 0,
-        };
-    });
+            return {
+                batchId: entry.batch_id || entry.id,
+                date: entry.entry_date || entry.date,
+                description: entry.description,
+                status: 'draft',
+                debitAccount: debitLine?.accounts?.name || debitLine?.account_items?.name || '未設定',
+                creditAccount: creditLine?.accounts?.name || creditLine?.account_items?.name || '未設定',
+                debitAmount: debitLine?.debit || debitLine?.debit_amount || null,
+                creditAmount: creditLine?.credit || creditLine?.credit_amount || null,
+                source: 'application',
+                confidence: entryLines.length > 0 ? 0.8 : 0,
+            };
+        });
 };
 
 export const approveJournalBatch = async (batchId: string): Promise<void> => {
@@ -4337,3 +4514,74 @@ export const createJournalFromApplication = async (
     return generateJournalLinesFromApplication(applicationId);
 };
 
+// VIEW-based data fetching functions for accounting pages
+export const getJournalBookData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_journal_book').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch journal book data');
+    return data || [];
+};
+
+export const getGeneralLedgerData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_general_ledger').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch general ledger data');
+    return data || [];
+};
+
+export const getTrialBalanceData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_trial_balance').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch trial balance data');
+    return data || [];
+};
+
+export const getTaxSummaryData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_tax_summary').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch tax summary data');
+    return data || [];
+};
+
+// Management stub data functions
+export const getInventoryData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_inventory_stub').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch inventory data');
+    return data || [];
+};
+
+export const getManufacturingData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_manufacturing_stub').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch manufacturing data');
+    return data || [];
+};
+
+export const getPurchasingData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_purchasing_stub').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch purchasing data');
+    return data || [];
+};
+
+export const getAttendanceData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_attendance_stub').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch attendance data');
+    return data || [];
+};
+
+export const getManHoursData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_man_hours_stub').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch man-hours data');
+    return data || [];
+};
+
+export const getLaborCostData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_labor_cost_stub').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch labor cost data');
+    return data || [];
+};

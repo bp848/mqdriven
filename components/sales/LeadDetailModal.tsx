@@ -24,6 +24,7 @@ interface LeadDetailModalProps {
     isAIOff: boolean;
     onAddEstimate: (estimate: any) => Promise<void>;
     onEstimateCreated?: () => void; // 見積もり作成後のコールバック
+    onShowAiEstimate?: () => void; // AI見積作成ページを表示
     initialAiTab?: 'investigation' | 'proposal' | 'email';
 }
 
@@ -141,7 +142,7 @@ const renderInvestigationSummary = (text: string) => {
     );
 };
 
-export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate, onEstimateCreated, initialAiTab }) => {
+export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ isOpen, onClose, lead, onSave, onDelete, addToast, requestConfirmation, currentUser, onGenerateReply, isAIOff, onAddEstimate, onEstimateCreated, onShowAiEstimate, initialAiTab }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<Lead>>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -513,7 +514,6 @@ MQ会計分析:
             const { subject, html, body, emailId } = buildEstimateEmail();
             
             // Send email through system
-            const { sendEmail } = await import('../../services/emailService');
             const result = await sendEmail({
                 to: [lead.email],
                 subject,
@@ -597,6 +597,15 @@ MQ会計分析:
                 onClick: () => {
                     setActiveAiTab('proposal');
                     handleCreateProposalPackage();
+                },
+            };
+        }
+        // AI見積作成ボタンを追加
+        if (onShowAiEstimate && (hasReply || hasInvestigation)) {
+            return {
+                label: 'AI見積もり作成',
+                onClick: () => {
+                    onShowAiEstimate();
                 },
             };
         }

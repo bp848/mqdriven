@@ -15,8 +15,15 @@ export default defineConfig(({ mode }) => {
     
     return {
       server: {
-        port: 3000,
+        port: 8080,
         host: '0.0.0.0',
+        proxy: {
+          '/api': {
+            target: 'http://localhost:3000',
+            changeOrigin: true,
+            secure: false,
+          }
+        }
       },
       plugins: [react()],
       resolve: {
@@ -32,12 +39,17 @@ export default defineConfig(({ mode }) => {
               supabase: ['@supabase/supabase-js'],
               charts: ['recharts'],
               icons: ['lucide-react'],
+              ai: ['@google/genai'],
+              utils: ['uuid', 'jszip']
             }
           }
-        }
+        },
+        minify: 'esbuild',
+        cssMinify: false, // Disable CSS minify completely
+        chunkSizeWarningLimit: 1000
       },
       optimizeDeps: {
-        include: ['react', 'react-dom', '@supabase/supabase-js', 'recharts', 'lucide-react']
+        include: ['react', 'react-dom', '@supabase/supabase-js', 'recharts', 'lucide-react', '@google/genai', 'uuid', 'jszip', 'google-auth-library']
       }
     };
 });

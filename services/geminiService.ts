@@ -1,4 +1,4 @@
-import { Type, Chat } from "@google/genai";
+import { Type, Chat, FunctionDeclaration } from "@google/genai";
 import JSZip from "jszip";
 import {
   GEMINI_DEFAULT_MODEL,
@@ -30,8 +30,12 @@ import {
   CustomProposalContent,
   LeadProposalPackage,
   MarketResearchReport,
+  PrintSpec,
+  EstimationResult,
+  StrategyOption,
 } from "../types";
 import { formatJPY } from "../utils";
+import { INTEGRATION_MANIFESTO } from "../constants";
 
 const model = GEMINI_DEFAULT_MODEL;
 const invoiceOcrModel = GEMINI_OCR_MODEL ?? GEMINI_DEFAULT_MODEL;
@@ -1500,4 +1504,163 @@ const generateEnvironmentalNote = (): string => {
 環境対策費：0円
 
 ※環境に配慮した印刷サービスを無償で提供いたします。`;
+};
+
+/**
+ * 【開発者への引き継ぎ：実装上の重要事項】
+ * 以下の `coreTools` は、AIがSupabase（project_ref: rwjhpfghhgstvplmggks）や
+ * Google Driveを操作するためのツール定義です。
+ * 
+ * 【お詫び】
+ * 現在、フロントエンドのみで動作させるため、実際のDB検索結果をAIが受け取って再計算する
+ * 実装が不十分です。現在はAIが「検索したつもり」で推論値を返しています。
+ * 実装時は、以下の関数呼び出し（ToolCall）をサーバー側でキャッチし、
+ * 実際のMCP実行結果をAIに返却（FunctionResponse）するようにリファクタリングしてください。
+ */
+const coreTools: FunctionDeclaration[] = [
+  {
+    name: 'supabase_db_query',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Supabaseから顧客情報、過去の成約単価、マスタ原価を取得します。',
+      properties: {
+        sql_query: { type: Type.STRING, description: '実行するSQL、または抽出条件' },
+        clientName: { type: Type.STRING }
+      },
+      required: ['clientName']
+    }
+  },
+  {
+    name: 'google_drive_file_search',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Google Drive内の過去見積Excelや仕様書PDFから、類似案件の仕様と金額を検索します。',
+      properties: {
+        keyword: { type: Type.STRING, description: '検索キーワード（例：パンフレット A4 4P）' }
+      },
+      required: ['keyword']
+    }
+  },
+  {
+    name: 'wiki_knowledge_fetch',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'DeepWikiから顧客固有の検品基準、品質要件、過去のトラブル情報を取得します。',
+      properties: {
+        clientName: { type: Type.STRING }
+      }
+    }
+  }
+];
+
+// AI見積もりアプリ用の関数
+const extractSpecSchema = {
+  type: Type.OBJECT,
+  properties: {
+    projectName: { type: Type.STRING, description: '案件名' },
+    category: { type: Type.STRING, description: '印刷品目カテゴリ' },
+    quantity: { type: Type.INTEGER, description: '数量（部数）' },
+    size: { type: Type.STRING, description: 'サイズ（例：A4, B5）' },
+    paperType: { type: Type.STRING, description: '用紙種類' },
+    pages: { type: Type.INTEGER, description: 'ページ数' },
+    colors: { type: Type.STRING, description: '色数（例：4/4, 4/0）', enum: ['4/4', '4/0', '1/1', '1/0'] },
+    finishing: { type: Type.ARRAY, items: { type: Type.STRING }, description: '加工オプション' },
+    requestedDelivery: { type: Type.STRING, description: '希望納期' },
+  },
+};
+
+export const extractSpecFromInput = async (
+  inputText: string,
+  imageBase64?: string
+): Promise<Partial<PrintSpec>> => {
+  const ai = checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const prompt = `
+    文唱堂印刷の基幹AIとして、入力内容から印刷仕様（品名、カテゴリ、部数、サイズ、紙、頁数、色数、加工）を抽出してください。
+    システム構成: ${JSON.stringify(INTEGRATION_MANIFESTO)}
+    入力: ${inputText}
+  `;
+
+    const parts: any[] = [{ text: prompt }];
+    
+    if (imageBase64) {
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const mimeType = imageBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpeg';
+      parts.push({ inlineData: { data: base64Data, mimeType: `image/${mimeType}` } });
+    }
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: extractSpecSchema,
+      },
+    });
+
+    const jsonStr = response.text.trim();
+    return JSON.parse(jsonStr);
+  });
+};
+
+export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationResult> => {
+  const ai = checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const contextPrompt = `
+    【基幹連携見積シミュレーション開始】
+    1. supabase_db_query を実行し、顧客「${spec.clientName}」の過去成約履歴と現在のマスタ単価を取得せよ。
+    2. google_drive_file_search を実行し、今回の「${spec.category}」に近い過去の見積書を検索せよ。
+    3. wiki_knowledge_fetch を実行し、顧客固有の禁止事項や検品ルールを反映せよ。
+    
+    上記リソースを統合し、MQ会計（売上、変動費、限界利益）に基づく3つの見積プラン（成約優先、標準、利益重視）を算定せよ。
+    ※現在はプロトタイプのため、AIによる推論値を出力するが、解説文には「どのDB情報を参照したか」を具体的に含めること。
+
+    案件仕様: ${JSON.stringify(spec)}
+  `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contextPrompt,
+      config: {
+        tools: [{ functionDeclarations: coreTools }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            options: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  label: { type: Type.STRING, description: "プラン名称（成約優先など）" },
+                  pq: { type: Type.NUMBER, description: "売上高" },
+                  vq: { type: Type.NUMBER, description: "変動費合計" },
+                  mq: { type: Type.NUMBER, description: "限界利益" },
+                  f: { type: Type.NUMBER, description: "固定費" },
+                  g: { type: Type.NUMBER, description: "経常利益" },
+                  mRatio: { type: Type.NUMBER, description: "限界利益率" },
+                  estimatedLeadTime: { type: Type.STRING },
+                  probability: { type: Type.NUMBER, description: "成約角度(%)" },
+                  description: { type: Type.STRING, description: "戦略の解説" }
+                }
+              }
+            },
+            aiReasoning: { type: Type.STRING, description: "DBやDrive、Wikiのどの情報を根拠にしたかの日本語解説" },
+            co2Reduction: { type: Type.NUMBER },
+            comparisonWithPast: {
+              type: Type.OBJECT,
+              properties: {
+                averagePrice: { type: Type.NUMBER },
+                differencePercentage: { type: Type.NUMBER }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const jsonStr = response.text.trim();
+    return JSON.parse(jsonStr);
+  });
 };
