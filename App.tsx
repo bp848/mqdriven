@@ -48,6 +48,7 @@ import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
 import AIEstimatePage from './components/estimate/AIEstimatePage';
 import PrintEstimateApp from './components/estimate/PrintEstimateApp';
+import STRACAnalysisPage from './components/analysis/STRACAnalysisPage';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SalesDashboard from './components/sales/SalesDashboard';
@@ -1326,6 +1327,8 @@ useEffect(() => {
                 );
             case 'print_estimate_app':
                 return <PrintEstimateApp />;
+            case 'strac_analysis':
+                return <STRACAnalysisPage />;
             case 'sales_estimates':
                 return <EstimateManagementPage
                     estimates={estimates || []}

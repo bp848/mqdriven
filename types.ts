@@ -34,7 +34,8 @@ export type Page =
   | 'prompt_management'
   | 'newsletter'
   | 'simple_estimates'
-  | 'print_estimate_app';
+  | 'print_estimate_app'
+  | 'strac_analysis';
 
 // Allow loose typing for legacy camelCase usage across the app.
 export interface LooseRecord {
@@ -1117,4 +1118,47 @@ export interface PastEstimate {
     pages: number;
     colors: string;
   };
+}
+
+// STRAC分析アプリ用の型
+export interface SaleRecord {
+  id: string;
+  customerName: string;
+  productName: string;
+  salesRep: string;
+  estPQ: number; // 見積売上
+  estVQ: number; // 見積変動費
+  estMQ: number; // 見積限界利益
+  finalPQ: number; // 確定売上
+  finalVQ: number; // 確定変動費
+  finalMQ: number; // 確定限界利益
+  materialCost?: number;   // 変動費内訳: 材料費
+  outsourcingCost?: number; // 変動費内訳: 外注費
+  deadline: string;
+  lastUpdated: string;
+  status: string;
+  industry?: string; // 業種
+}
+
+export interface FixedCostBreakdown {
+  labor: number;   // 人件費
+  rent: number;    // 地代家賃
+  other: number;   // その他固定費
+}
+
+export interface SummaryStats {
+  totalSales: number;
+  totalVariableCost: number;
+  totalMaterialCost: number;
+  totalOutsourcingCost: number;
+  totalProfit: number;
+  avgMarginRatio: number;
+  count: number;
+  fixedCost: number; 
+  fixedCostBreakdown: FixedCostBreakdown;
+  netGain: number;   
+  // 顧客分析
+  uniqueCustomerCount: number;
+  repeatCustomerCount: number;
+  repeatRate: number;
 }
