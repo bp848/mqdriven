@@ -501,10 +501,10 @@ export const extractInvoiceDetails = async (
     });
     const jsonStr = response.text.trim();
     try {
-        return JSON.parse(jsonStr);
+      return JSON.parse(jsonStr);
     } catch (e) {
-        console.error("AIからのJSON解析に失敗しました。", e);
-        throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${jsonStr}`);
+      console.error("AIからのJSON解析に失敗しました。", e);
+      throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${jsonStr}`);
     }
   });
 };
@@ -635,17 +635,17 @@ export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
         
         データサンプル:
         ${JSON.stringify(
-          leads
-            .slice(0, 3)
-            .map((l) => ({
-              company: l.company,
-              status: l.status,
-              inquiryType: l.inquiryType,
-              message: l.message,
-            })),
-          null,
-          2
-        )}
+      leads
+        .slice(0, 3)
+        .map((l) => ({
+          company: l.company,
+          status: l.status,
+          inquiryType: l.inquiryType,
+          message: l.message,
+        })),
+      null,
+      2
+    )}
         `;
     const response = await ai.models.generateContent({ model, contents: prompt });
     return response.text;
@@ -1434,18 +1434,18 @@ export const createProjectFromInputs = async (..._args: any[]): Promise<any> => 
 // フォールバック見積もり生成関数
 const generateFallbackEstimate = (lead: Lead) => {
   const message = lead.message || '';
-  
+
   // 雑誌印刷の具体例から仕様を抽出
   const isMagazine = message.includes('雑誌') || message.includes('インディペンデント');
   const size = message.includes('B5') ? 'B5' : message.includes('A4') ? 'A4' : 'A4';
   const pages = message.match(/(\d+)ページ/) ? parseInt(message.match(/(\d+)ページ/)![1]) : 32;
   const quantity = message.match(/(\d+)部/) ? parseInt(message.match(/(\d+)部/)![1]) : 500;
   const color = message.includes('カラー') ? 'フルカラー' : 'モノクロ';
-  
+
   const basePrice = isMagazine ? 150000 : 80000;
   const pagePrice = pages * 500;
   const quantityPrice = quantity * 100;
-  
+
   return [
     {
       division: '用紙代' as const,
@@ -1582,7 +1582,7 @@ export const extractSpecFromInput = async (
   `;
 
     const parts: any[] = [{ text: prompt }];
-    
+
     if (imageBase64) {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
       const mimeType = imageBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpeg';
@@ -1618,49 +1618,43 @@ export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationRe
     案件仕様: ${JSON.stringify(spec)}
   `;
 
+    // Note: Gemini API does not support tools + responseMimeType together.
+    // We remove responseMimeType and parse JSON manually from the response.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: contextPrompt,
       config: {
         tools: [{ functionDeclarations: coreTools }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            options: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  label: { type: Type.STRING, description: "プラン名称（成約優先など）" },
-                  pq: { type: Type.NUMBER, description: "売上高" },
-                  vq: { type: Type.NUMBER, description: "変動費合計" },
-                  mq: { type: Type.NUMBER, description: "限界利益" },
-                  f: { type: Type.NUMBER, description: "固定費" },
-                  g: { type: Type.NUMBER, description: "経常利益" },
-                  mRatio: { type: Type.NUMBER, description: "限界利益率" },
-                  estimatedLeadTime: { type: Type.STRING },
-                  probability: { type: Type.NUMBER, description: "成約角度(%)" },
-                  description: { type: Type.STRING, description: "戦略の解説" }
-                }
-              }
-            },
-            aiReasoning: { type: Type.STRING, description: "DBやDrive、Wikiのどの情報を根拠にしたかの日本語解説" },
-            co2Reduction: { type: Type.NUMBER },
-            comparisonWithPast: {
-              type: Type.OBJECT,
-              properties: {
-                averagePrice: { type: Type.NUMBER },
-                differencePercentage: { type: Type.NUMBER }
-              }
-            }
-          }
-        }
       }
     });
 
-    const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr);
+    let jsonStr = stripCodeFences(response.text);
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      console.error("Failed to parse estimation result JSON:", e);
+      console.error("Received text:", jsonStr);
+      // Return a fallback estimation result
+      return {
+        options: [
+          {
+            id: "standard",
+            label: "標準プラン",
+            pq: 100000,
+            vq: 60000,
+            mq: 40000,
+            f: 20000,
+            g: 20000,
+            mRatio: 0.4,
+            estimatedLeadTime: "2週間",
+            probability: 70,
+            description: "標準的な見積もりプランです。詳細な仕様確認後に正式見積もりを作成します。"
+          }
+        ],
+        aiReasoning: "AIからの応答を解析できませんでした。フォールバック値を使用しています。",
+        co2Reduction: 0,
+        comparisonWithPast: { averagePrice: 0, differencePercentage: 0 }
+      };
+    }
   });
 };

@@ -4,7 +4,7 @@ import ApplicationDetailModal from '../ApplicationDetailModal';
 import { getApplications, getApplicationCodes, approveApplication, rejectApplication, cancelApplication, deleteApplicationDraft, generateJournalLinesFromApplication } from '../../services/dataService';
 import SMTPEmailService from '../../services/smtpEmailService';
 // FIX: Import AllocationDivision type.
-import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill } from '../../types';
+import { ApplicationWithDetails, ApplicationCode, EmployeeUser, Toast, Customer, AccountItem, Job, PurchaseOrder, Department, AllocationDivision, PaymentRecipient, DailyReportPrefill, AccountingStatus } from '../../types';
 import { Loader, AlertTriangle, Mail } from '../Icons';
 import { summarizeResubmissionLinks } from '../../utils/applicationResubmission';
 
@@ -341,7 +341,7 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
             return;
         }
 
-        if (application.accounting_status && application.accounting_status !== 'none') {
+        if (application.accounting_status && application.accounting_status !== AccountingStatus.NONE) {
             addToast('この申請は既に仕訳が作成されています。', 'error');
             return;
         }

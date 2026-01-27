@@ -1,4 +1,6 @@
 import { PrintSpec, EstimationResult } from '../types';
+import { getSupabase } from './supabaseClient';
+import { generateAiEstimate } from './aiEstimateService';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -20,21 +22,47 @@ export interface AiCategory {
 }
 
 export const fetchAiCustomers = async (): Promise<AiCustomer[]> => {
-  const response = await fetch('/api/v1/customers');
-  if (!response.ok) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id, customer_code, customer_name, representative, phone_number, address_1, created_at')
+    .order('customer_name', { ascending: true })
+    .limit(500);
+
+  if (error) {
+    console.error('fetchAiCustomers error:', error);
     throw new Error('顧客マスターの取得に失敗しました。');
   }
-  const payload = await response.json();
-  return payload.customers || [];
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    name: row.customer_name || '名称未設定',
+    code: row.customer_code || null,
+    representative: row.representative || null,
+    phoneNumber: row.phone_number || null,
+    address: row.address_1 || null,
+    createdAt: row.created_at || null,
+  }));
 };
 
 export const fetchAiCategories = async (): Promise<AiCategory[]> => {
-  const response = await fetch('/api/v1/categories');
-  if (!response.ok) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('ai_product_categories')
+    .select('id, name, description, factory_area')
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('fetchAiCategories error:', error);
     throw new Error('カテゴリ情報の取得に失敗しました。');
   }
-  const payload = await response.json();
-  return payload.categories || [];
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description || null,
+    factoryArea: row.factory_area || null,
+  }));
 };
 
 export const createAiEstimate = async (params: {
@@ -42,21 +70,12 @@ export const createAiEstimate = async (params: {
   customerId: string;
   categoryId: string;
 }): Promise<EstimationResult> => {
-  const response = await fetch('/api/v1/ai-estimates', {
-    method: 'POST',
-    headers: jsonHeaders,
-    body: JSON.stringify({
-      spec: params.spec,
-      customerId: params.customerId,
-      categoryId: params.categoryId,
-    }),
+  // 直接AI見積もりサービスを呼び出す
+  return generateAiEstimate({
+    spec: params.spec,
+    customerId: params.customerId,
+    categoryId: params.categoryId,
   });
-  if (!response.ok) {
-    const errorPayload = await response.json().catch(() => null);
-    const message = errorPayload?.error || 'AI見積生成エラーが発生しました。';
-    throw new Error(message);
-  }
-  return response.json();
 };
 
 export const listAiEstimates = async () => {

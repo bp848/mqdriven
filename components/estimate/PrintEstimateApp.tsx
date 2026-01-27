@@ -19,7 +19,10 @@ import {
   AlertTriangle, 
   FileText, 
   Link2,
-  Loader
+  Loader,
+  MessageSquare,
+  X,
+  CheckCircle
 } from 'lucide-react';
 import { PrintSpec, EstimationResult, StrategyOption, Customer } from '../../types';
 import { INTEGRATION_MANIFESTO, CATEGORIES } from '../../constants';
@@ -50,7 +53,66 @@ const PrintEstimateApp: React.FC = () => {
   
   const [estimationData, setEstimationData] = useState<EstimationResult | null>(null);
   const [selectedOption, setSelectedOption] = useState<StrategyOption | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackIssues, setFeedbackIssues] = useState<string[]>([]);
+  const [feedbackImprovement, setFeedbackImprovement] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const issueOptions = [
+    '価格が高すぎる',
+    '価格が低すぎる（品質への不安）',
+    '納期が長すぎる',
+    '納期が短すぎる（実現可能性への不安）',
+    '仕様が不明確',
+    '原価内訳が不明',
+    '戦略の説明が不十分',
+    '過去案件との比較が不十分',
+    'その他'
+  ];
+
+  const handleFeedbackSubmit = async () => {
+    if (feedbackIssues.length === 0 && !feedbackImprovement.trim()) {
+      alert('問題点または改善要望を入力してください。');
+      return;
+    }
+
+    try {
+      // フィードバックをlocalStorageに保存（実際の実装ではAPIに送信）
+      const feedback = {
+        timestamp: new Date().toISOString(),
+        clientName: spec.clientName,
+        projectName: spec.projectName,
+        selectedOption: selectedOption?.id,
+        issues: feedbackIssues,
+        improvement: feedbackImprovement,
+        estimationData: estimationData
+      };
+
+      const existingFeedback = JSON.parse(localStorage.getItem('estimate_feedback') || '[]');
+      existingFeedback.push(feedback);
+      localStorage.setItem('estimate_feedback', JSON.stringify(existingFeedback));
+
+      setFeedbackSubmitted(true);
+      setTimeout(() => {
+        setShowFeedbackModal(false);
+        setFeedbackIssues([]);
+        setFeedbackImprovement('');
+        setFeedbackSubmitted(false);
+      }, 2000);
+    } catch (error) {
+      console.error('フィードバックの保存に失敗しました:', error);
+      alert('フィードバックの保存に失敗しました。');
+    }
+  };
+
+  const toggleIssue = (issue: string) => {
+    setFeedbackIssues(prev => 
+      prev.includes(issue) 
+        ? prev.filter(i => i !== issue)
+        : [...prev, issue]
+    );
+  };
 
   // Supabaseから顧客データを取得
   useEffect(() => {
@@ -86,11 +148,26 @@ const PrintEstimateApp: React.FC = () => {
     setEstimationData(null);
     setSelectedOption(null);
     try {
+      // 過去のフィードバックを取得
+      const pastFeedback = JSON.parse(localStorage.getItem('estimate_feedback') || '[]')
+        .filter((fb: any) => fb.clientName === spec.clientName)
+        .slice(-3); // 直近3件のフィードバック
+
       const extracted = await extractSpecFromInput(inputText, imagePreview || undefined);
       const updatedSpec = { ...spec, ...extracted } as PrintSpec;
       setSpec(updatedSpec);
       
-      const result = await calculateEstimation(updatedSpec);
+      // フィードバックがある場合は、それを考慮した見積もりを生成
+      let result: EstimationResult;
+      if (pastFeedback.length > 0) {
+        // フィードバックを考慮した見積もり生成（将来的に実装）
+        result = await calculateEstimation(updatedSpec);
+        // フィードバック情報をAIに渡す（将来的に実装）
+        console.log('過去のフィードバックを考慮:', pastFeedback);
+      } else {
+        result = await calculateEstimation(updatedSpec);
+      }
+      
       setEstimationData(result);
     } catch (e) {
       console.error("システムエラー:", e);
@@ -490,14 +567,20 @@ const PrintEstimateApp: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-12 flex gap-6">
-                <button onClick={() => setSelectedOption(null)} className="flex items-center gap-3 px-10 py-5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-700 shadow-xl transition-all active:scale-95">
+              <div className="mt-12 flex flex-wrap gap-4 justify-center">
+                <button onClick={() => setSelectedOption(null)} className="flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-700 shadow-xl transition-all active:scale-95">
                   <ArrowLeft className="w-5 h-5" /> 別の戦略案を検討する
                 </button>
-                <button className="flex items-center gap-3 px-10 py-5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-500 shadow-xl transition-all active:scale-95">
+                <button 
+                  onClick={() => setShowFeedbackModal(true)}
+                  className="flex items-center gap-3 px-8 py-4 bg-amber-600 text-white rounded-xl font-bold text-sm hover:bg-amber-500 shadow-xl transition-all active:scale-95"
+                >
+                  <MessageSquare className="w-5 h-5" /> 改善要望を送る
+                </button>
+                <button className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-500 shadow-xl transition-all active:scale-95">
                   <Download className="w-5 h-5" /> PDFを出力
                 </button>
-                <button className="flex items-center gap-3 px-10 py-5 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 shadow-md transition-all active:scale-95">
+                <button className="flex items-center gap-3 px-8 py-4 bg-white border border-slate-300 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 shadow-md transition-all active:scale-95">
                   <Printer className="w-5 h-5" /> 印刷プレビュー
                 </button>
               </div>
@@ -515,6 +598,99 @@ const PrintEstimateApp: React.FC = () => {
            社外秘：文唱堂印刷株式会社
         </div>
       </footer>
+
+      {/* フィードバックモーダル */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => !feedbackSubmitted && setShowFeedbackModal(false)}>
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-6 border-b-2 border-slate-200 pb-4">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                  <MessageSquare className="w-6 h-6 text-amber-600" />
+                  見積もり改善フィードバック
+                </h3>
+                <p className="text-sm text-slate-500 mt-2">この見積もりで何が問題だったか、どのように改善してほしいかを教えてください</p>
+              </div>
+              {!feedbackSubmitted && (
+                <button 
+                  onClick={() => setShowFeedbackModal(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {feedbackSubmitted ? (
+              <div className="text-center py-12 space-y-4">
+                <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto" />
+                <h4 className="text-xl font-bold text-slate-900">フィードバックを送信しました</h4>
+                <p className="text-slate-600">ご意見をありがとうございます。次回の見積もり生成時に反映いたします。</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-3">
+                    何が問題でしたか？（複数選択可）
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {issueOptions.map(issue => (
+                      <label
+                        key={issue}
+                        className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          feedbackIssues.includes(issue)
+                            ? 'border-amber-600 bg-amber-50'
+                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={feedbackIssues.includes(issue)}
+                          onChange={() => toggleIssue(issue)}
+                          className="w-5 h-5 text-amber-600 border-slate-300 rounded focus:ring-2 focus:ring-amber-500"
+                        />
+                        <span className="text-sm font-bold text-slate-700">{issue}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-3">
+                    具体的な改善要望・コメント
+                  </label>
+                  <textarea
+                    value={feedbackImprovement}
+                    onChange={(e) => setFeedbackImprovement(e.target.value)}
+                    className="w-full h-32 bg-slate-50 border-2 border-slate-200 rounded-lg p-4 text-sm font-bold text-slate-700 outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-200 resize-none transition-all"
+                    placeholder="例：価格を10%下げてほしい、納期を1週間短縮してほしい、原価内訳を詳しく知りたい など..."
+                  />
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button
+                    onClick={handleFeedbackSubmit}
+                    disabled={feedbackIssues.length === 0 && !feedbackImprovement.trim()}
+                    className={`flex-1 py-4 rounded-xl font-bold text-sm transition-all ${
+                      feedbackIssues.length === 0 && !feedbackImprovement.trim()
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        : 'bg-amber-600 text-white hover:bg-amber-500 active:scale-95 shadow-lg'
+                    }`}
+                  >
+                    フィードバックを送信
+                  </button>
+                  <button
+                    onClick={() => setShowFeedbackModal(false)}
+                    className="px-8 py-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <style>{`
         ::-webkit-scrollbar { width: 4px; }

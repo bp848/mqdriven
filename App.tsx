@@ -39,6 +39,7 @@ import GeneralLedger from './components/accounting/GeneralLedger';
 import PayablesPage from './components/accounting/Payables';
 import ReceivablesPage from './components/accounting/Receivables';
 import CashSchedulePage from './components/accounting/CashSchedule';
+import ExpenseAnalysisPage from './components/accounting/ExpenseAnalysisPage';
 import DocumentCreationHub from './components/DocumentCreationHub';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
@@ -1371,6 +1372,8 @@ useEffect(() => {
                 return <ReceivablesPage />;
             case 'accounting_cash_schedule':
                 return <CashSchedulePage />;
+            case 'accounting_expense_analysis':
+                return <ExpenseAnalysisPage />;
             case 'accounting_approved_applications':
                 return <ApprovedApplications notify={addToast} currentUserId={currentUser?.id} onNavigate={handleNavigate} />;
             case 'accounting_approved_unhandled':

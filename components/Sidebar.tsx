@@ -117,6 +117,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
         { page: 'accounting_cash_schedule', name: '資金繰り表' },
         { page: 'accounting_trial_balance', name: '試算表' },
         { page: 'accounting_tax_summary', name: '消費税集計' },
+        { page: 'accounting_expense_analysis', name: '経費分析' },
         { page: 'accounting_period_closing', name: '締処理' },
     ],
   },

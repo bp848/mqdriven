@@ -838,6 +838,8 @@ const normalizeAccountingStatus = (value: any): AccountingStatus => {
     const raw = typeof value === 'string' ? value.trim() : '';
     if (raw === 'drafted' || raw === 'draft') return AccountingStatus.DRAFT;
     if (raw === 'posted') return AccountingStatus.POSTED;
+    // 'pending'は未定義値（データ不整合）なのでNONEに正規化
+    if (raw === 'pending') return AccountingStatus.NONE;
     return AccountingStatus.NONE;
 };
 
@@ -990,11 +992,11 @@ const ensureSupabaseSuccess = (error: PostgrestError | null, context: string): v
 
 export const getProjects = async (): Promise<Project[]> => {
     const supabase = getSupabase();
-    
+
     // Try the enhanced query first (with relationship), fallback to basic query
     let projectRows: any[] = [];
     let projectError: any = null;
-    
+
     try {
         // Use basic query without relationship since customers() doesn't exist
         const { data, error } = await supabase
@@ -1002,14 +1004,14 @@ export const getProjects = async (): Promise<Project[]> => {
             .select('*')
             .order('update_date', { ascending: false })
             .order('project_code', { ascending: false });
-        
+
         if (error) throw error;
         projectRows = data || [];
     } catch (err) {
         console.error('Error fetching projects:', err);
         projectRows = [];
     }
-    
+
     const { data: customerRows, error: customerError } = await supabase
         .from('customers')
         .select('id, customer_code, customer_name');
@@ -1040,7 +1042,7 @@ export const getProjects = async (): Promise<Project[]> => {
             };
             return dbProjectToProject(merged);
         }
-        
+
         // Fallback to manual lookup
         const projectCustomerId = normalizeLookupKey(project.customer_id);
         const projectCustomerCode = normalizeLookupKey(project.customer_code);
@@ -1416,28 +1418,28 @@ export const deleteJob = async (id: string): Promise<void> => {
 
 export const getCustomerBudgetSummaries = async (): Promise<CustomerBudgetSummary[]> => {
     const supabase = getSupabase();
-    
+
     try {
         // 譁ｹ譯・: 鬘ｧ螳｢蛻･莠育ｮ励ン繝･繝ｼ繧剃ｽｿ逕ｨ
         const { data, error } = await supabase
             .from('customer_budget_summary_view')
             .select('*')
             .order('total_budget', { ascending: false });
-        
+
         if (!error && data && data.length > 0) {
             return data.map(mapCustomerBudgetSummary);
         }
     } catch (err) {
         console.warn('Customer budget view not available, using fallback:', err.message);
     }
-    
+
     // Fallback: calculate manually when view is unavailable.
     return await calculateCustomerBudgetsManually();
 };
 
 const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary[]> => {
     const supabase = getSupabase();
-    
+
     // Load projects and customers.
     const [
         { data: projectRows, error: projectsError },
@@ -1450,7 +1452,7 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
     ensureSupabaseSuccess(customersError, 'Failed to load customers for customer budgets');
     const projects = projectRows || [];
     const customers = customerRows || [];
-    
+
     // Collect project IDs.
     const projectIds = projects.map((p: any) => p.id).filter(Boolean);
     const validProjectIds = filterUuidValues(projectIds);
@@ -1462,7 +1464,7 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
         : { data: [], error: null };
     ensureSupabaseSuccess(ordersError as any, 'Failed to load orders for customer budgets');
     const orders = orderRows || [];
-    
+
     // Build customer lookup.
     const customerMap = new Map<any, any>();
     customers.forEach((customer: any) => {
@@ -1471,18 +1473,18 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
             customerMap.set(customer.customer_code, customer);
         }
     });
-    
+
     const projectByCustomer = new Map<any, any[]>();
     projects.forEach((project: any) => {
         const customerKey = project.customer_id || project.customer_code;
         if (!customerKey) return;
-        
+
         if (!projectByCustomer.has(customerKey)) {
             projectByCustomer.set(customerKey, []);
         }
         projectByCustomer.get(customerKey).push(project);
     });
-    
+
     const ordersByProject = new Map<any, any[]>();
     orders.forEach((order: any) => {
         if (!ordersByProject.has(order.project_id)) {
@@ -1490,32 +1492,32 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
         }
         ordersByProject.get(order.project_id).push(order);
     });
-    
+
     // 鬘ｧ螳｢蛻･髮・ｨ医ｒ菴懈・
     const customerBudgets: CustomerBudgetSummary[] = [];
-    
+
     for (const [customerKey, customerProjects] of projectByCustomer) {
         const customer = customerMap.get(customerKey);
         if (!customer) continue;
-        
+
         let totalBudget = 0;
         let totalActual = 0;
         let totalCost = 0;
         let projectCount = customerProjects.length;
-        
+
         customerProjects.forEach((project: any) => {
             totalBudget += project.amount || 0;
             totalCost += project.total_cost || 0;
-            
+
             const projectOrders = ordersByProject.get(project.id) || [];
             projectOrders.forEach((order: any) => {
                 totalActual += order.amount || 0;
             });
         });
-        
+
         const profitMargin = totalBudget > 0 ? ((totalBudget - totalCost) / totalBudget) * 100 : 0;
         const achievementRate = totalBudget > 0 ? (totalActual / totalBudget) * 100 : 0;
-        
+
         customerBudgets.push({
             customerId: customer.id,
             customerCode: customer.customer_code,
@@ -1540,7 +1542,7 @@ const calculateCustomerBudgetsManually = async (): Promise<CustomerBudgetSummary
             }))
         });
     }
-    
+
     return customerBudgets.sort((a, b) => b.totalBudget - a.totalBudget);
 };
 
@@ -1618,37 +1620,44 @@ export const saveCustomerInfo = async (customerId: string, updates: Partial<Cust
 export const getJournalEntries = async (status?: string): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
     const targetStatus = status || 'posted';
-    // accountingスキーマのjournal_batchesとjournal_entriesを使用
+    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .schema('accounting')
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, status')
         .eq('status', targetStatus);
-    
+
     if (batchesError) {
         console.warn('Failed to fetch journal batches:', batchesError);
         return [];
     }
-    
+
     if (!batches || batches.length === 0) {
         return [];
     }
-    
+
     const batchIds = batches.map(b => b.id).filter(Boolean);
+    if (batchIds.length === 0) {
+        return [];
+    }
+
+    // 明示的にカラムを指定し、リレーションを推測させない
     const { data: entries, error: entriesError } = await supabase
-        .schema('accounting')
         .from('journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds)
         .order('entry_date', { ascending: false });
-    
-    ensureSupabaseSuccess(entriesError, 'Failed to fetch journal entries');
-    
+
+    if (entriesError) {
+        console.error('Failed to fetch journal entries:', entriesError);
+        // エラーをスローせず、空配列を返す（既存の動作を維持）
+        return [];
+    }
+
     const batchStatusMap = new Map<string, string>();
     batches.forEach(batch => {
         batchStatusMap.set(batch.id, batch.status);
     });
-    
+
     return (entries || []).map(entry => ({
         ...entry,
         date: entry.entry_date,
@@ -1658,46 +1667,43 @@ export const getJournalEntries = async (status?: string): Promise<JournalEntry[]
 
 export const getJournalEntriesByStatus = async (status: string): Promise<JournalEntry[]> => {
     const supabase = getSupabase();
-    // accountingスキーマのjournal_batchesとjournal_entriesを使用
+    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .schema('accounting')
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, status')
         .eq('status', status);
-    
+
     if (batchesError) {
         console.warn('Failed to fetch journal batches:', batchesError);
         return [];
     }
-    
+
     if (!batches || batches.length === 0) {
         return [];
     }
-    
+
     const batchIds = batches.map(b => b.id).filter(Boolean);
     const { data: entries, error: entriesError } = await supabase
-        .schema('accounting')
         .from('journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds)
         .order('created_at', { ascending: false });
     ensureSupabaseSuccess(entriesError, 'Failed to fetch journal entries');
-    
+
     if (!entries || entries.length === 0) {
         return [];
     }
-    
+
     const entryIds = entries.map(e => e.id).filter(Boolean);
     const { data: lines, error: linesError } = await supabase
-        .schema('accounting')
         .from('journal_lines')
         .select('id, journal_entry_id, account_id, debit, credit, description')
         .in('journal_entry_id', entryIds);
-    
+
     if (linesError) {
         console.warn('Failed to fetch journal entry lines:', linesError);
     }
-    
+
     const linesByEntryId = new Map<string, JournalEntryLine[]>();
     (lines || []).forEach(line => {
         const entryId = String(line.journal_entry_id || '');
@@ -1713,12 +1719,12 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
             description: line.description,
         });
     });
-    
+
     const batchStatusMap = new Map<string, string>();
     batches.forEach(batch => {
         batchStatusMap.set(batch.id, batch.status);
     });
-    
+
     return (entries || []).map(entry => ({
         ...entry,
         date: entry.entry_date,
@@ -1731,17 +1737,15 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     const supabase = getSupabase();
     // accountingスキーマのjournal_entriesとjournal_batchesを使用
     const { data: entry, error: entryError } = await supabase
-        .schema('accounting')
         .from('journal_entries')
-        .select('id, batch_id, journal_batches!inner(source_application_id)')
+        .select('id, batch_id, v_journal_batches!inner(source_application_id)')
         .eq('id', journalEntryId)
         .single();
     ensureSupabaseSuccess(entryError, 'Failed to fetch journal entry');
 
     // journal_batchesのstatusを更新
     const { error: batchError } = await supabase
-        .schema('accounting')
-        .from('journal_batches')
+        .from('v_journal_batches')
         .update({
             status,
             posted_at: status === 'posted' ? new Date().toISOString() : null,
@@ -1749,7 +1753,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
         .eq('id', entry.batch_id);
     ensureSupabaseSuccess(batchError, 'Failed to update journal batch status');
 
-    const sourceApplicationId = (entry as any)?.journal_batches?.source_application_id;
+    const sourceApplicationId = (entry as any)?.v_journal_batches?.source_application_id;
     if (sourceApplicationId && (status === 'posted' || status === 'draft')) {
         const { error: appError } = await supabase
             .from('applications')
@@ -1759,13 +1763,12 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     }
 };
 
-export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>): Promise<JournalEntry> => {
+export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id' | 'date'>): Promise<JournalEntry> => {
     const supabase = getSupabase();
-    // accountingスキーマを使用
+    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     // まずjournal_batchを作成
     const { data: batch, error: batchError } = await supabase
-        .schema('accounting')
-        .from('journal_batches')
+        .from('v_journal_batches')
         .insert({
             status: 'draft',
             created_by: entryData.created_by || null,
@@ -1773,11 +1776,10 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
         .select('id')
         .single();
     ensureSupabaseSuccess(batchError, 'Failed to create journal batch');
-    
+
     // journal_entryを作成
     const entryDate = entryData.date || new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
-        .schema('accounting')
         .from('journal_entries')
         .insert({
             batch_id: batch.id,
@@ -1787,7 +1789,7 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
         .select('id, batch_id, entry_date, description, created_at')
         .single();
     ensureSupabaseSuccess(error, 'Failed to add journal entry');
-    
+
     return {
         ...data,
         date: data.entry_date,
@@ -1798,10 +1800,10 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id'|'date'>
 const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUser[]> => {
     // Try sequential queries instead of parallel to avoid network congestion
     console.log('[dataService] Fetching users data...');
-    
+
     let userRows, departmentRows, titleRows;
     let userError, departmentError, titleError;
-    
+
     try {
         // First fetch users
         console.log('[dataService] Fetching users...');
@@ -1811,37 +1813,37 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
             .order('name', { ascending: true });
         userRows = result.data;
         userError = result.error;
-        
+
         if (userError) {
             console.error('[dataService] Users query failed:', userError);
             throw formatSupabaseError('Failed to fetch users', userError);
         }
         console.log(`[dataService] Successfully fetched ${userRows?.length || 0} users`);
-        
+
         // Then fetch departments
         console.log('[dataService] Fetching departments...');
         const deptResult = await supabase.from('departments').select('id, name');
         departmentRows = deptResult.data;
         departmentError = deptResult.error;
-        
+
         if (departmentError) {
             console.warn('[dataService] Failed to fetch departments for user mapping:', departmentError.message);
         } else {
             console.log(`[dataService] Successfully fetched ${departmentRows?.length || 0} departments`);
         }
-        
+
         // Finally fetch titles
         console.log('[dataService] Fetching employee titles...');
         const titleResult = await supabase.from('employee_titles').select('id, name');
         titleRows = titleResult.data;
         titleError = titleResult.error;
-        
+
         if (titleError) {
             console.warn('[dataService] Failed to fetch titles for user mapping:', titleError.message);
         } else {
             console.log(`[dataService] Successfully fetched ${titleRows?.length || 0} titles`);
         }
-        
+
     } catch (error) {
         console.error('[dataService] Database query failed:', error);
         throw error;
@@ -1881,18 +1883,18 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
 
 export async function getUsers(): Promise<EmployeeUser[]> {
     const supabase = getSupabase();
-    
+
     // Add retry logic with exponential backoff
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             console.log(`[dataService] Attempting to fetch users (attempt ${attempt}/${maxRetries})`);
             return await fetchUsersDirectly(supabase);
         } catch (error: any) {
             console.error(`[dataService] Attempt ${attempt} failed:`, error);
-            
+
             // Check if it's a network error that might be retryable
             if (isSupabaseUnavailableError(error) && attempt < maxRetries) {
                 const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
@@ -1900,7 +1902,7 @@ export async function getUsers(): Promise<EmployeeUser[]> {
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
             }
-            
+
             // If it's the last attempt or not a retryable error, throw the appropriate error
             if (isSupabaseUnavailableError(error)) {
                 throw new Error('Failed to fetch users: network error communicating with the database.');
@@ -1908,7 +1910,7 @@ export async function getUsers(): Promise<EmployeeUser[]> {
             throw error;
         }
     }
-    
+
     // This should never be reached, but TypeScript needs it
     throw new Error('Failed to fetch users: maximum retries exceeded');
 }
@@ -2033,7 +2035,7 @@ export const addApprovalRoute = async (routeData: any): Promise<ApprovalRoute> =
 };
 export const updateApprovalRoute = async (id: string, updates: Partial<ApprovalRoute>): Promise<ApprovalRoute> => {
     const supabase = getSupabase();
-    const dbUpdates = { name: updates.name, route_data: { steps: updates.routeData!.steps.map(s => ({ approver_id: s.approverId }))}};
+    const dbUpdates = { name: updates.name, route_data: { steps: updates.routeData!.steps.map(s => ({ approver_id: s.approverId })) } };
     const { data, error } = await supabase.from('approval_routes').update(dbUpdates).eq('id', id).select().single();
     ensureSupabaseSuccess(error, 'Failed to update approval route');
     return dbApprovalRouteToApprovalRoute(data);
@@ -2071,10 +2073,9 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         return mapAppsWithoutJournal();
     }
 
-    // accountingスキーマのjournal_batchesテーブルを使用
+    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .schema('accounting')
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, source_application_id, status')
         .in('source_application_id', appIds);
     ensureSupabaseSuccess(batchesError, 'Failed to fetch journal batches for approved applications');
@@ -2094,7 +2095,6 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
 
     // accountingスキーマのjournal_entriesテーブルを使用
     const { data: journalEntries, error: journalError } = await supabase
-        .schema('accounting')
         .from('journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds);
@@ -2126,9 +2126,8 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
     const entryIds = Array.from(entryByAppId.values()).map(entry => entry.id).filter(Boolean);
     const linesByEntryId = new Map<string, any[]>();
     if (entryIds.length > 0) {
-        // accountingスキーマのjournal_linesテーブルを使用（account_itemsはaccounting.accountsを参照）
+        // publicスキーマのVIEW経由でaccounting.journal_linesにアクセス（accountsもVIEW経由）
         const { data: journalLines, error: linesError } = await supabase
-            .schema('accounting')
             .from('journal_lines')
             .select(`
                 id,
@@ -2181,11 +2180,11 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
             accounting_status: normalizedStatus,
             journalEntry: entry
                 ? {
-                      id: entry.id,
-                      status: entry.status,
-                      date: entry.date,
-                      lines: mappedLines,
-                  }
+                    id: entry.id,
+                    status: entry.status,
+                    date: entry.date,
+                    lines: mappedLines,
+                }
                 : undefined,
         } as ApplicationWithDetails;
     });
@@ -2426,10 +2425,10 @@ export const submitApplication = async (appData: any, applicantId: string): Prom
         form_data: appData.formData,
         approval_route_id: appData.approvalRouteId,
         document_url: appData.documentUrl ?? appData.formData?.documentUrl ?? null,
-        applicant_id: applicantId, 
-        status: 'pending_approval', 
-        submitted_at: new Date().toISOString(), 
-        current_level: 1, 
+        applicant_id: applicantId,
+        status: 'pending_approval',
+        submitted_at: new Date().toISOString(),
+        current_level: 1,
         approver_id: firstApproverId,
     };
 
@@ -2913,6 +2912,27 @@ export const approveApplication = async (app: ApplicationWithDetails, currentUse
 
     try {
         if (isFinalStep) {
+            // 承認時にaccounting_statusをdraftに更新（仕訳生成前）
+            // 仕訳が生成されれば後でupdateJournalEntryStatusで更新されるが、
+            // 生成失敗時でも会計処理待ち状態を明確にする
+            const { error: statusError } = await supabase
+                .from('applications')
+                .update({ accounting_status: 'draft' })
+                .eq('id', app.id);
+            if (statusError) {
+                console.warn('Failed to update accounting_status on approval:', statusError);
+            }
+
+            // 承認時に自動で仕分けプレビューを生成
+            try {
+                await generateJournalLinesFromApplication(updatedApplication.id);
+                // 仕訳生成成功時は既にaccounting_status='draft'なので更新不要
+            } catch (journalError) {
+                console.warn('Failed to auto-generate journal lines on approval:', journalError);
+                // 仕分け生成の失敗は通知しない（手動で後から生成可能）
+                // accounting_statusは'draft'のまま（会計処理待ち状態）
+            }
+
             await sendApprovalNotification({
                 type: 'approved',
                 application: updatedApplication,
@@ -3049,16 +3069,16 @@ export const deactivateAccountItem = async (id: string): Promise<void> => {
 // Debug helper for payment recipients with service role.
 export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRecipient[]> => {
     console.log('[debugPaymentRecipientsWithServiceRole] Running service role diagnostics');
-    
+
     // 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ繧ｭ繝ｼ縺ｧ譁ｰ縺励＞繧ｯ繝ｩ繧､繧｢繝ｳ繝医ｒ菴懈・
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    
+
     if (!serviceRoleKey || !supabaseUrl) {
         console.error('[debugPaymentRecipientsWithServiceRole] 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ繧ｭ繝ｼ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ');
         return [];
     }
-    
+
     const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
         auth: {
             persistSession: false,
@@ -3070,18 +3090,18 @@ export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRe
             },
         },
     });
-    
+
     try {
         const { data, error } = await serviceClient
             .from('payment_recipients')
             .select('id,recipient_code,company_name,recipient_name')
             .limit(10);
-            
+
         if (error) {
             console.error('[debugPaymentRecipientsWithServiceRole] 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ繧ｯ繧ｨ繝ｪ繧ｨ繝ｩ繝ｼ:', error);
             return [];
         }
-        
+
         console.log(`[debugPaymentRecipientsWithServiceRole] 繧ｵ繝ｼ繝薙せ繝ｭ繝ｼ繝ｫ縺ｧ蜿門ｾ・ ${data?.length || 0}莉ｶ`, data);
         return (data || []).map(mapDbPaymentRecipient);
     } catch (err) {
@@ -3093,49 +3113,49 @@ export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRe
 export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
     console.log(`[getPaymentRecipients] 髢句ｧ・- 讀懃ｴ｢繧ｯ繧ｨ繝ｪ: "${q}"`);
     const supabase = getSupabase();
-    
+
     // Ensure the session is available.
     const { data: authData } = await supabase.auth.getSession();
-    console.log(`[getPaymentRecipients] 隱崎ｨｼ迥ｶ諷・`, { 
+    console.log(`[getPaymentRecipients] 隱崎ｨｼ迥ｶ諷・`, {
         hasSession: !!authData.session,
         userId: authData.session?.user?.id,
-        userEmail: authData.session?.user?.email 
+        userEmail: authData.session?.user?.email
     });
-    
+
     const buildQuery = (columns: string) => {
         let query = supabase
             .from('payment_recipients')
             .select(columns)
             .order('company_name', { ascending: true })
             .order('recipient_name', { ascending: true });
-        
+
         // 讀懃ｴ｢繧ｯ繧ｨ繝ｪ縺後≠繧句ｴ蜷医・隍・焚繧ｫ繝ｩ繝繧貞ｯｾ雎｡縺ｫ讀懃ｴ｢
         if (q && q.trim()) {
             const searchTerm = `%${q.trim()}%`;
             query = query.or(`company_name.ilike.${searchTerm},recipient_name.ilike.${searchTerm},recipient_code.ilike.${searchTerm}`);
             console.log(`[getPaymentRecipients] 讀懃ｴ｢譚｡莉ｶ驕ｩ逕ｨ: ${searchTerm}`);
         }
-        
+
         return query.limit(1000);
     };
 
     console.log('[getPaymentRecipients] Querying payment recipients');
     let { data, error } = await buildQuery(PAYMENT_RECIPIENT_SELECT);
-    
+
     if (error && isMissingColumnError(error)) {
         console.warn('payment_recipients table missing extended columns; falling back to legacy schema', error);
         console.log('[getPaymentRecipients] Retrying with legacy schema');
         ({ data, error } = await buildQuery(PAYMENT_RECIPIENT_LEGACY_SELECT));
     }
-    
+
     if (error) {
         console.error(`[getPaymentRecipients] 繧ｨ繝ｩ繝ｼ:`, error);
         throw error;
     }
-    
+
     const result = (data || []).map(mapDbPaymentRecipient);
-    console.log(`[getPaymentRecipients] 螳御ｺ・- 蜿門ｾ嶺ｻｶ謨ｰ: ${result.length}莉ｶ`, { 
-        searchQuery: q, 
+    console.log(`[getPaymentRecipients] 螳御ｺ・- 蜿門ｾ嶺ｻｶ謨ｰ: ${result.length}莉ｶ`, {
+        searchQuery: q,
         rawDataCount: data?.length || 0,
         firstFewItems: result.slice(0, 3).map(r => ({ id: r.id, name: r.companyName || r.recipientName }))
     });
@@ -3167,13 +3187,13 @@ export const getGeneralLedger = async (accountId: string, dateRange: { start: st
     });
 
     ensureSupabaseSuccess(error, 'Failed to fetch general ledger');
-    
+
     // 繧ｬ繝ｼ繝峨Ξ繝ｼ繝ｫ・嗔osted莉戊ｨｳ縺ｮ縺ｿ繧定ｨｱ蜿ｯ
-    const postedData = (data || []).filter(entry => 
-        entry.status === 'posted' && 
+    const postedData = (data || []).filter(entry =>
+        entry.status === 'posted' &&
         entry.accounting_status === 'posted'
     );
-    
+
     return postedData.map(row => ({
         id: row.id,
         date: row.date,
@@ -3246,7 +3266,7 @@ export const getAllocationDivisions = async (): Promise<AllocationDivision[]> =>
     const supabase = getSupabase();
     const { data, error } = await supabase.from('allocation_divisions').select('*').order('name');
     ensureSupabaseSuccess(error, '謖ｯ蛻・玄蛻・・蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆');
-    return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
+    return (data || []).map(d => ({ ...d, createdAt: d.created_at, isActive: d.is_active }));
 };
 
 export const saveAllocationDivision = async (item: Partial<AllocationDivision>): Promise<void> => {
@@ -3284,7 +3304,7 @@ export const getTitles = async (): Promise<Title[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('employee_titles').select('*').order('name');
     ensureSupabaseSuccess(error, '蠖ｹ閨ｷ縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆');
-    return (data || []).map(d => ({...d, createdAt: d.created_at, isActive: d.is_active}));
+    return (data || []).map(d => ({ ...d, createdAt: d.created_at, isActive: d.is_active }));
 };
 
 export const saveTitle = async (item: Partial<Title>): Promise<void> => {
@@ -3349,7 +3369,7 @@ export const updateInventoryItem = async (id: string, item: Partial<InventoryIte
 
 export const getBugReports = async (): Promise<BugReport[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', {ascending: false});
+    const { data, error } = await supabase.from('bug_reports').select('*').order('created_at', { ascending: false });
     ensureSupabaseSuccess(error, 'Failed to fetch bug reports');
     return (data || []).map(dbBugReportToBugReport);
 };
@@ -3404,21 +3424,21 @@ const mapEstimateRow = (row: any): Estimate => {
     const mqAmount = toNumberOrNull(row.mq_amount);
     const mqRate = toNumberOrNull(row.mq_rate);
     const detailCount = toNumberOrNull(row.detail_count);
-    
+
     // Project and customer names
     const projectName = toStringOrNull(row.project_name) || toStringOrNull(row.pattern_name);
     const customerName = toStringOrNull(row.customer_name) || projectName || `鬘ｧ螳｢${row.estimates_id || row.id || '荳肴・'}`;
-    
+
     // Display name
     const displayName = projectName || toStringOrNull(row.specification) || `隕狗ｩ・${row.estimates_id || row.id}`;
-    
+
     // Dates
     const createdAt = toStringOrNull(row.created_at) || toStringOrNull(row.create_date) || new Date().toISOString();
     const updatedAt = toStringOrNull(row.updated_at) || toStringOrNull(row.update_date) || createdAt;
-    
+
     // Status mapping
     const status = toStringOrNull(row.status) || 'draft';
-    
+
     console.log('Mapping estimate:', {
         id: row.estimates_id || row.id,
         projectName,
@@ -3460,7 +3480,7 @@ const mapEstimateRow = (row: any): Estimate => {
         update_date: toStringOrNull(row.update_date),
         update_id: toStringOrNull(row.update_id),
         status: status,
-        
+
         // Frontend fields
         estimateNumber: toNumberOrNull(row.estimate_number ?? row.pattern_no) || 0,
         customerName,
@@ -3618,7 +3638,7 @@ export const getEstimates = async (): Promise<Estimate[]> => {
 
     if (error) {
         console.warn('Direct JOIN failed, trying fallback:', error);
-        
+
         // Fallback: fetch estimates without joins.
         const { data: estimates, error: estimatesError } = await supabase
             .from('estimates')
@@ -3653,10 +3673,10 @@ export const getEstimates = async (): Promise<Estimate[]> => {
 
         return estimates.map(estimate => {
             const project = projectMap[estimate.project_id] || projectMap[estimate.project_code];
-            const customer = project ? 
-                customerMap[project.customer_id] || customerMap[project.customer_code] : 
+            const customer = project ?
+                customerMap[project.customer_id] || customerMap[project.customer_code] :
                 null;
-            
+
             return mapEstimateRow({
                 ...estimate,
                 project_name: estimate.project_name || project?.project_name,
@@ -3677,7 +3697,7 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const supabase = getSupabase();
     const from = Math.max(0, (page - 1) * pageSize);
     const to = from + pageSize - 1;
-    
+
     // 蜆ｪ蜈・ 鬘ｧ螳｢蜷・譯井ｻｶ蜷阪′隗｣豎ｺ貂医∩縺ｮ繝薙Η繝ｼ繧貞茜逕ｨ
     console.log('Fetching from estimates_working_view...');
     const { data, error, count } = await supabase
@@ -3965,7 +3985,7 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice>): Prom
     const dbUpdates: any = {};
     if (updates.status) dbUpdates.status = updates.status;
     if (updates.paidAt) dbUpdates.paid_at = updates.paidAt;
-    
+
     const { data, error } = await supabase.from('invoices').update(dbUpdates).eq('id', id).select().single();
     ensureSupabaseSuccess(error, 'Failed to update invoice');
     return data;
@@ -4031,7 +4051,7 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
         })
         .select('id')
         .single();
-    
+
     ensureSupabaseSuccess(invoiceError, 'Failed to create invoice header');
 
     const invoiceItems = jobs.map((job, index) => ({
@@ -4053,25 +4073,23 @@ export const createInvoiceFromJobs = async (jobIds: string[]): Promise<{ invoice
 
 export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => {
     const supabase = getSupabase();
-    // accountingスキーマのjournal_batchesとjournal_entriesを使用
+    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .schema('accounting')
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, status')
         .eq('status', 'draft');
-    
+
     if (batchesError) {
         console.warn('Failed to fetch journal batches:', batchesError);
         return [];
     }
-    
+
     if (!batches || batches.length === 0) {
         return [];
     }
-    
+
     const batchIds = batches.map(b => b.id).filter(Boolean);
     const { data: entries, error: entriesError } = await supabase
-        .schema('accounting')
         .from('journal_entries')
         .select('id, batch_id, entry_date, description')
         .in('batch_id', batchIds)
@@ -4085,7 +4103,6 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
 
     const entryIds = entries.map(e => e.id).filter(Boolean);
     const { data: lines, error: linesError } = await supabase
-        .schema('accounting')
         .from('journal_lines')
         .select(`
             journal_entry_id,
@@ -4382,7 +4399,7 @@ export const updateInboxItem = async (id: string, updates: Partial<InboxItem>): 
         status: updates.status, extracted_data: updates.extractedData,
     }).eq('id', id).select().single();
     ensureSupabaseSuccess(error, 'Failed to update inbox item');
-    
+
     const { data: urlData } = supabase.storage.from('inbox').getPublicUrl(data.file_path);
     return { ...data, fileUrl: urlData.publicUrl, extractedData: data.extracted_data } as InboxItem;
 };
@@ -4503,6 +4520,17 @@ export const generateJournalLinesFromApplication = async (applicationId: string)
         description: row.description,
     }));
 
+    // 仕訳生成成功時にaccounting_statusをdraftに更新
+    // （承認時に既に更新されている場合もあるが、二重更新は問題ない）
+    const { error: statusError } = await supabase
+        .from('applications')
+        .update({ accounting_status: 'draft' })
+        .eq('id', applicationId);
+    if (statusError) {
+        console.warn('Failed to update accounting_status after journal generation:', statusError);
+        // エラーでも処理は続行（仕訳は生成済み）
+    }
+
     return { journalEntryId, lines };
 };
 
@@ -4584,4 +4612,267 @@ export const getLaborCostData = async (): Promise<any[]> => {
     const { data, error } = await supabase.from('v_labor_cost_stub').select('*');
     ensureSupabaseSuccess(error, 'Failed to fetch labor cost data');
     return data || [];
+};
+
+// Expense analysis data functions
+// 仕様: docs/accounting/expense-analysis-view-spec.md
+// 
+// 経費分析用のVIEWデータ取得関数群
+// - v_expense_lines: 仕訳明細1行 = 1レコード（費用勘定のみ）
+// - v_expense_by_month_*: 月単位の集計ビュー
+// 
+// 注意: posted判定のフィルタリングが必要な場合は、利用側で batch_status='posted' を適用すること
+// 例: .eq('batch_status', 'posted')
+
+/**
+ * 経費明細データを取得
+ * @returns 費用勘定に該当する仕訳明細の配列（amount = debit - credit）
+ * @see docs/accounting/expense-analysis-view-spec.md
+ */
+export const getExpenseLinesData = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_expense_lines').select('*').order('occurred_on', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to fetch expense lines data');
+    return data || [];
+};
+
+/**
+ * 月次×勘定科目別の経費集計データを取得
+ * @returns 月単位で勘定科目ごとに集計された経費データ
+ * @see docs/accounting/expense-analysis-view-spec.md
+ */
+export const getExpenseByMonthAccount = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_expense_by_month_account').select('*').order('month', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to fetch expense by month and account data');
+    return data || [];
+};
+
+/**
+ * 月次×仕入先別の経費集計データを取得
+ * @returns 月単位で仕入先ごとに集計された経費データ
+ * @see docs/accounting/expense-analysis-view-spec.md
+ */
+export const getExpenseByMonthSupplier = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_expense_by_month_supplier').select('*').order('month', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to fetch expense by month and supplier data');
+    return data || [];
+};
+
+/**
+ * 月次×プロジェクト別の経費集計データを取得
+ * @returns 月単位でプロジェクトごとに集計された経費データ
+ * @see docs/accounting/expense-analysis-view-spec.md
+ */
+export const getExpenseByMonthProject = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_expense_by_month_project').select('*').order('month', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to fetch expense by month and project data');
+    return data || [];
+};
+
+/**
+ * ワークフローイベントデータを取得（申請→承認→仕訳起票のトレース）
+ * @returns ワークフローイベントの配列
+ * @see docs/accounting/expense-analysis-view-spec.md
+ */
+export const getExpenseWorkflowEvents = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_expense_workflow_events').select('*').order('workflow_created_at', { ascending: false });
+    ensureSupabaseSuccess(error, 'Failed to fetch expense workflow events data');
+    return data || [];
+};
+
+// Application analysis data functions
+/**
+ * 日別申請作成数を取得（直近30日）
+ * @returns 日別の申請作成数と申請者数
+ */
+export const getApplicationsDailyCreation = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_applications_daily_creation').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch applications daily creation data');
+    return data || [];
+};
+
+/**
+ * ステータス別申請件数を取得
+ * @returns ステータス別の申請件数と割合
+ */
+export const getApplicationsByStatus = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_applications_by_status').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch applications by status data');
+    return data || [];
+};
+
+/**
+ * 会計処理ステータス別申請件数を取得
+ * @returns 会計処理ステータス別の申請件数と割合
+ */
+export const getApplicationsByAccountingStatus = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_applications_by_accounting_status').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch applications by accounting status data');
+    return data || [];
+};
+
+/**
+ * 提出→承認の平均所要時間を取得（直近90日、SLA分析用）
+ * @returns 日別の提出数、承認数、平均所要時間（時間・日数）
+ */
+export const getApplicationsApprovalSLA = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_applications_approval_sla').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch applications approval SLA data');
+    return data || [];
+};
+
+/**
+ * データ品質チェック結果を取得
+ * @returns データ整合性チェックの結果（submitted_at/status整合性、approved_at/rejected_at相互排他など）
+ */
+export const getApplicationsDataQuality = async (): Promise<any[]> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from('v_applications_data_quality').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch applications data quality data');
+    return data || [];
+};
+
+// ============================================================
+// accounting スキーマへのアクセス用VIEW関数
+// PostgRESTはpublicスキーマのみ公開するため、v_* VIEWを経由
+// ============================================================
+
+interface PaginationOptions {
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    ascending?: boolean;
+}
+
+const DEFAULT_LIMIT = 100;
+
+export const getJournalBatches = async (options?: PaginationOptions): Promise<any[]> => {
+    const supabase = getSupabase();
+    const limit = options?.limit ?? DEFAULT_LIMIT;
+    const offset = options?.offset ?? 0;
+    const orderBy = options?.orderBy ?? 'created_at';
+    const ascending = options?.ascending ?? false;
+
+    const { data, error } = await supabase
+        .from('v_journal_batches')
+        .select('*')
+        .order(orderBy, { ascending })
+        .range(offset, offset + limit - 1);
+    ensureSupabaseSuccess(error, 'Failed to fetch journal batches');
+    return data || [];
+};
+
+export const getJournalEntries = async (batchId?: string, options?: PaginationOptions): Promise<any[]> => {
+    const supabase = getSupabase();
+    const limit = options?.limit ?? DEFAULT_LIMIT;
+    const offset = options?.offset ?? 0;
+    const orderBy = options?.orderBy ?? 'entry_date';
+    const ascending = options?.ascending ?? false;
+
+    let query = supabase.from('v_journal_entries').select('*');
+    if (batchId) {
+        query = query.eq('batch_id', batchId);
+    }
+    const { data, error } = await query
+        .order(orderBy, { ascending })
+        .range(offset, offset + limit - 1);
+    ensureSupabaseSuccess(error, 'Failed to fetch journal entries');
+    return data || [];
+};
+
+export const getJournalLines = async (journalEntryId?: string, options?: PaginationOptions): Promise<any[]> => {
+    const supabase = getSupabase();
+    const limit = options?.limit ?? DEFAULT_LIMIT;
+    const offset = options?.offset ?? 0;
+    const orderBy = options?.orderBy ?? 'created_at';
+    const ascending = options?.ascending ?? false;
+
+    let query = supabase.from('v_journal_lines').select('*');
+    if (journalEntryId) {
+        query = query.eq('journal_entry_id', journalEntryId);
+    }
+    const { data, error } = await query
+        .order(orderBy, { ascending })
+        .range(offset, offset + limit - 1);
+    ensureSupabaseSuccess(error, 'Failed to fetch journal lines');
+    return data || [];
+};
+
+export const getAccounts = async (includeInactive?: boolean): Promise<any[]> => {
+    const supabase = getSupabase();
+    let query = supabase.from('v_accounts').select('*');
+    if (!includeInactive) {
+        query = query.eq('is_active', true);
+    }
+    const { data, error } = await query.order('sort_order', { ascending: true });
+    ensureSupabaseSuccess(error, 'Failed to fetch accounts');
+    return data || [];
+};
+
+// ============================================================
+// accounting 更新系RPC関数
+// VIEW経由の更新は制限があるため、SECURITY DEFINER RPCを使用
+// ============================================================
+
+export const postJournalBatch = async (batchId: string): Promise<void> => {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('post_journal_batch', { p_batch_id: batchId });
+    ensureSupabaseSuccess(error, 'Failed to post journal batch');
+};
+
+export const createJournalBatch = async (
+    sourceApplicationId?: string,
+    createdBy?: string
+): Promise<string> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('create_journal_batch', {
+        p_source_application_id: sourceApplicationId ?? null,
+        p_created_by: createdBy ?? null,
+    });
+    ensureSupabaseSuccess(error, 'Failed to create journal batch');
+    return data as string;
+};
+
+export const createJournalEntry = async (
+    batchId: string,
+    entryDate: string,
+    description?: string
+): Promise<string> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('create_journal_entry', {
+        p_batch_id: batchId,
+        p_entry_date: entryDate,
+        p_description: description ?? null,
+    });
+    ensureSupabaseSuccess(error, 'Failed to create journal entry');
+    return data as string;
+};
+
+export const addJournalLine = async (
+    journalEntryId: string,
+    accountId: string,
+    debit: number = 0,
+    credit: number = 0,
+    description?: string,
+    projectId?: string
+): Promise<string> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('add_journal_line', {
+        p_journal_entry_id: journalEntryId,
+        p_account_id: accountId,
+        p_debit: debit,
+        p_credit: credit,
+        p_description: description ?? null,
+        p_project_id: projectId ?? null,
+    });
+    ensureSupabaseSuccess(error, 'Failed to add journal line');
+    return data as string;
 };
