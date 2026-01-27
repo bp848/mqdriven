@@ -277,12 +277,17 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
       const amount = deriveAmount(selectedApplication);
 
       if (debitAccountId && creditAccountId && amount !== null && amount > 0) {
-        const batchId = await dataService.createJournalBatch(selectedApplication.id, currentUserId || undefined);
-        const entryDate = new Date().toISOString().split('T')[0];
         const description = buildTitle(selectedApplication);
-        const journalEntryId = await dataService.createJournalEntry(batchId, entryDate, description);
-        await dataService.addJournalLine(journalEntryId, debitAccountId, amount, 0, description);
-        await dataService.addJournalLine(journalEntryId, creditAccountId, 0, amount, description);
+        await dataService.createJournalFromAiSelection({
+          applicationId: selectedApplication.id,
+          debitAccountId,
+          creditAccountId,
+          amount,
+          description,
+          reasoning: aiSuggestion?.reasoning,
+          confidence: aiSuggestion?.confidence,
+          createdBy: currentUserId || undefined,
+        });
         await dataService.updateApplicationAccountingStatus(selectedApplication.id, 'draft');
         notify?.('仕訳を生成しました。', 'success');
         await loadApprovedApplications();

@@ -4893,3 +4893,35 @@ export const addJournalLine = async (
     ensureSupabaseSuccess(error, 'Failed to add journal line');
     return data as string;
 };
+
+export const createJournalFromAiSelection = async (params: {
+    applicationId: string;
+    debitAccountId: string;
+    creditAccountId: string;
+    amount: number;
+    description?: string;
+    reasoning?: string;
+    confidence?: number;
+    createdBy?: string;
+}): Promise<{ proposalId: string; runId: string; batchId: string; journalEntryId: string }> => {
+    const supabase = getSupabase();
+    const { data, error } = await supabase.rpc('rpc_create_journal_from_ai_selection', {
+        p_application_id: params.applicationId,
+        p_debit_account_id: params.debitAccountId,
+        p_credit_account_id: params.creditAccountId,
+        p_amount: params.amount,
+        p_description: params.description ?? null,
+        p_reasoning: params.reasoning ?? null,
+        p_confidence: params.confidence ?? null,
+        p_created_by: params.createdBy ?? null,
+    });
+    ensureSupabaseSuccess(error, 'Failed to create journal from AI selection');
+
+    const result = data as any;
+    return {
+        proposalId: result.proposal_id,
+        runId: result.run_id,
+        batchId: result.batch_id,
+        journalEntryId: result.journal_entry_id,
+    };
+};
