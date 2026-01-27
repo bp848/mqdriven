@@ -605,13 +605,26 @@ JSON形式:
       },
     });
     const rawText = stripCodeFences(response.text);
+    const normalizeSuggestion = (value: AIJournalSuggestion): AIJournalSuggestion => {
+      const account = typeof value.account === "string" && value.account.trim()
+        ? value.account.trim()
+        : "要確認";
+      const description = typeof value.description === "string" && value.description.trim()
+        ? value.description.trim()
+        : "AI提案が不明瞭なため要確認";
+      return {
+        ...value,
+        account,
+        description,
+      };
+    };
     try {
-      return JSON.parse(rawText);
+      return normalizeSuggestion(JSON.parse(rawText));
     } catch (error) {
       const match = rawText.match(/\{[\s\S]*\}/);
       if (match) {
         try {
-          return JSON.parse(match[0]);
+          return normalizeSuggestion(JSON.parse(match[0]));
         } catch {
           // fall through
         }
@@ -626,24 +639,24 @@ JSON形式:
         const creditAccount = tableMatch[3].trim();
         const creditAmount = Number(tableMatch[4].replace(/,/g, '')) || 0;
         const summary = tableMatch[5].trim();
-        return {
+        return normalizeSuggestion({
           account: debitAccount || creditAccount || "要確認",
           description: summary || "AI提案が不明瞭なため要確認",
           debit: debitAmount,
           credit: creditAmount,
           reasoning: cleanReasoning,
           confidence: 0,
-        };
+        });
       }
       console.warn("AI returned non-JSON response for journal suggestion:", cleanReasoning);
-      return {
+      return normalizeSuggestion({
         account: "要確認",
         description: "AI提案が不明瞭なため要確認",
         debit: 0,
         credit: 0,
         reasoning: cleanReasoning,
         confidence: 0,
-      };
+      });
     }
   });
 };
