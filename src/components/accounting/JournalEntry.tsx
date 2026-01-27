@@ -19,6 +19,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiAutoSuggest, setIsAiAutoSuggest] = useState(true);
   const [accountItems, setAccountItems] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadApprovedApplications = useCallback(async () => {
     setIsLoading(true);
@@ -96,6 +97,26 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     }
     return null;
   };
+
+  const filteredApplications = applications.filter(app => {
+    if (!searchQuery.trim()) return true;
+    const data = app.formData ?? {};
+    const haystack = [
+      buildTitle(app),
+      data.details,
+      data.notes,
+      data.invoice?.description,
+      data.invoice?.supplierName,
+      data.documentName,
+      app.application_code?.name,
+      app.applicant?.full_name,
+      app.applicant?.name,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(searchQuery.toLowerCase());
+  });
 
   const deriveAmount = (app: ApplicationWithDetails): number | null => {
     const data = app.formData ?? {};
@@ -346,18 +367,25 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
 
       <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
         <div className="w-full lg:w-1/3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/80 flex justify-between items-center">
-            <h3 className="font-bold text-slate-700 text-sm">承認済み一覧 ({applications.length}件)</h3>
+          <div className="p-4 border-b border-slate-100 bg-slate-50/80 space-y-2">
+            <h3 className="font-bold text-slate-700 text-sm">承認済み一覧 ({filteredApplications.length}件)</h3>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="件名/内容/取引先/申請者で検索"
+              className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+            />
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {isLoading ? (
               <div className="p-8 text-center text-slate-400 text-sm flex items-center justify-center">
                 <Loader className="w-5 h-5 animate-spin mr-2" /> 読み込み中...
               </div>
-            ) : applications.length === 0 ? (
+            ) : filteredApplications.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-sm">対象の申請がありません。</div>
             ) : (
-              applications.map(app => {
+              filteredApplications.map(app => {
                 const entryStatus = app.accountingStatus ?? app.accounting_status ?? 'none';
                 const amount = deriveAmount(app);
                 const amountText = formatCurrency(amount);
