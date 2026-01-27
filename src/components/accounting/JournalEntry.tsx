@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Loader, CheckCircle, FileText, Plus, ArrowRight } from 'lucide-react';
-import { ApplicationWithDetails } from '../../../types';
+import { ApplicationWithDetails, AIJournalSuggestion } from '../../../types';
 import * as dataService from '../../../services/dataService';
+import { suggestJournalEntry } from '../../../services/geminiService';
 
 interface JournalReviewPageProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -13,6 +14,9 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<AIJournalSuggestion | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const loadApprovedApplications = useCallback(async () => {
     setIsLoading(true);
@@ -32,6 +36,11 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
   useEffect(() => {
     loadApprovedApplications();
   }, [loadApprovedApplications]);
+
+  useEffect(() => {
+    setAiSuggestion(null);
+    setAiError(null);
+  }, [selectedId]);
 
   const selectedApplication = applications.find(app => app.id === selectedId) ?? null;
   const status = selectedApplication?.accountingStatus ?? selectedApplication?.accounting_status ?? 'none';
@@ -70,6 +79,44 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     );
   };
 
+  const buildSuggestionPrompt = (app: ApplicationWithDetails): string => {
+    const data = app.formData ?? {};
+    const lines = Array.isArray(data.invoice?.lines)
+      ? data.invoice.lines
+        .map((line: any) => `${line.description || '内訳未入力'} ${line.amountExclTax || ''}`.trim())
+        .filter(Boolean)
+        .join(' / ')
+      : '';
+    const amount = deriveAmount(app);
+    const amountText = amount ? `金額: ${amount}` : '';
+    const parts = [
+      `申請種別: ${app.application_code?.name || '未設定'}`,
+      `件名: ${buildTitle(app)}`,
+      `内容: ${data.details || data.notes || data.invoice?.description || '未入力'}`,
+      `支払先: ${data.invoice?.supplierName || '未入力'}`,
+      amountText,
+      lines ? `内訳: ${lines}` : '',
+    ].filter(Boolean);
+    return parts.join('\n');
+  };
+
+  const handleAiSuggest = async () => {
+    if (!selectedApplication) return;
+    setIsAiLoading(true);
+    setAiError(null);
+    try {
+      const prompt = buildSuggestionPrompt(selectedApplication);
+      const suggestion = await suggestJournalEntry(prompt);
+      setAiSuggestion(suggestion);
+    } catch (err: any) {
+      const message = err?.message || 'AIによる仕訳提案の取得に失敗しました。';
+      setAiError(message);
+      notify?.(message, 'error');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const getAccountingStatusLabel = (value?: string) => {
     if (value === 'draft') return '仕訳下書き';
     if (value === 'posted') return '仕訳確定';
@@ -78,13 +125,21 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
 
   const buildTitle = (app: ApplicationWithDetails) => {
     const data = app.formData ?? {};
+    const detailText = typeof data.details === 'string' ? data.details.trim() : '';
+    const detailTitle = detailText ? detailText.split('\n')[0].trim() : '';
+    const documentUrl = typeof data.documentUrl === 'string' ? data.documentUrl : '';
+    const documentFile = documentUrl ? documentUrl.split('/').pop() : '';
+    const sourceFileName = data.invoice?.sourceFile?.name;
     const rawTitle =
       data.title ||
       data.subject ||
       data.documentName ||
+      sourceFileName ||
+      documentFile ||
       data.invoice?.supplierName ||
       data.invoice?.description ||
       data.notes ||
+      detailTitle ||
       '';
     const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
     return title || app.application_code?.name || '件名未入力';
@@ -195,8 +250,8 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                     key={app.id}
                     onClick={() => setSelectedId(app.id)}
                     className={`p-3 rounded-lg border cursor-pointer transition relative ${selectedId === app.id
-                        ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-300'
-                        : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-sm'
+                      ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-300'
+                      : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-sm'
                       }`}
                   >
                     <div className="text-xs text-slate-500 mb-1">{app.application_code?.name || 'N/A'}</div>
@@ -232,6 +287,39 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="rounded-lg border border-slate-200 p-4 bg-white">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">AI仕訳提案</p>
+                      <p className="text-sm text-slate-600">内容と振り分け先をAIが提案します。</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAiSuggest}
+                      disabled={isAiLoading}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {isAiLoading ? '提案中...' : 'AIで提案'}
+                    </button>
+                  </div>
+                  {aiError && <p className="text-xs text-red-600 mt-2">{aiError}</p>}
+                  {aiSuggestion && (
+                    <div className="mt-3 space-y-2 text-sm text-slate-700">
+                      <div className="font-semibold">提案内容</div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <div>勘定科目: {aiSuggestion.account || aiSuggestion.debitAccount || aiSuggestion.creditAccount || '未提案'}</div>
+                        <div>摘要: {aiSuggestion.description || aiSuggestion.reasoning || '未提案'}</div>
+                        <div>
+                          金額: {formatCurrency(aiSuggestion.debit || aiSuggestion.credit || aiSuggestion.amount || null) || '-'}
+                        </div>
+                        {aiSuggestion.reasoning && (
+                          <div className="text-xs text-slate-500 mt-2">根拠: {aiSuggestion.reasoning}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-lg border border-slate-200 p-4 bg-slate-50">
                   <p className="text-xs font-semibold text-slate-500 mb-2">申請内容</p>
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">
