@@ -4506,23 +4506,16 @@ export const getCashSchedule = async (period: { startDate: string, endDate: stri
     }));
 };
 
-export const generateJournalLinesFromApplication = async (applicationId: string): Promise<{
-    journalEntryId: string;
-    lines: Array<{
-        id: string;
-        accountId: string;
-        accountCode: string;
-        accountName: string;
-        debitAmount?: number;
-        creditAmount?: number;
-        description: string;
-    }>;
-}> => {
+export const generateJournalLinesFromApplication = async (
+    applicationId: string,
+    userId?: string
+): Promise<{ journalEntryId: string; lines: any[] }> => {
     const supabase = getSupabase();
 
     // RPCで作成/取得（既存でもエラーにしない）
     const { data, error } = await supabase.rpc('generate_journal_lines_from_application', {
-        application_id: applicationId,
+        p_application_id: applicationId,
+        p_user_id: userId || null,
     });
 
     if (error) {

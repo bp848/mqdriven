@@ -1,14 +1,15 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Loader, CheckCircle, FileText, Plus, ArrowRight } from 'lucide-react';
-import { ApplicationWithDetails, AIJournalSuggestion } from '../../../types';
+import { ApplicationWithDetails, AIJournalSuggestion, User } from '../../../types';
 import * as dataService from '../../../services/dataService';
 import { suggestJournalEntry } from '../../../services/geminiService';
 
 interface JournalReviewPageProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
+  currentUser?: User | null;
 }
 
-export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) => {
+export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, currentUser }) => {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -298,7 +299,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     if (!selectedApplication) return;
     setIsWorking(true);
     try {
-      await dataService.generateJournalLinesFromApplication(selectedApplication.id);
+      await dataService.generateJournalLinesFromApplication(selectedApplication.id, currentUser?.id);
       notify?.('仕訳を生成しました。', 'success');
       await loadApprovedApplications();
     } catch (err: any) {
