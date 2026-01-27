@@ -168,9 +168,25 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     const direct = suggestion.account || suggestion.debitAccount || suggestion.creditAccount;
     if (direct && direct.trim()) return direct.trim();
     const reasoning = suggestion.reasoning ? stripMarkdown(suggestion.reasoning) : '';
-    if (!reasoning) return '未提案';
-    const matched = accountItems.find(item => reasoning.includes(item.name));
-    return matched ? `${matched.code} ${matched.name}` : '未提案';
+    const description = suggestion.description ? stripMarkdown(suggestion.description) : '';
+    const text = `${reasoning} ${description}`.trim();
+    if (!text) return '未提案';
+    const matched = accountItems.find(item => text.includes(item.name));
+    if (matched) return `${matched.code} ${matched.name}`;
+    const keywordRules = [
+      { keywords: ['広告', '出稿', '掲載'], accountName: '広告宣伝費' },
+      { keywords: ['発送', '配送', '送料', '荷造'], accountName: '荷造運賃' },
+      { keywords: ['通信', '郵送'], accountName: '通信費' },
+      { keywords: ['消耗品', '資材'], accountName: '消耗品費' },
+      { keywords: ['接待', '贈答', '胡蝶蘭', '祝い'], accountName: '接待交際費' },
+    ];
+    for (const rule of keywordRules) {
+      if (rule.keywords.some(keyword => text.includes(keyword))) {
+        const account = accountItems.find(item => item.name.includes(rule.accountName));
+        if (account) return `${account.code} ${account.name}`;
+      }
+    }
+    return '未提案';
   };
 
   const handleAiSuggest = async () => {
