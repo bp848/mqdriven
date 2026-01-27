@@ -1642,7 +1642,7 @@ export const getJournalEntries = async (status?: string): Promise<JournalEntry[]
 
     // 明示的にカラムを指定し、リレーションを推測させない
     const { data: entries, error: entriesError } = await supabase
-        .from('journal_entries')
+        .from('v_journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds)
         .order('entry_date', { ascending: false });
@@ -1684,7 +1684,7 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
 
     const batchIds = batches.map(b => b.id).filter(Boolean);
     const { data: entries, error: entriesError } = await supabase
-        .from('journal_entries')
+        .from('v_journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds)
         .order('created_at', { ascending: false });
@@ -1696,7 +1696,7 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
 
     const entryIds = entries.map(e => e.id).filter(Boolean);
     const { data: lines, error: linesError } = await supabase
-        .from('journal_lines')
+        .from('v_journal_lines')
         .select('id, journal_entry_id, account_id, debit, credit, description')
         .in('journal_entry_id', entryIds);
 
@@ -1737,7 +1737,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     const supabase = getSupabase();
     // accountingスキーマのjournal_entriesとjournal_batchesを使用
     const { data: entry, error: entryError } = await supabase
-        .from('journal_entries')
+        .from('v_journal_entries')
         .select('id, batch_id, v_journal_batches!inner(source_application_id)')
         .eq('id', journalEntryId)
         .single();
@@ -1780,7 +1780,7 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id' | 'date
     // journal_entryを作成
     const entryDate = entryData.date || new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
-        .from('journal_entries')
+        .from('v_journal_entries')
         .insert({
             batch_id: batch.id,
             entry_date: entryDate,
@@ -2095,7 +2095,7 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
 
     // accountingスキーマのjournal_entriesテーブルを使用
     const { data: journalEntries, error: journalError } = await supabase
-        .from('journal_entries')
+        .from('v_journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds);
     ensureSupabaseSuccess(journalError, 'Failed to fetch journal entries for approved applications');
@@ -2128,7 +2128,7 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
     if (entryIds.length > 0) {
         // publicスキーマのVIEW経由でaccounting.journal_linesにアクセス（accountsもVIEW経由）
         const { data: journalLines, error: linesError } = await supabase
-            .from('journal_lines')
+            .from('v_journal_lines')
             .select(`
                 id,
                 journal_entry_id,
@@ -4090,7 +4090,7 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
 
     const batchIds = batches.map(b => b.id).filter(Boolean);
     const { data: entries, error: entriesError } = await supabase
-        .from('journal_entries')
+        .from('v_journal_entries')
         .select('id, batch_id, entry_date, description')
         .in('batch_id', batchIds)
         .order('entry_date', { ascending: false });
@@ -4103,7 +4103,7 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
 
     const entryIds = entries.map(e => e.id).filter(Boolean);
     const { data: lines, error: linesError } = await supabase
-        .from('journal_lines')
+        .from('v_journal_lines')
         .select(`
             journal_entry_id,
             account_id,
