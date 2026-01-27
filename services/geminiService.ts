@@ -578,8 +578,28 @@ export const suggestJournalEntry = async (
         responseSchema: suggestJournalEntrySchema,
       },
     });
-    const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr);
+    const rawText = stripCodeFences(response.text);
+    try {
+      return JSON.parse(rawText);
+    } catch (error) {
+      const match = rawText.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          return JSON.parse(match[0]);
+        } catch {
+          // fall through
+        }
+      }
+      console.warn("AI returned non-JSON response for journal suggestion:", rawText);
+      return {
+        account: "要確認",
+        description: "AI提案が不明瞭なため要確認",
+        debit: 0,
+        credit: 0,
+        reasoning: rawText,
+        confidence: 0,
+      };
+    }
   });
 };
 
