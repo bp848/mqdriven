@@ -150,6 +150,19 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     return vendor ? `請求内容: ${vendor}` : '内容が入力されていません。';
   };
 
+  const stripMarkdown = (text: string): string =>
+    text
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+      .replace(/^\s{0,3}>\s?/gm, '')
+      .replace(/^\s{0,3}[-*+]\s+/gm, '')
+      .replace(/\|/g, ' ')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const handleAiSuggest = async () => {
     if (!selectedApplication) return;
     setIsAiLoading(true);
@@ -373,7 +386,9 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                           金額: {formatCurrency(aiSuggestion.debit || aiSuggestion.credit || aiSuggestion.amount || null) || '-'}
                         </div>
                         {aiSuggestion.reasoning && (
-                          <div className="text-xs text-slate-500 mt-2">根拠: {aiSuggestion.reasoning}</div>
+                          <div className="text-xs text-slate-500 mt-2">
+                            根拠: {stripMarkdown(aiSuggestion.reasoning)}
+                          </div>
                         )}
                       </div>
                     </div>
