@@ -1753,15 +1753,20 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
         console.warn('Failed to fetch journal batch:', batchFetchError);
     }
 
-    // journal_batchesのstatusを更新
-    const { error: batchError } = await supabase
-        .from('v_journal_batches')
-        .update({
-            status,
-            posted_at: status === 'posted' ? new Date().toISOString() : null,
-        })
-        .eq('id', entry.batch_id);
-    ensureSupabaseSuccess(batchError, 'Failed to update journal batch status');
+    if (status === 'posted') {
+        const { error: postError } = await supabase.rpc('post_journal_batch', { p_batch_id: entry.batch_id });
+        ensureSupabaseSuccess(postError, 'Failed to post journal batch');
+    } else {
+        // NOTE: 未確定へ戻す（unpost）は監査/権限設計が絡むため、ここでは行わない。
+        const { error: batchError } = await supabase
+            .from('v_journal_batches')
+            .update({
+                status,
+                posted_at: null,
+            })
+            .eq('id', entry.batch_id);
+        ensureSupabaseSuccess(batchError, 'Failed to update journal batch status');
+    }
 
     const sourceApplicationId = batch?.source_application_id;
     if (sourceApplicationId && (status === 'posted' || status === 'draft')) {
