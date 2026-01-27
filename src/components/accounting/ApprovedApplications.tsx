@@ -262,6 +262,24 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     if (!selectedApplication) return;
     setIsWorking(true);
     try {
+      const debitAccountId = selectedDebitAccountId;
+      const creditAccountId = selectedCreditAccountId;
+      const amount = deriveAmount(selectedApplication);
+
+      if (debitAccountId && creditAccountId && amount !== null && amount > 0) {
+        const batchId = await dataService.createJournalBatch(selectedApplication.id, currentUserId || undefined);
+        const entryDate = new Date().toISOString().split('T')[0];
+        const description = buildTitle(selectedApplication);
+        const journalEntryId = await dataService.createJournalEntry(batchId, entryDate, description);
+        await dataService.addJournalLine(journalEntryId, debitAccountId, amount, 0, description);
+        await dataService.addJournalLine(journalEntryId, creditAccountId, 0, amount, description);
+        await dataService.updateApplicationAccountingStatus(selectedApplication.id, 'draft');
+        notify?.('仕訳を生成しました。', 'success');
+        await loadApprovedApplications();
+        return;
+      }
+
+      notify?.('勘定科目/金額が揃っていないため、自動仕訳生成を実行します。', 'info');
       await dataService.generateJournalLinesFromApplication(selectedApplication.id, currentUserId || undefined);
       notify?.('仕訳を生成しました。', 'success');
       await loadApprovedApplications();
@@ -271,7 +289,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     } finally {
       setIsWorking(false);
     }
-  }, [currentUserId, loadApprovedApplications, notify, selectedApplication]);
+  }, [currentUserId, loadApprovedApplications, notify, selectedApplication, selectedCreditAccountId, selectedDebitAccountId]);
 
   const handlePostJournal = useCallback(async () => {
     if (!selectedApplication) return;
@@ -512,41 +530,41 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                   <div className="mt-3 text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">{aiError}</div>
                 )}
 
-                {aiSuggestion && (
-                  <div className="mt-4 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">借方勘定科目</p>
-                        <select
-                          value={selectedDebitAccountId}
-                          onChange={(e) => setSelectedDebitAccountId(e.target.value)}
-                          className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
-                        >
-                          <option value="">未選択</option>
-                          {accountItems.map(item => (
-                            <option key={item.id} value={item.id}>
-                              {item.code} {item.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">貸方勘定科目</p>
-                        <select
-                          value={selectedCreditAccountId}
-                          onChange={(e) => setSelectedCreditAccountId(e.target.value)}
-                          className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
-                        >
-                          <option value="">未選択</option>
-                          {accountItems.map(item => (
-                            <option key={item.id} value={item.id}>
-                              {item.code} {item.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">借方勘定科目</p>
+                      <select
+                        value={selectedDebitAccountId}
+                        onChange={(e) => setSelectedDebitAccountId(e.target.value)}
+                        className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="">未選択</option>
+                        {accountItems.map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.code} {item.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">貸方勘定科目</p>
+                      <select
+                        value={selectedCreditAccountId}
+                        onChange={(e) => setSelectedCreditAccountId(e.target.value)}
+                        className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="">未選択</option>
+                        {accountItems.map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.code} {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
+                  {aiSuggestion ? (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">AI提案（借方）</p>
@@ -567,15 +585,17 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                         </p>
                       </div>
                     </div>
+                  ) : (
+                    <div className="text-sm text-slate-500 dark:text-slate-400">AI提案は未取得です。</div>
+                  )}
 
-                    {aiSuggestion.reasoning && (
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">根拠</p>
-                        <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{aiSuggestion.reasoning}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {aiSuggestion?.reasoning ? (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">根拠</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{aiSuggestion.reasoning}</p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div className="text-sm text-slate-700 dark:text-slate-200">
