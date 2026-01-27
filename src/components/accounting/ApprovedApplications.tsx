@@ -94,18 +94,37 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     return '仕訳未生成';
   };
 
-  const buildTitle = (app: ApplicationWithDetails) =>
-    app.formData?.title || app.formData?.subject || app.application_code?.name || '件名未入力';
+  const buildTitle = (app: ApplicationWithDetails) => {
+    const data = app.formData ?? {};
+    const rawTitle =
+      data.title ||
+      data.subject ||
+      data.documentName ||
+      data.invoice?.supplierName ||
+      data.invoice?.description ||
+      data.notes ||
+      '';
+    const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+    return title || app.application_code?.name || '件名未入力';
+  };
 
   const filteredApps = useMemo(() => {
     return applications.filter(app => {
       const handlingStatus = normalizeHandlingStatus((app as any).handlingStatus);
       if (handlingStatusOnly && handlingStatus !== handlingStatusOnly) return false;
       const term = searchTerm.toLowerCase();
-      const titleText = (app.formData?.title || app.formData?.subject || '').toLowerCase();
+      const titleText = buildTitle(app).toLowerCase();
+      const docName = (app.formData?.documentName || '').toLowerCase();
+      const supplierName = (app.formData?.invoice?.supplierName || '').toLowerCase();
       const applicantName = (app.applicant?.name || '').toLowerCase();
       const codeName = (app.application_code?.name || '').toLowerCase();
-      return titleText.includes(term) || applicantName.includes(term) || codeName.includes(term);
+      return (
+        titleText.includes(term) ||
+        docName.includes(term) ||
+        supplierName.includes(term) ||
+        applicantName.includes(term) ||
+        codeName.includes(term)
+      );
     });
   }, [applications, handlingStatusOnly, searchTerm]);
 
@@ -281,6 +300,40 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 {getAccountingStatusLabel(selectedApplication.accountingStatus ?? selectedApplication.accounting_status ?? 'none')}
               </div>
+
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-900/40">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">申請内容</p>
+                <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
+                  {selectedApplication.formData?.details ||
+                    selectedApplication.formData?.notes ||
+                    selectedApplication.formData?.invoice?.description ||
+                    '内容が入力されていません。'}
+                </p>
+              </div>
+
+              {(selectedApplication.formData?.invoice?.lines || []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">内訳</p>
+                  {(selectedApplication.formData?.invoice?.lines || []).map((line: any) => (
+                    <div
+                      key={line.id || `${line.description}-${line.amountExclTax}`}
+                      className="flex items-center justify-between p-3 bg-white dark:bg-slate-900/40 rounded-lg border border-slate-200 dark:border-slate-700"
+                    >
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                          {line.description || '内訳未入力'}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {line.projectName || line.customerName || 'プロジェクト未設定'}
+                        </div>
+                      </div>
+                      <div className="text-sm font-mono font-semibold text-slate-700 dark:text-slate-200">
+                        {formatCurrency(toNumber(line.amountExclTax) ?? null) || '-'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="space-y-2">
                 {(selectedApplication.journalEntry?.lines || []).length === 0 ? (
