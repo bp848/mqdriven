@@ -17,6 +17,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
   const [aiSuggestion, setAiSuggestion] = useState<AIJournalSuggestion | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [isAiAutoSuggest, setIsAiAutoSuggest] = useState(true);
 
   const loadApprovedApplications = useCallback(async () => {
     setIsLoading(true);
@@ -54,6 +55,14 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     if (value <= 0) return '';
     return `¥${value.toLocaleString()}`;
   };
+
+  useEffect(() => {
+    if (!selectedApplication || !isAiAutoSuggest) return;
+    const timer = window.setTimeout(() => {
+      handleAiSuggest();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [selectedApplication, isAiAutoSuggest]);
 
   const toNumber = (value: any): number | null => {
     if (value === null || value === undefined) return null;
@@ -293,14 +302,24 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                       <p className="text-xs font-semibold text-slate-500">AI仕訳提案</p>
                       <p className="text-sm text-slate-600">内容と振り分け先をAIが提案します。</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAiSuggest}
-                      disabled={isAiLoading}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {isAiLoading ? '提案中...' : 'AIで提案'}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-xs text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={isAiAutoSuggest}
+                          onChange={(e) => setIsAiAutoSuggest(e.target.checked)}
+                        />
+                        自動提案
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAiSuggest}
+                        disabled={isAiLoading}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {isAiLoading ? '提案中...' : '再提案'}
+                      </button>
+                    </div>
                   </div>
                   {aiError && <p className="text-xs text-red-600 mt-2">{aiError}</p>}
                   {aiSuggestion && (
