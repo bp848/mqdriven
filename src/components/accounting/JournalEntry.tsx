@@ -46,11 +46,61 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     return `¥${value.toLocaleString()}`;
   };
 
+  const toNumber = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const normalized = value.replace(/,/g, '').trim();
+      if (!normalized) return null;
+      const parsed = Number(normalized);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  };
+
+  const deriveAmount = (app: ApplicationWithDetails): number | null => {
+    const data = app.formData ?? {};
+    return (
+      toNumber(data.amount) ??
+      toNumber(data.totalAmount) ??
+      toNumber(data.requestedAmount) ??
+      toNumber(data.invoice?.totalGross) ??
+      toNumber(data.invoice?.totalNet) ??
+      null
+    );
+  };
+
   const getAccountingStatusLabel = (value?: string) => {
     if (value === 'draft') return '仕訳下書き';
     if (value === 'posted') return '仕訳確定';
     return '仕訳未生成';
   };
+
+  const buildTitle = (app: ApplicationWithDetails) => {
+    const data = app.formData ?? {};
+    const rawTitle =
+      data.title ||
+      data.subject ||
+      data.documentName ||
+      data.invoice?.supplierName ||
+      data.invoice?.description ||
+      data.notes ||
+      '';
+    const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+    return title || app.application_code?.name || '件名未入力';
+  };
+
+  const summary = applications.reduce(
+    (acc, app) => {
+      const amount = deriveAmount(app);
+      if (amount) acc.totalAmount += amount;
+      const statusValue = app.accountingStatus ?? app.accounting_status ?? 'none';
+      if (statusValue !== 'posted') acc.remainingCount += 1;
+      acc.totalCount += 1;
+      return acc;
+    },
+    { totalCount: 0, remainingCount: 0, totalAmount: 0 }
+  );
 
   const handleGenerateJournal = async () => {
     if (!selectedApplication) return;
@@ -102,6 +152,21 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+          <p className="text-xs text-slate-500">件数</p>
+          <p className="text-lg font-bold text-slate-800">{summary.totalCount.toLocaleString()}件</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+          <p className="text-xs text-slate-500">未確定件数</p>
+          <p className="text-lg font-bold text-amber-600">{summary.remainingCount.toLocaleString()}件</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+          <p className="text-xs text-slate-500">申請金額合計</p>
+          <p className="text-lg font-bold text-emerald-700">{formatCurrency(summary.totalAmount) || '-'}</p>
+        </div>
+      </div>
+
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-3 text-sm">
           {error}
@@ -123,21 +188,25 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
             ) : (
               applications.map(app => {
                 const entryStatus = app.accountingStatus ?? app.accounting_status ?? 'none';
+                const amount = deriveAmount(app);
+                const amountText = formatCurrency(amount);
                 return (
                   <div
                     key={app.id}
                     onClick={() => setSelectedId(app.id)}
-                    className={`p-3 rounded-lg border cursor-pointer transition relative ${
-                      selectedId === app.id
+                    className={`p-3 rounded-lg border cursor-pointer transition relative ${selectedId === app.id
                         ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-300'
                         : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-sm'
-                    }`}
+                      }`}
                   >
                     <div className="text-xs text-slate-500 mb-1">{app.application_code?.name || 'N/A'}</div>
                     <div className="font-bold text-slate-800 text-sm mb-1 truncate">
-                      {app.formData?.title || app.formData?.subject || '件名未入力'}
+                      {buildTitle(app)}
                     </div>
-                    <div className="text-xs text-slate-500">{getAccountingStatusLabel(entryStatus)}</div>
+                    <div className="text-xs text-slate-500 flex items-center justify-between gap-2">
+                      <span>{getAccountingStatusLabel(entryStatus)}</span>
+                      <span className="font-mono text-emerald-700">{amountText || '-'}</span>
+                    </div>
                   </div>
                 );
               })
@@ -153,7 +222,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                   <div>
                     <div className="text-xs text-slate-500">{selectedApplication.application_code?.name || 'N/A'}</div>
                     <h3 className="text-lg font-bold text-slate-900">
-                      {selectedApplication.formData?.title || selectedApplication.formData?.subject || '件名未入力'}
+                      {buildTitle(selectedApplication)}
                     </h3>
                   </div>
                   <div className="text-sm text-slate-600">
@@ -163,6 +232,40 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="rounded-lg border border-slate-200 p-4 bg-slate-50">
+                  <p className="text-xs font-semibold text-slate-500 mb-2">申請内容</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                    {selectedApplication.formData?.details ||
+                      selectedApplication.formData?.notes ||
+                      selectedApplication.formData?.invoice?.description ||
+                      '内容が入力されていません。'}
+                  </p>
+                </div>
+
+                {(selectedApplication.formData?.invoice?.lines || []).length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-500">内訳</p>
+                    {(selectedApplication.formData?.invoice?.lines || []).map((line: any) => (
+                      <div
+                        key={line.id || `${line.description}-${line.amountExclTax}`}
+                        className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200"
+                      >
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {line.description || '内訳未入力'}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {line.projectName || line.customerName || 'プロジェクト未設定'}
+                          </div>
+                        </div>
+                        <div className="text-sm font-mono font-semibold text-slate-700">
+                          {formatCurrency(toNumber(line.amountExclTax) ?? null) || '-'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {hasLines ? (
                   <div className="space-y-2">
                     {lines.map(line => {
