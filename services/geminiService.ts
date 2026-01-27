@@ -583,7 +583,20 @@ export const suggestJournalEntry = async (
 ): Promise<AIJournalSuggestion> => {
   const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
-    const fullPrompt = `以下の日常的な取引内容を会計仕訳に変換してください。「${prompt}」`;
+    const fullPrompt = `以下の取引内容を会計仕訳に変換してください。
+出力は必ずJSONのみ（コードフェンス禁止）。
+勘定科目は「勘定科目候補」に含まれるものから1つ選択し、該当が無い場合は「要確認」としてください。
+
+取引内容:
+${prompt}
+
+JSON形式:
+{
+  "account": "勘定科目名",
+  "description": "摘要",
+  "debit": 0,
+  "credit": 0
+}`;
     const response = await ai.models.generateContent({
       model,
       contents: fullPrompt,
