@@ -170,7 +170,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     const reasoning = suggestion.reasoning ? stripMarkdown(suggestion.reasoning) : '';
     const description = suggestion.description ? stripMarkdown(suggestion.description) : '';
     const text = `${reasoning} ${description}`.trim();
-    if (!text) return '未提案';
+    if (!text || accountItems.length === 0) return '要確認';
     const matched = accountItems.find(item => text.includes(item.name));
     if (matched) return `${matched.code} ${matched.name}`;
     const keywordRules = [
@@ -416,6 +416,11 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                             根拠: {stripMarkdown(aiSuggestion.reasoning)}
                           </div>
                         )}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        勘定科目候補: {accountItems.length > 0
+                          ? accountItems.slice(0, 8).map(item => `${item.code} ${item.name}`).join(' / ')
+                          : '取得できませんでした'}
                       </div>
                     </div>
                   )}
