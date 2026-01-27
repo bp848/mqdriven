@@ -193,6 +193,7 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_payables: '買掛管理',
     accounting_receivables: '売掛管理',
     accounting_cash_schedule: '資金繰り',
+    accounting_expense_analysis: '経費分析',
     accounting_approved_applications: '承認済み申請',
     accounting_approved_unhandled: '未処理',
     accounting_approved_expense: '経費',
@@ -220,6 +221,7 @@ const PAGE_TITLES: Record<Page, string> = {
     settings: '設定',
     prompt_management: 'プロンプト管理',
     newsletter: 'ニュースレター',
+    strac_analysis: 'STRAC分析',
 };
 
 const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
@@ -259,23 +261,23 @@ const ESTIMATE_PAGE_SIZE = 50;
 
 const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSetup: () => void; }> = ({ error, onRetry, onShowSetup }) => (
     <div className="bg-red-600 text-white p-3 flex items-center justify-between gap-4 flex-shrink-0 z-20">
-      <div className="flex items-center gap-3">
-        <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-        <div>
-          <h3 className="font-bold">データベースエラー</h3>
-          <p className="text-sm">{error}</p>
+        <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+            <div>
+                <h3 className="font-bold">データベースエラー</h3>
+                <p className="text-sm">{error}</p>
+            </div>
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <button onClick={onShowSetup} className="bg-red-700 hover:bg-red-800 font-semibold text-sm py-1.5 px-3 rounded-md flex items-center gap-1.5 transition-colors">
-            <Settings className="w-4 h-4" />
-            セットアップガイド
-        </button>
-        <button onClick={onRetry} className="bg-red-700 hover:bg-red-800 font-semibold text-sm py-1.5 px-3 rounded-md flex items-center gap-1.5 transition-colors">
-            <RefreshCw className="w-4 h-4" />
-            再試行
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+            <button onClick={onShowSetup} className="bg-red-700 hover:bg-red-800 font-semibold text-sm py-1.5 px-3 rounded-md flex items-center gap-1.5 transition-colors">
+                <Settings className="w-4 h-4" />
+                セットアップガイド
+            </button>
+            <button onClick={onRetry} className="bg-red-700 hover:bg-red-800 font-semibold text-sm py-1.5 px-3 rounded-md flex items-center gap-1.5 transition-colors">
+                <RefreshCw className="w-4 h-4" />
+                再試行
+            </button>
+        </div>
     </div>
 );
 
@@ -294,13 +296,13 @@ const App: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentUser, setCurrentUser] = useState<EmployeeUser | null>(null);
     const [user, setUser] = useState<any>(null); // TODO: Replace 'any' with proper user type
-    
+
     const onUserChange = (newUser: any) => {
         setCurrentUser(newUser);
         setUser(newUser);
     };
     const [allUsers, setAllUsers] = useState<EmployeeUser[]>([]);
-    
+
     // Data State
     const [projects, setProjects] = useState<Project[]>([]);
     const [jobs, setJobs] = useState<ProjectBudgetSummary[]>([]);
@@ -314,7 +316,7 @@ const App: React.FC = () => {
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [estimates, setEstimates] = useState<Estimate[]>([]);
-    
+
     // デバッグ用：estimatesの状態を監視
     useEffect(() => {
         console.log('📊 Estimates state changed:', estimates.length);
@@ -327,7 +329,7 @@ const App: React.FC = () => {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [allocationDivisions, setAllocationDivisions] = useState<AllocationDivision[]>([]);
     const [titles, setTitles] = useState<Title[]>([]);
-    
+
     // UI State
     const [isLoading, setIsLoading] = useState(true);
     const [dbError, setDbError] = useState<string | null>(null);
@@ -359,7 +361,7 @@ const App: React.FC = () => {
     const [analysisError, setAnalysisError] = useState('');
     const [isBugReportModalOpen, setIsBugReportModalOpen] = useState(false);
     const [toasts, setToasts] = useState<Toast[]>([]);
-    const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogProps>({ isOpen: false, title: '', message: '', onConfirm: () => {}, onClose: () => () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });
+    const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogProps>({ isOpen: false, title: '', message: '', onConfirm: () => { }, onClose: () => () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });
     const [aiSuggestion, setAiSuggestion] = useState('');
     const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
     const [isAIOff, setIsAIOff] = useState(() => {
@@ -373,7 +375,7 @@ const App: React.FC = () => {
     const abortControllerRef = useRef<AbortController | null>(null);
     const estimatePageRef = useRef<number>(1);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
-  const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
+    const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
 
     const refreshEstimatesPage = useCallback(async (page: number, signal?: AbortSignal) => {
         console.log('🔄 Loading estimates page...', page);
@@ -476,7 +478,7 @@ const App: React.FC = () => {
     const dismissToast = (id: number) => {
         setToasts(prev => prev.filter(t => t.id !== id));
     };
-    
+
     const requestConfirmation = (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => {
         setConfirmationDialog({ ...dialog, isOpen: true, onClose: () => setConfirmationDialog(prev => ({ ...prev, isOpen: false })) });
     };
@@ -842,7 +844,7 @@ const App: React.FC = () => {
             const usersData = await dataService.getUsers();
             if (signal.aborted) return;
             setAllUsers(usersData);
-            
+
             let effectiveUser: User | null = currentUser ?? null;
             if (!effectiveUser && supabaseUser) {
                 effectiveUser = usersData.find(user => user.id === supabaseUser.id) ?? null;
@@ -857,7 +859,7 @@ const App: React.FC = () => {
             if (effectiveUser && (!currentUser || currentUser.id !== effectiveUser.id)) {
                 setCurrentUser(effectiveUser as EmployeeUser);
             }
-            
+
             const employeesFromUsers: Employee[] = usersData.map(user => ({
                 id: user.id,
                 name: user.name,
@@ -867,7 +869,7 @@ const App: React.FC = () => {
                 salary: 0,
                 createdAt: user.createdAt,
             }));
-            
+
             const results = await Promise.allSettled([
                 dataService.getProjects(),
                 dataService.getProjectBudgetSummaries(),
@@ -887,10 +889,10 @@ const App: React.FC = () => {
 
             if (signal.aborted) return;
 
-      const [
-        projectsResult,
-        jobsResult,
-        customersResult,
+            const [
+                projectsResult,
+                jobsResult,
+                customersResult,
                 journalResult,
                 accountItemsResult,
                 leadsResult,
@@ -904,22 +906,22 @@ const App: React.FC = () => {
                 estimatesResult,
             ] = results;
 
-      const sortCustomersDesc = (items: Customer[]) =>
-        [...items].sort((a, b) => {
-          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return bTime - aTime;
-        });
+            const sortCustomersDesc = (items: Customer[]) =>
+                [...items].sort((a, b) => {
+                    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return bTime - aTime;
+                });
 
-      if (projectsResult.status === 'fulfilled') setProjects(projectsResult.value); else console.error('Failed to load projects:', projectsResult.reason);
-      if (jobsResult.status === 'fulfilled') setJobs(jobsResult.value); else console.error('Failed to load jobs:', jobsResult.reason);
-      if (customersResult.status === 'fulfilled') {
-        const sorted = sortCustomersDesc(customersResult.value);
-        console.log('[loadAllData] customers sorted', { count: sorted.length, newest: sorted[0]?.createdAt });
-        setCustomers(sorted);
-      } else {
-        console.error('Failed to load customers:', customersResult.reason);
-      }
+            if (projectsResult.status === 'fulfilled') setProjects(projectsResult.value); else console.error('Failed to load projects:', projectsResult.reason);
+            if (jobsResult.status === 'fulfilled') setJobs(jobsResult.value); else console.error('Failed to load jobs:', jobsResult.reason);
+            if (customersResult.status === 'fulfilled') {
+                const sorted = sortCustomersDesc(customersResult.value);
+                console.log('[loadAllData] customers sorted', { count: sorted.length, newest: sorted[0]?.createdAt });
+                setCustomers(sorted);
+            } else {
+                console.error('Failed to load customers:', customersResult.reason);
+            }
             if (journalResult.status === 'fulfilled') setJournalEntries(journalResult.value); else console.error('Failed to load journal entries:', journalResult.reason);
             if (accountItemsResult.status === 'fulfilled') setAccountItems(accountItemsResult.value); else console.error('Failed to load account items:', accountItemsResult.reason);
             if (leadsResult.status === 'fulfilled') setLeads(leadsResult.value); else console.error('Failed to load leads:', leadsResult.reason);
@@ -938,7 +940,7 @@ const App: React.FC = () => {
             if (paymentRecipientsResult.status === 'fulfilled') setPaymentRecipients(paymentRecipientsResult.value); else console.error('Failed to load payment recipients:', paymentRecipientsResult.reason);
             if (allocationDivisionsResult.status === 'fulfilled') setAllocationDivisions(allocationDivisionsResult.value); else console.error('Failed to load allocation divisions:', allocationDivisionsResult.reason);
             if (titlesResult.status === 'fulfilled') setTitles(titlesResult.value); else console.error('Failed to load titles:', titlesResult.reason);
-            
+
             if (effectiveUser) {
                 const applicationsData = await dataService.getApplications(effectiveUser);
                 if (!signal.aborted) setApplications(applicationsData);
@@ -964,11 +966,11 @@ const App: React.FC = () => {
     }, [currentUser, supabaseUser, addToast, refreshEstimatesPage]);
 
 
-useEffect(() => {
-    if (!isSupabaseConfigured) {
-        setIsLoading(false);
-        return;
-    }
+    useEffect(() => {
+        if (!isSupabaseConfigured) {
+            setIsLoading(false);
+            return;
+        }
         if (!isAuthenticated) {
             setIsLoading(false);
             return;
@@ -994,13 +996,13 @@ useEffect(() => {
             supabase.removeChannel(channel);
         };
     }, [isSupabaseConfigured, loadAllData]);
-    
+
     useEffect(() => {
     }, [currentPage, jobs, isAIOff]);
 
     const pendingApprovalCount = useMemo(() => {
-      if (!currentUser || !applications) return 0;
-      return applications.filter(app => app.approverId === currentUser.id && app.status === 'pending_approval').length;
+        if (!currentUser || !applications) return 0;
+        return applications.filter(app => app.approverId === currentUser.id && app.status === 'pending_approval').length;
     }, [currentUser, applications]);
 
     // Data Handlers
@@ -1046,7 +1048,7 @@ useEffect(() => {
         setJobDetailModalOpen(false);
         await loadAllData();
     };
-     const handleAddLead = async (leadData: Partial<Lead>) => {
+    const handleAddLead = async (leadData: Partial<Lead>) => {
         await dataService.addLead(leadData);
         addToast('リードが追加されました。', 'success');
         setCreateLeadModalOpen(false);
@@ -1122,7 +1124,7 @@ useEffect(() => {
             setAnalysisLoading(false);
         }
     };
-    
+
     const handleSaveBugReport = async (report: Omit<BugReport, 'id' | 'createdAt' | 'status' | 'reporterName'>) => {
         if (!currentUser) {
             addToast('ユーザー情報が見つかりません。', 'error');
@@ -1144,13 +1146,13 @@ useEffect(() => {
     const handleEstimatePageChange = async (page: number) => {
         await refreshEstimatesPage(page);
     };
-    
+
     const onPrimaryAction = () => {
         if (dbError) {
             addToast('データベース接続エラーのため、この操作は実行できません。', 'error');
             return;
         }
-        switch(currentPage) {
+        switch (currentPage) {
             case 'sales_orders': setCreateJobModalOpen(true); break;
             case 'sales_leads': setCreateLeadModalOpen(true); break;
             case 'sales_customers':
@@ -1176,29 +1178,29 @@ useEffect(() => {
     const renderContent = () => {
         switch (currentPage) {
             case 'analysis_dashboard':
-                return <Dashboard 
-                            jobs={jobs} 
-                            journalEntries={journalEntries} 
-                            accountItems={accountItems} 
-                            customers={customers}
-                            purchaseOrders={purchaseOrders}
-                            applications={applications}
-                            suggestion={aiSuggestion} 
-                            isSuggestionLoading={isSuggestionLoading}
-                            pendingApprovalCount={pendingApprovalCount}
-                            onNavigateToApprovals={() => handleNavigate('approval_list')}
-                            onNavigateToBulletinBoard={() => handleNavigate('bulletin_board')}
-                            isAIOff={isAIOff}
-                            onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
-                            onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
-                            isGoogleAuthLoading={isGoogleAuthLoading}
-                            googleAuthConnected={googleAuthStatus.connected}
-                            googleAuthExpiresAt={googleAuthStatus.expiresAt}
-                            googleAuthStatusLoading={googleAuthStatus.loading}
-                            toastsEnabled={toastsEnabled}
-                            onToggleToasts={toggleToasts}
-                            addToast={addToast}
-                        />;
+                return <Dashboard
+                    jobs={jobs}
+                    journalEntries={journalEntries}
+                    accountItems={accountItems}
+                    customers={customers}
+                    purchaseOrders={purchaseOrders}
+                    applications={applications}
+                    suggestion={aiSuggestion}
+                    isSuggestionLoading={isSuggestionLoading}
+                    pendingApprovalCount={pendingApprovalCount}
+                    onNavigateToApprovals={() => handleNavigate('approval_list')}
+                    onNavigateToBulletinBoard={() => handleNavigate('bulletin_board')}
+                    isAIOff={isAIOff}
+                    onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
+                    onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
+                    isGoogleAuthLoading={isGoogleAuthLoading}
+                    googleAuthConnected={googleAuthStatus.connected}
+                    googleAuthExpiresAt={googleAuthStatus.expiresAt}
+                    googleAuthStatusLoading={googleAuthStatus.loading}
+                    toastsEnabled={toastsEnabled}
+                    onToggleToasts={toggleToasts}
+                    addToast={addToast}
+                />;
             case 'sales_dashboard':
                 return <SalesDashboard jobs={jobs} leads={leads} />;
             case 'sales_orders':
@@ -1257,17 +1259,17 @@ useEffect(() => {
             case 'newsletter':
                 return <NewsletterPage customers={customers} addToast={addToast} />;
             case 'sales_leads':
-                return <LeadManagementPage 
-                    leads={leads} 
-                    searchTerm={searchTerm} 
-                    onRefresh={loadAllData} 
-                    onUpdateLead={handleUpdateLead} 
-                    onDeleteLead={handleDeleteLead} 
-                    addToast={addToast} 
-                    requestConfirmation={requestConfirmation} 
-                    currentUser={currentUser} 
-                    isAIOff={isAIOff} 
-                    onAddEstimate={handleAddEstimate} 
+                return <LeadManagementPage
+                    leads={leads}
+                    searchTerm={searchTerm}
+                    onRefresh={loadAllData}
+                    onUpdateLead={handleUpdateLead}
+                    onDeleteLead={handleDeleteLead}
+                    addToast={addToast}
+                    requestConfirmation={requestConfirmation}
+                    currentUser={currentUser}
+                    isAIOff={isAIOff}
+                    onAddEstimate={handleAddEstimate}
                     customers={customers}
                     onNavigate={handleNavigate}
                     onCreateExistingCustomerLead={async (leadData) => {
@@ -1290,21 +1292,21 @@ useEffect(() => {
                     departments={departments}
                     titles={titles}
                     onSaveAccountItem={async (item: Partial<AccountItem>) => { await dataService.saveAccountItem(item); await loadAllData(); addToast('勘定科目を保存しました。', 'success'); }}
-                    onDeleteAccountItem={async (id: string) => { await dataService.deactivateAccountItem(id); await loadAllData(); addToast('勘定科目を無効化しました。', 'success');}}
+                    onDeleteAccountItem={async (id: string) => { await dataService.deactivateAccountItem(id); await loadAllData(); addToast('勘定科目を無効化しました。', 'success'); }}
                     onSavePaymentRecipient={async (item: Partial<PaymentRecipient>) => { await dataService.savePaymentRecipient(item); await loadAllData(); addToast('支払先を保存しました。', 'success'); }}
-                    onDeletePaymentRecipient={async (id: string) => { await dataService.deletePaymentRecipient(id); await loadAllData(); addToast('支払先を削除しました。', 'success');}}
+                    onDeletePaymentRecipient={async (id: string) => { await dataService.deletePaymentRecipient(id); await loadAllData(); addToast('支払先を削除しました。', 'success'); }}
                     onSaveAllocationDivision={async (item: Partial<AllocationDivision>) => { await dataService.saveAllocationDivision(item); await loadAllData(); addToast('振分区分を保存しました。', 'success'); }}
-                    onDeleteAllocationDivision={async (id: string) => { await dataService.deleteAllocationDivision(id); await loadAllData(); addToast('振分区分を削除しました。', 'success');}}
+                    onDeleteAllocationDivision={async (id: string) => { await dataService.deleteAllocationDivision(id); await loadAllData(); addToast('振分区分を削除しました。', 'success'); }}
                     onSaveDepartment={async (item: Partial<Department>) => { await dataService.saveDepartment(item); await loadAllData(); addToast('部署を保存しました。', 'success'); }}
-                    onDeleteDepartment={async (id: string) => { await dataService.deleteDepartment(id); await loadAllData(); addToast('部署を削除しました。', 'success');}}
+                    onDeleteDepartment={async (id: string) => { await dataService.deleteDepartment(id); await loadAllData(); addToast('部署を削除しました。', 'success'); }}
                     onSaveTitle={async (item: Partial<Title>) => { await dataService.saveTitle(item); await loadAllData(); addToast('役職を保存しました。', 'success'); }}
-                    onDeleteTitle={async (id: string) => { await dataService.deleteTitle(id); await loadAllData(); addToast('役職を削除しました。', 'success');}}
+                    onDeleteTitle={async (id: string) => { await dataService.deleteTitle(id); await loadAllData(); addToast('役職を削除しました。', 'success'); }}
                     addToast={addToast}
                     requestConfirmation={requestConfirmation}
                 />;
             case 'settings':
-                return <EmailNotificationSettingsPage 
-                    addToast={addToast} 
+                return <EmailNotificationSettingsPage
+                    addToast={addToast}
                     currentUser={currentUser}
                 />;
             case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_trial_balance': case 'accounting_period_closing':
@@ -1313,7 +1315,7 @@ useEffect(() => {
                 return <InventoryManagementPage inventoryItems={inventoryItems || []} onSelectItem={(item) => { setSelectedInventoryItem(item); setIsCreateInventoryItemModalOpen(true); }} />;
             case 'manufacturing_progress':
                 return <ManufacturingPipelinePage jobs={jobs || []} onUpdateJob={handleUpdateJob} onCardClick={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
-             case 'manufacturing_orders':
+            case 'manufacturing_orders':
                 return <ManufacturingOrdersPage jobs={jobs || []} onSelectJob={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
             case 'manufacturing_cost':
                 return <ManufacturingCostManagement jobs={jobs || []} />;
@@ -1529,7 +1531,7 @@ useEffect(() => {
                 return <PlaceholderPage title={PAGE_TITLES[currentPage] || currentPage} />;
         }
     };
-    
+
     if (shouldRequireAuth && isAuthCallbackRoute) {
         return <AuthCallbackPage />;
     }
@@ -1585,19 +1587,19 @@ useEffect(() => {
     }
 
     const headerConfig = {
-      title: PAGE_TITLES[currentPage],
-      primaryAction: PRIMARY_ACTION_ENABLED_PAGES.includes(currentPage)
-        ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
-        : undefined,
-      secondaryActions: undefined,
-      search: SEARCH_ENABLED_PAGES.includes(currentPage)
-        ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...`, suggestions: predictiveSuggestions }
-        : undefined,
+        title: PAGE_TITLES[currentPage],
+        primaryAction: PRIMARY_ACTION_ENABLED_PAGES.includes(currentPage)
+            ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
+            : undefined,
+        secondaryActions: undefined,
+        search: SEARCH_ENABLED_PAGES.includes(currentPage)
+            ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...`, suggestions: predictiveSuggestions }
+            : undefined,
     };
 
     return (
         <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans flex">
-            <Sidebar 
+            <Sidebar
                 currentPage={currentPage}
                 onNavigate={handleNavigate}
                 currentUser={currentUser}
@@ -1621,7 +1623,7 @@ useEffect(() => {
                     </div>
                 )}
             </main>
-            
+
             {/* Modals */}
             {isCreateJobModalOpen && <CreateJobModal isOpen={isCreateJobModalOpen} onClose={() => setCreateJobModalOpen(false)} onAddJob={handleAddJob} customers={customers} onCreateCustomer={handleCreateCustomerInline} />}
             {isCreateLeadModalOpen && <CreateLeadModal isOpen={isCreateLeadModalOpen} onClose={() => setCreateLeadModalOpen(false)} onAddLead={handleAddLead} />}
@@ -1652,7 +1654,7 @@ useEffect(() => {
                     onAutoCreateCustomer={handleCreateCustomerInline}
                 />
             )}
-            {isAnalysisModalOpen && <CompanyAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setAnalysisModalOpen(false)} analysis={companyAnalysis} customer={selectedCustomer} isLoading={isAnalysisLoading} error={analysisError} currentUser={currentUser} isAIOff={isAIOff} onReanalyze={handleAnalyzeCustomer}/>}
+            {isAnalysisModalOpen && <CompanyAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setAnalysisModalOpen(false)} analysis={companyAnalysis} customer={selectedCustomer} isLoading={isAnalysisLoading} error={analysisError} currentUser={currentUser} isAIOff={isAIOff} onReanalyze={handleAnalyzeCustomer} />}
             {isBugReportModalOpen && <BugReportChatModal isOpen={isBugReportModalOpen} onClose={() => setIsBugReportModalOpen(false)} onReportSubmit={handleSaveBugReport} isAIOff={isAIOff} />}
             {isSetupModalOpen && <DatabaseSetupInstructionsModal onRetry={() => { setIsSetupModalOpen(false); loadAllData(); }} />}
             {showFeatureUpdateModal && currentUser && (

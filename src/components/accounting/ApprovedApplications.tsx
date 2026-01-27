@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FileCheck, Search, Eye, Loader, X } from 'lucide-react';
-import { ApplicationWithDetails, Page } from '../../../types';
+import { FileCheck, Search, Eye, Loader, X, RefreshCw } from 'lucide-react';
+import { ApplicationWithDetails, AIJournalSuggestion, Page } from '../../../types';
 import * as dataService from '../../../services/dataService';
+import { suggestJournalEntry } from '../../../services/geminiService';
 
 interface ApprovedApplicationsProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -20,12 +21,21 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   title = '承認済み一覧',
   description = '承認済み申請の会計状態を表示します。',
   handlingStatusOnly,
+  currentUserId,
 }) => {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [accountItems, setAccountItems] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [aiSuggestion, setAiSuggestion] = useState<AIJournalSuggestion | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isAiAutoSuggest, setIsAiAutoSuggest] = useState(true);
+  const [selectedDebitAccountId, setSelectedDebitAccountId] = useState<string>('');
+  const [selectedCreditAccountId, setSelectedCreditAccountId] = useState<string>('');
 
   const normalizeHandlingStatus = (value: unknown): 'unhandled' | 'in_progress' | 'done' | 'blocked' => {
     const raw = typeof value === 'string' ? value.trim() : '';
@@ -50,6 +60,23 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   useEffect(() => {
     loadApprovedApplications();
   }, [loadApprovedApplications]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAccountItems = async () => {
+      try {
+        const items = await dataService.getActiveAccountItems();
+        if (!isMounted) return;
+        setAccountItems(items.map(item => ({ id: item.id, code: item.code, name: item.name })));
+      } catch (err) {
+        console.warn('Failed to load account items:', err);
+      }
+    };
+    loadAccountItems();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const formatCurrency = (value?: number | null) => {
     if (value === null || value === undefined) return '';
@@ -129,6 +156,142 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   }, [applications, handlingStatusOnly, searchTerm]);
 
   const selectedApplication = filteredApps.find(app => app.id === selectedApplicationId) ?? null;
+
+  useEffect(() => {
+    setAiSuggestion(null);
+    setAiError(null);
+    setSelectedDebitAccountId('');
+    setSelectedCreditAccountId('');
+  }, [selectedApplicationId]);
+
+  const resolveAccountId = useCallback(
+    (raw: string | null | undefined): string => {
+      const text = typeof raw === 'string' ? raw.trim() : '';
+      if (!text) return '';
+      const codeMatch = text.match(/\b\d{3,6}\b/);
+      if (codeMatch) {
+        const byCode = accountItems.find(item => item.code === codeMatch[0]);
+        if (byCode) return byCode.id;
+      }
+      const normalized = text.replace(/\s+/g, '');
+      const byName = accountItems.find(item => item.name.replace(/\s+/g, '') === normalized);
+      if (byName) return byName.id;
+      const partial = accountItems.find(item => normalized.includes(item.name.replace(/\s+/g, '')));
+      return partial?.id ?? '';
+    },
+    [accountItems]
+  );
+
+  useEffect(() => {
+    if (!aiSuggestion) return;
+    const debitId = resolveAccountId(aiSuggestion.debitAccount);
+    const creditId = resolveAccountId(aiSuggestion.creditAccount);
+    if (debitId) setSelectedDebitAccountId(debitId);
+    if (creditId) setSelectedCreditAccountId(creditId);
+  }, [aiSuggestion, resolveAccountId]);
+
+  const buildSuggestionPrompt = useCallback(
+    (app: ApplicationWithDetails): string => {
+      const data = app.formData ?? {};
+      const lines = (data.invoice?.lines || []) as any[];
+      const linesText = lines
+        .slice(0, 6)
+        .map(line => `${line.description || ''} ${line.projectName || ''} ${line.amountExclTax || ''}`.trim())
+        .filter(Boolean)
+        .join('\n');
+      const amount = deriveAmount(app);
+      const amountText = amount ? `¥${amount.toLocaleString()}` : '';
+      const body = [
+        `件名: ${buildTitle(app)}`,
+        `種別: ${app.application_code?.name || ''}`,
+        `申請内容: ${data.details || data.notes || data.invoice?.description || ''}`,
+        `金額: ${amountText}`,
+        linesText ? `内訳:\n${linesText}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const candidates = accountItems
+        .slice(0, 120)
+        .map(item => `${item.code} ${item.name}`)
+        .join('\n');
+
+      return `${body}\n\n利用可能な勘定科目候補（この中から選んでください）:\n${candidates}`;
+    },
+    [accountItems, buildTitle, deriveAmount]
+  );
+
+  const handleAiSuggest = useCallback(async () => {
+    if (!selectedApplication) return;
+    if (accountItems.length === 0) {
+      notify?.('勘定科目マスタの読み込み中です。少し待ってください。', 'info');
+      return;
+    }
+    setIsAiLoading(true);
+    setAiError(null);
+    try {
+      const prompt = buildSuggestionPrompt(selectedApplication);
+      if (prompt.replace(/\s+/g, '').length < 30) {
+        setAiError('申請内容が少なくAI提案ができません。');
+        return;
+      }
+      const suggestion = await suggestJournalEntry(prompt);
+      setAiSuggestion(suggestion);
+    } catch (err: any) {
+      console.error('Failed to suggest journal entry:', err);
+      setAiError(err?.message || 'AI提案に失敗しました。');
+    } finally {
+      setIsAiLoading(false);
+    }
+  }, [accountItems.length, buildSuggestionPrompt, notify, selectedApplication]);
+
+  useEffect(() => {
+    if (!selectedApplication) return;
+    if (!isAiAutoSuggest) return;
+    if (aiSuggestion) return;
+    if (accountItems.length === 0) return;
+    const prompt = buildSuggestionPrompt(selectedApplication);
+    if (prompt.replace(/\s+/g, '').length < 30) return;
+    const timer = window.setTimeout(() => {
+      handleAiSuggest();
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [accountItems.length, aiSuggestion, buildSuggestionPrompt, handleAiSuggest, isAiAutoSuggest, selectedApplication]);
+
+  const handleGenerateJournal = useCallback(async () => {
+    if (!selectedApplication) return;
+    setIsWorking(true);
+    try {
+      await dataService.generateJournalLinesFromApplication(selectedApplication.id, currentUserId || undefined);
+      notify?.('仕訳を生成しました。', 'success');
+      await loadApprovedApplications();
+    } catch (err: any) {
+      console.error('Failed to generate journal lines:', err);
+      notify?.(err?.message || '仕訳の生成に失敗しました。', 'error');
+    } finally {
+      setIsWorking(false);
+    }
+  }, [currentUserId, loadApprovedApplications, notify, selectedApplication]);
+
+  const handlePostJournal = useCallback(async () => {
+    if (!selectedApplication) return;
+    const entryId = selectedApplication.journalEntry?.id;
+    if (!entryId) {
+      notify?.('仕訳が未生成のため確定できません。', 'error');
+      return;
+    }
+    setIsWorking(true);
+    try {
+      await dataService.updateJournalEntryStatus(entryId, 'posted');
+      notify?.('仕訳を確定しました。', 'success');
+      await loadApprovedApplications();
+    } catch (err: any) {
+      console.error('Failed to post journal entry:', err);
+      notify?.(err?.message || '仕訳の確定に失敗しました。', 'error');
+    } finally {
+      setIsWorking(false);
+    }
+  }, [loadApprovedApplications, notify, selectedApplication]);
 
   const getAccountingSummary = (app: ApplicationWithDetails) => {
     const entry = app.journalEntry;
@@ -283,17 +446,138 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                   {selectedApplication.application_code?.name || '種別未設定'} / {selectedApplication.applicant?.name || '申請者未設定'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedApplicationId(null)}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
-                aria-label="閉じる"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {(selectedApplication.journalEntry?.lines || []).length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleGenerateJournal}
+                    disabled={isWorking}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                    仕訳生成
+                  </button>
+                ) : (selectedApplication.accountingStatus ?? selectedApplication.accounting_status ?? 'none') !== 'posted' ? (
+                  <button
+                    type="button"
+                    onClick={handlePostJournal}
+                    disabled={isWorking}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                    仕訳確定
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedApplicationId(null)}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                  aria-label="閉じる"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 space-y-4">
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">AI仕訳提案</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">内容と振り分け先をAIが提案します。</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={isAiAutoSuggest}
+                        onChange={(e) => setIsAiAutoSuggest(e.target.checked)}
+                      />
+                      自動提案
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAiSuggest}
+                      disabled={isAiLoading}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {isAiLoading ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      再提案
+                    </button>
+                  </div>
+                </div>
+
+                {aiError && (
+                  <div className="mt-3 text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">{aiError}</div>
+                )}
+
+                {aiSuggestion && (
+                  <div className="mt-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">借方勘定科目</p>
+                        <select
+                          value={selectedDebitAccountId}
+                          onChange={(e) => setSelectedDebitAccountId(e.target.value)}
+                          className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                        >
+                          <option value="">未選択</option>
+                          {accountItems.map(item => (
+                            <option key={item.id} value={item.id}>
+                              {item.code} {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">貸方勘定科目</p>
+                        <select
+                          value={selectedCreditAccountId}
+                          onChange={(e) => setSelectedCreditAccountId(e.target.value)}
+                          className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                        >
+                          <option value="">未選択</option>
+                          {accountItems.map(item => (
+                            <option key={item.id} value={item.id}>
+                              {item.code} {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">AI提案（借方）</p>
+                        <p className="text-sm text-slate-800 dark:text-slate-100">
+                          {aiSuggestion.debitAccount || '未提案'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">AI提案（貸方）</p>
+                        <p className="text-sm text-slate-800 dark:text-slate-100">
+                          {aiSuggestion.creditAccount || '未提案'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">金額</p>
+                        <p className="text-sm font-mono font-semibold text-slate-800 dark:text-slate-100">
+                          {typeof aiSuggestion.amount === 'number' ? formatCurrency(aiSuggestion.amount) : '-'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {aiSuggestion.reasoning && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">根拠</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{aiSuggestion.reasoning}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="text-sm text-slate-700 dark:text-slate-200">
                 {getAccountingSummary(selectedApplication)}
               </div>

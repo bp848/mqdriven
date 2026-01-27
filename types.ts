@@ -19,6 +19,7 @@ export type Page =
   | 'bulletin_board' | 'knowledge_base' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
   | 'accounting_dashboard' | 'accounting_journal_review'
   | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
+  | 'accounting_expense_analysis'
   | 'accounting_approved_applications'
   | 'accounting_approved_unhandled'
   | 'accounting_approved_expense'
@@ -1154,9 +1155,9 @@ export interface SummaryStats {
   totalProfit: number;
   avgMarginRatio: number;
   count: number;
-  fixedCost: number; 
+  fixedCost: number;
   fixedCostBreakdown: FixedCostBreakdown;
-  netGain: number;   
+  netGain: number;
   // 顧客分析
   uniqueCustomerCount: number;
   repeatCustomerCount: number;
