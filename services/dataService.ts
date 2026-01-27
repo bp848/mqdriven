@@ -1735,13 +1735,23 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
 
 export const updateJournalEntryStatus = async (journalEntryId: string, status: string): Promise<void> => {
     const supabase = getSupabase();
-    // accountingスキーマのjournal_entriesとjournal_batchesを使用
+    // まずjournal_entryを取得
     const { data: entry, error: entryError } = await supabase
         .from('v_journal_entries')
-        .select('id, batch_id, v_journal_batches!inner(source_application_id)')
+        .select('id, batch_id')
         .eq('id', journalEntryId)
         .single();
     ensureSupabaseSuccess(entryError, 'Failed to fetch journal entry');
+
+    // batch_idからsource_application_idを取得
+    const { data: batch, error: batchFetchError } = await supabase
+        .from('v_journal_batches')
+        .select('id, source_application_id')
+        .eq('id', entry.batch_id)
+        .single();
+    if (batchFetchError) {
+        console.warn('Failed to fetch journal batch:', batchFetchError);
+    }
 
     // journal_batchesのstatusを更新
     const { error: batchError } = await supabase
@@ -1753,7 +1763,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
         .eq('id', entry.batch_id);
     ensureSupabaseSuccess(batchError, 'Failed to update journal batch status');
 
-    const sourceApplicationId = (entry as any)?.v_journal_batches?.source_application_id;
+    const sourceApplicationId = batch?.source_application_id;
     if (sourceApplicationId && (status === 'posted' || status === 'draft')) {
         const { error: appError } = await supabase
             .from('applications')
@@ -2126,30 +2136,37 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
     const entryIds = Array.from(entryByAppId.values()).map(entry => entry.id).filter(Boolean);
     const linesByEntryId = new Map<string, any[]>();
     if (entryIds.length > 0) {
-        // publicスキーマのVIEW経由でaccounting.journal_linesにアクセス（accountsもVIEW経由）
+        // publicスキーマのVIEW経由でaccounting.journal_linesにアクセス
         const { data: journalLines, error: linesError } = await supabase
             .from('v_journal_lines')
-            .select(`
-                id,
-                journal_entry_id,
-                account_id,
-                debit,
-                credit,
-                description,
-                accounts:account_id (
-                    code,
-                    name
-                )
-            `)
+            .select('id, journal_entry_id, account_id, debit, credit, description')
             .in('journal_entry_id', entryIds);
         ensureSupabaseSuccess(linesError, 'Failed to fetch journal entry lines');
+
+        // account_idからaccount情報を別途取得
+        const accountIds = [...new Set((journalLines || []).map(l => l.account_id).filter(Boolean))];
+        const accountMap = new Map<string, { code: string; name: string }>();
+        if (accountIds.length > 0) {
+            const { data: accounts } = await supabase
+                .from('chart_of_accounts')
+                .select('id, code, name')
+                .in('id', accountIds);
+            (accounts || []).forEach(acc => {
+                accountMap.set(acc.id, { code: acc.code, name: acc.name });
+            });
+        }
+
         (journalLines || []).forEach(line => {
             const key = String(line.journal_entry_id || '');
             if (!key) return;
             if (!linesByEntryId.has(key)) {
                 linesByEntryId.set(key, []);
             }
-            linesByEntryId.get(key)!.push(line);
+            const acc = accountMap.get(line.account_id);
+            linesByEntryId.get(key)!.push({
+                ...line,
+                accounts: acc || null,
+            });
         });
     }
 
@@ -4104,21 +4121,24 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
     const entryIds = entries.map(e => e.id).filter(Boolean);
     const { data: lines, error: linesError } = await supabase
         .from('v_journal_lines')
-        .select(`
-            journal_entry_id,
-            account_id,
-            debit,
-            credit,
-            description,
-            accounts:account_id (
-                code,
-                name
-            )
-        `)
+        .select('journal_entry_id, account_id, debit, credit, description')
         .in('journal_entry_id', entryIds);
 
     if (linesError) {
         console.warn('Failed to fetch journal entry lines:', linesError);
+    }
+
+    // account_idからaccount情報を別途取得
+    const accountIds = [...new Set((lines || []).map(l => l.account_id).filter(Boolean))];
+    const accountMap = new Map<string, { code: string; name: string }>();
+    if (accountIds.length > 0) {
+        const { data: accounts } = await supabase
+            .from('chart_of_accounts')
+            .select('id, code, name')
+            .in('id', accountIds);
+        (accounts || []).forEach(acc => {
+            accountMap.set(acc.id, { code: acc.code, name: acc.name });
+        });
     }
 
     const linesByEntryId = new Map<string, any[]>();
@@ -4127,7 +4147,11 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
         if (!linesByEntryId.has(entryId)) {
             linesByEntryId.set(entryId, []);
         }
-        linesByEntryId.get(entryId)!.push(line);
+        const acc = accountMap.get(line.account_id);
+        linesByEntryId.get(entryId)!.push({
+            ...line,
+            accounts: acc || null,
+        });
     });
 
     // Transform to DraftJournalEntry format
