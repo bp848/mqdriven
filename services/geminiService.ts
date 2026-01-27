@@ -155,6 +155,19 @@ const stripXmlTags = (xml: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
+const stripMarkdown = (text: string): string =>
+  text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s{0,3}[-*+]\s+/gm, "")
+    .replace(/\|/g, " ")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const extractDocxTextFromBase64 = async (fileBase64: string): Promise<string> => {
   try {
     const zip = await JSZip.loadAsync(base64ToUint8Array(fileBase64));
@@ -590,13 +603,14 @@ export const suggestJournalEntry = async (
           // fall through
         }
       }
-      console.warn("AI returned non-JSON response for journal suggestion:", rawText);
+      const cleanReasoning = stripMarkdown(rawText);
+      console.warn("AI returned non-JSON response for journal suggestion:", cleanReasoning);
       return {
         account: "要確認",
         description: "AI提案が不明瞭なため要確認",
         debit: 0,
         credit: 0,
-        reasoning: rawText,
+        reasoning: cleanReasoning,
         confidence: 0,
       };
     }
