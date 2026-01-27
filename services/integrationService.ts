@@ -1,6 +1,5 @@
 import { PrintSpec, EstimationResult } from '../types';
 import { getSupabase } from './supabaseClient';
-import { generateAiEstimate } from './aiEstimateService';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -70,12 +69,29 @@ export const createAiEstimate = async (params: {
   customerId: string;
   categoryId: string;
 }): Promise<EstimationResult> => {
-  // 直接AI見積もりサービスを呼び出す
-  return generateAiEstimate({
-    spec: params.spec,
-    customerId: params.customerId,
-    categoryId: params.categoryId,
+  const response = await fetch('/api/v1/ai-estimates', {
+    method: 'POST',
+    headers: {
+      ...jsonHeaders,
+    },
+    body: JSON.stringify({
+      spec: params.spec,
+      customerId: params.customerId,
+      categoryId: params.categoryId,
+    }),
   });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const message =
+      body?.error ||
+      body?.message ||
+      'AI見積もりの生成に失敗しました。サーバー設定を確認してください。';
+    throw new Error(message);
+  }
+
+  const data = await response.json();
+  return data as EstimationResult;
 };
 
 export const listAiEstimates = async () => {
