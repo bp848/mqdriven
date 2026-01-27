@@ -567,15 +567,32 @@ export const extractBusinessCardDetails = async (
 const suggestJournalEntrySchema = {
   type: Type.OBJECT,
   properties: {
-    account: { type: Type.STRING, description: "この取引に最も適した勘定科目。" },
+    debitAccount: {
+      type: Type.STRING,
+      description: "借方の勘定科目（勘定科目候補から選択）。該当が無い場合は要確認。",
+    },
+    creditAccount: {
+      type: Type.STRING,
+      description: "貸方の勘定科目（勘定科目候補から選択）。該当が無い場合は要確認。",
+    },
+    amount: {
+      type: Type.NUMBER,
+      description: "取引金額（正の数）。",
+    },
     description: {
       type: Type.STRING,
-      description: "取引内容を簡潔に説明する摘要。",
+      description: "摘要（短く、何の支払い/何の取引かが分かるように）。",
     },
-    debit: { type: Type.NUMBER, description: "借方の金額。貸方の場合は0。" },
-    credit: { type: Type.NUMBER, description: "貸方の金額。借方の場合は0。" },
+    reasoning: {
+      type: Type.STRING,
+      description: "根拠（どの情報から判断したか/不確実な点）。",
+    },
+    confidence: {
+      type: Type.NUMBER,
+      description: "自信度(0-1)。",
+    },
   },
-  required: ["account", "description", "debit", "credit"],
+  required: ["debitAccount", "creditAccount", "amount"],
 };
 
 export const suggestJournalEntry = async (
@@ -583,19 +600,21 @@ export const suggestJournalEntry = async (
 ): Promise<AIJournalSuggestion> => {
   const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
-    const fullPrompt = `以下の取引内容を会計仕訳に変換してください。
+    const fullPrompt = `以下の取引内容を会計仕訳（2行）に変換してください。
 出力は必ずJSONのみ（コードフェンス禁止）。
-勘定科目は「勘定科目候補」に含まれるものから1つ選択し、該当が無い場合は「要確認」としてください。
+勘定科目は必ず「勘定科目候補」に含まれるものから選択し、該当が無い場合のみ「要確認」としてください。
 
 取引内容:
 ${prompt}
 
 JSON形式:
 {
-  "account": "勘定科目名",
+  "debitAccount": "借方勘定科目名",
+  "creditAccount": "貸方勘定科目名",
+  "amount": 0,
   "description": "摘要",
-  "debit": 0,
-  "credit": 0
+  "reasoning": "根拠",
+  "confidence": 0.0
 }`;
     const response = await ai.models.generateContent({
       model,
@@ -606,16 +625,30 @@ JSON形式:
     });
     const rawText = stripCodeFences(response.text);
     const normalizeSuggestion = (value: AIJournalSuggestion): AIJournalSuggestion => {
-      const account = typeof value.account === "string" && value.account.trim()
-        ? value.account.trim()
+      const debitAccount = typeof value.debitAccount === "string" && value.debitAccount.trim()
+        ? value.debitAccount.trim()
         : "要確認";
+      const creditAccount = typeof value.creditAccount === "string" && value.creditAccount.trim()
+        ? value.creditAccount.trim()
+        : "要確認";
+      const amount = typeof value.amount === "number" && Number.isFinite(value.amount) ? value.amount : 0;
       const description = typeof value.description === "string" && value.description.trim()
         ? value.description.trim()
         : "AI提案が不明瞭なため要確認";
+      const reasoning = typeof value.reasoning === "string" && value.reasoning.trim()
+        ? value.reasoning.trim()
+        : description;
+      const confidence = typeof value.confidence === "number" && Number.isFinite(value.confidence)
+        ? value.confidence
+        : 0;
       return {
         ...value,
-        account,
+        debitAccount,
+        creditAccount,
+        amount,
         description,
+        reasoning,
+        confidence,
       };
     };
     try {
@@ -630,30 +663,12 @@ JSON形式:
         }
       }
       const cleanReasoning = stripMarkdown(rawText);
-      const tableMatch = rawText.match(
-        /\|\s*([^|]+?)\s*\|\s*([0-9,]+)\s*\|\s*([^|]+?)\s*\|\s*([0-9,]+)\s*\|\s*([^|]+?)\s*\|/
-      );
-      if (tableMatch) {
-        const debitAccount = tableMatch[1].trim();
-        const debitAmount = Number(tableMatch[2].replace(/,/g, '')) || 0;
-        const creditAccount = tableMatch[3].trim();
-        const creditAmount = Number(tableMatch[4].replace(/,/g, '')) || 0;
-        const summary = tableMatch[5].trim();
-        return normalizeSuggestion({
-          account: debitAccount || creditAccount || "要確認",
-          description: summary || "AI提案が不明瞭なため要確認",
-          debit: debitAmount,
-          credit: creditAmount,
-          reasoning: cleanReasoning,
-          confidence: 0,
-        });
-      }
       console.warn("AI returned non-JSON response for journal suggestion:", cleanReasoning);
       return normalizeSuggestion({
-        account: "要確認",
+        debitAccount: "要確認",
+        creditAccount: "要確認",
+        amount: 0,
         description: "AI提案が不明瞭なため要確認",
-        debit: 0,
-        credit: 0,
         reasoning: cleanReasoning,
         confidence: 0,
       });

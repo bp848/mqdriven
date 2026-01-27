@@ -142,7 +142,10 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
     const amount = deriveAmount(app);
     const amountText = amount ? `金額: ${amount}` : '';
     const accountList = accountItems.length
-      ? `勘定科目候補: ${accountItems.map(item => `${item.code} ${item.name}`).join(' / ')}`
+      ? `利用可能な勘定科目候補（この中から選んでください）:\n${accountItems
+        .slice(0, 120)
+        .map(item => `${item.code} ${item.name}`)
+        .join('\n')}`
       : '';
     const parts = [
       `申請種別: ${app.application_code?.name || '未設定'}`,
@@ -187,7 +190,11 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
 
   const resolveSuggestedAccount = (suggestion: AIJournalSuggestion | null): string => {
     if (!suggestion) return '未提案';
-    const direct = suggestion.account || suggestion.debitAccount || suggestion.creditAccount;
+    const legacyAccount = (suggestion as any)?.account;
+    const direct =
+      (typeof suggestion.debitAccount === 'string' ? suggestion.debitAccount : '') ||
+      (typeof suggestion.creditAccount === 'string' ? suggestion.creditAccount : '') ||
+      (typeof legacyAccount === 'string' ? legacyAccount : '');
     if (direct && direct.trim()) return direct.trim();
     const reasoning = suggestion.reasoning ? stripMarkdown(suggestion.reasoning) : '';
     const description = suggestion.description ? stripMarkdown(suggestion.description) : '';
@@ -240,6 +247,12 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
 
   const handleAiSuggest = async () => {
     if (!selectedApplication) return;
+    if (accountItems.length === 0) {
+      const message = '勘定科目マスタの読み込み中です。少し待ってください。';
+      setAiError(message);
+      notify?.(message, 'info');
+      return;
+    }
     setIsAiLoading(true);
     setAiError(null);
     try {
@@ -484,10 +497,11 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
                     <div className="mt-3 space-y-2 text-sm text-slate-700">
                       <div className="font-semibold">提案内容</div>
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <div>勘定科目: {resolveSuggestedAccount(aiSuggestion)}</div>
+                        <div>借方: {aiSuggestion.debitAccount || resolveSuggestedAccount(aiSuggestion)}</div>
+                        <div>貸方: {aiSuggestion.creditAccount || '未提案'}</div>
                         <div>摘要: {aiSuggestion.description || aiSuggestion.reasoning || '未提案'}</div>
                         <div>
-                          金額: {formatCurrency(aiSuggestion.debit || aiSuggestion.credit || aiSuggestion.amount || null) || '-'}
+                          金額: {formatCurrency(aiSuggestion.amount ?? null) || '-'}
                         </div>
                         {aiSuggestion.reasoning && (
                           <div className="text-xs text-slate-500 mt-2">

@@ -121,6 +121,16 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     return '仕訳未生成';
   };
 
+  const getAccountingStatusBadgeClass = (status?: string) => {
+    if (status === 'posted') {
+      return 'bg-emerald-50 text-emerald-800 border-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-400/40';
+    }
+    if (status === 'draft') {
+      return 'bg-amber-50 text-amber-800 border-amber-100 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-400/40';
+    }
+    return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-500/10 dark:text-slate-200 dark:border-slate-400/30';
+  };
+
   const buildTitle = (app: ApplicationWithDetails) => {
     const data = app.formData ?? {};
     const rawTitle =
@@ -375,11 +385,10 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                 <tr>
                   <th className="px-6 py-4">種別</th>
                   <th className="px-6 py-4">件名</th>
-                  <th className="px-6 py-4">申請者</th>
+                  <th className="px-6 py-4 hidden md:table-cell">申請者</th>
                   <th className="px-6 py-4 text-right">金額</th>
-                  <th className="px-6 py-4">承認日時</th>
+                  <th className="px-6 py-4 hidden lg:table-cell">承認日時</th>
                   <th className="px-6 py-4">会計</th>
-                  <th className="px-6 py-4">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -388,7 +397,11 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                   const status = app.accountingStatus ?? app.accounting_status ?? 'none';
                   const amountText = formatCurrency(amount);
                   return (
-                    <tr key={app.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40">
+                    <tr
+                      key={app.id}
+                      onClick={() => setSelectedApplicationId(app.id)}
+                      className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40 cursor-pointer"
+                    >
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
                           {app.application_code?.name || 'N/A'}
@@ -398,40 +411,39 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                         <div className="font-bold text-slate-800 dark:text-slate-100">
                           {buildTitle(app)}
                         </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+                          {buildTitle(app) === (app.formData?.invoice?.supplierName || '') ? '' : app.formData?.invoice?.supplierName || ''}
+                        </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden md:table-cell">
                         <div className="text-slate-700 dark:text-slate-200">{app.applicant?.name}</div>
                       </td>
                       <td className="px-6 py-4 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300">
                         {amountText ? amountText : '-'}
                       </td>
-                      <td className="px-6 py-4 text-xs font-mono text-slate-500 dark:text-slate-400">
+                      <td className="px-6 py-4 text-xs font-mono text-slate-500 dark:text-slate-400 hidden lg:table-cell">
                         {formatDate(app.approvedAt)}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-slate-700 dark:text-slate-200">
-                          {getAccountingSummary(app)}
+                        <div className="flex items-start gap-2">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getAccountingStatusBadgeClass(
+                              status
+                            )}`}
+                          >
+                            {getAccountingStatusLabel(status)}
+                          </span>
+                          <div className="text-slate-700 dark:text-slate-200">
+                            {getAccountingSummary(app)}
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          {getAccountingStatusLabel(status)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedApplicationId(app.id)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200"
-                        >
-                          <Eye className="w-4 h-4" />
-                          仕訳を見る
-                        </button>
                       </td>
                     </tr>
                   );
                 })}
                 {filteredApps.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
                       該当する承認済み申請がありません。
                     </td>
                   </tr>
