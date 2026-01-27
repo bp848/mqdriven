@@ -58,6 +58,8 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
 
   useEffect(() => {
     if (!selectedApplication || !isAiAutoSuggest) return;
+    const prompt = buildSuggestionPrompt(selectedApplication);
+    if (prompt.replace(/\s+/g, '').length < 20) return;
     const timer = window.setTimeout(() => {
       handleAiSuggest();
     }, 300);
@@ -107,6 +109,22 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
       lines ? `内訳: ${lines}` : '',
     ].filter(Boolean);
     return parts.join('\n');
+  };
+
+  const buildContentSummary = (app: ApplicationWithDetails): string => {
+    const data = app.formData ?? {};
+    const primary = data.details || data.notes || data.invoice?.description;
+    if (primary && typeof primary === 'string' && primary.trim()) return primary;
+    const lineDescriptions = Array.isArray(data.invoice?.lines)
+      ? data.invoice.lines
+        .map((line: any) => line.description || '')
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(' / ')
+      : '';
+    if (lineDescriptions) return lineDescriptions;
+    const vendor = data.invoice?.supplierName || data.documentName || buildTitle(app);
+    return vendor ? `請求内容: ${vendor}` : '内容が入力されていません。';
   };
 
   const handleAiSuggest = async () => {
@@ -342,10 +360,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                 <div className="rounded-lg border border-slate-200 p-4 bg-slate-50">
                   <p className="text-xs font-semibold text-slate-500 mb-2">申請内容</p>
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                    {selectedApplication.formData?.details ||
-                      selectedApplication.formData?.notes ||
-                      selectedApplication.formData?.invoice?.description ||
-                      '内容が入力されていません。'}
+                    {buildContentSummary(selectedApplication)}
                   </p>
                 </div>
 
