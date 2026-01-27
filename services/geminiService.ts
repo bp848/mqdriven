@@ -604,6 +604,24 @@ export const suggestJournalEntry = async (
         }
       }
       const cleanReasoning = stripMarkdown(rawText);
+      const tableMatch = rawText.match(
+        /\|\s*([^|]+?)\s*\|\s*([0-9,]+)\s*\|\s*([^|]+?)\s*\|\s*([0-9,]+)\s*\|\s*([^|]+?)\s*\|/
+      );
+      if (tableMatch) {
+        const debitAccount = tableMatch[1].trim();
+        const debitAmount = Number(tableMatch[2].replace(/,/g, '')) || 0;
+        const creditAccount = tableMatch[3].trim();
+        const creditAmount = Number(tableMatch[4].replace(/,/g, '')) || 0;
+        const summary = tableMatch[5].trim();
+        return {
+          account: debitAccount || creditAccount || "要確認",
+          description: summary || "AI提案が不明瞭なため要確認",
+          debit: debitAmount,
+          credit: creditAmount,
+          reasoning: cleanReasoning,
+          confidence: 0,
+        };
+      }
       console.warn("AI returned non-JSON response for journal suggestion:", cleanReasoning);
       return {
         account: "要確認",
