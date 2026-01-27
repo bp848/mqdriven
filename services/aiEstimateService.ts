@@ -66,7 +66,7 @@ export const findSimilarEstimates = async (spec: PrintSpec): Promise<Array<{
   similarity_score: number;
 }>> => {
   const supabase = getSupabase();
-  
+
   // 仕様に基づいて類似案件を検索
   const { data, error } = await supabase
     .from('estimates')
@@ -90,19 +90,19 @@ export const findSimilarEstimates = async (spec: PrintSpec): Promise<Array<{
   // 類似度スコアを計算（簡易版）
   const scored = (data || []).map(est => {
     let score = 0;
-    
+
     // 数量の近さ
     const qtyDiff = Math.abs((est.copies || 0) - spec.quantity);
     if (qtyDiff < 100) score += 30;
     else if (qtyDiff < 500) score += 20;
     else if (qtyDiff < 1000) score += 10;
-    
+
     // 仕様の類似性（キーワードマッチ）
     const specText = (est.specification || '').toLowerCase();
     if (specText.includes(spec.size.toLowerCase())) score += 20;
     if (specText.includes(spec.paperType.toLowerCase())) score += 20;
     if (specText.includes(spec.category.toLowerCase())) score += 15;
-    
+
     return {
       ...est,
       similarity_score: score
@@ -119,9 +119,9 @@ const buildEstimatePrompt = (
   pastEstimates: Array<{ customer_name: string; title: string; total: number; copies: number; unit_price: number; specification: string }>
 ): string => {
   const pastDataSummary = pastEstimates.length > 0
-    ? pastEstimates.map((est, i) => 
-        `${i + 1}. ${est.customer_name} - ${est.title}: ${est.copies}部 × ¥${est.unit_price?.toLocaleString() || 0} = ¥${est.total?.toLocaleString() || 0}`
-      ).join('\n')
+    ? pastEstimates.map((est, i) =>
+      `${i + 1}. ${est.customer_name} - ${est.title}: ${est.copies}部 × ¥${est.unit_price?.toLocaleString() || 0} = ¥${est.total?.toLocaleString() || 0}`
+    ).join('\n')
     : '過去データなし';
 
   return `あなたは印刷会社の見積もり専門AIです。以下の仕様に基づいて、3つの価格戦略オプションを提案してください。
@@ -185,7 +185,7 @@ const generateDefaultEstimate = (spec: PrintSpec): EstimationResult => {
   const paperCost = spec.pages * spec.quantity * 2; // 用紙コスト
   const printCost = spec.pages * spec.quantity * (spec.colors === '4/4' ? 8 : spec.colors === '4/0' ? 5 : 3);
   const finishingCost = spec.finishing.length * spec.quantity * 10;
-  
+
   const totalVQ = paperCost + printCost + finishingCost;
   const fixedCost = 5000; // 固定費
 
@@ -263,13 +263,14 @@ export const generateAiEstimate = async (params: {
     const client = requireGeminiClient();
     const prompt = buildEstimatePrompt(spec, similarEstimates);
 
+    // シンプルなテキスト生成（response_mime_typeを使用しない）
     const response = await client.models.generateContent({
       model: GEMINI_DEFAULT_MODEL,
-      contents: prompt,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
 
     const text = response.text || '';
-    
+
     // JSONを抽出
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -278,7 +279,7 @@ export const generateAiEstimate = async (params: {
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as EstimationResult;
-    
+
     // バリデーション
     if (!parsed.options || parsed.options.length < 3) {
       console.warn('[AI Estimate] Invalid response structure, using default');
@@ -302,13 +303,13 @@ export const saveAiEstimate = async (params: {
 }): Promise<string> => {
   const { spec, result, selectedOptionId, customerId, createdBy } = params;
   const selectedOption = result.options.find(o => o.id === selectedOptionId);
-  
+
   if (!selectedOption) {
     throw new Error('Invalid option selected');
   }
 
   const supabase = getSupabase();
-  
+
   const estimateData = {
     customer_id: customerId || null,
     customer_name: spec.clientName,

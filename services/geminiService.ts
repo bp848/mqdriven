@@ -258,7 +258,7 @@ export const suggestJobParameters = async (
     const response = await ai.models.generateContent({
       model,
       contents: fullPrompt,
-      config: { responseMimeType: "application/json", responseSchema: suggestJobSchema },
+      config: { responseSchema: suggestJobSchema },
     });
     const jsonStr = response.text.trim();
     return JSON.parse(jsonStr);
@@ -495,7 +495,6 @@ export const extractInvoiceDetails = async (
       model: invoiceOcrModel,
       contents: { parts: [imagePart, textPart] },
       config: {
-        responseMimeType: "application/json",
         responseSchema: extractInvoiceSchema,
       },
     });
@@ -544,7 +543,6 @@ export const extractBusinessCardDetails = async (
       model,
       contents: { parts: [filePart, instructionPart] },
       config: {
-        responseMimeType: "application/json",
         responseSchema: businessCardSchema,
       },
     });
@@ -577,7 +575,6 @@ export const suggestJournalEntry = async (
       model,
       contents: fullPrompt,
       config: {
-        responseMimeType: "application/json",
         responseSchema: suggestJournalEntrySchema,
       },
     });
@@ -819,11 +816,17 @@ export const draftEstimate = async (prompt: string): Promise<Partial<Estimate>> 
       model,
       contents: fullPrompt,
       config: {
-        responseMimeType: "application/json",
         responseSchema: draftEstimateSchema as any,
       },
     });
-    const jsonStr = response.text.trim();
+    let jsonStr = response.text.trim();
+    // JSONブロックを抽出
+    if (jsonStr.startsWith("```json")) {
+      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+    }
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+    }
     const parsed = JSON.parse(jsonStr);
     // Ensure items array exists
     if (!parsed.items) {
@@ -898,11 +901,17 @@ export const draftEstimateFromSpecFile = async (
       model,
       contents: { parts: [filePart, instructionPart] },
       config: {
-        responseMimeType: "application/json",
         responseSchema: draftEstimateSchema as any,
       },
     });
-    const jsonStr = response.text.trim();
+    let jsonStr = response.text.trim();
+    // JSONブロックを抽出
+    if (jsonStr.startsWith("```json")) {
+      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+    }
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+    }
     const parsed = JSON.parse(jsonStr);
     if (!Array.isArray(parsed.items)) {
       parsed.items = [];
@@ -992,7 +1001,6 @@ export const scoreLead = async (lead: Lead): Promise<LeadScore> => {
       model,
       contents: prompt,
       config: {
-        responseMimeType: "application/json",
         responseSchema: scoreLeadSchema,
       },
     });
@@ -1296,7 +1304,6 @@ export const generateLeadSummary = async (
       model: "gemini-2.5-flash", // 高速モデルに変更
       contents: prompt,
       config: {
-        responseMimeType: "text/plain",
         maxOutputTokens: 500, // トークン数を制限して高速化
         temperature: 0.1, // 低い温度で一貫性を確保
       },
@@ -1371,7 +1378,6 @@ export const createLeadProposalPackage = async (
       model: "gemini-2.5-flash", // 高速モデルに変更
       contents: prompt,
       config: {
-        responseMimeType: "application/json",
         maxOutputTokens: 2000, // トークン数を増やして完全な見積を生成
         temperature: 0.1, // 低い温度で一貫性を確保
       },
@@ -1593,12 +1599,18 @@ export const extractSpecFromInput = async (
       model: 'gemini-2.5-flash',
       contents: { parts },
       config: {
-        responseMimeType: 'application/json',
         responseSchema: extractSpecSchema,
       },
     });
 
-    const jsonStr = response.text.trim();
+    let jsonStr = response.text.trim();
+    // JSONブロックを抽出
+    if (jsonStr.startsWith("```json")) {
+      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+    }
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+    }
     return JSON.parse(jsonStr);
   });
 };
