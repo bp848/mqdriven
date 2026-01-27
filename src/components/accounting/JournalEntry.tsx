@@ -18,6 +18,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiAutoSuggest, setIsAiAutoSuggest] = useState(true);
+  const [accountItems, setAccountItems] = useState<Array<{ id: string; code: string; name: string }>>([]);
 
   const loadApprovedApplications = useCallback(async () => {
     setIsLoading(true);
@@ -37,6 +38,24 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
   useEffect(() => {
     loadApprovedApplications();
   }, [loadApprovedApplications]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAccountItems = async () => {
+      try {
+        const items = await dataService.getActiveAccountItems();
+        if (isMounted) {
+          setAccountItems(items.map(item => ({ id: item.id, code: item.code, name: item.name })));
+        }
+      } catch (err) {
+        console.warn('Failed to load account items for AI suggestions:', err);
+      }
+    };
+    loadAccountItems();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setAiSuggestion(null);
@@ -100,6 +119,9 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
       : '';
     const amount = deriveAmount(app);
     const amountText = amount ? `金額: ${amount}` : '';
+    const accountList = accountItems.length
+      ? `勘定科目候補: ${accountItems.map(item => `${item.code} ${item.name}`).join(' / ')}`
+      : '';
     const parts = [
       `申請種別: ${app.application_code?.name || '未設定'}`,
       `件名: ${buildTitle(app)}`,
@@ -107,6 +129,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
       `支払先: ${data.invoice?.supplierName || '未入力'}`,
       amountText,
       lines ? `内訳: ${lines}` : '',
+      accountList,
     ].filter(Boolean);
     return parts.join('\n');
   };
