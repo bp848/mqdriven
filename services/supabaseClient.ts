@@ -1,22 +1,17 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../supabaseCredentials';
 
-type AccountingSupabaseClient = SupabaseClient<any, 'accounting'>;
-
-let supabase: AccountingSupabaseClient | null = null;
+let supabase: SupabaseClient | null = null;
 
 // 新しい接続情報でSupabaseクライアントを初期化する関数
-export const initializeSupabase = (url: string, key: string): AccountingSupabaseClient | null => {
+export const initializeSupabase = (url: string, key: string): SupabaseClient | null => {
     try {
         if (!url || !key || url.includes('ここにURLを貼り付け') || key.includes('ここにキーを貼り付け')) {
             console.warn("Supabase URL or Key is missing or is a placeholder in credentials file.");
             supabase = null;
             return null;
         }
-        supabase = createClient<any, 'accounting'>(url, key, {
-            db: {
-                schema: 'accounting',
-            },
+        supabase = createClient(url, key, {
             global: {
                 headers: {
                     'apikey': key,
@@ -33,7 +28,7 @@ export const initializeSupabase = (url: string, key: string): AccountingSupabase
 };
 
 // 現在のSupabaseクライアントインスタンスを取得する関数
-export const getSupabase = (): AccountingSupabaseClient => {
+export const getSupabase = (): SupabaseClient => {
     // Initialize if not already done.
     if (!supabase) {
         initializeSupabase(SUPABASE_URL, SUPABASE_KEY);
