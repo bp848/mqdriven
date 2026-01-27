@@ -189,6 +189,33 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
     return '未提案';
   };
 
+  const buildAccountCandidates = (app: ApplicationWithDetails | null, suggestion: AIJournalSuggestion | null) => {
+    if (!app) return [] as Array<{ id: string; code: string; name: string }>;
+    if (accountItems.length === 0) return [];
+    const data = app.formData ?? {};
+    const baseText = [
+      buildContentSummary(app),
+      data.invoice?.description,
+      data.invoice?.supplierName,
+      (data.invoice?.lines || []).map((line: any) => line.description).filter(Boolean).join(' '),
+      suggestion?.reasoning,
+      suggestion?.description,
+    ]
+      .filter(Boolean)
+      .map((text: string) => stripMarkdown(String(text)))
+      .join(' ');
+    const keywords = baseText.split(/\s+/).filter(word => word.length >= 2);
+    const matched = accountItems.filter(item =>
+      keywords.some(keyword => item.name.includes(keyword))
+    );
+    const unique = new Map<string, { id: string; code: string; name: string }>();
+    [...matched, ...accountItems].forEach(item => {
+      if (unique.size >= 8) return;
+      unique.set(item.id, item);
+    });
+    return Array.from(unique.values());
+  };
+
   const handleAiSuggest = async () => {
     if (!selectedApplication) return;
     setIsAiLoading(true);
@@ -362,15 +389,37 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
           {selectedApplication ? (
             <>
               <div className="p-6 border-b border-slate-200 bg-slate-50/80">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-xs text-slate-500">{selectedApplication.application_code?.name || 'N/A'}</div>
                     <h3 className="text-lg font-bold text-slate-900">
                       {buildTitle(selectedApplication)}
                     </h3>
                   </div>
-                  <div className="text-sm text-slate-600">
-                    {getAccountingStatusLabel(status)}
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-slate-600">
+                      {getAccountingStatusLabel(status)}
+                    </div>
+                    {!hasLines && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateJournal}
+                        disabled={isWorking}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {isWorking ? '生成中...' : '仕訳生成'}
+                      </button>
+                    )}
+                    {hasLines && !isPosted && (
+                      <button
+                        type="button"
+                        onClick={handlePostJournal}
+                        disabled={isWorking}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {isWorking ? '確定中...' : '仕訳確定'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -418,9 +467,13 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                         )}
                       </div>
                       <div className="text-xs text-slate-500">
-                        勘定科目候補: {accountItems.length > 0
-                          ? accountItems.slice(0, 8).map(item => `${item.code} ${item.name}`).join(' / ')
-                          : '取得できませんでした'}
+                        {(() => {
+                          const candidates = buildAccountCandidates(selectedApplication, aiSuggestion);
+                          if (candidates.length === 0) return '勘定科目候補: 取得できませんでした';
+                          return `勘定科目候補(${candidates.length}): ${candidates
+                            .map(item => `${item.code} ${item.name}`)
+                            .join(' / ')}`;
+                        })()}
                       </div>
                     </div>
                   )}
