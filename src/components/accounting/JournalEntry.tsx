@@ -163,6 +163,16 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
       .replace(/\s+/g, ' ')
       .trim();
 
+  const resolveSuggestedAccount = (suggestion: AIJournalSuggestion | null): string => {
+    if (!suggestion) return '未提案';
+    const direct = suggestion.account || suggestion.debitAccount || suggestion.creditAccount;
+    if (direct && direct.trim()) return direct.trim();
+    const reasoning = suggestion.reasoning ? stripMarkdown(suggestion.reasoning) : '';
+    if (!reasoning) return '未提案';
+    const matched = accountItems.find(item => reasoning.includes(item.name));
+    return matched ? `${matched.code} ${matched.name}` : '未提案';
+  };
+
   const handleAiSuggest = async () => {
     if (!selectedApplication) return;
     setIsAiLoading(true);
@@ -380,7 +390,7 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify }) 
                     <div className="mt-3 space-y-2 text-sm text-slate-700">
                       <div className="font-semibold">提案内容</div>
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <div>勘定科目: {aiSuggestion.account || aiSuggestion.debitAccount || aiSuggestion.creditAccount || '未提案'}</div>
+                        <div>勘定科目: {resolveSuggestedAccount(aiSuggestion)}</div>
                         <div>摘要: {aiSuggestion.description || aiSuggestion.reasoning || '未提案'}</div>
                         <div>
                           金額: {formatCurrency(aiSuggestion.debit || aiSuggestion.credit || aiSuggestion.amount || null) || '-'}
