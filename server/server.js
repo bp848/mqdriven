@@ -96,20 +96,20 @@ const getSupabaseStatus = error => {
 };
 
 
-const staticPath = path.join(__dirname,'dist');
-const publicPath = path.join(__dirname,'public');
+const staticPath = path.join(__dirname, 'dist');
+const publicPath = path.join(__dirname, 'public');
 
 if (!apiKey) {
     // Only log an error, don't exit. The server will serve apps without proxy functionality
     console.error("Warning: GEMINI_API_KEY or API_KEY environment variable is not set! Proxy functionality will be disabled.");
 }
 else {
-  console.log("API KEY FOUND (proxy will use this)")
+    console.log("API KEY FOUND (proxy will use this)")
 }
 
 // Limit body size to 50mb
 app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({extended: true, limit: '50mb'}));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
 registerAiRoutes(app, supabase);
 
@@ -965,12 +965,12 @@ app.post('/api/accounting/applications/:id/create-journal', async (req, res) => 
         // For now, p_user_id is passed as null.
         const { data: batchId, error } = await supabase.rpc('create_journal_from_application', {
             p_application_id: applicationId,
-            p_user_id: null 
+            p_user_id: null
         });
 
         if (error) {
             console.error('Error from create_journal_from_application RPC:', error);
-             // Check for specific, user-facing errors from the RPC
+            // Check for specific, user-facing errors from the RPC
             if (error.message.includes('Journal has already been created')) {
                 return res.status(409).json({ error: 'Conflict', details: error.message });
             }
@@ -1087,7 +1087,7 @@ app.post('/api/board/posts/:id/comments', async (req, res) => {
     try {
         const postId = req.params.id;
         const { content, user_id } = req.body;
-        
+
         const { data, error } = await supabase.rpc('add_comment', {
             p_post_id: postId,
             p_content: content,
@@ -1114,7 +1114,7 @@ app.put('/api/board/posts/:id/complete', async (req, res) => {
     try {
         const postId = req.params.id;
         const { user_id } = req.body;
-        
+
         const { error } = await supabase.rpc('complete_task', {
             p_post_id: postId,
             p_user_id: user_id || null
@@ -1340,24 +1340,8 @@ app.use('/api-proxy', async (req, res, next) => {
 
 const webSocketInterceptorScriptTag = `<script src="/public/websocket-interceptor.js" defer></script>`;
 
-// Prepare service worker registration script content
-const serviceWorkerRegistrationScript = `
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load' , () => {
-    navigator.serviceWorker.register('./service-worker.js')
-      .then(registration => {
-        console.log('Service Worker registered successfully with scope:', registration.scope);
-      })
-      .catch(error => {
-        console.error('Service Worker registration failed:', error);
-      });
-  });
-} else {
-  console.log('Service workers are not supported in this browser.');
-}
-</script>
-`;
+// Service Worker登録はキャッシュ事故回避のため無効化
+const serviceWorkerRegistrationScript = '';
 
 // Serve index.html or placeholder based on API key and file availability
 app.get('/', (req, res) => {
@@ -1376,8 +1360,8 @@ app.get('/', (req, res) => {
 
         // If API key is not set, serve original HTML without injection
         if (!apiKey) {
-          console.log("LOG: API key not set. Serving original index.html without script injections.");
-          return res.sendFile(indexPath);
+            console.log("LOG: API key not set. Serving original index.html without script injections.");
+            return res.sendFile(indexPath);
         }
 
         // index.html found and apiKey set, inject scripts
@@ -1401,7 +1385,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/service-worker.js', (req, res) => {
-   return res.sendFile(path.join(publicPath, 'service-worker.js'));
+    return res.sendFile(path.join(publicPath, 'service-worker.js'));
 });
 
 app.use('/public', express.static(publicPath));

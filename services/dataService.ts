@@ -4794,7 +4794,7 @@ export const getJournalBatches = async (options?: PaginationOptions): Promise<an
     return data || [];
 };
 
-export const getJournalEntries = async (batchId?: string, options?: PaginationOptions): Promise<any[]> => {
+export const getJournalEntriesPaginated = async (batchId?: string, options?: PaginationOptions): Promise<any[]> => {
     const supabase = getSupabase();
     const limit = options?.limit ?? DEFAULT_LIMIT;
     const offset = options?.offset ?? 0;
