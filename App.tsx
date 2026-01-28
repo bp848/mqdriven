@@ -1432,7 +1432,7 @@ const App: React.FC = () => {
             case 'meeting_minutes':
                 return <MeetingMinutesIframe />;
             case 'meeting_minutes_ai':
-                return <MeetingMinutesIframe />;
+                return React.lazy(() => import('./components/meetingMinutes/MeetingMinutesApp'));
             case 'ai_estimate':
                 return <AIEstimatePage />;
             case 'my_schedule':
