@@ -109,8 +109,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     items: [
       { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
-      { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
-      { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },
+      { page: 'meeting_minutes', name: '議事録AI', icon: ClipboardList },
       { page: 'fax_ocr_intake', name: '何でも取り込み', icon: Inbox },
       { page: 'document_creation_tools', name: '資料作成' },
       { page: 'proposal_ai', name: '提案書作成AI' },
