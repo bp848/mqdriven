@@ -48,7 +48,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_leads', name: 'リード管理' },
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
-      { page: 'simple_estimates', name: 'AI見積もり作成', adminOnly: false },
+      { page: 'simple_estimates', name: '新AI見積もり', adminOnly: false },
       { page: 'print_estimate_app', name: '基幹見積システム', adminOnly: false },
       { page: 'sales_estimates', name: '見積管理', adminOnly: false },
       { page: 'sales_orders', name: '受注・予算管理' },
@@ -93,32 +93,32 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     name: '会計',
     icon: DollarSign,
     items: [
-        { page: 'accounting_dashboard', name: '会計ダッシュボード' },
-        { page: 'accounting_journal_review', name: '仕訳レビュー' },
-        {
-          page: 'accounting_approved_applications',
-          name: '承認済一覧',
-          icon: CheckCircle,
-          children: [
-            { page: 'accounting_approved_unhandled', name: '未対応' },
-            { page: 'accounting_approved_applications', name: '全て' },
-            { page: 'accounting_approved_expense', name: '経費' },
-            { page: 'accounting_approved_transport', name: '交通費' },
-            { page: 'accounting_approved_leave', name: '休暇' },
-            { page: 'accounting_approved_apl', name: '稟議' },
-            { page: 'accounting_approved_dly', name: '日報' },
-            { page: 'accounting_approved_wkr', name: '週報' },
-          ],
-        },
-        { page: 'accounting_journal', name: '仕訳帳' },
-        { page: 'accounting_general_ledger', name: '総勘定元帳' },
-        { page: 'accounting_payables', name: '支払管理' },
-        { page: 'accounting_receivables', name: '売掛金管理' },
-        { page: 'accounting_cash_schedule', name: '資金繰り表' },
-        { page: 'accounting_trial_balance', name: '試算表' },
-        { page: 'accounting_tax_summary', name: '消費税集計' },
-        { page: 'accounting_expense_analysis', name: '経費分析' },
-        { page: 'accounting_period_closing', name: '締処理' },
+      { page: 'accounting_dashboard', name: '会計ダッシュボード' },
+      { page: 'accounting_journal_review', name: '仕訳レビュー' },
+      {
+        page: 'accounting_approved_applications',
+        name: '承認済一覧',
+        icon: CheckCircle,
+        children: [
+          { page: 'accounting_approved_unhandled', name: '未対応' },
+          { page: 'accounting_approved_applications', name: '全て' },
+          { page: 'accounting_approved_expense', name: '経費' },
+          { page: 'accounting_approved_transport', name: '交通費' },
+          { page: 'accounting_approved_leave', name: '休暇' },
+          { page: 'accounting_approved_apl', name: '稟議' },
+          { page: 'accounting_approved_dly', name: '日報' },
+          { page: 'accounting_approved_wkr', name: '週報' },
+        ],
+      },
+      { page: 'accounting_journal', name: '仕訳帳' },
+      { page: 'accounting_general_ledger', name: '総勘定元帳' },
+      { page: 'accounting_payables', name: '支払管理' },
+      { page: 'accounting_receivables', name: '売掛金管理' },
+      { page: 'accounting_cash_schedule', name: '資金繰り表' },
+      { page: 'accounting_trial_balance', name: '試算表' },
+      { page: 'accounting_tax_summary', name: '消費税集計' },
+      { page: 'accounting_expense_analysis', name: '経費分析' },
+      { page: 'accounting_period_closing', name: '締処理' },
     ],
   },
   {
@@ -238,9 +238,9 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       </div>
       <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
-	          {visibleCategories.map(category => {
+          {visibleCategories.map(category => {
             const isCategoryExpanded = !isCollapsed && (expandedCategories[category.id] ?? true);
-            
+
             return (
               <React.Fragment key={category.id}>
                 <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
@@ -258,81 +258,78 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                   )}
                 </li>
                 {isCategoryExpanded && category.items.map(item => {
-	                const ItemIcon = item.icon ?? category.icon;
-	                const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
-	                const isActive = currentPage === item.page || isChildActive;
-                    const isExpanded = !isCollapsed && ((expandedItems[item.page] ?? false) || isChildActive);
-	                return (
-	                  <li key={item.page}>
-                        <a
-                          href="#"
-                          onClick={(e) => { 
-                            e.preventDefault(); 
-                            if (item.children) {
+                  const ItemIcon = item.icon ?? category.icon;
+                  const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
+                  const isActive = currentPage === item.page || isChildActive;
+                  const isExpanded = !isCollapsed && ((expandedItems[item.page] ?? false) || isChildActive);
+                  return (
+                    <li key={item.page}>
+                      <a
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (item.children) {
+                            e.stopPropagation();
+                            setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
+                          } else {
+                            onNavigate(item.page);
+                          }
+                        }}
+                        className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                          } ${isCollapsed ? 'justify-center' : 'gap-3'}`}
+                      >
+                        {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
+                        <span className={`font-medium ${isCollapsed ? 'sr-only' : ''}`}>{item.name}</span>
+                        {item.children && !isCollapsed && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
-                            } else {
-                              onNavigate(item.page);
-                            }
-                          }}
-                          className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
-                            isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                          } ${isCollapsed ? 'justify-center' : 'gap-3'}`}
-                        >
-                          {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
-                          <span className={`font-medium ${isCollapsed ? 'sr-only' : ''}`}>{item.name}</span>
-                          {item.children && !isCollapsed && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
-                              }}
-                              className="ml-auto p-1 rounded hover:bg-slate-600/40"
-                              aria-label={isExpanded ? '折りたたむ' : '展開する'}
-                            >
-                              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                            </button>
-                          )}
-                          {item.badge !== undefined && item.badge > 0 && !item.children && (
-                            <span
-                              className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                item.badgeColor === 'green'
-                                  ? 'bg-emerald-500 text-white'
-                                  : item.badgeColor === 'red'
-                                    ? 'bg-rose-500 text-white'
-                                    : 'bg-blue-500 text-white'
-                              } ${isCollapsed ? 'ml-0' : ''}`}
-                            >
-                              {item.badge}
-                            </span>
-                          )}
-                        </a>
-                        {item.children && isExpanded && (
-                          <ul className="mt-1 space-y-1">
-                            {item.children.map(child => {
-                              const isChildPageActive = currentPage === child.page;
-                              return (
-                                <li key={child.page}>
-                                  <a
-                                    href="#"
-                                    onClick={(e) => { e.preventDefault(); onNavigate(child.page); }}
-                                    className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
-                                      isChildPageActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                                    } ml-8`}
-                                  >
-                                    <span className="font-medium">{child.name}</span>
-                                  </a>
-                                </li>
-                              );
-                            })}
-                          </ul>
+                            }}
+                            className="ml-auto p-1 rounded hover:bg-slate-600/40"
+                            aria-label={isExpanded ? '折りたたむ' : '展開する'}
+                          >
+                            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
                         )}
-	                  </li>
-	                );
-	              })}
-            </React.Fragment>
+                        {item.badge !== undefined && item.badge > 0 && !item.children && (
+                          <span
+                            className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.badgeColor === 'green'
+                                ? 'bg-emerald-500 text-white'
+                                : item.badgeColor === 'red'
+                                  ? 'bg-rose-500 text-white'
+                                  : 'bg-blue-500 text-white'
+                              } ${isCollapsed ? 'ml-0' : ''}`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </a>
+                      {item.children && isExpanded && (
+                        <ul className="mt-1 space-y-1">
+                          {item.children.map(child => {
+                            const isChildPageActive = currentPage === child.page;
+                            return (
+                              <li key={child.page}>
+                                <a
+                                  href="#"
+                                  onClick={(e) => { e.preventDefault(); onNavigate(child.page); }}
+                                  className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                    } ml-8`}
+                                >
+                                  <span className="font-medium">{child.name}</span>
+                                </a>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </React.Fragment>
             );
           })}
         </ul>
@@ -347,18 +344,18 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
         {currentUser?.role === 'admin' && (
           <div className="px-3 py-2">
             <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
-            <select 
-                id="user-select"
-                className="w-full mt-1 bg-slate-700 border-slate-600 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-                value={currentUser?.id || ''}
-                onChange={(e) => {
-                    const selectedUser = allUsers.find(u => u.id === e.target.value);
-                    onUserChange(selectedUser || null);
-                }}
+            <select
+              id="user-select"
+              className="w-full mt-1 bg-slate-700 border-slate-600 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              value={currentUser?.id || ''}
+              onChange={(e) => {
+                const selectedUser = allUsers.find(u => u.id === e.target.value);
+                onUserChange(selectedUser || null);
+              }}
             >
-                {allUsers.map(user => (
-                    <option key={user.id} value={user.id}>{user.name}</option>
-                ))}
+              {allUsers.map(user => (
+                <option key={user.id} value={user.id}>{user.name}</option>
+              ))}
             </select>
           </div>
         )}

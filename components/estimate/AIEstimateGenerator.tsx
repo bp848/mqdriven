@@ -4,10 +4,10 @@ import { Lead, EstimationResult, PrintSpec } from '../../types';
 import {
   fetchAiCustomers,
   fetchAiCategories,
-  createAiEstimate,
   AiCustomer,
   AiCategory,
 } from '../../services/integrationService';
+import { generateAiEstimate } from '../../services/aiEstimateService';
 
 interface AIEstimateGeneratorProps {
   lead: Lead;
@@ -123,10 +123,10 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
 
     try {
       const spec = buildSpec();
-      const estimateResult = await createAiEstimate({
+      const estimateResult = await generateAiEstimate({
         spec,
         customerId: selectedCustomer.id,
-        categoryId: selectedCategory?.id || '',
+        categoryId: selectedCategory?.id || undefined,
       });
       setGeneratedEstimate(estimateResult);
       onEstimateGenerated?.(estimateResult);

@@ -26,7 +26,7 @@ const AIEstimatePage: React.FC<Props> = ({ lead, onGenerated }) => {
         <div className="mb-6">
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-[0.2em]">AI Estimate</p>
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mt-1">
-            AI見積もり作成
+            新AI見積もり
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
             「新規見積もりを追加」から起動したAI見積もりワークフローです。顧客・カテゴリを選び、ファイルを添付して生成してください。
