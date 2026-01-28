@@ -42,4 +42,5 @@ export interface HistoryEntry {
   summary?: SummaryData;
   wordCount: number;
   charCount: number;
+  analysis?: AnalysisResults;
 }
