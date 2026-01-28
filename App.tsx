@@ -45,6 +45,7 @@ import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
 import MeetingMinutesIframe from './components/MeetingMinutesIframe';
+import MeetingMinutesApp from './components/meetingMinutes/MeetingMinutesApp';
 import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
 import AIEstimatePage from './components/estimate/AIEstimatePage';
@@ -1432,7 +1433,7 @@ const App: React.FC = () => {
             case 'meeting_minutes':
                 return <MeetingMinutesIframe />;
             case 'meeting_minutes_ai':
-                return React.lazy(() => import('./components/meetingMinutes/MeetingMinutesApp'));
+                return <MeetingMinutesApp />;
             case 'ai_estimate':
                 return <AIEstimatePage />;
             case 'my_schedule':
