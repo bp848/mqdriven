@@ -107,6 +107,10 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     name: 'ツール',
     icon: BookOpen,
     items: [
+      { page: 'ai_business_consultant', name: 'ビジネスコンサルタントAI' },
+      { page: 'ai_market_research', name: '市場リサーチAI' },
+      { page: 'ai_transcription', name: '議事録AI文字起こし' },
+      { page: 'print_estimate_app', name: '印刷積算AI' },
       { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
       { page: 'fax_ocr_intake', name: '何でも取り込み', icon: Inbox },

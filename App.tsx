@@ -44,6 +44,7 @@ import DocumentCreationHub from './components/DocumentCreationHub';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
+import AITranscriptionPage from './components/AITranscriptionPage';
 import MeetingMinutesIframe from './components/MeetingMinutesIframe';
 import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
@@ -209,6 +210,7 @@ const PAGE_TITLES: Record<Page, string> = {
     dtp_tools: 'DTP支援AI',
     ai_business_consultant: 'AI業務相談',
     ai_market_research: 'AI市場調査',
+    ai_transcription: '議事録AI文字起こし',
     meeting_minutes: '議事録',
     admin_audit_log: '監査ログ',
     admin_journal_queue: '仕訳キュー',
@@ -1425,6 +1427,8 @@ const App: React.FC = () => {
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
+            case 'ai_transcription':
+                return <AITranscriptionPage addToast={addToast} isAIOff={isAIOff} />;
             case 'meeting_minutes':
                 return <MeetingMinutesIframe />;
             case 'my_schedule':

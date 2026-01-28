@@ -1,8 +1,8 @@
 import React from 'react';
-import MeetingMinutesApp from './meetingMinutes/MeetingMinutesApp';
+import { TranscriptionService } from './meetingAssistant/TranscriptionService';
 
 const MeetingMinutesIframe: React.FC = () => {
-  return <MeetingMinutesApp />;
+  return <TranscriptionService />;
 };
 
 export default MeetingMinutesIframe;

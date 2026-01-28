@@ -14,6 +14,7 @@ export type Page =
   | 'accounting_tax_summary' | 'accounting_period_closing' | 'accounting_business_plan'
   | 'ai_business_consultant'
   | 'ai_market_research'
+  | 'ai_transcription'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
   | 'admin_master_management' | 'admin_bug_reports' | 'admin_action_console' | 'settings'
   | 'bulletin_board' | 'knowledge_base' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
