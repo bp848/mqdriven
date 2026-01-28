@@ -39,7 +39,7 @@ const RESPONSE_SCHEMA = {
 };
 
 export const processAIQuote = async (formData: QuoteFormData): Promise<QuoteResultData> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   const model = "gemini-3-pro-preview";
 
   let parts: any[] = [];
@@ -66,7 +66,7 @@ export const processAIQuote = async (formData: QuoteFormData): Promise<QuoteResu
 };
 
 export const updateQuoteWithFeedback = async (instruction: string, currentData: QuoteResultData): Promise<QuoteResultData> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: [{ parts: [{ text: `現在の積算データ: ${JSON.stringify(currentData)}\n\n修正指示: ${instruction}\n\nこの指示に基づきデータを再計算し、JSONで返してください。` }] }],
