@@ -1429,6 +1429,8 @@ const App: React.FC = () => {
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
             case 'meeting_minutes':
                 return <MeetingMinutesIframe />;
+            case 'ai_estimate':
+                return <AIEstimatePage currentUser={currentUser} addToast={addToast} />;
             case 'my_schedule':
                 return (
                     <MySchedulePage
