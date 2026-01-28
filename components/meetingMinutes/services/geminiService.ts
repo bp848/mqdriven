@@ -1,21 +1,11 @@
-import { Type } from '@google/genai';
-import { requireGeminiClient } from '../../../services/Gemini';
-import { TranscriptEntry, OptimizationEntry, SummaryData } from '../types';
+import { GoogleGenAI, Type } from "@google/genai";
+import { TranscriptEntry, OptimizationEntry, SummaryData } from "../types";
 
-const TRANSCRIBE_MODEL = 'gemini-3-flash-preview';
-const SUMMARY_MODEL = 'gemini-3-pro-preview';
-
-const withRetry = async <T>(fn: () => Promise<T>, retries = 2): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error: any) {
-    if (retries <= 0) {
-      throw error instanceof Error ? error : new Error(String(error));
-    }
-    console.warn('Gemini request failed, retrying...', { error, retries });
-    await new Promise((resolve) => setTimeout(resolve, 400 * (3 - retries)));
-    return withRetry(fn, retries - 1);
+const getApiKey = (): string => {
+  if (typeof import.meta !== "undefined" && import.meta.env) {
+    return import.meta.env.VITE_GEMINI_API_KEY || "";
   }
+  return "";
 };
 
 export const transcribeMedia = async (
@@ -23,137 +13,104 @@ export const transcribeMedia = async (
   mimeType: string,
   onProgress: (msg: string) => void
 ): Promise<{ transcript: TranscriptEntry[] }> => {
-  const ai = requireGeminiClient();
-  onProgress('音声を書き起こしています...');
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  onProgress("音声解析エンジンを初期化中...");
 
-  const response = await withRetry(() =>
-    ai.models.generateContent({
-      model: TRANSCRIBE_MODEL,
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                data: base64Data,
-                mimeType,
-              },
-            },
-            {
-              text: 'この音声・動画をビジネス会議の記録として、タイムスタンプ付きJSON形式で書き起こしてください。フィラーを除去し、発話者名は省略してください。',
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            required: ['timestamp', 'text'],
-            properties: {
-              timestamp: { type: Type.STRING },
-              text: { type: Type.STRING },
-            },
-          },
-        },
-      },
-    })
-  );
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        parts: [
+          { inlineData: { data: base64Data, mimeType: mimeType } },
+          { text: "この音声・動画の内容を正確に書き起こしてください。ビジネス会議の記録として、読みやすく、時間軸（timestamp）に沿ったJSON形式で出力してください。フィラーは削除してください。" }
+        ]
+      }
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: { timestamp: { type: Type.STRING }, text: { type: Type.STRING } },
+          required: ["timestamp", "text"]
+        }
+      }
+    }
+  });
 
   const text = response.text;
-  if (!text) {
-    throw new Error('書き起こしが空のレスポンスでした。');
-  }
-  return { transcript: JSON.parse(text) as TranscriptEntry[] };
+  if (!text) throw new Error("書き起こしに失敗しました。");
+  return { transcript: JSON.parse(text) };
 };
 
 export const generateSummary = async (
   transcript: TranscriptEntry[],
   onProgress: (msg: string) => void
 ): Promise<SummaryData> => {
-  const ai = requireGeminiClient();
-  onProgress('議事録を構成しています...');
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  onProgress("プロフェッショナル議事録を作成中...");
 
-  const fullText = transcript.map((t) => `[${t.timestamp}] ${t.text}`).join('\n');
+  const fullText = transcript.map(t => `[${t.timestamp}] ${t.text}`).join("\n");
 
-  const response = await withRetry(() =>
-    ai.models.generateContent({
-      model: SUMMARY_MODEL,
-      contents: [
-        {
-          parts: [
-            {
-              text: `以下の会議記録から、プロフェッショナルな議事録を作成してください。特に「決定事項」と「次のアクション」に重点を置き、簡潔に日本語で出力してください。\n\n${fullText}`,
-            },
-          ],
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-pro",
+    contents: [
+      {
+        parts: [
+          {
+            text: `以下の会議記録をもとに、プロフェッショナルな「議事録」を作成してください。
+特に「何が決まったのか（決定事項）」と「次に誰が何をすべきか（ネクストアクション）」を最優先で抽出してください。
+
+文字起こしデータ:
+${fullText}`
+          }
+        ]
+      }
+    ],
+    config: {
+      thinkingConfig: { thinkingBudget: 4000 },
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          overview: { type: Type.STRING },
+          decisions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          keyPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
+          nextActions: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
-      ],
-      config: {
-        thinkingConfig: { thinkingBudget: 4000 },
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ['title', 'overview', 'decisions', 'keyPoints', 'nextActions'],
-          properties: {
-            title: { type: Type.STRING },
-            overview: { type: Type.STRING },
-            decisions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            keyPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-            nextActions: { type: Type.ARRAY, items: { type: Type.STRING } },
-          },
-        },
-      },
-    })
-  );
+        required: ["title", "overview", "decisions", "keyPoints", "nextActions"]
+      }
+    }
+  });
 
   const text = response.text;
-  if (!text) {
-    throw new Error('要約が返ってきませんでした。');
-  }
-  return JSON.parse(text) as SummaryData;
+  if (!text) throw new Error("要約に失敗しました。");
+  return JSON.parse(text);
 };
 
 export const optimizeTranscript = async (
   transcript: TranscriptEntry[],
   onProgress: (msg: string) => void
 ): Promise<OptimizationEntry[]> => {
-  const ai = requireGeminiClient();
-  onProgress('トランスクリプトを校正しています...');
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const fullText = transcript.slice(0, 100).map(t => t.text).join("\n");
 
-  const snippet = transcript.slice(0, 100).map((t) => t.text).join('\n');
-
-  const response = await withRetry(() =>
-    ai.models.generateContent({
-      model: TRANSCRIBE_MODEL,
-      contents: [
-        {
-          parts: [
-            {
-              text: `以下の文章をビジネス文書として読みやすく校正してください。\n\n${snippet}`,
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            required: ['id', 'original', 'optimized'],
-            properties: {
-              id: { type: Type.STRING },
-              original: { type: Type.STRING },
-              optimized: { type: Type.STRING },
-            },
-          },
-        },
-      },
-    })
-  );
-
-  const text = response.text;
-  if (!text) return [];
-  return JSON.parse(text) as OptimizationEntry[];
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ parts: [{ text: `以下の文章をビジネス文書として読みやすく校正してください。\n\n${fullText}` }] }],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: { id: { type: Type.STRING }, original: { type: Type.STRING }, optimized: { type: Type.STRING } },
+          required: ["id", "original", "optimized"]
+        }
+      }
+    }
+  });
+  return JSON.parse(response.text || "[]");
 };
