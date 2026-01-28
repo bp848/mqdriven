@@ -166,6 +166,14 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   }, [applications, handlingStatusOnly, searchTerm]);
 
   const selectedApplication = filteredApps.find(app => app.id === selectedApplicationId) ?? null;
+  const selectedApplicationStatus =
+    selectedApplication?.accountingStatus ?? selectedApplication?.accounting_status ?? 'none';
+  const selectedApplicationAmount = selectedApplication ? deriveAmount(selectedApplication) : null;
+  const canGenerateJournal =
+    Boolean(selectedDebitAccountId) &&
+    Boolean(selectedCreditAccountId) &&
+    selectedApplicationAmount !== null &&
+    selectedApplicationAmount > 0;
 
   useEffect(() => {
     setAiSuggestion(null);
@@ -294,10 +302,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
         return;
       }
 
-      notify?.('勘定科目/金額が揃っていないため、自動仕訳生成を実行します。', 'info');
-      await dataService.generateJournalLinesFromApplication(selectedApplication.id, currentUserId || undefined);
-      notify?.('仕訳を生成しました。', 'success');
-      await loadApprovedApplications();
+      notify?.('借方/貸方/金額を選択してから仕訳生成してください。', 'error');
     } catch (err: any) {
       console.error('Failed to generate journal lines:', err);
       notify?.(err?.message || '仕訳の生成に失敗しました。', 'error');
@@ -468,7 +473,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
           onClick={() => setSelectedApplicationId(null)}
         >
           <div
-            className="w-full max-w-3xl bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden"
+            className="w-full max-w-3xl max-h-[90vh] bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 p-5 border-b border-slate-200 dark:border-slate-700">
@@ -480,30 +485,17 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   {selectedApplication.application_code?.name || '種別未設定'} / {selectedApplication.applicant?.name || '申請者未設定'}
                 </p>
+                <div className="mt-3">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getAccountingStatusBadgeClass(
+                      selectedApplicationStatus
+                    )}`}
+                  >
+                    {getAccountingStatusLabel(selectedApplicationStatus)}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                {(selectedApplication.journalEntry?.lines || []).length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleGenerateJournal}
-                    disabled={isWorking}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : null}
-                    仕訳生成
-                  </button>
-                ) : (selectedApplication.accountingStatus ?? selectedApplication.accounting_status ?? 'none') !== 'posted' ? (
-                  <button
-                    type="button"
-                    onClick={handlePostJournal}
-                    disabled={isWorking}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : null}
-                    仕訳確定
-                  </button>
-                ) : null}
-
                 <button
                   type="button"
                   onClick={() => setSelectedApplicationId(null)}
@@ -515,7 +507,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
               </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/40">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -615,13 +607,6 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                 </div>
               </div>
 
-              <div className="text-sm text-slate-700 dark:text-slate-200">
-                {getAccountingSummary(selectedApplication)}
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                {getAccountingStatusLabel(selectedApplication.accountingStatus ?? selectedApplication.accounting_status ?? 'none')}
-              </div>
-
               <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-900/40">
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">申請内容</p>
                 <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
@@ -681,6 +666,30 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                   })
                 )}
               </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              {(selectedApplication.journalEntry?.lines || []).length === 0 ? (
+                <button
+                  type="button"
+                  onClick={handleGenerateJournal}
+                  disabled={isWorking || !canGenerateJournal}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-indigo-600 text-white text-base font-semibold hover:bg-indigo-700 disabled:opacity-50 min-w-40"
+                >
+                  {isWorking ? <Loader className="w-5 h-5 animate-spin" /> : null}
+                  仕訳生成
+                </button>
+              ) : (selectedApplication.accountingStatus ?? selectedApplication.accounting_status ?? 'none') !== 'posted' ? (
+                <button
+                  type="button"
+                  onClick={handlePostJournal}
+                  disabled={isWorking}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-emerald-600 text-white text-base font-semibold hover:bg-emerald-700 disabled:opacity-50 min-w-40"
+                >
+                  {isWorking ? <Loader className="w-5 h-5 animate-spin" /> : null}
+                  仕訳確定
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

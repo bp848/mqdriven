@@ -20,6 +20,8 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
   const [aiError, setAiError] = useState<string | null>(null);
   const [isAiAutoSuggest, setIsAiAutoSuggest] = useState(true);
   const [accountItems, setAccountItems] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [selectedDebitAccountId, setSelectedDebitAccountId] = useState<string>('');
+  const [selectedCreditAccountId, setSelectedCreditAccountId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadApprovedApplications = useCallback(async () => {
@@ -62,7 +64,39 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
   useEffect(() => {
     setAiSuggestion(null);
     setAiError(null);
+    setSelectedDebitAccountId('');
+    setSelectedCreditAccountId('');
   }, [selectedId]);
+
+  const resolveAccountId = useCallback(
+    (text?: string | null): string => {
+      if (!text) return '';
+      const raw = String(text).trim();
+      if (!raw) return '';
+      const codeMatch = raw.match(/\b\d{3,6}\b/);
+      if (codeMatch) {
+        const byCode = accountItems.find(item => item.code === codeMatch[0]);
+        if (byCode) return byCode.id;
+      }
+      const normalized = raw.replace(/\s+/g, '');
+      const byName = accountItems.find(item => item.name.replace(/\s+/g, '') === normalized);
+      if (byName) return byName.id;
+      const partial = accountItems.find(item => normalized.includes(item.name.replace(/\s+/g, '')));
+      return partial?.id ?? '';
+    },
+    [accountItems]
+  );
+
+  useEffect(() => {
+    if (!aiSuggestion) return;
+    if (accountItems.length === 0) return;
+    const suggestedDebit = aiSuggestion.debitAccount || resolveSuggestedAccount(aiSuggestion);
+    const suggestedCredit = aiSuggestion.creditAccount;
+    const debitId = resolveAccountId(suggestedDebit);
+    const creditId = resolveAccountId(suggestedCredit);
+    if (debitId) setSelectedDebitAccountId(debitId);
+    if (creditId) setSelectedCreditAccountId(creditId);
+  }, [aiSuggestion, accountItems.length, resolveAccountId]);
 
   const selectedApplication = applications.find(app => app.id === selectedId) ?? null;
   const status = selectedApplication?.accountingStatus ?? selectedApplication?.accounting_status ?? 'none';
@@ -312,9 +346,28 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
     if (!selectedApplication) return;
     setIsWorking(true);
     try {
-      await dataService.generateJournalLinesFromApplication(selectedApplication.id, currentUser?.id);
-      notify?.('仕訳を生成しました。', 'success');
-      await loadApprovedApplications();
+      const debitAccountId = selectedDebitAccountId;
+      const creditAccountId = selectedCreditAccountId;
+      const amount = deriveAmount(selectedApplication);
+
+      if (debitAccountId && creditAccountId && amount !== null && amount > 0) {
+        const description = buildTitle(selectedApplication);
+        await dataService.createJournalFromAiSelection({
+          applicationId: selectedApplication.id,
+          debitAccountId,
+          creditAccountId,
+          amount,
+          description,
+          reasoning: aiSuggestion?.reasoning,
+          confidence: (aiSuggestion as any)?.confidence,
+          createdBy: currentUser?.id || undefined,
+        });
+        await loadApprovedApplications();
+        notify?.('仕訳を生成しました。', 'success');
+        return;
+      }
+
+      notify?.('借方/貸方/金額を選択してから仕訳生成してください。', 'error');
     } catch (err: any) {
       console.error('Failed to generate journal lines:', err);
       notify?.(err?.message || '仕訳の生成に失敗しました。', 'error');
@@ -522,6 +575,46 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
                   )}
                 </div>
 
+                {!hasLines && (
+                  <div className="rounded-lg border border-slate-200 p-4 bg-white space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-500 mb-1">借方勘定科目</div>
+                        <select
+                          value={selectedDebitAccountId}
+                          onChange={(e) => setSelectedDebitAccountId(e.target.value)}
+                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                        >
+                          <option value="">未選択</option>
+                          {accountItems.map(item => (
+                            <option key={item.id} value={item.id}>
+                              {item.code} {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-500 mb-1">貸方勘定科目</div>
+                        <select
+                          value={selectedCreditAccountId}
+                          onChange={(e) => setSelectedCreditAccountId(e.target.value)}
+                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                        >
+                          <option value="">未選択</option>
+                          {accountItems.map(item => (
+                            <option key={item.id} value={item.id}>
+                              {item.code} {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      金額: {formatCurrency(deriveAmount(selectedApplication) ?? null) || '-'}
+                    </div>
+                  </div>
+                )}
+
                 <div className="rounded-lg border border-slate-200 p-4 bg-slate-50">
                   <p className="text-xs font-semibold text-slate-500 mb-2">申請内容</p>
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">
@@ -587,7 +680,14 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
                 {!isPosted && !hasLines && (
                   <button
                     onClick={handleGenerateJournal}
-                    disabled={isWorking}
+                    disabled={
+                      isWorking ||
+                      !(
+                        Boolean(selectedDebitAccountId) &&
+                        Boolean(selectedCreditAccountId) &&
+                        (deriveAmount(selectedApplication) ?? 0) > 0
+                      )
+                    }
                     className="px-8 py-3 bg-green-600 text-white rounded-lg font-bold shadow-lg flex items-center gap-2 transition transform active:scale-95 hover:bg-green-700 disabled:opacity-50"
                   >
                     <Plus className="w-5 h-5" /> 仕訳を生成

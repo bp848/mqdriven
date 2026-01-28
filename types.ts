@@ -877,25 +877,35 @@ export interface ClosingChecklistItem extends LooseRecord {
 export interface PayableItem extends LooseRecord {
   id: string;
   supplier?: string;
-  amount?: number;
-  dueDate?: string;
-  status?: string;
+  category?: string | null;
+  amount: number;
+  paidAmount: number;
+  date?: string;
+  due?: string;
+  status: 'outstanding' | 'partially_paid' | 'paid' | string;
+  method?: string | null;
+  invoiceImage?: string | null;
+  journalLineId?: string | null;
 }
 
 export interface ReceivableItem extends LooseRecord {
   id: string;
   customer?: string;
-  amount?: number;
-  dueDate?: string;
-  status?: string;
+  category?: string | null;
+  amount: number;
+  paidAmount: number;
+  date?: string;
+  due?: string;
+  status: 'outstanding' | 'partially_paid' | 'paid' | string;
+  journalLineId?: string | null;
 }
 
 export interface CashScheduleData extends LooseRecord {
-  id: string;
-  date?: string;
-  inflow?: number;
-  outflow?: number;
-  balance?: number;
+  date: string;
+  opening_balance: number;
+  inflows: number;
+  outflows: number;
+  closing_balance: number;
 }
 
 export interface CustomProposalContent extends LooseRecord {

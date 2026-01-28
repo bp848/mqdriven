@@ -1754,7 +1754,19 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     }
 
     if (status === 'posted') {
-        const { error: postError } = await supabase.rpc('post_journal_batch', { p_batch_id: entry.batch_id });
+        const {
+            data: authData,
+            error: authError,
+        } = await supabase.auth.getUser();
+        ensureSupabaseSuccess(authError, 'Failed to get current user');
+        if (!authData?.user?.id) {
+            throw new Error('Not authenticated');
+        }
+
+        const { error: postError } = await supabase.rpc('approve_journal_batch', {
+            p_batch_id: entry.batch_id,
+            p_user_id: authData.user.id,
+        });
         ensureSupabaseSuccess(postError, 'Failed to post journal batch');
     } else {
         // NOTE: 未確定へ戻す（unpost）は監査/権限設計が絡むため、ここでは行わない。
@@ -4451,9 +4463,9 @@ export const updateJobReadyToInvoice = async (jobId: string, value: boolean): Pr
 export const getPayables = async (filters: { status?: string, startDate?: string, endDate?: string }): Promise<PayableItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.rpc('get_payables', {
-        p_status: filters.status,
-        p_due_date_start: filters.startDate,
-        p_due_date_end: filters.endDate,
+        p_status: filters.status ?? null,
+        p_due_date_start: filters.startDate ?? null,
+        p_due_date_end: filters.endDate ?? null,
     });
 
     ensureSupabaseSuccess(error, 'Failed to fetch payables');
@@ -4475,9 +4487,9 @@ export const getPayables = async (filters: { status?: string, startDate?: string
 export const getReceivables = async (filters: { status?: string, startDate?: string, endDate?: string }): Promise<ReceivableItem[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.rpc('get_receivables', {
-        p_status: filters.status,
-        p_due_date_start: filters.startDate,
-        p_due_date_end: filters.endDate,
+        p_status: filters.status ?? null,
+        p_due_date_start: filters.startDate ?? null,
+        p_due_date_end: filters.endDate ?? null,
     });
 
     ensureSupabaseSuccess(error, 'Failed to fetch receivables');
@@ -4488,7 +4500,7 @@ export const getReceivables = async (filters: { status?: string, startDate?: str
         amount: Number(row.amount ?? 0),
         paidAmount: Number(row.paid_amount ?? 0),
         date: row.date ?? '',
-        due_date: row.due_date ?? '',
+        due: row.due_date ?? '',
         status: (row.status ?? 'outstanding') as ReceivableItem['status'],
         journalLineId: row.journal_line_id ?? null,
     }));
@@ -4846,7 +4858,19 @@ export const getAccounts = async (includeInactive?: boolean): Promise<any[]> => 
 
 export const postJournalBatch = async (batchId: string): Promise<void> => {
     const supabase = getSupabase();
-    const { error } = await supabase.rpc('post_journal_batch', { p_batch_id: batchId });
+    const {
+        data: authData,
+        error: authError,
+    } = await supabase.auth.getUser();
+    ensureSupabaseSuccess(authError, 'Failed to get current user');
+    if (!authData?.user?.id) {
+        throw new Error('Not authenticated');
+    }
+
+    const { error } = await supabase.rpc('approve_journal_batch', {
+        p_batch_id: batchId,
+        p_user_id: authData.user.id,
+    });
     ensureSupabaseSuccess(error, 'Failed to post journal batch');
 };
 

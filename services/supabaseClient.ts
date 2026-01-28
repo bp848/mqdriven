@@ -15,7 +15,6 @@ export const initializeSupabase = (url: string, key: string): SupabaseClient | n
             global: {
                 headers: {
                     'apikey': key,
-                    'Authorization': `Bearer ${key}`,
                 },
             },
         });
