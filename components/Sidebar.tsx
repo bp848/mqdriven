@@ -40,7 +40,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
       { page: 'sales_estimates', name: '見積管理' },
-      { page: 'ai_estimate', name: 'AI見積もり' },
       { page: 'sales_orders', name: '受注・予算管理' },
       { page: 'project_management', name: 'プロジェクト管理' },
       { page: 'sales_billing', name: '売上請求（AR）' },
@@ -109,7 +108,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     items: [
       { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
-      { page: 'meeting_minutes_ai', name: '議事録AI', icon: ClipboardList },
       { page: 'fax_ocr_intake', name: '何でも取り込み', icon: Inbox },
       { page: 'document_creation_tools', name: '資料作成' },
       { page: 'proposal_ai', name: '提案書作成AI' },
