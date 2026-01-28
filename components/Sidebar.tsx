@@ -48,8 +48,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_leads', name: 'リード管理' },
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
-      { page: 'simple_estimates', name: '新AI見積もり', adminOnly: false },
-      { page: 'print_estimate_app', name: '基幹見積システム', adminOnly: false },
       { page: 'sales_estimates', name: '見積管理', adminOnly: false },
       { page: 'sales_orders', name: '受注・予算管理' },
       { page: 'project_management', name: 'プロジェクト管理' },
@@ -297,10 +295,10 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                         {item.badge !== undefined && item.badge > 0 && !item.children && (
                           <span
                             className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.badgeColor === 'green'
-                                ? 'bg-emerald-500 text-white'
-                                : item.badgeColor === 'red'
-                                  ? 'bg-rose-500 text-white'
-                                  : 'bg-blue-500 text-white'
+                              ? 'bg-emerald-500 text-white'
+                              : item.badgeColor === 'red'
+                                ? 'bg-rose-500 text-white'
+                                : 'bg-blue-500 text-white'
                               } ${isCollapsed ? 'ml-0' : ''}`}
                           >
                             {item.badge}
