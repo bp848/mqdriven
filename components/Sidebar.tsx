@@ -32,15 +32,6 @@ type NavCategoryType = {
 
 const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   {
-    id: 'analysis',
-    name: '分析',
-    icon: PieChart,
-    items: [
-      { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
-      { page: 'strac_analysis', name: 'STRAC分析', icon: PieChart },
-    ],
-  },
-  {
     id: 'sales',
     name: '営業',
     icon: Briefcase,
@@ -48,42 +39,18 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_leads', name: 'リード管理' },
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_pipeline', name: '進捗管理' },
-      { page: 'sales_estimates', name: '見積管理', adminOnly: false },
+      { page: 'sales_estimates', name: '見積管理' },
       { page: 'sales_orders', name: '受注・予算管理' },
       { page: 'project_management', name: 'プロジェクト管理' },
       { page: 'sales_billing', name: '売上請求（AR）' },
       { page: 'newsletter', name: 'メールマガジン', icon: Mail },
-    ],
-  },
-  {
-    id: 'approvals',
-    name: '申請',
-    icon: CheckCircle,
-    items: [
-      { page: 'approval_list', name: '承認一覧' },
+      { page: 'approval_list', name: '承認一覧', icon: CheckCircle },
       { page: 'approval_form_expense', name: '経費精算' },
       { page: 'approval_form_transport', name: '交通費精算' },
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
       { page: 'approval_form_daily', name: '日報申請' },
       { page: 'approval_form_weekly', name: '週報申請' },
-    ],
-  },
-  {
-    id: 'tools',
-    name: 'ツール',
-    icon: BookOpen,
-    items: [
-      { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
-      { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
-      { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
-      { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },
-      { page: 'fax_ocr_intake', name: '何でも取り込み', icon: Inbox },
-      { page: 'document_creation_tools', name: '資料作成' },
-      { page: 'proposal_ai', name: '提案書作成AI' },
-      { page: 'pdf_editing_tools', name: 'PDF編集AI' },
-      { page: 'dtp_tools', name: 'DTP自動組版AI' },
-      { page: 'prompt_management', name: 'プロンプト管理' },
     ],
   },
   {
@@ -117,13 +84,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'accounting_tax_summary', name: '消費税集計' },
       { page: 'accounting_expense_analysis', name: '経費分析' },
       { page: 'accounting_period_closing', name: '締処理' },
-    ],
-  },
-  {
-    id: 'operations',
-    name: '運営管理',
-    icon: Settings,
-    items: [
       { page: 'inventory_management', name: '在庫管理' },
       { page: 'manufacturing_orders', name: '製造管理' },
       { page: 'purchasing_orders', name: '購買管理' },
@@ -133,16 +93,34 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     ],
   },
   {
-    id: 'admin_tools',
-    name: '管理',
-    icon: Settings,
-    adminOnly: true,
+    id: 'analysis',
+    name: '分析',
+    icon: PieChart,
     items: [
-      { page: 'admin_user_management', name: 'ユーザー管理' },
-      { page: 'admin_route_management', name: '承認ルート管理' },
-      { page: 'admin_master_management', name: 'マスタ管理' },
-      { page: 'admin_action_console', name: 'アクションコンソール' },
-      { page: 'settings', name: '通知メール設定' },
+      { page: 'analysis_dashboard', name: 'ダッシュボード', icon: PieChart },
+      { page: 'strac_analysis', name: 'STRAC分析', icon: PieChart },
+    ],
+  },
+  {
+    id: 'tools',
+    name: 'ツール',
+    icon: BookOpen,
+    items: [
+      { page: 'knowledge_base', name: 'ナレッジベース', icon: BookOpen },
+      { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
+      { page: 'bulletin_board', name: '議事録/掲示板', icon: Inbox },
+      { page: 'meeting_minutes', name: '議事録支援', icon: ClipboardList },
+      { page: 'fax_ocr_intake', name: '何でも取り込み', icon: Inbox },
+      { page: 'document_creation_tools', name: '資料作成' },
+      { page: 'proposal_ai', name: '提案書作成AI' },
+      { page: 'pdf_editing_tools', name: 'PDF編集AI' },
+      { page: 'dtp_tools', name: 'DTP自動組版AI' },
+      { page: 'prompt_management', name: 'プロンプト管理' },
+      { page: 'admin_user_management', name: 'ユーザー管理', adminOnly: true },
+      { page: 'admin_route_management', name: '承認ルート管理', adminOnly: true },
+      { page: 'admin_master_management', name: 'マスタ管理', adminOnly: true },
+      { page: 'admin_action_console', name: 'アクションコンソール', adminOnly: true },
+      { page: 'settings', name: '通知メール設定', adminOnly: true },
     ],
   },
 ];
@@ -152,7 +130,7 @@ const decorateCategories = (
   pendingApprovalCount?: number
 ): NavCategoryType[] =>
   categories.map(category => {
-    if (category.id !== 'approvals') return category;
+    if (category.id !== 'sales') return category;
     return {
       ...category,
       items: category.items.map(item =>
