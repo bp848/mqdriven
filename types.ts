@@ -16,7 +16,7 @@ export type Page =
   | 'ai_market_research'
   | 'admin_audit_log' | 'admin_journal_queue' | 'admin_user_management' | 'admin_route_management'
   | 'admin_master_management' | 'admin_bug_reports' | 'admin_action_console' | 'settings'
-  | 'bulletin_board' | 'knowledge_base' | 'meeting_minutes' | 'my_schedule' | 'fax_ocr_intake'
+  | 'bulletin_board' | 'knowledge_base' | 'meeting_minutes' | 'meeting_minutes_ai' | 'my_schedule' | 'fax_ocr_intake'
   | 'accounting_dashboard' | 'accounting_journal_review'
   | 'accounting_payables' | 'accounting_receivables' | 'accounting_cash_schedule'
   | 'accounting_expense_analysis'

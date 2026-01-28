@@ -158,6 +158,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_customers: '顧客/取引先',
     sales_pipeline: 'パイプライン',
     sales_estimates: '見積管理',
+    ai_estimate: 'AI見積もり',
     sales_orders: '受発注管理',
     project_management: 'プロジェクト管理',
     sales_billing: '請求管理',
@@ -209,6 +210,7 @@ const PAGE_TITLES: Record<Page, string> = {
     ai_business_consultant: 'AI業務相談',
     ai_market_research: 'AI市場調査',
     meeting_minutes: '議事録',
+    meeting_minutes_ai: '議事録AI',
     admin_audit_log: '監査ログ',
     admin_journal_queue: '仕訳キュー',
     admin_user_management: 'ユーザー管理',
@@ -1428,6 +1430,8 @@ const App: React.FC = () => {
             case 'ai_market_research':
                 return <MarketResearchPage addToast={addToast} isAIOff={isAIOff} />;
             case 'meeting_minutes':
+                return <MeetingMinutesIframe />;
+            case 'meeting_minutes_ai':
                 return <MeetingMinutesIframe />;
             case 'ai_estimate':
                 return <AIEstimatePage />;
