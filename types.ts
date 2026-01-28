@@ -4,7 +4,7 @@
 export type Page =
   | 'analysis_dashboard'
   | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
-  | 'sales_estimates' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
+  | 'sales_estimates' | 'quote_center' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
   | 'inventory_management' | 'manufacturing_orders' | 'manufacturing_progress' | 'manufacturing_cost'
   | 'hr_attendance' | 'hr_man_hours' | 'hr_labor_cost'

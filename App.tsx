@@ -48,6 +48,7 @@ import MeetingMinutesIframe from './components/MeetingMinutesIframe';
 import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
 import PrintEstimateApp from './components/estimate/PrintEstimateApp';
+import QuoteCenter from './components/quoteCenter';
 import STRACAnalysisPage from './components/analysis/STRACAnalysisPage';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';
@@ -157,6 +158,7 @@ const PAGE_TITLES: Record<Page, string> = {
     sales_customers: '顧客/取引先',
     sales_pipeline: 'パイプライン',
     sales_estimates: '見積管理',
+    quote_center: '見積作成センター',
     sales_orders: '受発注管理',
     project_management: 'プロジェクト管理',
     sales_billing: '請求管理',
@@ -1322,6 +1324,8 @@ const App: React.FC = () => {
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders || []} jobs={jobs || []} />;
             case 'simple_estimates':
                 return <PlaceholderPage title="AI見積もり" />;
+            case 'quote_center':
+                return <QuoteCenter />;
             case 'print_estimate_app':
                 return <PrintEstimateApp />;
             case 'strac_analysis':
