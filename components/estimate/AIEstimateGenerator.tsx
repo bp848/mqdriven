@@ -33,6 +33,7 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState<number>(lead.estimated_value ? Number(lead.estimated_value) : 100);
+  const [description, setDescription] = useState<string>(lead.message?.trim() ?? '');
 
   useEffect(() => {
     let active = true;
@@ -69,6 +70,12 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
   const selectedCategory =
     categories.find((cat) => cat.id === selectedCategoryId) || categories[0];
 
+  const requestDescription = (description.trim() || lead.message?.trim() || '').trim();
+
+  useEffect(() => {
+    setDescription(lead.message?.trim() ?? '');
+  }, [lead.message]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     setUploadedFiles((prev) => [...prev, ...files]);
@@ -85,7 +92,7 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
 
   const buildSpec = (): PrintSpec => ({
     clientName: selectedCustomer?.name || lead.company || '顧客名未設定',
-    projectName: lead.message?.slice(0, 70) || 'AI見積',
+    projectName: requestDescription.slice(0, 70) || 'AI見積',
     category: selectedCategory?.name || '商業印刷（チラシ・パンフレット・ポスター）',
     quantity,
     size: 'A4',
@@ -97,8 +104,8 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
   });
 
   const generateEstimate = async () => {
-    if (!lead.message?.trim()) {
-      const message = '蝠上＞蜷医ｏ縺帛・螳ｹ縺悟ｿ・ｦ√〒縺・';
+    if (!requestDescription) {
+      const message = '依頼内容を入力してください。';
       setError(message);
       onError?.(message);
       return;
@@ -138,6 +145,19 @@ export const AIEstimateGenerator: React.FC<AIEstimateGeneratorProps> = ({
       <div className="flex items-center mb-4">
         <FileText className="w-5 h-5 mr-2 text-blue-600" />
         <h3 className="text-lg font-semibold">AI見積もり自動生成</h3>
+      </div>
+
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          依頼内容 / 仕様のポイント
+        </label>
+        <textarea
+          rows={4}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="案件のご要望や納期、部数・紙質などを具体的に入力してください。"
+          className="w-full border border-gray-300 rounded-xl p-3 text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 resize-none transition-shadow"
+        />
       </div>
 
       <div className="mb-6">
