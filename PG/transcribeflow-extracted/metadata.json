@@ -1,0 +1,8 @@
+{
+  "name": "TranscribeFlow AI",
+  "description": "An advanced media transcription and optimization tool that converts audio/video to text, provides deep analytics, and AI-powered text refinement with a side-by-side diff viewer.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

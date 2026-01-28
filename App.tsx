@@ -48,7 +48,7 @@ import MeetingMinutesIframe from './components/MeetingMinutesIframe';
 import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
 import PrintEstimateApp from './components/estimate/PrintEstimateApp';
-import QuoteCenter from './components/quoteCenter';
+import QuoteCenter from './components/QuoteCenter';
 import STRACAnalysisPage from './components/analysis/STRACAnalysisPage';
 import { ToastContainer } from './components/Toast';
 import ConfirmationDialog from './components/ConfirmationDialog';

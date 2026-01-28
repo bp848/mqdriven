@@ -1,0 +1,7 @@
+{
+  "name": "Quantum Print Estimator PRO",
+  "description": "AIによる仕様書解析と対話型修正に対応した、総合印刷会社向け次世代積算ツール",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

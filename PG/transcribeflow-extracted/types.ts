@@ -1,16 +1,4 @@
-export interface MeetingTask {
-  id: string;
-  description: string;
-  assignedTo: string;
-  status: '未着手' | '進行中' | '完了';
-}
 
-export interface TranscriptionEntry {
-  speaker: 'user' | 'model';
-  text: string;
-}
-
-// Transcription types from Google AI Studio
 export interface TranscriptEntry {
   timestamp: string;
   text: string;
@@ -52,12 +40,4 @@ export interface HistoryEntry {
   summary?: SummaryData;
   wordCount: number;
   charCount: number;
-  created_at?: string;
-}
-
-export interface MeetingContext {
-  topic: string;
-  attendees: string;
-  location: string;
-  category: string;
 }
