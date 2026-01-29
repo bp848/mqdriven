@@ -31,3 +31,6 @@ aisanbo-*.json
 src/config.generated.ts
 
 .vercel
+
+.vercel
+.env*.local

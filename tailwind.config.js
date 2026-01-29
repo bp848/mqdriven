@@ -2,7 +2,6 @@
 export default {
   content: [
     './index.html',
-    './ai-transcription.html',
     './src/**/*.{ts,tsx,js,jsx}',
     './components/**/*.{ts,tsx,js,jsx}',
     './pages/**/*.{ts,tsx,js,jsx}',

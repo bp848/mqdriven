@@ -34,8 +34,7 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         input: {
-          main: path.resolve(__dirname, 'index.html'),
-          'ai-transcription': path.resolve(__dirname, 'ai-transcription.html')
+          main: path.resolve(__dirname, 'index.html')
         },
         output: {
           manualChunks: {
