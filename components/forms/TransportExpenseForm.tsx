@@ -234,10 +234,14 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                 if (parts.length >= 5) {
                     let [date, departure, arrival, transport, amount] = parts;
 
+                    // Debug logging
+                    console.log('Processing row:', { date, departure, arrival, transport, amount });
+
                     // Clean up date field - handle various date formats
                     if (date) {
                         // Remove extra spaces and normalize
                         date = date.trim();
+                        console.log('Original date:', date);
 
                         // Handle Excel date format (number)
                         if (!isNaN(Number(date)) && date.length <= 10 && date !== '') {
@@ -245,11 +249,14 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                                 const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
                                 if (!isNaN(excelDate.getTime())) {
                                     date = excelDate.toISOString().split('T')[0];
+                                    console.log('Converted Excel date:', date);
                                 } else {
                                     date = new Date().toISOString().split('T')[0];
+                                    console.log('Invalid Excel date, using today:', date);
                                 }
                             } catch {
                                 date = new Date().toISOString().split('T')[0];
+                                console.log('Excel date conversion failed, using today:', date);
                             }
                         }
                         // Handle various date formats
@@ -258,14 +265,17 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                             const parsedDate = new Date(date);
                             if (!isNaN(parsedDate.getTime())) {
                                 date = parsedDate.toISOString().split('T')[0];
+                                console.log('Converted slash/date:', date);
                             } else {
                                 // Try to parse Japanese date format
                                 const match = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
                                 if (match) {
                                     const [, year, month, day] = match;
                                     date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    console.log('Converted Japanese slash date:', date);
                                 } else {
                                     date = new Date().toISOString().split('T')[0];
+                                    console.log('Invalid date format, using today:', date);
                                 }
                             }
                         }
@@ -275,16 +285,20 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                             if (match) {
                                 const [, year, month, day] = match;
                                 date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                console.log('Converted Japanese date:', date);
                             } else {
                                 date = new Date().toISOString().split('T')[0];
+                                console.log('Invalid Japanese date, using today:', date);
                             }
                         }
                         // If it's not a valid date format, use today
                         else {
                             date = new Date().toISOString().split('T')[0];
+                            console.log('Unknown date format, using today:', date);
                         }
                     } else {
                         date = new Date().toISOString().split('T')[0];
+                        console.log('Empty date, using today:', date);
                     }
 
                     if (departure && arrival) {
