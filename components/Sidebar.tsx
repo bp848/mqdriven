@@ -251,7 +251,12 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                             e.stopPropagation();
                             setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
                           } else {
-                            onNavigate(item.page);
+                            // 議事録AI文字起こしのみ新しいタブで開く
+                            if (item.page === 'ai_transcription') {
+                              window.open('/ai-transcription.html', '_blank', 'noopener,noreferrer');
+                            } else {
+                              onNavigate(item.page);
+                            }
                           }
                         }}
                         className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
