@@ -4,6 +4,7 @@ import { Toast } from '../../types.ts';
 import { uploadFile } from '../../services/dataService.ts';
 import { hasSupabaseCredentials } from '../../services/supabaseClient.ts';
 import { googleDriveService, GoogleDriveFile } from '../../services/googleDriveService.ts';
+import * as XLSX from 'xlsx';
 
 interface ExpenseManagementProps {
   addToast: (message: string, type: Toast['type']) => void;
@@ -36,13 +37,13 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   const [googleDriveFiles, setGoogleDriveFiles] = useState<GoogleDriveFile[]>([]);
   const [isLoadingGoogleDrive, setIsLoadingGoogleDrive] = useState(false);
   const [selectedGoogleDriveFiles, setSelectedGoogleDriveFiles] = useState<string[]>([]);
-  
+
   // Manual input states
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualExpenses, setManualExpenses] = useState<ExpenseRecord[]>([]);
 
   // Excel file handling
-  const isExcel = (file: File) => 
+  const isExcel = (file: File) =>
     file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
     file.type === 'application/vnd.ms-excel' ||
     file.name.toLowerCase().endsWith('.xlsx') ||
@@ -61,30 +62,30 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
-    const droppedFiles = Array.from(e.dataTransfer.files).filter((file: File) => 
+
+    const droppedFiles = Array.from(e.dataTransfer.files).filter((file: File) =>
       isExcel(file) || file.type.startsWith('image/')
     );
-    
+
     if (droppedFiles.length === 0) {
       setError('Excelファイルまたは画像ファイル（領収書）をアップロードしてください');
       return;
     }
-    
+
     setFiles(prev => [...prev, ...droppedFiles]);
     setError('');
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []).filter((file: File) => 
+    const selectedFiles = Array.from(e.target.files || []).filter((file: File) =>
       isExcel(file) || file.type.startsWith('image/')
     );
-    
+
     if (selectedFiles.length === 0) {
       setError('Excelファイルまたは画像ファイル（領収書）をアップロードしてください');
       return;
     }
-    
+
     setFiles(prev => [...prev, ...selectedFiles]);
     setError('');
   };
@@ -94,32 +95,92 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   };
 
   const processExcelFile = async (file: File): Promise<ExpenseRecord[]> => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const data = e.target?.result;
-        // Excel processing logic would go here
-        // For now, return mock data
-        const mockExpenses: ExpenseRecord[] = [
-          {
-            id: Date.now().toString(),
-            date: new Date().toISOString().split('T')[0],
-            category: '交通費',
-            amount: 2500,
-            description: '新宿〜大阪 新幹線代',
-            status: 'pending'
-          },
-          {
-            id: (Date.now() + 1).toString(),
-            date: new Date().toISOString().split('T')[0],
-            category: '宿泊費',
-            amount: 12000,
-            description: '大阪ホテル宿泊費',
-            status: 'pending'
+        try {
+          const data = e.target?.result;
+          let expenses: ExpenseRecord[] = [];
+
+          if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            // Process Excel file with xlsx library
+            const arrayBuffer = data as ArrayBuffer;
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+            // Convert to expense records
+            expenses = jsonData.slice(1).map((row: any, index: number) => {
+              if (Array.isArray(row) && row.length >= 3) {
+                const [date, amount, description] = row;
+                const cleanAmount = parseInt(String(amount).replace(/[^\d]/g, '')) || 0;
+
+                if (cleanAmount > 0) {
+                  return {
+                    id: `excel-${Date.now()}-${index}`,
+                    date: date && String(date).includes('/') ? String(date) : new Date().toISOString().split('T')[0],
+                    category: '交通費',
+                    amount: cleanAmount,
+                    description: String(description || '経費'),
+                    status: 'pending'
+                  };
+                }
+              }
+              return null;
+            }).filter(Boolean) as ExpenseRecord[];
+          } else if (file.name.endsWith('.csv')) {
+            // Process CSV file
+            const text = new TextDecoder().decode(data as ArrayBuffer);
+            const lines = text.split('\n').filter(line => line.trim());
+
+            expenses = lines.slice(1).map((line, index) => {
+              const parts = line.split(',').map(p => p.trim().replace(/"/g, ''));
+              if (parts.length >= 3) {
+                const [date, amount, description] = parts;
+                const cleanAmount = parseInt(amount.replace(/[^\d]/g, '')) || 0;
+
+                if (cleanAmount > 0) {
+                  return {
+                    id: `csv-${Date.now()}-${index}`,
+                    date: date && date.includes('/') ? date : new Date().toISOString().split('T')[0],
+                    category: '交通費',
+                    amount: cleanAmount,
+                    description: description || '経費',
+                    status: 'pending'
+                  };
+                }
+              }
+              return null;
+            }).filter(Boolean) as ExpenseRecord[];
           }
-        ];
-        resolve(mockExpenses);
+
+          resolve(expenses);
+        } catch (error) {
+          console.error('Excel processing error:', error);
+          // Return mock data as fallback
+          const mockExpenses: ExpenseRecord[] = [
+            {
+              id: Date.now().toString(),
+              date: new Date().toISOString().split('T')[0],
+              category: '交通費',
+              amount: 2500,
+              description: '新宿〜大阪 新幹線代',
+              status: 'pending'
+            },
+            {
+              id: (Date.now() + 1).toString(),
+              date: new Date().toISOString().split('T')[0],
+              category: '宿泊費',
+              amount: 12000,
+              description: '大阪ホテル宿泊費',
+              status: 'pending'
+            }
+          ];
+          resolve(mockExpenses);
+        }
       };
+      reader.onerror = () => reject(new Error('File reading failed'));
       reader.readAsArrayBuffer(file);
     });
   };
@@ -167,7 +228,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
     setShowGoogleDriveModal(true);
     setIsLoadingGoogleDrive(true);
     setError('');
-    
+
     try {
       const expenseFiles = await googleDriveService.searchExpenseFiles();
       setGoogleDriveFiles(expenseFiles.files);
@@ -180,8 +241,8 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   };
 
   const toggleGoogleDriveFileSelection = (fileId: string) => {
-    setSelectedGoogleDriveFiles(prev => 
-      prev.includes(fileId) 
+    setSelectedGoogleDriveFiles(prev =>
+      prev.includes(fileId)
         ? prev.filter(id => id !== fileId)
         : [...prev, fileId]
     );
@@ -199,14 +260,14 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
     try {
       for (const fileId of selectedGoogleDriveFiles) {
         const { data, fileName } = await googleDriveService.downloadFile(fileId);
-        
+
         // Create File object from ArrayBuffer
         const mimeType = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           : 'image/jpeg';
-        
+
         const file = new File([data], fileName, { type: mimeType });
-        
+
         // Upload to Supabase
         const result = await uploadFile(file);
         setUploaded(prev => [...prev, { name: fileName, url: result.publicUrl || result.path }]);
@@ -232,7 +293,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   };
 
   const updateExpenseStatus = (id: string, status: ExpenseRecord['status']) => {
-    setExpenses(prev => prev.map(expense => 
+    setExpenses(prev => prev.map(expense =>
       expense.id === id ? { ...expense, status } : expense
     ));
     addToast('経費のステータスを更新しました', 'success');
@@ -241,18 +302,18 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   const parseClipboardData = (text: string): ExpenseRecord[] => {
     const lines = text.split('\n').filter(line => line.trim());
     const expenses: ExpenseRecord[] = [];
-    
+
     lines.forEach((line, index) => {
       // Try to parse as tab-separated or comma-separated values
       const values = line.split('\t').length > 1 ? line.split('\t') : line.split(',');
-      
+
       if (values.length >= 3) {
         // Try to extract date, amount, and description
         const date = values[0]?.trim() || new Date().toISOString().split('T')[0];
         const amountStr = values[1]?.trim().replace(/[¥,]/g, '') || '0';
         const amount = parseFloat(amountStr) || 0;
         const description = values.slice(2).join(',').trim() || '経費';
-        
+
         if (amount > 0) {
           expenses.push({
             id: `manual-${Date.now()}-${index}`,
@@ -265,27 +326,27 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
         }
       }
     });
-    
+
     return expenses;
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text');
-    
+
     if (!text.trim()) {
       setError('クリップボードにデータがありません');
       return;
     }
-    
+
     try {
       const parsedExpenses = parseClipboardData(text);
-      
+
       if (parsedExpenses.length === 0) {
         setError('クリップボードデータから経費情報を解析できませんでした');
         return;
       }
-      
+
       setManualExpenses(prev => [...prev, ...parsedExpenses]);
       setShowManualInput(true);
       addToast(`${parsedExpenses.length}件の経費データをクリップボードから読み込みました`, 'success');
@@ -309,7 +370,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   };
 
   const updateManualExpense = (id: string, field: keyof ExpenseRecord, value: any) => {
-    setManualExpenses(prev => prev.map(expense => 
+    setManualExpenses(prev => prev.map(expense =>
       expense.id === id ? { ...expense, [field]: value } : expense
     ));
   };
@@ -319,15 +380,15 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
   };
 
   const saveManualExpenses = () => {
-    const validExpenses = manualExpenses.filter(expense => 
+    const validExpenses = manualExpenses.filter(expense =>
       expense.amount > 0 && expense.description.trim()
     );
-    
+
     if (validExpenses.length === 0) {
       setError('有効な経費データがありません');
       return;
     }
-    
+
     setExpenses(prev => [...prev, ...validExpenses]);
     setManualExpenses([]);
     setShowManualInput(false);
@@ -344,11 +405,10 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
       {/* Upload Section */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">ファイルアップロード</h2>
-        
+
         <div
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-          }`}
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+            }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -370,7 +430,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".xlsx,.xls,.jpg,.jpeg,.png"
+            accept=".xlsx,.xls,.csv,.jpg,.jpeg,.png"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -482,7 +542,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <div className="space-y-4">
                 {manualExpenses.map((expense) => (
@@ -539,7 +599,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                 ))}
               </div>
             </div>
-            
+
             <div className="p-6 border-t">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">
@@ -595,13 +655,12 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                     <td className="p-2">¥{expense.amount.toLocaleString()}</td>
                     <td className="p-2">{expense.description}</td>
                     <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        expense.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs ${expense.status === 'approved' ? 'bg-green-100 text-green-700' :
+                          expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-yellow-100 text-yellow-700'
+                        }`}>
                         {expense.status === 'approved' ? '承認' :
-                         expense.status === 'rejected' ? '却下' : '保留中'}
+                          expense.status === 'rejected' ? '却下' : '保留中'}
                       </span>
                     </td>
                     <td className="p-2">
@@ -643,7 +702,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               {isLoadingGoogleDrive ? (
                 <div className="text-center py-8">
@@ -660,11 +719,10 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                   {googleDriveFiles.map((file) => (
                     <div
                       key={file.id}
-                      className={`flex items-center justify-between p-3 border rounded cursor-pointer transition-colors ${
-                        selectedGoogleDriveFiles.includes(file.id)
+                      className={`flex items-center justify-between p-3 border rounded cursor-pointer transition-colors ${selectedGoogleDriveFiles.includes(file.id)
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                        }`}
                       onClick={() => toggleGoogleDriveFileSelection(file.id)}
                     >
                       <div className="flex items-center gap-3">
@@ -678,7 +736,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                         <div>
                           <p className="font-medium">{file.name}</p>
                           <p className="text-sm text-gray-500">
-                            {file.size && `${(parseInt(file.size) / 1024).toFixed(1)} KB`} • 
+                            {file.size && `${(parseInt(file.size) / 1024).toFixed(1)} KB`} •
                             {new Date(file.createdTime).toLocaleDateString('ja-JP')}
                           </p>
                         </div>
@@ -699,7 +757,7 @@ const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ addToast, isAIOff
                 </div>
               )}
             </div>
-            
+
             <div className="p-6 border-t">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">

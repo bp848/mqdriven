@@ -6,6 +6,7 @@ import { Loader, Upload, PlusCircle, Trash2, AlertTriangle } from '../Icons';
 import { User, ApplicationWithDetails } from '../../types';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
+import * as XLSX from 'xlsx';
 
 interface TransportExpenseFormProps {
     onSuccess: () => void;
@@ -84,13 +85,30 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
             for (const line of lines) {
                 const parts = line.split('\t').map(p => p.trim());
                 if (parts.length >= 5) {
-                    const [date, departure, arrival, transport, amount] = parts;
-                    if (date && departure && arrival) {
+                    let [date, departure, arrival, transport, amount] = parts;
+
+                    // Clean up date field
+                    if (date) {
+                        date = date.trim();
+                        // Handle Excel date numbers
+                        if (!isNaN(Number(date)) && date.length <= 10) {
+                            const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
+                            date = excelDate.toISOString().split('T')[0];
+                        }
+                        // If no proper date format, use today
+                        else if (!date.includes('/') && !date.includes('-')) {
+                            date = new Date().toISOString().split('T')[0];
+                        }
+                    } else {
+                        date = new Date().toISOString().split('T')[0];
+                    }
+
+                    if (departure && arrival) {
                         newDetails.push({
                             id: `row_paste_${Date.now()}_${Math.random()}`,
-                            travelDate: date.includes('/') ? date : new Date().toISOString().split('T')[0],
-                            departure,
-                            arrival,
+                            travelDate: date,
+                            departure: departure.trim(),
+                            arrival: arrival.trim(),
                             transportMode: TRANSPORT_MODES.includes(transport) ? transport : TRANSPORT_MODES[0],
                             amount: parseInt(amount.replace(/[^\d]/g, '')) || 0,
                         });
@@ -100,7 +118,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
             // Check for duplicates before adding
             const uniqueNewDetails = newDetails.filter(newDetail => {
-                const isDuplicate = details.some(existing => 
+                const isDuplicate = details.some(existing =>
                     existing.travelDate === newDetail.travelDate &&
                     existing.departure === newDetail.departure &&
                     existing.arrival === newDetail.arrival &&
@@ -130,16 +148,17 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
         try {
             let text: string;
-            
+            let lines: string[] = [];
+
             // Handle different file types
             if (file.name.endsWith('.csv')) {
                 // For CSV files, detect encoding
                 const arrayBuffer = await file.arrayBuffer();
                 const uint8Array = new Uint8Array(arrayBuffer);
-                
+
                 // Check if it's likely Shift-JIS (contains Japanese characters in high bytes)
                 const isLikelyShiftJIS = Array.from(uint8Array.slice(0, 1024)).some(byte => byte >= 0x80 && byte <= 0x9F || byte >= 0xE0 && byte <= 0xEF);
-                
+
                 if (isLikelyShiftJIS) {
                     // Use TextDecoder with Shift-JIS
                     const decoder = new TextDecoder('shift-jis');
@@ -148,29 +167,62 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     // Fallback to UTF-8
                     text = new TextDecoder('utf-8').decode(uint8Array);
                 }
+                lines = text.split('\n').filter(line => line.trim());
+            } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                // For Excel files, use xlsx library
+                const arrayBuffer = await file.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                lines = jsonData.map((row: any) => {
+                    if (Array.isArray(row)) {
+                        return row.map(cell => String(cell).trim()).join('\t');
+                    }
+                    return String(row).trim();
+                }).filter(line => line.trim());
             } else {
-                // For .xlsx/.xls files, we'd need a library like xlsx
-                setError('Excelファイル(.xlsx/.xls)は現在対応していません。CSV形式で保存してください。');
+                setError('対応していないファイル形式です。CSVまたはExcelファイル(.xlsx/.xls)を使用してください。');
                 return;
             }
-            const lines = text.split('\n').filter(line => line.trim());
+
             const newDetails: TransportDetail[] = [];
 
             // Skip header row if exists
-            const startIndex = lines[0].includes('利用日') || lines[0].includes('日付') ? 1 : 0;
+            const startIndex = lines.length > 0 && (lines[0].includes('利用日') || lines[0].includes('日付') || lines[0].includes('travel')) ? 1 : 0;
 
             for (let i = startIndex; i < lines.length; i++) {
                 const line = lines[i];
-                const parts = line.split(',').map(p => p.trim().replace(/"/g, ''));
-                
+                // Try both tab and comma separators
+                const parts = line.includes('\t') ? line.split('\t').map(p => p.trim().replace(/"/g, '')) : line.split(',').map(p => p.trim().replace(/"/g, ''));
+
                 if (parts.length >= 5) {
-                    const [date, departure, arrival, transport, amount] = parts;
-                    if (date && departure && arrival) {
+                    let [date, departure, arrival, transport, amount] = parts;
+
+                    // Clean up date field - handle various date formats
+                    if (date) {
+                        // Remove extra spaces and normalize
+                        date = date.trim();
+                        // If it's in Excel date format (number), convert it
+                        if (!isNaN(Number(date)) && date.length <= 10) {
+                            const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
+                            date = excelDate.toISOString().split('T')[0];
+                        }
+                        // If it contains slashes, keep as is
+                        // If it's not a valid date format, use today
+                        else if (!date.includes('/') && !date.includes('-')) {
+                            date = new Date().toISOString().split('T')[0];
+                        }
+                    } else {
+                        date = new Date().toISOString().split('T')[0];
+                    }
+
+                    if (departure && arrival) {
                         newDetails.push({
                             id: `row_excel_${Date.now()}_${i}`,
-                            travelDate: date.includes('/') ? date : new Date().toISOString().split('T')[0],
-                            departure,
-                            arrival,
+                            travelDate: date,
+                            departure: departure.trim(),
+                            arrival: arrival.trim(),
                             transportMode: TRANSPORT_MODES.includes(transport) ? transport : TRANSPORT_MODES[0],
                             amount: parseInt(amount.replace(/[^\d]/g, '')) || 0,
                         });
@@ -180,7 +232,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
             // Check for duplicates before adding
             const uniqueNewDetails = newDetails.filter(newDetail => {
-                const isDuplicate = details.some(existing => 
+                const isDuplicate = details.some(existing =>
                     existing.travelDate === newDetail.travelDate &&
                     existing.departure === newDetail.departure &&
                     existing.arrival === newDetail.arrival &&
@@ -196,15 +248,16 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     setError(`${newDetails.length - uniqueNewDetails.length}件の重複データを除外しました。`);
                 }
             } else {
-                setError('Excelファイルから有効なデータが見つからなかったか、すべて重複していました。');
+                setError('ファイルから有効なデータが見つからなかったか、すべて重複していました。');
             }
         } catch (err) {
-            setError('Excelファイルの読み込みに失敗しました。CSV形式のファイルを確認してください。');
+            console.error('File upload error:', err);
+            setError('ファイルの読み込みに失敗しました。ファイル形式を確認してください。');
         } finally {
             e.target.value = '';
         }
     };
-    
+
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -219,7 +272,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
         try {
             const base64String = await readFileAsBase64(file);
             const ocrData: any = await extractInvoiceDetails(base64String, file.type);
-            
+
             // Heuristic to parse departure/arrival from description
             const description = ocrData.description || '';
             const parts = description.split(/から|→|～/);
@@ -354,7 +407,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
     return (
         <div className="relative">
-             {(isLoading || formLoadError) && (
+            {(isLoading || formLoadError) && (
                 <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl p-8">
                     {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                 </div>
@@ -367,7 +420,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                         <p>{formLoadError}</p>
                     </div>
                 )}
-                
+
                 <details className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700" open>
                     <summary className="text-base font-semibold cursor-pointer text-slate-700 dark:text-slate-200">明細書 (AI-OCR)</summary>
                     <div className="mt-4 flex items-center gap-4">
@@ -390,21 +443,21 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                                 <label htmlFor="excel-upload" className="relative inline-flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer">
                                     <Upload className="w-5 h-5" />
                                     <span>Excel/CSVファイル選択</span>
-                                    <input id="excel-upload" type="file" className="sr-only" onChange={handleExcelUpload} accept=".csv" disabled={isDisabled} />
+                                    <input id="excel-upload" type="file" className="sr-only" onChange={handleExcelUpload} accept=".csv,.xlsx,.xls" disabled={isDisabled} />
                                 </label>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">CSVファイルから交通費データを一括読み込み（Shift-JIS/UTF-8自動判定）</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Excel/CSVファイルから交通費データを一括読み込み（Shift-JIS/UTF-8自動判定、.xlsx/.xls/.csv対応）</p>
                             </div>
                         </div>
-                        
+
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">クリップボードから貼り付け</label>
                             <div className="space-y-2">
-                                <button 
+                                <button
                                     type="button"
                                     onClick={() => {
                                         navigator.clipboard.readText().then(text => {
                                             const syntheticEvent = {
-                                                preventDefault: () => {},
+                                                preventDefault: () => { },
                                                 clipboardData: {
                                                     getData: () => text
                                                 }
@@ -420,7 +473,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                                     📋 クリップボードから貼り付け
                                 </button>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Excelからコピーしたデータを貼り付け（タブ区切り対応）<br/>
+                                    Excelからコピーしたデータを貼り付け（タブ区切り対応）<br />
                                     書式: 利用日\t出発地\t目的地\t交通手段\t金額
                                 </p>
                             </div>
@@ -478,16 +531,16 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
                 {error && <p className="text-red-500 text-sm bg-red-100 dark:bg-red-900/50 p-3 rounded-lg">{error}</p>}
 
-                    <div className="flex justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                        <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>内容をクリア</button>
-                        <button
-                            type="button"
-                            onClick={handleSaveDraft}
-                            className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
-                            disabled={isDisabled}
-                        >
-                            下書き保存
-                        </button>
+                <div className="flex justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <button type="button" onClick={clearForm} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600" disabled={isDisabled}>内容をクリア</button>
+                    <button
+                        type="button"
+                        onClick={handleSaveDraft}
+                        className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+                        disabled={isDisabled}
+                    >
+                        下書き保存
+                    </button>
                     <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
                         {isSubmitting ? <Loader className="w-5 h-5 animate-spin" /> : '申請を送信する'}
                     </button>
