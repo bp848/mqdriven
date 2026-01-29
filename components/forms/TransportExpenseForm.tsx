@@ -82,7 +82,29 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
             const lines = text.split('\n').filter(line => line.trim());
             const newDetails: TransportDetail[] = [];
 
-            for (const line of lines) {
+            // Skip header row if exists - more robust detection for clipboard
+            let startIndex = 0;
+            if (lines.length > 0) {
+                const firstLine = lines[0].toLowerCase();
+                if (
+                    firstLine.includes('利用日') ||
+                    firstLine.includes('日付') ||
+                    firstLine.includes('travel') ||
+                    firstLine.includes('出発地') ||
+                    firstLine.includes('目的地') ||
+                    firstLine.includes('交通手段') ||
+                    firstLine.includes('金額') ||
+                    firstLine.includes('date') ||
+                    firstLine.includes('departure') ||
+                    firstLine.includes('arrival')
+                ) {
+                    startIndex = 1;
+                    console.log('Header row detected and skipped in clipboard:', lines[0]);
+                }
+            }
+
+            for (let i = startIndex; i < lines.length; i++) {
+                const line = lines[i];
                 const parts = line.split('\t').map(p => p.trim());
                 if (parts.length >= 5) {
                     let [date, departure, arrival, transport, amount] = parts;
@@ -235,8 +257,26 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
 
             const newDetails: TransportDetail[] = [];
 
-            // Skip header row if exists
-            const startIndex = lines.length > 0 && (lines[0].includes('利用日') || lines[0].includes('日付') || lines[0].includes('travel')) ? 1 : 0;
+            // Skip header row if exists - more robust detection
+            let startIndex = 0;
+            if (lines.length > 0) {
+                const firstLine = lines[0].toLowerCase();
+                if (
+                    firstLine.includes('利用日') ||
+                    firstLine.includes('日付') ||
+                    firstLine.includes('travel') ||
+                    firstLine.includes('出発地') ||
+                    firstLine.includes('目的地') ||
+                    firstLine.includes('交通手段') ||
+                    firstLine.includes('金額') ||
+                    firstLine.includes('date') ||
+                    firstLine.includes('departure') ||
+                    firstLine.includes('arrival')
+                ) {
+                    startIndex = 1;
+                    console.log('Header row detected and skipped:', lines[0]);
+                }
+            }
 
             for (let i = startIndex; i < lines.length; i++) {
                 const line = lines[i];
