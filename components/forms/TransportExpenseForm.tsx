@@ -109,14 +109,26 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                             const parsedDate = new Date(date);
                             if (!isNaN(parsedDate.getTime())) {
                                 date = parsedDate.toISOString().split('T')[0];
+                                console.log('Converted slash/date:', date);
                             } else {
-                                // Try to parse Japanese date format
-                                const match = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
+                                // Handle short format like "1/9" - assume current year
+                                const match = date.match(/(\d{1,2})[\/](\d{1,2})/);
                                 if (match) {
-                                    const [, year, month, day] = match;
-                                    date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    const [, month, day] = match;
+                                    const currentYear = new Date().getFullYear();
+                                    date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    console.log('Converted short date (M/D):', date);
                                 } else {
-                                    date = new Date().toISOString().split('T')[0];
+                                    // Try to parse Japanese date format
+                                    const jpMatch = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
+                                    if (jpMatch) {
+                                        const [, year, month, day] = jpMatch;
+                                        date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                        console.log('Converted Japanese slash date:', date);
+                                    } else {
+                                        date = new Date().toISOString().split('T')[0];
+                                        console.log('Invalid date format, using today:', date);
+                                    }
                                 }
                             }
                         }
@@ -261,21 +273,31 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                         }
                         // Handle various date formats
                         else if (date.includes('/') || date.includes('-')) {
-                            // For dates like "2026/01/29" or "2026-01-29"
+                            // For dates like "2026/01/29" or "2026-01-29" or "1/9"
+                            // First try to parse as is
                             const parsedDate = new Date(date);
                             if (!isNaN(parsedDate.getTime())) {
                                 date = parsedDate.toISOString().split('T')[0];
                                 console.log('Converted slash/date:', date);
                             } else {
-                                // Try to parse Japanese date format
-                                const match = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
+                                // Handle short format like "1/9" - assume current year
+                                const match = date.match(/(\d{1,2})[\/](\d{1,2})/);
                                 if (match) {
-                                    const [, year, month, day] = match;
-                                    date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                                    console.log('Converted Japanese slash date:', date);
+                                    const [, month, day] = match;
+                                    const currentYear = new Date().getFullYear();
+                                    date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    console.log('Converted short date (M/D):', date);
                                 } else {
-                                    date = new Date().toISOString().split('T')[0];
-                                    console.log('Invalid date format, using today:', date);
+                                    // Try to parse Japanese date format
+                                    const jpMatch = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
+                                    if (jpMatch) {
+                                        const [, year, month, day] = jpMatch;
+                                        date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                        console.log('Converted Japanese slash date:', date);
+                                    } else {
+                                        date = new Date().toISOString().split('T')[0];
+                                        console.log('Invalid date format, using today:', date);
+                                    }
                                 }
                             }
                         }
