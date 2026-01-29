@@ -988,6 +988,12 @@ const ensureSupabaseSuccess = (error: PostgrestError | null, context: string): v
     }
 };
 
+const ensureAuthSuccess = (error: any, context: string): void => {
+    if (error) {
+        throw new Error(`${context}: ${error.message || 'Authentication error'}`);
+    }
+};
+
 // --- Data Service Functions ---
 
 export const getProjects = async (): Promise<Project[]> => {
@@ -1758,7 +1764,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
             data: authData,
             error: authError,
         } = await supabase.auth.getUser();
-        ensureSupabaseSuccess(authError, 'Failed to get current user');
+        ensureAuthSuccess(authError, 'Failed to get current user');
         if (!authData?.user?.id) {
             throw new Error('Not authenticated');
         }
@@ -4862,7 +4868,7 @@ export const postJournalBatch = async (batchId: string): Promise<void> => {
         data: authData,
         error: authError,
     } = await supabase.auth.getUser();
-    ensureSupabaseSuccess(authError, 'Failed to get current user');
+    ensureAuthSuccess(authError, 'Failed to get current user');
     if (!authData?.user?.id) {
         throw new Error('Not authenticated');
     }
