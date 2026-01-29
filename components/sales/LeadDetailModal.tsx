@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Lead, LeadStatus, Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
-import { X, Pencil, Mail, CheckCircle, Lightbulb, Search } from '../Icons';
+import { X, Pencil, Mail, CheckCircle, Lightbulb, Search, Loader } from '../Icons';
+import { generateLeadReply } from '../../services/geminiService';
 
 interface LeadDetailModalProps {
     isOpen: boolean;
@@ -29,6 +30,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
 }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [activeAiTab, setActiveAiTab] = useState<'email' | 'proposal' | 'investigation'>('email');
+    const [isGeneratingReply, setIsGeneratingReply] = useState(false);
+    const [aiReply, setAiReply] = useState<string | null>(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -38,6 +41,32 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
+
+    // AI返信を生成する関数
+    const handleGenerateAiReply = async () => {
+        if (!lead || isAIOff) return;
+
+        setIsGeneratingReply(true);
+        setAiReply(null);
+
+        try {
+            const reply = await generateLeadReply(lead);
+            setAiReply(reply);
+            addToast('AI返信を生成しました', 'success');
+        } catch (error) {
+            console.error('AI返信生成エラー:', error);
+            addToast('AI返信の生成に失敗しました', 'error');
+        } finally {
+            setIsGeneratingReply(false);
+        }
+    };
+
+    // リードが変更されたらAI返信を生成
+    useEffect(() => {
+        if (lead && activeAiTab === 'email' && !aiReply && !isAIOff) {
+            handleGenerateAiReply();
+        }
+    }, [lead, activeAiTab]);
 
     if (!isOpen || !lead) return null;
 
@@ -185,59 +214,34 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                                 {lead.company} {lead.name}様
                                             </div>
                                             <div className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                                                文唱堂印刷の石嶋洋平です。
-
-                                                お問い合わせありがとうございます。
-                                                {(() => {
-                                                    const message = lead.message || '';
-
-                                                    // デバッグ用にメッセージ内容をログ出力
-                                                    console.log('Lead message:', message);
-                                                    console.log('Message includes 採用:', message.includes('採用'));
-                                                    console.log('Message includes 母集団:', message.includes('母集団'));
-                                                    console.log('Message includes 学生:', message.includes('学生'));
-                                                    console.log('Message includes 印刷:', message.includes('印刷'));
-
-                                                    // 新卒採用・母集団関連の問い合わせ
-                                                    if (message.includes('採用') || message.includes('母集団') || message.includes('学生')) {
-                                                        return `新卒採用ご担当者様
-                                                        
-                                                        あけましておめでとうございます！
-                                                        ご依頼内容を拝見いたしました。
-                                                        
-                                                        「すでにある母集団に、質の高い学生を追加したい」
-                                                        について、オンラインでの面談をご提案いたします。
-                                                        
-                                                        ご都合のよろしい日程はございますでしょうか。`;
-                                                    }
-
-                                                    // 経営計画書・印刷関連の問い合わせ
-                                                    if (message.includes('印刷') || message.includes('経営計画書') || message.includes('冊子')) {
-                                                        return `経営計画書の印刷ご相談、承知いたしました。
-                                                        
-                                                        ご提示いただいた仕様について、
-                                                        ・レイアウトデザイン～現物納品までの一貫対応
-                                                        ・サンプル納品と完成品会場配送
-                                                        いずれも可能でございます。
-                                                        
-                                                        詳細なお見積もりを提出させていただきますので、
-                                                        ご都合のよろしい日程でオンライン面談のご調整をお願いいたします。`;
-                                                    }
-
-                                                    // その他の一般的な問い合わせ
-                                                    return `ご依頼内容を拝見いたしました。
-                                                    
-                                                    詳細についてご説明させていただきますので、
-                                                    ご都合のよろしい日程でオンライン面談のご調整をお願いいたします。`;
-                                                })()}
+                                                {isGeneratingReply ? (
+                                                    <div className="flex items-center gap-2 py-4">
+                                                        <Loader className="w-4 h-4 animate-spin" />
+                                                        <span>AI返信を生成中...</span>
+                                                    </div>
+                                                ) : aiReply ? (
+                                                    aiReply
+                                                ) : isAIOff ? (
+                                                    <div className="text-slate-500 italic">
+                                                        AI機能は現在無効です。
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-slate-500 italic">
+                                                        返信を生成できませんでした。
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
                                         {/* Action Buttons */}
                                         <div className="flex gap-3">
-                                            <button className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">
+                                            <button
+                                                onClick={handleGenerateAiReply}
+                                                disabled={isGeneratingReply || isAIOff}
+                                                className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                            >
                                                 <CheckCircle className="w-4 h-4" />
-                                                この内容を確認
+                                                {isGeneratingReply ? '生成中...' : 'この内容を確認'}
                                             </button>
                                             <button className="flex items-center gap-2 bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-300 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500">
                                                 次へ進む
