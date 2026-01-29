@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { processAIQuote, updateQuoteWithFeedback } from '../services/Gemini';
+import { saveEstimate } from '../services/dataService';
 import type { ViewState, QuoteFormData, QuoteResultData } from '../types';
 import { MAIN_CATEGORIES, SUB_CATEGORIES, BOOK_SIZES, BINDING_OPTIONS, PAPER_TYPES, COLOR_OPTIONS, KEYWORD_MAP, SPECIAL_PROCESSING_OPTIONS } from '../types';
 import { createSupabaseBrowser } from '../services/supabase';
@@ -127,6 +128,36 @@ const QuoteCenter: React.FC = () => {
     try {
       const data = await processAIQuote(formData);
       setResult(data);
+
+      // 見積データをデータベースに保存
+      try {
+        await saveEstimate({
+          customerName: formData.customerName,
+          salesStaff: formData.salesStaff,
+          title: formData.title,
+          mainCategory: formData.mainCategory,
+          subCategory: formData.subCategory,
+          pages: formData.pages,
+          size: formData.size,
+          coverPaper: formData.coverPaper,
+          innerPaper: formData.innerPaper,
+          color: formData.color,
+          binding: formData.binding,
+          quantity: formData.quantity,
+          markup: formData.markup,
+          totalPrice: data.pq,
+          taxAmount: Math.floor(data.pq * 0.1),
+          grandTotal: Math.floor(data.pq * 1.1),
+          estimatedProductionDays: data.estimatedProductionDays,
+          items: data.formalItems,
+          userId: currentUser?.id
+        });
+        console.log('見積データを保存しました');
+      } catch (saveError) {
+        console.error('見積データの保存に失敗しました:', saveError);
+        // 保存失敗しても処理は続行
+      }
+
       setView('dashboard');
     } catch (error) {
       alert("積算に失敗しました。仕様を確認してください。");

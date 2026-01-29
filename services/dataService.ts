@@ -4960,3 +4960,65 @@ export const createJournalFromAiSelection = async (params: {
         journalEntryId: result.journal_entry_id,
     };
 };
+
+// 見積データを保存する関数
+export const saveEstimate = async (params: {
+    customerName: string;
+    salesStaff: string;
+    title: string;
+    mainCategory: string;
+    subCategory: string;
+    pages: number;
+    size: string;
+    coverPaper: string;
+    innerPaper: string;
+    color: string;
+    binding: string;
+    quantity: number;
+    markup: number;
+    totalPrice: number;
+    taxAmount: number;
+    grandTotal: number;
+    estimatedProductionDays: number;
+    items: any[];
+    userId?: string;
+}): Promise<string> => {
+    const supabase = getSupabase();
+    const quoteNumber = `QT-${Math.floor(Date.now() / 100000)}`;
+
+    const { data, error } = await supabase
+        .from('estimates')
+        .insert({
+            estimates_id: quoteNumber,
+            customer_name: params.customerName,
+            create_id: params.salesStaff,
+            specification: params.title,
+            page_cnt: params.pages.toString(),
+            size: params.size,
+            binding: params.binding,
+            copies: params.quantity.toString(),
+            total: params.grandTotal.toString(),
+            subtotal: params.totalPrice.toString(),
+            consumption: params.taxAmount.toString(),
+            status: 'draft',
+            create_date: new Date().toISOString().split('T')[0],
+            update_date: new Date().toISOString().split('T')[0],
+            // JSON形式で詳細データを保存
+            note: JSON.stringify({
+                mainCategory: params.mainCategory,
+                subCategory: params.subCategory,
+                coverPaper: params.coverPaper,
+                innerPaper: params.innerPaper,
+                color: params.color,
+                markup: params.markup,
+                estimatedProductionDays: params.estimatedProductionDays,
+                items: params.items,
+                userId: params.userId
+            })
+        })
+        .select('id')
+        .single();
+
+    ensureSupabaseSuccess(error, 'Failed to save estimate');
+    return data.id;
+};
