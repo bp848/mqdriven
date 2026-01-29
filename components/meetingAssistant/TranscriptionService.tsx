@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
+import {
   SparklesIcon,
   MicrophoneIcon,
   StopIcon,
@@ -54,7 +54,7 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedMinute, setSelectedMinute] = useState<HistoryEntry | null>(null);
-  
+
   const [meetingTopic, setMeetingTopic] = useState('');
   const [meetingAttendees, setMeetingAttendees] = useState('');
   const [meetingLocation, setMeetingLocation] = useState('');
@@ -80,21 +80,34 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
   const animationFrameRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const supabase = createSupabaseBrowser();
 
   useEffect(() => {
     const init = async () => {
       try {
-        const { data: sbData } = await supabase
-          .from('minutes')
-          .select('*')
-          .order('created_at', { ascending: false });
-        
-        if (sbData) {
-          setHistory(sbData);
+        // 現在のユーザーを取得
+        const { data: { user } } = await supabase.auth.getUser();
+        setCurrentUser(user);
+
+        if (user) {
+          // ユーザーごとのデータのみ取得
+          const { data: sbData } = await supabase
+            .from('minutes')
+            .select('*')
+            .eq('owner_id', user.id)
+            .order('created_at', { ascending: false });
+
+          if (sbData) {
+            setHistory(sbData);
+          }
+        } else {
+          // 未認証の場合はローカルストレージを使用
+          const saved = localStorage.getItem('minute_history_v14');
+          if (saved) setHistory(JSON.parse(saved));
         }
       } catch (error) {
-        console.warn('Supabase接続エラー、ローカルストレージを使用します:', error);
+        console.warn('データ取得エラー:', error);
         const saved = localStorage.getItem('minute_history_v14');
         if (saved) setHistory(JSON.parse(saved));
       }
@@ -148,19 +161,36 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
       analyser.fftSize = 512;
       source.connect(analyser);
 
-      const scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-      scriptProcessor.onaudioprocess = (e) => {
-        if (!isRecordingRef.current) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        let sum = 0;
-        for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
-        const rms = Math.sqrt(sum / inputData.length);
-        const level = Math.min(1, rms * 5);
-        setVolumeLevel(level);
-        setAudioStatus(level < 0.05 ? 'quiet' : level > 0.8 ? 'loud' : 'good');
-      };
-      source.connect(scriptProcessor);
-      scriptProcessor.connect(audioContext.destination);
+      // AudioWorkletを使用（ScriptProcessorNodeの非推奨警告対策）
+      try {
+        await audioContext.audioWorklet.addModule('/audio-processor.js');
+        const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+        source.connect(workletNode);
+        workletNode.connect(audioContext.destination);
+
+        workletNode.port.onmessage = (event) => {
+          if (!isRecordingRef.current) return;
+          const level = event.data;
+          setVolumeLevel(level);
+          setAudioStatus(level < 0.05 ? 'quiet' : level > 0.8 ? 'loud' : 'good');
+        };
+      } catch (error) {
+        // フォールバック：ScriptProcessorNodeを使用
+        console.warn('AudioWorkletが利用できないため、ScriptProcessorNodeを使用します');
+        const scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+        scriptProcessor.onaudioprocess = (e) => {
+          if (!isRecordingRef.current) return;
+          const inputData = e.inputBuffer.getChannelData(0);
+          let sum = 0;
+          for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
+          const rms = Math.sqrt(sum / inputData.length);
+          const level = Math.min(1, rms * 5);
+          setVolumeLevel(level);
+          setAudioStatus(level < 0.05 ? 'quiet' : level > 0.8 ? 'loud' : 'good');
+        };
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+      }
 
       mediaRecorder.start();
       setIsRecording(true);
@@ -168,8 +198,8 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
       setRecordingTime(0);
       timerRef.current = window.setInterval(() => setRecordingTime(t => t + 1), 1000);
       visualize(analyser);
-    } catch (err) { 
-      alert("マイクへのアクセスを許可してください。"); 
+    } catch (err) {
+      alert("マイクへのアクセスを許可してください。");
     }
   };
 
@@ -218,16 +248,16 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
     };
 
     const initialEntry: HistoryEntry = {
-      id: tempId, 
-      date: new Date().toLocaleDateString('ja-JP'), 
+      id: tempId,
+      date: new Date().toLocaleDateString('ja-JP'),
       fileName: meetingTopic || media.name,
-      author: CURRENT_USER.name, 
-      ownerId: CURRENT_USER.id, 
-      department: CURRENT_USER.dept,
-      status: '解析中', 
-      visibility: visibility, 
-      transcript: [], 
-      wordCount: 0, 
+      author: currentUser?.user_metadata?.name || currentUser?.email || '不明',
+      ownerId: currentUser?.id || 'anonymous',
+      department: currentUser?.user_metadata?.department || '未設定',
+      status: '解析中',
+      visibility: visibility,
+      transcript: [],
+      wordCount: 0,
       charCount: 0,
       created_at: new Date().toISOString()
     };
@@ -236,17 +266,17 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
       setHistory(prev => [initialEntry, ...prev]);
       setProcessPhase('transcribing');
       const { transcript } = await transcribeMedia(media.base64, media.type, context, addLog);
-      
+
       setProcessPhase('summarizing');
       const summary = await generateSummary(transcript, context, addLog);
-      
+
       const finalEntry: HistoryEntry = {
-        ...initialEntry, 
-        fileName: summary.title, 
-        status: '解析済み', 
-        transcript, 
+        ...initialEntry,
+        fileName: summary.title,
+        status: '解析済み',
+        transcript,
         summary,
-        wordCount: transcript.length, 
+        wordCount: transcript.length,
         charCount: transcript.reduce((acc, curr) => acc + curr.text.length, 0),
       };
 
@@ -255,7 +285,7 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
       } catch (error) {
         console.warn('Supabase保存エラー、ローカルストレージを使用します:', error);
       }
-      
+
       setHistory(prev => {
         const updated = prev.map(h => h.id === tempId ? finalEntry : h);
         localStorage.setItem('minute_history_v14', JSON.stringify(updated));
@@ -284,13 +314,26 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
 
   const deleteEntry = async (id: string) => {
     if (!window.confirm("このドキュメントを削除しますか？")) return;
+
+    // ユーザーごとの削除を確認
+    const entry = history.find(h => h.id === id);
+    if (!entry || (currentUser && entry.ownerId !== currentUser.id)) {
+      alert("削除権限がありません。");
+      return;
+    }
+
     try {
-      await supabase.from('minutes').delete().eq('id', id);
+      if (currentUser) {
+        await supabase.from('minutes').delete().eq('id', id).eq('owner_id', currentUser.id);
+      }
     } catch (error) {
       console.warn('Supabase削除エラー:', error);
     }
+
     const updated = history.filter(h => h.id !== id);
     setHistory(updated);
+
+    // ローカルストレージも更新
     localStorage.setItem('minute_history_v14', JSON.stringify(updated));
     if (selectedMinute?.id === id) setSelectedMinute(null);
   };
@@ -307,14 +350,14 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
               <span className="text-2xl font-black tracking-tighter">TranscribeFlow</span>
             </div>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => { setView('create'); setCreateStep('info'); setMedia(null); setMeetingTopic(''); }} 
+              <button
+                onClick={() => { setView('create'); setCreateStep('info'); setMedia(null); setMeetingTopic(''); }}
                 className="bg-white text-slate-600 border px-6 py-3 rounded-2xl font-black text-xs shadow-sm flex items-center gap-2 hover:bg-slate-50"
               >
                 <PlusIcon className="w-4 h-4" /> 新規
               </button>
-              <button 
-                onClick={() => { setView('create'); setCreateStep('action'); setMedia(null); setMeetingTopic('クイック解析'); }} 
+              <button
+                onClick={() => { setView('create'); setCreateStep('action'); setMedia(null); setMeetingTopic('クイック解析'); }}
                 className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-xl flex items-center gap-2 hover:bg-indigo-700 transition-all"
               >
                 <MicrophoneIcon className="w-4 h-4" /> クイック録音
@@ -329,12 +372,11 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
               <h2 className="text-4xl font-black tracking-tighter">ドキュメント</h2>
               <div className="flex gap-2 bg-white border p-1 rounded-2xl">
                 {['all', 'shared', 'private'].map(f => (
-                  <button 
-                    key={f} 
-                    onClick={() => setListFilter(f as any)} 
-                    className={`px-5 py-2 rounded-xl text-[11px] font-black transition-all ${
-                      listFilter === f ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'
-                    }`}
+                  <button
+                    key={f}
+                    onClick={() => setListFilter(f as any)}
+                    className={`px-5 py-2 rounded-xl text-[11px] font-black transition-all ${listFilter === f ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'
+                      }`}
                   >
                     {f === 'all' ? 'すべて' : f === 'shared' ? '共有' : '個人'}
                   </button>
@@ -353,17 +395,17 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
                 </thead>
                 <tbody className="divide-y text-sm">
                   {history.filter(h => listFilter === 'all' || h.visibility === listFilter).map(item => (
-                    <tr 
-                      key={item.id} 
-                      className="hover:bg-slate-50 transition-colors cursor-pointer group" 
+                    <tr
+                      key={item.id}
+                      className="hover:bg-slate-50 transition-colors cursor-pointer group"
                       onClick={() => { setSelectedMinute(item); setView('detail'); }}
                     >
                       <td className="px-10 py-8 italic font-black text-indigo-500 uppercase">{item.status}</td>
                       <td className="px-10 py-8 font-black text-lg group-hover:text-indigo-600 transition-colors">{item.fileName}</td>
                       <td className="px-10 py-8 text-slate-400 font-mono">{item.date}</td>
                       <td className="px-10 py-8 text-right">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); deleteEntry(item.id); }} 
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteEntry(item.id); }}
                           className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                         >
                           <TrashIcon className="w-5 h-5" />
@@ -399,20 +441,19 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
                 <h3 className="text-4xl font-black tracking-tight">会議設定</h3>
                 <div className="text-left space-y-3">
                   <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-4">会議の議題</label>
-                  <input 
-                    type="text" 
-                    value={meetingTopic} 
-                    onChange={e => setMeetingTopic(e.target.value)} 
-                    placeholder="議題を入力してください" 
-                    className="w-full px-8 py-6 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-[2rem] font-black outline-none text-xl transition-all shadow-inner" 
+                  <input
+                    type="text"
+                    value={meetingTopic}
+                    onChange={e => setMeetingTopic(e.target.value)}
+                    placeholder="議題を入力してください"
+                    className="w-full px-8 py-6 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-[2rem] font-black outline-none text-xl transition-all shadow-inner"
                   />
                 </div>
-                <button 
-                  onClick={() => setCreateStep('action')} 
-                  disabled={!meetingTopic} 
-                  className={`w-full py-8 rounded-[2.5rem] font-black text-2xl transition-all ${
-                    meetingTopic ? 'bg-indigo-600 text-white shadow-xl hover:bg-indigo-700' : 'bg-slate-100 text-slate-300'
-                  }`}
+                <button
+                  onClick={() => setCreateStep('action')}
+                  disabled={!meetingTopic}
+                  className={`w-full py-8 rounded-[2.5rem] font-black text-2xl transition-all ${meetingTopic ? 'bg-indigo-600 text-white shadow-xl hover:bg-indigo-700' : 'bg-slate-100 text-slate-300'
+                    }`}
                 >
                   次へ進む
                 </button>
@@ -425,30 +466,31 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
                       <SpeakerWaveIcon className="w-5 h-5 text-indigo-500" /> 音声モニター
                     </h3>
                     <div className={`text-6xl font-black font-mono tracking-tighter ${isRecording ? 'text-indigo-600' : 'text-slate-100'}`}>
-                      {Math.floor(recordingTime/60).toString().padStart(2,'0')}:{ (recordingTime%60).toString().padStart(2,'0') }
+                      {Math.floor(recordingTime / 60).toString().padStart(2, '0')}:{(recordingTime % 60).toString().padStart(2, '0')}
                     </div>
                     <canvas ref={canvasRef} width="300" height="80" className="w-full h-20 bg-slate-50 rounded-2xl" />
                     <div className="flex gap-4">
-                      <button 
-                        onClick={isRecording ? stopRecording : startRecording} 
-                        className={`w-28 h-28 rounded-[2rem] flex items-center justify-center shadow-2xl transition-all ${
-                          isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-700 text-white hover:bg-indigo-900'
-                        }`}
+                      <button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={`w-28 h-28 rounded-[2rem] flex items-center justify-center shadow-2xl transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-indigo-700 text-white hover:bg-indigo-900'
+                          }`}
                       >
                         {isRecording ? <StopIcon className="w-10 h-10" /> : <MicrophoneIcon className="w-10 h-10" />}
                       </button>
-                      <button 
-                        onClick={() => fileInputRef.current?.click()} 
-                        className="w-28 h-28 rounded-[2rem] bg-slate-100 text-slate-600 flex items-center justify-center shadow-xl hover:bg-slate-200 transition-all"
-                      >
-                        <DocumentArrowUpIcon className="w-10 h-10" />
-                      </button>
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept="audio/*,video/*" 
-                        onChange={handleFileUpload} 
+                      {!isRecording && media && (
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-28 h-28 rounded-[2rem] bg-slate-100 text-slate-600 flex items-center justify-center shadow-xl hover:bg-slate-200 transition-all"
+                        >
+                          <PlusIcon className="w-10 h-10" />
+                        </button>
+                      )}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept="audio/*,video/*"
+                        onChange={handleFileUpload}
                       />
                     </div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">録音 または ファイルアップロード</p>
@@ -463,15 +505,15 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
                           <p className="font-black text-sm truncate">{media.name}</p>
                           <p className="text-[10px] text-white/40 font-mono uppercase">{(media.size / 1024 / 1024).toFixed(2)} MB</p>
                         </div>
-                        <button 
-                          onClick={() => setMedia(null)} 
+                        <button
+                          onClick={() => setMedia(null)}
                           className="ml-auto p-2 text-white/40 hover:text-white transition-colors"
                         >
                           <XMarkIcon className="w-5 h-5" />
                         </button>
                       </div>
-                      <button 
-                        onClick={startAnalysis} 
+                      <button
+                        onClick={startAnalysis}
                         className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-md hover:bg-indigo-500 transition-all flex items-center justify-center gap-3"
                       >
                         <SparklesIcon className="w-5 h-5" /> 解析を開始
@@ -491,7 +533,7 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
               </div>
             )}
           </div>
-        </main>
+        </main >
 
         {isProcessing && (
           <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-3xl z-[100] flex flex-col items-center justify-center text-white p-10">
@@ -502,7 +544,7 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
             </div>
           </div>
         )}
-      </div>
+      </div >
     );
   }
 
@@ -529,7 +571,7 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
               <div className="p-10 bg-indigo-50/30 rounded-[3rem] text-slate-700 leading-relaxed text-2xl font-medium border border-indigo-100/20 shadow-inner">
                 {selectedMinute.summary?.overview}
               </div>
-              
+
               <div className="grid lg:grid-cols-2 gap-12 pt-12">
                 <div className="space-y-8">
                   <h3 className="font-black text-slate-900 text-3xl flex items-center gap-4">
@@ -552,7 +594,7 @@ export const TranscriptionService: React.FC<TranscriptionServiceProps> = ({ onBa
                   ))}
                 </div>
               </div>
-              
+
               <div className="pt-20 space-y-12 border-t">
                 <h3 className="font-black text-slate-900 text-3xl flex items-center gap-4">
                   <ListBulletIcon className="w-10 h-10 text-slate-300" /> 文字起こしログ

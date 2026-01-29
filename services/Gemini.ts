@@ -233,7 +233,7 @@ export const transcribeMedia = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-1.5-flash", // より安定したモデルに変更
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType: cleanMimeType } },
@@ -293,7 +293,7 @@ export const generateSummary = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-1.5-flash", // より安定したモデルに変更
       contents: {
         parts: [{
           text: `以下の文字起こしから、決定事項とネクストアクションを抽出したビジネス議事録を作成してください。
