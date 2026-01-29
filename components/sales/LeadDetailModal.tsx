@@ -150,8 +150,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                 <button
                                     onClick={() => setActiveAiTab('email')}
                                     className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeAiTab === 'email'
-                                            ? 'border-blue-500 text-blue-600'
-                                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                                        ? 'border-blue-500 text-blue-600'
+                                        : 'border-transparent text-slate-500 hover:text-slate-700'
                                         }`}
                                 >
                                     返信案
@@ -159,8 +159,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                 <button
                                     onClick={() => setActiveAiTab('proposal')}
                                     className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeAiTab === 'proposal'
-                                            ? 'border-blue-500 text-blue-600'
-                                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                                        ? 'border-blue-500 text-blue-600'
+                                        : 'border-transparent text-slate-500 hover:text-slate-700'
                                         }`}
                                 >
                                     見積もり案
@@ -168,8 +168,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                 <button
                                     onClick={() => setActiveAiTab('investigation')}
                                     className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeAiTab === 'investigation'
-                                            ? 'border-blue-500 text-blue-600'
-                                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                                        ? 'border-blue-500 text-blue-600'
+                                        : 'border-transparent text-slate-500 hover:text-slate-700'
                                         }`}
                                 >
                                     提案
@@ -211,7 +211,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                             </button>
                                         </div>
                                     </div>
-                                )}    )}
+                                )}
 
                                 {activeAiTab === 'proposal' && (
                                     <div className="text-center py-8">
