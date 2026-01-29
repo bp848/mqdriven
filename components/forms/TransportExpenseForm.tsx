@@ -90,13 +90,48 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     // Clean up date field
                     if (date) {
                         date = date.trim();
+
                         // Handle Excel date numbers
-                        if (!isNaN(Number(date)) && date.length <= 10) {
-                            const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
-                            date = excelDate.toISOString().split('T')[0];
+                        if (!isNaN(Number(date)) && date.length <= 10 && date !== '') {
+                            try {
+                                const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
+                                if (!isNaN(excelDate.getTime())) {
+                                    date = excelDate.toISOString().split('T')[0];
+                                } else {
+                                    date = new Date().toISOString().split('T')[0];
+                                }
+                            } catch {
+                                date = new Date().toISOString().split('T')[0];
+                            }
+                        }
+                        // Handle various date formats
+                        else if (date.includes('/') || date.includes('-')) {
+                            const parsedDate = new Date(date);
+                            if (!isNaN(parsedDate.getTime())) {
+                                date = parsedDate.toISOString().split('T')[0];
+                            } else {
+                                // Try to parse Japanese date format
+                                const match = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
+                                if (match) {
+                                    const [, year, month, day] = match;
+                                    date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                } else {
+                                    date = new Date().toISOString().split('T')[0];
+                                }
+                            }
+                        }
+                        // Handle Japanese date format like "2026年1月29日"
+                        else if (date.includes('年') && date.includes('月') && date.includes('日')) {
+                            const match = date.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+                            if (match) {
+                                const [, year, month, day] = match;
+                                date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                date = new Date().toISOString().split('T')[0];
+                            }
                         }
                         // If no proper date format, use today
-                        else if (!date.includes('/') && !date.includes('-')) {
+                        else {
                             date = new Date().toISOString().split('T')[0];
                         }
                     } else {
@@ -203,14 +238,49 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     if (date) {
                         // Remove extra spaces and normalize
                         date = date.trim();
-                        // If it's in Excel date format (number), convert it
-                        if (!isNaN(Number(date)) && date.length <= 10) {
-                            const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
-                            date = excelDate.toISOString().split('T')[0];
+
+                        // Handle Excel date format (number)
+                        if (!isNaN(Number(date)) && date.length <= 10 && date !== '') {
+                            try {
+                                const excelDate = new Date((Number(date) - 25569) * 86400 * 1000);
+                                if (!isNaN(excelDate.getTime())) {
+                                    date = excelDate.toISOString().split('T')[0];
+                                } else {
+                                    date = new Date().toISOString().split('T')[0];
+                                }
+                            } catch {
+                                date = new Date().toISOString().split('T')[0];
+                            }
                         }
-                        // If it contains slashes, keep as is
+                        // Handle various date formats
+                        else if (date.includes('/') || date.includes('-')) {
+                            // For dates like "2026/01/29" or "2026-01-29"
+                            const parsedDate = new Date(date);
+                            if (!isNaN(parsedDate.getTime())) {
+                                date = parsedDate.toISOString().split('T')[0];
+                            } else {
+                                // Try to parse Japanese date format
+                                const match = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
+                                if (match) {
+                                    const [, year, month, day] = match;
+                                    date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                } else {
+                                    date = new Date().toISOString().split('T')[0];
+                                }
+                            }
+                        }
+                        // Handle Japanese date format like "2026年1月29日"
+                        else if (date.includes('年') && date.includes('月') && date.includes('日')) {
+                            const match = date.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+                            if (match) {
+                                const [, year, month, day] = match;
+                                date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                date = new Date().toISOString().split('T')[0];
+                            }
+                        }
                         // If it's not a valid date format, use today
-                        else if (!date.includes('/') && !date.includes('-')) {
+                        else {
                             date = new Date().toISOString().split('T')[0];
                         }
                     } else {
