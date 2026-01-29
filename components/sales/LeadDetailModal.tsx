@@ -15,17 +15,17 @@ interface LeadDetailModalProps {
     isAIOff: boolean;
 }
 
-export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ 
-    isOpen, 
-    onClose, 
-    lead, 
-    onSave, 
-    onDelete, 
-    addToast, 
-    requestConfirmation, 
-    currentUser, 
-    onGenerateReply, 
-    isAIOff 
+export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
+    isOpen,
+    onClose,
+    lead,
+    onSave,
+    onDelete,
+    addToast,
+    requestConfirmation,
+    currentUser,
+    onGenerateReply,
+    isAIOff
 }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [activeAiTab, setActiveAiTab] = useState<'email' | 'proposal' | 'investigation'>('email');
@@ -59,27 +59,27 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                         </div>
                         <div className="flex items-center gap-3">
                             {/* Action Buttons */}
-                            <button 
-                                type="button" 
-                                onClick={() => setIsEditing(true)} 
+                            <button
+                                type="button"
+                                onClick={() => setIsEditing(true)}
                                 className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-3 rounded-lg hover:bg-slate-200"
                             >
-                                <Pencil className="w-4 h-4"/>編集
+                                <Pencil className="w-4 h-4" />編集
                             </button>
                             {lead.email && (
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-3 rounded-lg hover:bg-slate-200"
                                 >
-                                    <Mail className="w-4 h-4"/>メール確認
+                                    <Mail className="w-4 h-4" />メール確認
                                 </button>
                             )}
-                            <button 
-                                type="button" 
-                                onClick={onClose} 
+                            <button
+                                type="button"
+                                onClick={onClose}
                                 className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 font-semibold py-2 px-3 rounded-lg hover:bg-slate-200"
                             >
-                                <X className="w-4 h-4"/>
+                                <X className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -89,7 +89,7 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                         {/* Left Column - Customer Content */}
                         <div className="w-1/2 p-6 border-r border-slate-200 dark:border-slate-700 overflow-y-auto">
                             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">顧客からの内容</h3>
-                            
+
                             {/* Company Information */}
                             <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-4 mb-4">
                                 <div className="font-bold text-slate-900 dark:text-white mb-2">{lead.company}</div>
@@ -115,12 +115,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                         <Mail className="w-4 h-4 text-slate-500" />
                                         <span className="text-slate-700 dark:text-slate-300">メール受信</span>
                                         <span className="text-slate-500 dark:text-slate-400">
-                                            {lead.createdAt ? new Date(lead.createdAt).toLocaleString('ja-JP', { 
-                                                year: 'numeric', 
-                                                month: '2-digit', 
-                                                day: '2-digit', 
-                                                hour: '2-digit', 
-                                                minute: '2-digit' 
+                                            {lead.createdAt ? new Date(lead.createdAt).toLocaleString('ja-JP', {
+                                                year: 'numeric',
+                                                month: '2-digit',
+                                                day: '2-digit',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
                                             }).replace(/\//g, '/') : ''}
                                         </span>
                                     </div>
@@ -128,12 +128,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                         <Search className="w-4 h-4 text-slate-500" />
                                         <span className="text-slate-700 dark:text-slate-300">企業調査完了</span>
                                         <span className="text-slate-500 dark:text-slate-400">
-                                            {new Date().toLocaleString('ja-JP', { 
-                                                year: 'numeric', 
-                                                month: '2-digit', 
-                                                day: '2-digit', 
-                                                hour: '2-digit', 
-                                                minute: '2-digit' 
+                                            {new Date().toLocaleString('ja-JP', {
+                                                year: 'numeric',
+                                                month: '2-digit',
+                                                day: '2-digit',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
                                             }).replace(/\//g, '/')}
                                         </span>
                                     </div>
@@ -144,36 +144,33 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                         {/* Right Column - AI Proposal Check */}
                         <div className="w-1/2 p-6 overflow-y-auto">
                             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">AI提案をチェック</h3>
-                            
+
                             {/* Tabs */}
                             <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4">
                                 <button
                                     onClick={() => setActiveAiTab('email')}
-                                    className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-                                        activeAiTab === 'email'
+                                    className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeAiTab === 'email'
                                             ? 'border-blue-500 text-blue-600'
                                             : 'border-transparent text-slate-500 hover:text-slate-700'
-                                    }`}
+                                        }`}
                                 >
                                     返信案
                                 </button>
                                 <button
                                     onClick={() => setActiveAiTab('proposal')}
-                                    className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-                                        activeAiTab === 'proposal'
+                                    className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeAiTab === 'proposal'
                                             ? 'border-blue-500 text-blue-600'
                                             : 'border-transparent text-slate-500 hover:text-slate-700'
-                                    }`}
+                                        }`}
                                 >
                                     見積もり案
                                 </button>
                                 <button
                                     onClick={() => setActiveAiTab('investigation')}
-                                    className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-                                        activeAiTab === 'investigation'
+                                    className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeAiTab === 'investigation'
                                             ? 'border-blue-500 text-blue-600'
                                             : 'border-transparent text-slate-500 hover:text-slate-700'
-                                    }`}
+                                        }`}
                                 >
                                     提案
                                 </button>
@@ -189,18 +186,20 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                             </div>
                                             <div className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
                                                 文唱堂印刷の石嶋洋平です。
-                                                
+
                                                 お問い合わせありがとうございます。
-                                                内容を拝見いたしました。
-                                                
-                                                すでにある母集団に、質の高い学生を追加したい
-                                                
-                                                について、オンラインでの面談をご提案いたします。
-                                                
-                                                ご都合のよろしい日程はございますでしょうか。
+                                                経営計画書の印刷ご相談、承知いたしました。
+
+                                                ご提示いただいた仕様について、
+                                                ・レイアウトデザイン～現物納品までの一貫対応
+                                                ・サンプル納品と完成品会場配送
+                                                いずれも可能でございます。
+
+                                                詳細なお見積もりを提出させていただきますので、
+                                                ご都合のよろしい日程でオンライン面談のご調整をお願いいたします。
                                             </div>
                                         </div>
-                                        
+
                                         {/* Action Buttons */}
                                         <div className="flex gap-3">
                                             <button className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700">
@@ -212,15 +211,15 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                             </button>
                                         </div>
                                     </div>
-                                )}
-                                
+                                )}    )}
+
                                 {activeAiTab === 'proposal' && (
                                     <div className="text-center py-8">
                                         <Lightbulb className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                         <p className="text-slate-500 dark:text-slate-400">見積もり案の準備中...</p>
                                     </div>
                                 )}
-                                
+
                                 {activeAiTab === 'investigation' && (
                                     <div className="text-center py-8">
                                         <Search className="w-12 h-12 text-slate-400 mx-auto mb-4" />
