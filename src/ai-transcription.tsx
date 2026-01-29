@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import AITranscriptionStandalone from '../components/AITranscriptionStandalone';
-import '../src/index.css';
 
 // Mock implementations for standalone mode
 const addToast = (message: string, type: 'success' | 'error' | 'info' | 'warning') => {
