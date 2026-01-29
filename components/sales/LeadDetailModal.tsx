@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Lead, LeadStatus, Toast, ConfirmationDialogProps, EmployeeUser } from '../../types';
 import { X, Pencil, Mail, CheckCircle, Lightbulb, Search, Loader } from '../Icons';
-import { generateLeadReply } from '../../services/geminiService';
+import { generateLeadReplyEmail } from '../../services/geminiService';
 
 interface LeadDetailModalProps {
     isOpen: boolean;
@@ -50,8 +50,8 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
         setAiReply(null);
 
         try {
-            const reply = await generateLeadReply(lead);
-            setAiReply(reply);
+            const reply = await generateLeadReplyEmail(lead, currentUser?.name || '石嶋洋平');
+            setAiReply(reply.body);
             addToast('AI返信を生成しました', 'success');
         } catch (error) {
             console.error('AI返信生成エラー:', error);
