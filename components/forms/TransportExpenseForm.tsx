@@ -138,8 +138,15 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                                 if (match) {
                                     const [, month, day] = match;
                                     const currentYear = new Date().getFullYear();
-                                    date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                                    console.log('Converted short date (M/D):', date);
+                                    // Create date in current year to avoid 1900s interpretation
+                                    const fullDate = `${currentYear}/${month}/${day}`;
+                                    const parsedDate = new Date(fullDate);
+                                    if (!isNaN(parsedDate.getTime())) {
+                                        date = parsedDate.toISOString().split('T')[0];
+                                    } else {
+                                        date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    }
+                                    console.log('Converted short date (M/D) with current year:', date);
                                 } else {
                                     // Try to parse Japanese date format
                                     const jpMatch = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
@@ -325,8 +332,15 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                                 if (match) {
                                     const [, month, day] = match;
                                     const currentYear = new Date().getFullYear();
-                                    date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                                    console.log('Converted short date (M/D):', date);
+                                    // Create date in current year to avoid 1900s interpretation
+                                    const fullDate = `${currentYear}/${month}/${day}`;
+                                    const parsedDate = new Date(fullDate);
+                                    if (!isNaN(parsedDate.getTime())) {
+                                        date = parsedDate.toISOString().split('T')[0];
+                                    } else {
+                                        date = `${currentYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                    }
+                                    console.log('Converted short date (M/D) with current year:', date);
                                 } else {
                                     // Try to parse Japanese date format
                                     const jpMatch = date.match(/(\d{4})[\/年](\d{1,2})[\/月](\d{1,2})/);
