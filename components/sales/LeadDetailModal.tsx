@@ -191,18 +191,12 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                                 {(() => {
                                                     const message = lead.message || '';
 
-                                                    // 経営計画書・印刷関連の問い合わせ
-                                                    if (message.includes('印刷') || message.includes('経営計画書') || message.includes('冊子')) {
-                                                        return `経営計画書の印刷ご相談、承知いたしました。
-                                                    
-                                                    ご提示いただいた仕様について、
-                                                    ・レイアウトデザイン～現物納品までの一貫対応
-                                                    ・サンプル納品と完成品会場配送
-                                                    いずれも可能でございます。
-                                                    
-                                                    詳細なお見積もりを提出させていただきますので、
-                                                    ご都合のよろしい日程でオンライン面談のご調整をお願いいたします。`;
-                                                    }
+                                                    // デバッグ用にメッセージ内容をログ出力
+                                                    console.log('Lead message:', message);
+                                                    console.log('Message includes 採用:', message.includes('採用'));
+                                                    console.log('Message includes 母集団:', message.includes('母集団'));
+                                                    console.log('Message includes 学生:', message.includes('学生'));
+                                                    console.log('Message includes 印刷:', message.includes('印刷'));
 
                                                     // 新卒採用・母集団関連の問い合わせ
                                                     if (message.includes('採用') || message.includes('母集団') || message.includes('学生')) {
@@ -215,6 +209,19 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({
                                                     について、オンラインでの面談をご提案いたします。
                                                     
                                                     ご都合のよろしい日程はございますでしょうか。`;
+                                                    }
+
+                                                    // 経営計画書・印刷関連の問い合わせ
+                                                    if (message.includes('印刷') || message.includes('経営計画書') || message.includes('冊子')) {
+                                                        return `経営計画書の印刷ご相談、承知いたしました。
+                                                    
+                                                    ご提示いただいた仕様について、
+                                                    ・レイアウトデザイン～現物納品までの一貫対応
+                                                    ・サンプル納品と完成品会場配送
+                                                    いずれも可能でございます。
+                                                    
+                                                    詳細なお見積もりを提出させていただきますので、
+                                                    ご都合のよろしい日程でオンライン面談のご調整をお願いいたします。`;
                                                     }
 
                                                     // その他の一般的な問い合わせ
