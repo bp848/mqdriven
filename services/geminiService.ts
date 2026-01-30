@@ -561,7 +561,7 @@ export const extractInvoiceDetails = async (
 
       // AI出力を期待する形式にマッピング
       const mapped = {
-        vendorName: parsed.issuer?.company_name || parsed.sender_info?.company_name || parsed.vendor_info?.name || parsed.billing_party?.company_name || parsed.invoice_title || '',
+        vendorName: parsed.sender_info?.name || parsed.issuer?.company_name || parsed.vendor_info?.name || parsed.billing_party?.company_name || parsed.invoice_title || '',
         invoiceDate: convertJapaneseDate(parsed.invoice_date || parsed.issue_date || ''),
         dueDate: convertJapaneseDate(parsed.due_date || parsed.payment_due_date || ''),
         totalAmount: removeCurrency(parsed.amount_due || parsed.total_billed_amount || parsed.total_amount_due || parsed.total_amount_at_headline),
@@ -569,7 +569,7 @@ export const extractInvoiceDetails = async (
         taxAmount: removeCurrency(parsed.subtotals?.tax || parsed.breakdown?.tax_amount || parsed.summary?.tax_amount || parsed.tax?.amount),
         registrationNumber: parsed.issuer?.registration_number || parsed.registration_number || parsed.sender_info?.registration_number || parsed.vendor_info?.registration_number || '',
         description: parsed.invoice_title || '',
-        relatedCustomer: parsed.customer?.company_name || parsed.recipient_info?.company_name || parsed.customer_info?.name || parsed.billed_party?.company_name || '',
+        relatedCustomer: parsed.recipient_info?.name || parsed.customer?.company_name || parsed.customer_info?.name || parsed.billed_party?.company_name || '',
         lineItems: parsed.items?.map((item: any) => ({
           description: item.description || item.item_name || '',
           quantity: removeCurrency(item.quantity || 1),
