@@ -502,7 +502,7 @@ export const extractInvoiceDetails = async (
     const imagePart = { inlineData: { data: imageBase64, mimeType } };
     const textPart = {
       text:
-        "この画像から請求書の詳細情報をJSONで抽出してください。支払期日、登録番号、支払先銀行情報、明細行（品名/数量/単価）も可能な限り含めてください。",
+        "この画像から請求書の詳細情報をJSONで抽出してください。説明や挨拶は不要です。JSONのみで回答してください。支払期日、登録番号、支払先銀行情報、明細行（品名/数量/単価）も可能な限り含めてください。",
     };
     const response = await ai.models.generateContent({
       model: invoiceOcrModel,
