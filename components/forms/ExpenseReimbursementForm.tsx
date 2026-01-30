@@ -57,6 +57,8 @@ interface ExpenseLine {
     nonCustomerExpense?: boolean;
     linkedRevenueId: string;
     ocrExtracted: boolean;
+    purposeType: '自社' | '顧客' | '他社' | 'その他';
+    businessCategory: '印刷' | '製造' | '物流' | '業務' | 'その他';
     internalMemo?: string;
 }
 
@@ -130,6 +132,8 @@ const createEmptyLine = (ocr: boolean = false): ExpenseLine => ({
     unit: '式',
     unitPrice: 0,
     amountExclTax: 0,
+    purposeType: '自社',
+    businessCategory: '業務',
     taxRate: 10,
     accountItemId: '',
     allocationDivisionId: '',
@@ -628,6 +632,40 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 if (ocrFields.size === 0) {
                     console.error('[ExpenseReimbursementForm] OCR returned no usable fields', ocrData);
                     throw new Error('OCR結果を項目として取り込めませんでした。手入力で内容を入力してください。');
+                }
+
+                // OCR結果と手入力内容の相違チェック
+                const validateOCRConsistency = () => {
+                    if (!invoice.sourceFile || !ocrData) return true;
+
+                    // 基本情報の相違チェック
+                    const inconsistencies = [];
+
+                    if (invoice.supplierName && ocrData.vendorName &&
+                        invoice.supplierName !== ocrData.vendorName) {
+                        inconsistencies.push(`サプライヤー名: OCR="${ocrData.vendorName}" vs 入力="${invoice.supplierName}"`);
+                    }
+
+                    if (invoice.totalGross && ocrData.totalAmount &&
+                        Math.abs(Number(invoice.totalGross) - Number(ocrData.totalAmount)) > 100) {
+                        inconsistencies.push(`合計金額: OCR=${ocrData.totalAmount} vs 入力=${invoice.totalGross}`);
+                    }
+
+                    if (invoice.invoiceDate && ocrData.invoiceDate &&
+                        invoice.invoiceDate !== ocrData.invoiceDate) {
+                        inconsistencies.push(`請求日: OCR="${ocrData.invoiceDate}" vs 入力="${invoice.invoiceDate}"`);
+                    }
+
+                    if (inconsistencies.length > 0) {
+                        console.warn('[ExpenseReimbursementForm] OCRと入力内容に相違:', inconsistencies);
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                if (!validateOCRConsistency()) {
+                    throw new Error('OCRで読み取った内容と入力内容に相違があります。内容を確認してください。');
                 }
             } else {
                 nextInvoiceState = {
@@ -1211,6 +1249,8 @@ const LineItemTable: React.FC<{
                         <thead>
                             <tr>
                                 <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 dark:text-white sm:pl-0">品名 / 用途</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">使用目的</th>
+                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">事業カテゴリ</th>
                                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">日付</th>
                                 {!isInternalExpense && (
                                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">顧客候補（オートコンプリート可）</th>
@@ -1285,7 +1325,34 @@ const LineItemTable: React.FC<{
                                                 placeholder="例: 校了データ発送作業"
                                             />
                                         </td>
-                                        <td className="px-3 py-4 text-sm align-top">
+                                        <td className="py-4 px-3 text-sm align-top">
+                                            <select
+                                                value={line.purposeType}
+                                                onChange={e => onLineChange(line.id, 'purposeType', e.target.value)}
+                                                className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                disabled={isDisabled}
+                                            >
+                                                <option value="自社">自社</option>
+                                                <option value="顧客">顧客</option>
+                                                <option value="他社">他社</option>
+                                                <option value="その他">その他</option>
+                                            </select>
+                                        </td>
+                                        <td className="py-4 px-3 text-sm align-top">
+                                            <select
+                                                value={line.businessCategory}
+                                                onChange={e => onLineChange(line.id, 'businessCategory', e.target.value)}
+                                                className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                disabled={isDisabled}
+                                            >
+                                                <option value="印刷">印刷</option>
+                                                <option value="製造">製造</option>
+                                                <option value="物流">物流</option>
+                                                <option value="業務">業務</option>
+                                                <option value="その他">その他</option>
+                                            </select>
+                                        </td>
+                                        <td className="py-4 px-3 text-sm align-top">
                                             <input
                                                 type="date"
                                                 value={line.lineDate}
