@@ -1316,24 +1316,30 @@ const LineItemTable: React.FC<{
                                     ? jobs.filter(job => job.customerId === line.customerId)
                                     : jobs;
                                 const limitedProjectOptions = availableProjects.slice(0, 30);
-                                const isNonCustomerExpense = Boolean(line.nonCustomerExpense);
+                                // 使用目的に基づいて顧客フィールドの制御を判断
+                                const isNonCustomerExpense = line.purposeType !== '顧客';
 
                                 const handleCustomerInputChange = (value: string) => {
                                     const trimmed = value.trim();
-                                    const match = customers.find(
-                                        customer => customer.customerName.toLowerCase() === trimmed.toLowerCase()
-                                    );
-                                    if (match) {
-                                        onLineChange(line.id, 'customerId', match.id);
-                                        onLineChange(line.id, 'customerName', match.customerName);
-                                        onLineChange(line.id, 'customCustomerName', '');
-                                        if (isNonCustomerExpense) {
-                                            onLineChange(line.id, 'nonCustomerExpense', false);
-                                        }
-                                    } else {
+                                    if (trimmed.length === 0) {
                                         onLineChange(line.id, 'customerId', '');
-                                        onLineChange(line.id, 'customerName', trimmed);
+                                        onLineChange(line.id, 'customerName', '');
                                         onLineChange(line.id, 'customCustomerName', trimmed);
+                                    } else {
+                                        const match = customers.find(c => c.customerName === trimmed);
+                                        if (match) {
+                                            onLineChange(line.id, 'customerId', match.id);
+                                            onLineChange(line.id, 'customerName', match.customerName);
+                                            onLineChange(line.id, 'customCustomerName', '');
+                                            // 顧客名が入力されたら目的を「顧客」に自動設定
+                                            if (line.purposeType !== '顧客') {
+                                                onLineChange(line.id, 'purposeType', '顧客');
+                                            }
+                                        } else {
+                                            onLineChange(line.id, 'customerId', '');
+                                            onLineChange(line.id, 'customerName', '');
+                                            onLineChange(line.id, 'customCustomerName', trimmed);
+                                        }
                                     }
                                 };
 
@@ -1418,20 +1424,6 @@ const LineItemTable: React.FC<{
                                                                 <option key={customer.id} value={customer.customerName} />
                                                             ))}
                                                         </datalist>
-                                                        <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isNonCustomerExpense}
-                                                                onChange={e => {
-                                                                    onLineChange(line.id, 'nonCustomerExpense', e.target.checked);
-                                                                    if (e.target.checked) {
-                                                                        onLineChange(line.id, 'customerId', '');
-                                                                    }
-                                                                }}
-                                                                disabled={isDisabled}
-                                                            />
-                                                            顧客に紐付けず処理する（資材・社内用途など）
-                                                        </label>
                                                         {!line.customerId && !line.customCustomerName && !isDisabled && (
                                                             <p className="text-xs text-amber-600">
                                                                 まず名称を入力しておくと後で得意先登録がしやすくなります。
