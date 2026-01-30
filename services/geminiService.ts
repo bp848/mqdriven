@@ -537,7 +537,29 @@ export const extractInvoiceDetails = async (
     try {
       const parsed = JSON.parse(jsonStr);
       console.log('[extractInvoiceDetails] 解析成功:', parsed);
-      return parsed;
+
+      // AI出力を期待する形式にマッピング
+      const mapped = {
+        vendorName: parsed.billing_party?.company_name || parsed.invoice_title || '',
+        invoiceDate: parsed.invoice_date || '',
+        dueDate: parsed.due_date || '',
+        totalAmount: parsed.total_amount_at_headline || parsed.summary?.total_before_withholding || 0,
+        subtotalAmount: parsed.summary?.subtotal || 0,
+        taxAmount: parsed.summary?.tax_amount || 0,
+        registrationNumber: parsed.registration_number || '',
+        description: parsed.invoice_title || '',
+        relatedCustomer: parsed.billed_party?.company_name || '',
+        lineItems: parsed.line_items?.map((item: any) => ({
+          description: item.item_name || '',
+          quantity: item.quantity || 1,
+          unitPrice: item.unit_price || 0,
+          amountExclTax: item.amount || 0,
+          taxRate: 10
+        })) || []
+      };
+
+      console.log('[extractInvoiceDetails] マッピング後:', mapped);
+      return mapped;
     } catch (e) {
       console.error("[extractInvoiceDetails] JSON解析失敗:", e);
       console.error("受信内容:", rawText);
