@@ -3151,12 +3151,12 @@ export const debugPaymentRecipientsWithServiceRole = async (): Promise<PaymentRe
 };
 
 export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient[]> => {
-    console.log(`[getPaymentRecipients] 髢句ｧ・- 讀懃ｴ｢繧ｯ繧ｨ繝ｪ: "${q}"`);
+    console.log(`[getPaymentRecipients] 検索クエリ: "${q}"`);
     const supabase = getSupabase();
 
     // Ensure the session is available.
     const { data: authData } = await supabase.auth.getSession();
-    console.log(`[getPaymentRecipients] 隱崎ｨｼ迥ｶ諷・`, {
+    console.log(`[getPaymentRecipients] 認証状態`, {
         hasSession: !!authData.session,
         userId: authData.session?.user?.id,
         userEmail: authData.session?.user?.email
@@ -3169,11 +3169,11 @@ export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient
             .order('company_name', { ascending: true })
             .order('recipient_name', { ascending: true });
 
-        // 讀懃ｴ｢繧ｯ繧ｨ繝ｪ縺後≠繧句ｴ蜷医・隍・焚繧ｫ繝ｩ繝繧貞ｯｾ雎｡縺ｫ讀懃ｴ｢
+        // 検索クエリがある場合は部分一致で検索
         if (q && q.trim()) {
             const searchTerm = `%${q.trim()}%`;
             query = query.or(`company_name.ilike.${searchTerm},recipient_name.ilike.${searchTerm},recipient_code.ilike.${searchTerm}`);
-            console.log(`[getPaymentRecipients] 讀懃ｴ｢譚｡莉ｶ驕ｩ逕ｨ: ${searchTerm}`);
+            console.log(`[getPaymentRecipients] 検索条件適用: ${searchTerm}`);
         }
 
         return query.limit(1000);
@@ -3189,15 +3189,16 @@ export const getPaymentRecipients = async (q?: string): Promise<PaymentRecipient
     }
 
     if (error) {
-        console.error(`[getPaymentRecipients] 繧ｨ繝ｩ繝ｼ:`, error);
+        console.error(`[getPaymentRecipients] エラー:`, error);
         throw error;
     }
 
     const result = (data || []).map(mapDbPaymentRecipient);
-    console.log(`[getPaymentRecipients] 螳御ｺ・- 蜿門ｾ嶺ｻｶ謨ｰ: ${result.length}莉ｶ`, {
+    console.log(`[getPaymentRecipients] 取得完了: ${result.length}件`, {
         searchQuery: q,
         rawDataCount: data?.length || 0,
-        firstFewItems: result.slice(0, 3).map(r => ({ id: r.id, name: r.companyName || r.recipientName }))
+        firstFewItems: result.slice(0, 3).map(r => ({ id: r.id, name: r.companyName || r.recipientName })),
+        allNames: result.map(r => ({ id: r.id, companyName: r.companyName, recipientName: r.recipientName }))
     });
     return result;
 };
