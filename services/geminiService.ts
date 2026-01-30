@@ -540,20 +540,20 @@ export const extractInvoiceDetails = async (
 
       // AI出力を期待する形式にマッピング
       const mapped = {
-        vendorName: parsed.sender_info?.company_name || parsed.billing_party?.company_name || parsed.invoice_title || '',
-        invoiceDate: parsed.invoice_date || '',
-        dueDate: parsed.payment_due_date || parsed.due_date || '',
-        totalAmount: parsed.total_amount_due || parsed.total_amount_at_headline || parsed.summary?.total_before_withholding || 0,
-        subtotalAmount: parsed.summary?.subtotal || 0,
-        taxAmount: parsed.summary?.tax || parsed.summary?.tax_amount || 0,
-        registrationNumber: parsed.registration_number || '',
+        vendorName: parsed.vendor_info?.name || parsed.sender_info?.company_name || parsed.billing_party?.company_name || parsed.invoice_title || '',
+        invoiceDate: parsed.issue_date || parsed.invoice_date || '',
+        dueDate: parsed.due_date || parsed.payment_due_date || '',
+        totalAmount: Number(String(parsed.total_amount_due || parsed.total_amount_at_headline || parsed.summary?.total_before_withholding || 0).replace(/,/g, '')) || 0,
+        subtotalAmount: Number(String(parsed.subtotal || parsed.summary?.subtotal || 0).replace(/,/g, '')) || 0,
+        taxAmount: Number(String(parsed.tax?.amount || parsed.summary?.tax || parsed.summary?.tax_amount || 0).replace(/,/g, '')) || 0,
+        registrationNumber: parsed.vendor_info?.registration_number || parsed.registration_number || '',
         description: parsed.invoice_title || '',
-        relatedCustomer: parsed.recipient_info?.company_name || parsed.billed_party?.company_name || '',
+        relatedCustomer: parsed.customer_info?.name || parsed.recipient_info?.company_name || parsed.billed_party?.company_name || '',
         lineItems: parsed.line_items?.map((item: any) => ({
           description: item.description || item.item_name || '',
-          quantity: Number(item.quantity) || 1,
-          unitPrice: Number(item.unit_price) || 0,
-          amountExclTax: Number(item.amount) || 0,
+          quantity: Number(String(item.quantity || 1).replace(/,/g, '')),
+          unitPrice: Number(String(item.unit_price || 0).replace(/,/g, '')),
+          amountExclTax: Number(String(item.amount || 0).replace(/,/g, '')),
           taxRate: 10
         })) || []
       };
