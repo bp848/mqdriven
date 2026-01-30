@@ -4419,8 +4419,10 @@ export const uploadFile = async (
 
     const { data, error } = await supabase.storage.from(safeBucket).upload(filePath, file);
     if (error) {
+        console.error(`[uploadFile] Upload error for ${filePath}:`, error);
+
         // If collision occurs, retry with a different path
-        if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+        if (error.message?.includes('already exists') || error.message?.includes('duplicate') || error.message?.includes('resource already exists')) {
             console.warn(`[uploadFile] File collision detected for ${filePath}, retrying with new ID`);
             const retryTimestamp = Date.now();
             const retryRandom = Math.random().toString(36).slice(2, 15);
@@ -4428,8 +4430,10 @@ export const uploadFile = async (
             const retryUniqueId = `${retryTimestamp}-${retryRandom}-${retryCounter}-retry`;
             const retryFilePath = `public/${retryUniqueId}.${extension}`;
 
+            console.log(`[uploadFile] Retrying with: ${retryFilePath}`);
             const { data: retryData, error: retryError } = await supabase.storage.from(safeBucket).upload(retryFilePath, file);
             if (retryError) {
+                console.error(`[uploadFile] Retry failed:`, retryError);
                 throw formatSupabaseError(`Failed to upload to ${safeBucket} (even after retry)`, retryError as unknown as PostgrestError);
             }
             const { data: urlData } = supabase.storage.from(safeBucket).getPublicUrl(retryData.path);
