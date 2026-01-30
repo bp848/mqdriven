@@ -122,8 +122,28 @@ async function withRetry<T>(
 const stripCodeFences = (value: string): string => {
   const trimmed = value?.trim() ?? "";
   if (!trimmed.startsWith("```")) {
-    return trimmed;
+    // コードフェンスがない場合、JSON部分を抽出
+    const jsonStart = trimmed.indexOf('{');
+    if (jsonStart === -1) return trimmed;
+
+    let braceCount = 0;
+    let jsonEnd = jsonStart;
+
+    for (let i = jsonStart; i < trimmed.length; i++) {
+      if (trimmed[i] === '{') {
+        braceCount++;
+      } else if (trimmed[i] === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          jsonEnd = i + 1;
+          break;
+        }
+      }
+    }
+
+    return trimmed.substring(jsonStart, jsonEnd).trim();
   }
+
   const withoutOpening = trimmed.replace(/^```[a-zA-Z0-9_-]*\s*/, "");
   if (withoutOpening.endsWith("```")) {
     return withoutOpening.slice(0, -3).trim();
