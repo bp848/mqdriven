@@ -154,8 +154,8 @@ const ensureExpenseLineShape = (rawLine?: Partial<ExpenseLine> | null): ExpenseL
         typeof merged.customerName === 'string' && merged.customerName.trim()
             ? merged.customerName
             : typeof merged.customCustomerName === 'string'
-            ? merged.customCustomerName
-            : '';
+                ? merged.customCustomerName
+                : '';
     return {
         ...merged,
         id: rawLine?.id || baseLine.id,
@@ -164,8 +164,8 @@ const ensureExpenseLineShape = (rawLine?: Partial<ExpenseLine> | null): ExpenseL
             typeof rawLine?.internalMemo === 'string'
                 ? rawLine.internalMemo
                 : typeof rawLine?.customCustomerName === 'string'
-                ? rawLine.customCustomerName
-                : merged.internalMemo || '',
+                    ? rawLine.customCustomerName
+                    : merged.internalMemo || '',
     };
 };
 
@@ -428,14 +428,14 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const handleFieldChange = (field: keyof ExpenseInvoiceDraft, value: any) => {
         setInvoice(prev => {
             const updated = { ...prev, [field]: value };
-            
+
             // 税抜合計または消費税が変更された場合は税込合計を再計算
             if (field === 'totalNet' || field === 'taxAmount') {
                 const net = Number(updated.totalNet) || 0;
                 const tax = Number(updated.taxAmount) || 0;
                 updated.totalGross = net + tax;
             }
-            
+
             return updated;
         });
     };
@@ -456,13 +456,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 }
                 return updatedLine;
             });
-            
+
             // 再計算した合計金額をinvoice状態に反映（手動入力された場合は維持）
             const totals = computeLineTotals({ ...prev, lines: newLines });
             const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
-            
-            return { 
-                ...prev, 
+
+            return {
+                ...prev,
                 lines: newLines,
                 totalNet: hasManualNetInput ? prev.totalNet : totals.net,
                 taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
@@ -476,9 +476,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             const newLines = normalizeLinesForInternalExpense([...prev.lines, createEmptyLine()]);
             const totals = computeLineTotals({ ...prev, lines: newLines });
             const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
-            
-            return { 
-                ...prev, 
+
+            return {
+                ...prev,
                 lines: newLines,
                 totalNet: hasManualNetInput ? prev.totalNet : totals.net,
                 taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
@@ -495,9 +495,9 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             }
             const totals = computeLineTotals({ ...prev, lines: newLines });
             const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
-            
-            return { 
-                ...prev, 
+
+            return {
+                ...prev,
                 lines: newLines,
                 totalNet: hasManualNetInput ? prev.totalNet : totals.net,
                 taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
@@ -581,7 +581,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 const ocrFields = new Set<string>();
 
                 const updateField = (field: keyof ExpenseInvoiceDraft, value: any) => {
-                    if (value) {
+                    if (value !== undefined && value !== null && value !== '') {
                         (newDraft as any)[field] = value;
                         ocrFields.add(field);
                     }
@@ -599,15 +599,15 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     newDraft.lines = ocrData.lineItems.map(item => {
                         const candidateCustomer = (item as any).customerName || ocrData.relatedCustomer || '';
                         return {
-                        ...createEmptyLine(true),
-                        description: item.description || '',
-                        customerName: candidateCustomer || '',
-                        customCustomerName: candidateCustomer || '',
-                        amountExclTax: item.amountExclTax || 0,
-                        quantity: item.quantity || 1,
-                        unitPrice: item.unitPrice || 0,
-                        taxRate: item.taxRate || 10,
-                    };
+                            ...createEmptyLine(true),
+                            description: item.description || '',
+                            customerName: candidateCustomer || '',
+                            customCustomerName: candidateCustomer || '',
+                            amountExclTax: item.amountExclTax || 0,
+                            quantity: item.quantity || 1,
+                            unitPrice: item.unitPrice || 0,
+                            taxRate: item.taxRate || 10,
+                        };
                     });
                     ocrFields.add('lines');
                 } else if (newDraft.totalNet) {
@@ -624,6 +624,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
                 newDraft.ocrExtractedFields = ocrFields;
                 nextInvoiceState = newDraft;
+
+                if (ocrFields.size === 0) {
+                    console.error('[ExpenseReimbursementForm] OCR returned no usable fields', ocrData);
+                    throw new Error('OCR結果を項目として取り込めませんでした。手入力で内容を入力してください。');
+                }
             } else {
                 nextInvoiceState = {
                     ...invoice,
@@ -659,11 +664,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
     const buildApplicationPayload = () => {
         const attachmentPayload = documentAttachment
             ? {
-                  documentUrl: documentAttachment.publicUrl,
-                  documentName: documentAttachment.name,
-                  documentMimeType: documentAttachment.type,
-                  documentStoragePath: documentAttachment.path,
-              }
+                documentUrl: documentAttachment.publicUrl,
+                documentName: documentAttachment.name,
+                documentMimeType: documentAttachment.type,
+                documentStoragePath: documentAttachment.path,
+            }
             : {};
 
         const baseFormData = {
@@ -699,7 +704,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             await clearApplicationDraft(applicationCodeId, currentUser.id);
             setHasSubmitted(true);
             addToast?.('経費精算を送信しました。', 'success');
-            
+
             // Send submission notification email
             if (emailService) {
                 try {
@@ -715,7 +720,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     console.error('Email notification error:', emailError);
                 }
             }
-            
+
             onSuccess();
         } catch (err: any) {
             console.error('申請送信エラー:', err);
@@ -758,7 +763,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             return;
         }
         if (!currentUser) return setError('ユーザー情報が見つかりません。');
-        
+
         try {
             await saveApplicationDraft(buildApplicationPayload(), currentUser.id);
             addToast?.('下書きを保存しました。', 'success');
@@ -798,7 +803,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     デバッグ：サービスロールで支払先取得
                 </button>
             </div>
-            
+
             {hasSubmitted && (
                 <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-6 dark:border-emerald-500/40 dark:bg-emerald-900/20">
                     <div className="flex items-center gap-3 mb-4">
@@ -1291,68 +1296,68 @@ const LineItemTable: React.FC<{
                                         </td>
                                         {!isInternalExpense ? (
                                             <>
-                                            <td className="px-3 py-4 text-sm align-top">
-                                                <div className="space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        list={customerDatalistId}
-                                                        value={customerDisplayName}
-                                                        onChange={e => handleCustomerInputChange(e.target.value)}
-                                                        onBlur={e => handleCustomerInputChange(e.target.value)}
-                                                        className="w-full rounded-md border-slate-300 dark:border-slate-600"
-                                                        disabled={isDisabled}
-                                                        placeholder="顧客名や「その他」「校正用プリント」など"
-                                                    />
-                                                    <datalist id={customerDatalistId}>
-                                                        {customers.map(customer => (
-                                                            <option key={customer.id} value={customer.customerName} />
-                                                        ))}
-                                                    </datalist>
-                                                    <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                                <td className="px-3 py-4 text-sm align-top">
+                                                    <div className="space-y-2">
                                                         <input
-                                                            type="checkbox"
-                                                            checked={isNonCustomerExpense}
-                                                            onChange={e => {
-                                                                onLineChange(line.id, 'nonCustomerExpense', e.target.checked);
-                                                                if (e.target.checked) {
-                                                                    onLineChange(line.id, 'customerId', '');
-                                                                }
-                                                            }}
+                                                            type="text"
+                                                            list={customerDatalistId}
+                                                            value={customerDisplayName}
+                                                            onChange={e => handleCustomerInputChange(e.target.value)}
+                                                            onBlur={e => handleCustomerInputChange(e.target.value)}
+                                                            className="w-full rounded-md border-slate-300 dark:border-slate-600"
                                                             disabled={isDisabled}
+                                                            placeholder="顧客名や「その他」「校正用プリント」など"
                                                         />
-                                                        顧客に紐付けず処理する（資材・社内用途など）
-                                                    </label>
-                                                    {!line.customerId && !line.customCustomerName && !isDisabled && (
-                                                        <p className="text-xs text-amber-600">
-                                                            まず名称を入力しておくと後で得意先登録がしやすくなります。
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-4 text-sm align-top">
-                                                <div className="space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        list={projectDatalistId}
-                                                        value={projectDisplayName}
-                                                        onChange={e => handleProjectInputChange(e.target.value)}
-                                                        onBlur={e => handleProjectInputChange(e.target.value)}
-                                                        className="w-full rounded-md border-slate-300 dark:border-slate-600"
-                                                        disabled={isDisabled}
-                                                        placeholder="案件名 / プロジェクト名（自由入力可）"
-                                                    />
-                                                    <datalist id={projectDatalistId}>
-                                                        {limitedProjectOptions.map(project => (
-                                                            <option key={project.id} value={project.title} />
-                                                        ))}
-                                                    </datalist>
-                                                    {!line.customerId && (
-                                                        <p className="text-xs text-slate-500">
-                                                            得意先が未登録でも案件名をメモできます。登録後に紐付けてください。
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </td>
+                                                        <datalist id={customerDatalistId}>
+                                                            {customers.map(customer => (
+                                                                <option key={customer.id} value={customer.customerName} />
+                                                            ))}
+                                                        </datalist>
+                                                        <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isNonCustomerExpense}
+                                                                onChange={e => {
+                                                                    onLineChange(line.id, 'nonCustomerExpense', e.target.checked);
+                                                                    if (e.target.checked) {
+                                                                        onLineChange(line.id, 'customerId', '');
+                                                                    }
+                                                                }}
+                                                                disabled={isDisabled}
+                                                            />
+                                                            顧客に紐付けず処理する（資材・社内用途など）
+                                                        </label>
+                                                        {!line.customerId && !line.customCustomerName && !isDisabled && (
+                                                            <p className="text-xs text-amber-600">
+                                                                まず名称を入力しておくと後で得意先登録がしやすくなります。
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-3 py-4 text-sm align-top">
+                                                    <div className="space-y-2">
+                                                        <input
+                                                            type="text"
+                                                            list={projectDatalistId}
+                                                            value={projectDisplayName}
+                                                            onChange={e => handleProjectInputChange(e.target.value)}
+                                                            onBlur={e => handleProjectInputChange(e.target.value)}
+                                                            className="w-full rounded-md border-slate-300 dark:border-slate-600"
+                                                            disabled={isDisabled}
+                                                            placeholder="案件名 / プロジェクト名（自由入力可）"
+                                                        />
+                                                        <datalist id={projectDatalistId}>
+                                                            {limitedProjectOptions.map(project => (
+                                                                <option key={project.id} value={project.title} />
+                                                            ))}
+                                                        </datalist>
+                                                        {!line.customerId && (
+                                                            <p className="text-xs text-slate-500">
+                                                                得意先が未登録でも案件名をメモできます。登録後に紐付けてください。
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </td>
                                             </>
                                         ) : (
                                             <td className="px-3 py-4 text-sm align-top">
