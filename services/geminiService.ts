@@ -511,12 +511,23 @@ export const extractInvoiceDetails = async (
         responseSchema: extractInvoiceSchema,
       },
     });
-    const jsonStr = response.text.trim();
+    const rawText = response.text.trim();
+    const jsonStr = stripCodeFences(rawText);
     try {
       return JSON.parse(jsonStr);
     } catch (e) {
       console.error("AIからのJSON解析に失敗しました。", e);
-      throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${jsonStr}`);
+      // コードフェンスを除去しても失敗した場合、手動で除去を試みる
+      const cleanedText = rawText
+        .replace(/^```json\s*\n/, '')
+        .replace(/\n```$/, '')
+        .trim();
+      try {
+        return JSON.parse(cleanedText);
+      } catch (e2) {
+        console.error("手動クリーンアップ後もJSON解析に失敗しました。", e2);
+        throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${rawText}`);
+      }
     }
   });
 };
