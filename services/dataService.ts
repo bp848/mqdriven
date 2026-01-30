@@ -3487,6 +3487,7 @@ const mapEstimateRow = (row: any): Estimate => {
         customerName,
         status,
         total,
+        rawRowKeys: Object.keys(row),
         rawRow: row
     });
 
