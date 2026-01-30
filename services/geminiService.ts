@@ -538,22 +538,43 @@ export const extractInvoiceDetails = async (
       const parsed = JSON.parse(jsonStr);
       console.log('[extractInvoiceDetails] 解析成功:', parsed);
 
+      // 日付形式を変換するヘルパー関数
+      const convertJapaneseDate = (dateStr: string): string => {
+        if (!dateStr) return '';
+        // "2023年4月5日" → "2023-04-05"
+        const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+        if (match) {
+          const year = match[1];
+          const month = match[2].padStart(2, '0');
+          const day = match[3].padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+        return dateStr;
+      };
+
+      // 数値から通貨記号を除去
+      const removeCurrency = (value: any): number => {
+        if (!value) return 0;
+        const str = String(value).replace(/[円,]/g, '').replace(/[^0-9.-]/g, '');
+        return Number(str) || 0;
+      };
+
       // AI出力を期待する形式にマッピング
       const mapped = {
-        vendorName: parsed.vendor_info?.name || parsed.sender_info?.company_name || parsed.billing_party?.company_name || parsed.invoice_title || '',
-        invoiceDate: parsed.issue_date || parsed.invoice_date || '',
-        dueDate: parsed.due_date || parsed.payment_due_date || '',
-        totalAmount: Number(String(parsed.total_amount_due || parsed.total_amount_at_headline || parsed.summary?.total_before_withholding || 0).replace(/,/g, '')) || 0,
-        subtotalAmount: Number(String(parsed.subtotal || parsed.summary?.subtotal || 0).replace(/,/g, '')) || 0,
-        taxAmount: Number(String(parsed.tax?.amount || parsed.summary?.tax || parsed.summary?.tax_amount || 0).replace(/,/g, '')) || 0,
-        registrationNumber: parsed.vendor_info?.registration_number || parsed.registration_number || '',
+        vendorName: parsed.sender_info?.company_name || parsed.vendor_info?.name || parsed.billing_party?.company_name || parsed.invoice_title || '',
+        invoiceDate: convertJapaneseDate(parsed.invoice_date || parsed.issue_date || ''),
+        dueDate: convertJapaneseDate(parsed.payment_due_date || parsed.due_date || ''),
+        totalAmount: removeCurrency(parsed.total_billed_amount || parsed.total_amount_due || parsed.total_amount_at_headline),
+        subtotalAmount: removeCurrency(parsed.summary?.subtotal || parsed.subtotal),
+        taxAmount: removeCurrency(parsed.summary?.tax_amount || parsed.tax?.amount),
+        registrationNumber: parsed.registration_number || parsed.sender_info?.registration_number || parsed.vendor_info?.registration_number || '',
         description: parsed.invoice_title || '',
-        relatedCustomer: parsed.customer_info?.name || parsed.recipient_info?.company_name || parsed.billed_party?.company_name || '',
+        relatedCustomer: parsed.recipient_info?.company_name || parsed.customer_info?.name || parsed.billed_party?.company_name || '',
         lineItems: parsed.line_items?.map((item: any) => ({
           description: item.description || item.item_name || '',
-          quantity: Number(String(item.quantity || 1).replace(/,/g, '')),
-          unitPrice: Number(String(item.unit_price || 0).replace(/,/g, '')),
-          amountExclTax: Number(String(item.amount || 0).replace(/,/g, '')),
+          quantity: removeCurrency(item.quantity || 1),
+          unitPrice: removeCurrency(item.unit_price),
+          amountExclTax: removeCurrency(item.amount),
           taxRate: 10
         })) || []
       };
