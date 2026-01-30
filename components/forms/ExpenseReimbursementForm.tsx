@@ -1283,13 +1283,13 @@ const LineItemTable: React.FC<{
         <div className="flow-root">
             <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
                 <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                    <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden">
                         <thead>
                             <tr>
-                                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 dark:text-white sm:pl-0">品名 / 用途</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">使用目的</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">事業カテゴリ</th>
-                                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">日付</th>
+                                <th scope="col" className="py-4 pl-4 pr-3 text-left text-sm font-semibold bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white sm:pl-0">品名 / 用途</th>
+                                <th scope="col" className="px-3 py-4 text-left text-sm font-semibold bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white">使用目的</th>
+                                <th scope="col" className="px-3 py-4 text-left text-sm font-semibold bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white">事業カテゴリ</th>
+                                <th scope="col" className="px-3 py-4 text-left text-sm font-semibold bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white">日付</th>
                                 {!isInternalExpense && (
                                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">顧客候補（オートコンプリート可）</th>
                                 )}
