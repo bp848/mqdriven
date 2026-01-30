@@ -533,10 +533,13 @@ export const extractInvoiceDetails = async (
     });
     const rawText = response.text.trim();
     const jsonStr = stripCodeFences(rawText);
+    console.log('[extractInvoiceDetails] AI応答:', rawText);
     try {
-      return JSON.parse(jsonStr);
+      const parsed = JSON.parse(jsonStr);
+      console.log('[extractInvoiceDetails] 解析成功:', parsed);
+      return parsed;
     } catch (e) {
-      console.error("AIからのJSON解析に失敗しました。", e);
+      console.error("[extractInvoiceDetails] JSON解析失敗:", e);
       console.error("受信内容:", rawText);
       // コードフェンスを除去しても失敗した場合、手動で除去を試みる
       const cleanedText = rawText
