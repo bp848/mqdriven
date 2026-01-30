@@ -602,6 +602,27 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 if (ocrData.lineItems && ocrData.lineItems.length > 0) {
                     newDraft.lines = ocrData.lineItems.map(item => {
                         const candidateCustomer = (item as any).customerName || ocrData.relatedCustomer || '';
+                        // 明細ごとに目的と用途を推定（デフォルト値）
+                        const itemDescription = item.description || '';
+                        let purposeType: '自社' | '顧客' | '他社' | 'その他' = '自社';
+                        let businessCategory: '印刷' | '製造' | '物流' | '業務' | 'その他' = '業務';
+
+                        // 品名から目的を推定
+                        if (itemDescription.includes('顧客') || itemDescription.includes('納品')) {
+                            purposeType = '顧客';
+                        } else if (itemDescription.includes('他社') || itemDescription.includes('外注')) {
+                            purposeType = '他社';
+                        }
+
+                        // 品名から事業カテゴリを推定
+                        if (itemDescription.includes('印刷') || itemDescription.includes('プリント') || itemDescription.includes('刷り')) {
+                            businessCategory = '印刷';
+                        } else if (itemDescription.includes('製造') || itemDescription.includes('生産') || itemDescription.includes('加工')) {
+                            businessCategory = '製造';
+                        } else if (itemDescription.includes('配送') || itemDescription.includes('運送') || itemDescription.includes('発送')) {
+                            businessCategory = '物流';
+                        }
+
                         return {
                             ...createEmptyLine(true),
                             description: item.description || '',
@@ -611,17 +632,34 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                             quantity: item.quantity || 1,
                             unitPrice: item.unitPrice || 0,
                             taxRate: item.taxRate || 10,
+                            purposeType,
+                            businessCategory,
                         };
                     });
                     ocrFields.add('lines');
                 } else if (newDraft.totalNet) {
                     const candidateCustomer = ocrData.relatedCustomer || ocrData.project || '';
+                    const itemDescription = ocrData.description || '品名不明';
+                    let purposeType: '自社' | '顧客' | '他社' | 'その他' = '自社';
+                    let businessCategory: '印刷' | '製造' | '物流' | '業務' | 'その他' = '業務';
+
+                    // 単一明細の場合も推定
+                    if (itemDescription.includes('印刷') || itemDescription.includes('プリント')) {
+                        businessCategory = '印刷';
+                    } else if (itemDescription.includes('製造') || itemDescription.includes('生産')) {
+                        businessCategory = '製造';
+                    } else if (itemDescription.includes('配送') || itemDescription.includes('運送')) {
+                        businessCategory = '物流';
+                    }
+
                     newDraft.lines = [{
                         ...createEmptyLine(true),
-                        description: ocrData.description || '品名不明',
+                        description: itemDescription,
                         customerName: candidateCustomer || '',
                         customCustomerName: candidateCustomer || '',
                         amountExclTax: newDraft.totalNet,
+                        purposeType,
+                        businessCategory,
                     }];
                     ocrFields.add('lines');
                 }
