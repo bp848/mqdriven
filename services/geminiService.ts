@@ -540,20 +540,20 @@ export const extractInvoiceDetails = async (
 
       // AI出力を期待する形式にマッピング
       const mapped = {
-        vendorName: parsed.billing_party?.company_name || parsed.invoice_title || '',
+        vendorName: parsed.sender_info?.company_name || parsed.billing_party?.company_name || parsed.invoice_title || '',
         invoiceDate: parsed.invoice_date || '',
-        dueDate: parsed.due_date || '',
-        totalAmount: parsed.total_amount_at_headline || parsed.summary?.total_before_withholding || 0,
+        dueDate: parsed.payment_due_date || parsed.due_date || '',
+        totalAmount: parsed.total_amount_due || parsed.total_amount_at_headline || parsed.summary?.total_before_withholding || 0,
         subtotalAmount: parsed.summary?.subtotal || 0,
-        taxAmount: parsed.summary?.tax_amount || 0,
+        taxAmount: parsed.summary?.tax || parsed.summary?.tax_amount || 0,
         registrationNumber: parsed.registration_number || '',
         description: parsed.invoice_title || '',
-        relatedCustomer: parsed.billed_party?.company_name || '',
+        relatedCustomer: parsed.recipient_info?.company_name || parsed.billed_party?.company_name || '',
         lineItems: parsed.line_items?.map((item: any) => ({
-          description: item.item_name || '',
-          quantity: item.quantity || 1,
-          unitPrice: item.unit_price || 0,
-          amountExclTax: item.amount || 0,
+          description: item.description || item.item_name || '',
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unit_price) || 0,
+          amountExclTax: Number(item.amount) || 0,
           taxRate: 10
         })) || []
       };
