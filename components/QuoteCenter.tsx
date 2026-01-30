@@ -3,7 +3,7 @@ import { processAIQuote, updateQuoteWithFeedback } from '../services/Gemini';
 import { saveEstimate } from '../services/dataService';
 import type { ViewState, QuoteFormData, QuoteResultData } from '../types';
 import { MAIN_CATEGORIES, SUB_CATEGORIES, BOOK_SIZES, BINDING_OPTIONS, PAPER_TYPES, COLOR_OPTIONS, KEYWORD_MAP, SPECIAL_PROCESSING_OPTIONS } from '../types';
-import { createSupabaseBrowser } from '../services/supabase';
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Shared UI Components (Internal to QuoteCenter)
@@ -55,7 +55,10 @@ const QuoteCenter: React.FC = () => {
   const [isSuggested, setIsSuggested] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const supabase = createSupabaseBrowser();
+  const supabase = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+  );
 
   // 現在のユーザー情報を取得
   useEffect(() => {
