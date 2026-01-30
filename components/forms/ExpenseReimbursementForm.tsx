@@ -585,7 +585,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 const ocrFields = new Set<string>();
 
                 const updateField = (field: keyof ExpenseInvoiceDraft, value: any) => {
-                    if (value !== undefined && value !== null && value !== '') {
+                    if (value !== undefined && value !== null) {
                         (newDraft as any)[field] = value;
                         ocrFields.add(field);
                     }
