@@ -131,6 +131,37 @@ const stripCodeFences = (value: string): string => {
   return withoutOpening.trim();
 };
 
+const extractJsonFromResponse = (value: string): string => {
+  const trimmed = value?.trim() ?? "";
+
+  // まずコードフェンスを試す
+  if (trimmed.startsWith("```")) {
+    return stripCodeFences(trimmed);
+  }
+
+  // JSONオブジェクトの開始を見つける
+  const jsonStart = trimmed.indexOf('{');
+  if (jsonStart === -1) return trimmed;
+
+  // JSONオブジェクトの終了を見つける
+  let braceCount = 0;
+  let jsonEnd = jsonStart;
+
+  for (let i = jsonStart; i < trimmed.length; i++) {
+    if (trimmed[i] === '{') {
+      braceCount++;
+    } else if (trimmed[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        jsonEnd = i + 1;
+        break;
+      }
+    }
+  }
+
+  return trimmed.substring(jsonStart, jsonEnd);
+};
+
 const base64ToUint8Array = (base64: string): Uint8Array => {
   const binary =
     typeof atob === "function"
@@ -512,24 +543,14 @@ export const extractInvoiceDetails = async (
       },
     });
     const rawText = response.text.trim();
-    const jsonStr = stripCodeFences(rawText);
+    const jsonStr = extractJsonFromResponse(rawText);
     try {
       return JSON.parse(jsonStr);
     } catch (e) {
       console.error("AIからのJSON解析に失敗しました。", e);
       console.error("受信内容:", rawText);
-      // コードフェンスを除去しても失敗した場合、手動で除去を試みる
-      const cleanedText = rawText
-        .replace(/^```json\s*\n/, '')
-        .replace(/\n```$/, '')
-        .trim();
-      try {
-        return JSON.parse(cleanedText);
-      } catch (e2) {
-        console.error("手動クリーンアップ後もJSON解析に失敗しました。", e2);
-        console.error("クリーンアップ後の内容:", cleanedText);
-        throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${rawText}`);
-      }
+      console.error("抽出したJSON:", jsonStr);
+      throw new Error(`AIの応答が不正なJSON形式です。受信内容: ${rawText}`);
     }
   });
 };
