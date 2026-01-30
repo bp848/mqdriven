@@ -1317,7 +1317,7 @@ const LineItemTable: React.FC<{
                                     : jobs;
                                 const limitedProjectOptions = availableProjects.slice(0, 30);
                                 // 使用目的に基づいて顧客フィールドの制御を判断
-                                const isNonCustomerExpense = line.purposeType !== '顧客';
+                                const isNonCustomerExpense = line.purposeType === '自社' || line.purposeType === '他社' || line.purposeType === 'その他';
 
                                 const handleCustomerInputChange = (value: string) => {
                                     const trimmed = value.trim();
