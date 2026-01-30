@@ -4402,13 +4402,35 @@ export const uploadFile = async (
     const supabase = getSupabase();
     const safeBucket = bucket || FAX_STORAGE_BUCKET;
     const filename = file instanceof File ? file.name : `blob-${Date.now()}.bin`;
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    // Generate truly unique ID using timestamp + random + counter to avoid collisions
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).slice(2, 15);
+    const counter = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const uniqueId = `${timestamp}-${random}-${counter}`;
     const rawExtension = filename.includes('.') ? filename.split('.').pop() ?? '' : '';
     const safeExtension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, '');
     const extension = safeExtension || 'bin';
     const filePath = `public/${uniqueId}.${extension}`;
+
     const { data, error } = await supabase.storage.from(safeBucket).upload(filePath, file);
     if (error) {
+        // If collision occurs, retry with a different path
+        if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+            console.warn(`[uploadFile] File collision detected for ${filePath}, retrying with new ID`);
+            const retryTimestamp = Date.now();
+            const retryRandom = Math.random().toString(36).slice(2, 15);
+            const retryCounter = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            const retryUniqueId = `${retryTimestamp}-${retryRandom}-${retryCounter}-retry`;
+            const retryFilePath = `public/${retryUniqueId}.${extension}`;
+
+            const { data: retryData, error: retryError } = await supabase.storage.from(safeBucket).upload(retryFilePath, file);
+            if (retryError) {
+                throw formatSupabaseError(`Failed to upload to ${safeBucket} (even after retry)`, retryError as unknown as PostgrestError);
+            }
+            const { data: urlData } = supabase.storage.from(safeBucket).getPublicUrl(retryData.path);
+            return { path: retryData.path, publicUrl: urlData?.publicUrl };
+        }
         throw formatSupabaseError(`Failed to upload to ${safeBucket}`, error as unknown as PostgrestError);
     }
     const { data: urlData } = supabase.storage.from(safeBucket).getPublicUrl(data.path);

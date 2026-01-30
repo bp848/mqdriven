@@ -704,6 +704,20 @@ export const generateLeadReplyEmail = async (
 会社名: ${lead.company}
 担当者名: ${lead.name}様
 問い合わせ内容: ${lead.message || "記載なし"}
+
+重要：返信文の署名は、送信者の個人情報ではなく、リード先企業の情報を使用してください。
+以下の形式で署名を作成し、返信文の最後に含めてください：
+
+――――――――――
+${lead.company}
+${lead.name}様
+〒[リード先企業の郵便番号]
+[リード先企業の住所]
+TEL: [リード先企業の電話番号]
+Mail: [リード先企業のメールアドレス]
+URL: [リード先企業のウェブサイトURL]
+――――――――――
+
 送信者: ${senderName}`;
     const response = await ai.models.generateContent({ model, contents: prompt });
     const text = response.text;
