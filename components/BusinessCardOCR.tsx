@@ -108,8 +108,8 @@ const ProcessedCardCard: React.FC<{
         <div className={`bg-white dark:bg-slate-800 p-4 rounded-xl shadow-md border ${card.status === 'approved' ? 'border-green-300 dark:border-green-700' : 'border-slate-200 dark:border-slate-700'}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white">
-                        <img src={card.fileUrl} alt={card.fileName} className="w-full h-auto object-contain" />
+                    <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white flex items-center justify-center">
+                        <img src={card.fileUrl} alt={card.fileName} className="max-w-full max-h-96 w-auto h-auto object-contain" />
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 truncate" title={card.fileName}>{card.fileName}</p>
                 </div>
@@ -234,6 +234,9 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             const base64String = await readFileAsBase64(file);
             const extractedData = await extractBusinessCardDetails(base64String, file.type);
 
+            // デバッグ情報を出力
+            console.log('[BusinessCardOCR] AI応答データ:', extractedData);
+
             const processedCard: ProcessedCard = {
                 ...tempCard,
                 status: 'pending_review',
@@ -243,11 +246,18 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                         extractedData.companyName || '',
                     representative_name: getNestedValue(extractedData, 'name', 'japanese') ||
                         getNestedValue(extractedData, 'name', 'ja') ||
+                        getNestedValue(extractedData, 'personName', 'japanese') ||
+                        getNestedValue(extractedData, 'personName', 'ja') ||
                         extractedData.personName ||
                         extractedData.contactPerson ||
-                        extractedData.recipientName || '',
+                        extractedData.recipientName ||
+                        extractedData.name ||
+                        getNestedValue(extractedData, 'contactPerson', 'japanese') ||
+                        getNestedValue(extractedData, 'contactPerson', 'ja') || '',
                     department: extractedData.department || '',
                     position: getNestedValue(extractedData, 'title', 'japanese', 0) ||
+                        getNestedValue(extractedData, 'title', 'ja', 0) ||
+                        getNestedValue(extractedData, 'title', 'japanese') ||
                         getNestedValue(extractedData, 'title', 'ja') ||
                         extractedData.title ||
                         extractedData.position || '',
@@ -257,12 +267,15 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                     phone_number: extractedData.phone ||
                         extractedData.phoneNumber ||
                         extractedData.tel ||
-                        getNestedValue(extractedData, 'contactInformation', 'phone') || '',
+                        getNestedValue(extractedData, 'contactInformation', 'phone') ||
+                        getNestedValue(extractedData, 'contact', 'phone') || '',
                     fax: extractedData.fax ||
                         extractedData.faxNumber ||
-                        getNestedValue(extractedData, 'contactInformation', 'fax') || '',
+                        getNestedValue(extractedData, 'contactInformation', 'fax') ||
+                        getNestedValue(extractedData, 'contact', 'fax') || '',
                     email: extractedData.email ||
-                        getNestedValue(extractedData, 'contactInformation', 'email') || '',
+                        getNestedValue(extractedData, 'contactInformation', 'email') ||
+                        getNestedValue(extractedData, 'contact', 'email') || '',
                     website_url: extractedData.website ||
                         extractedData.url ||
                         extractedData.websiteUrl || '',
