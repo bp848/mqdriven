@@ -25,6 +25,8 @@ type CardDraft = {
   contact: BusinessCardContact;
   manualOverride?: boolean;
   error?: string;
+  processingStartTime?: number;
+  processingProgress?: number;
 };
 
 const readFileAsBase64 = (file: File): Promise<string> =>
@@ -126,20 +128,52 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
       : `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const runOcr = useCallback(async (draftId: string, file: File) => {
+    const startTime = Date.now();
+
+    // Set initial processing state
     setDrafts(prev =>
       prev.map(draft =>
-        draft.id === draftId ? { ...draft, status: 'processing', error: undefined } : draft
+        draft.id === draftId ? {
+          ...draft,
+          status: 'processing',
+          error: undefined,
+          processingStartTime: startTime,
+          processingProgress: 0
+        } : draft
       )
     );
+
+    // Simulate progress updates
+    const progressInterval = setInterval(() => {
+      setDrafts(prev =>
+        prev.map(draft =>
+          draft.id === draftId ? {
+            ...draft,
+            processingProgress: Math.min((draft.processingProgress || 0) + 15, 85)
+          } : draft
+        )
+      );
+    }, 800);
+
     try {
       const base64 = await readFileAsBase64(file);
       const parsed = await extractBusinessCardDetails(base64, file.type || 'application/octet-stream');
       const contact = normalizeContact(parsed);
+
+      clearInterval(progressInterval);
+
       setDrafts(prev =>
         prev.map(draft =>
-          draft.id === draftId ? { ...draft, status: 'ready', contact, error: undefined } : draft
+          draft.id === draftId ? {
+            ...draft,
+            status: 'ready',
+            contact,
+            error: undefined,
+            processingProgress: 100
+          } : draft
         )
       );
+
       logActionEvent({
         module: '名刺OCR',
         severity: 'info',
@@ -149,12 +183,20 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
         ...actorInfo,
       });
     } catch (error) {
+      clearInterval(progressInterval);
+
       const message = error instanceof Error ? error.message : '名刺の解析に失敗しました。';
       setDrafts(prev =>
         prev.map(draft =>
-          draft.id === draftId ? { ...draft, status: 'error', error: message } : draft
+          draft.id === draftId ? {
+            ...draft,
+            status: 'error',
+            error: message,
+            processingProgress: 0
+          } : draft
         )
       );
+
       logActionEvent({
         module: '名刺OCR',
         severity: 'critical',
@@ -331,9 +373,8 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold ${
-                isAIOff ? 'opacity-60 cursor-not-allowed' : ''
-              }`}
+              className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold ${isAIOff ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
             >
               <Upload className="w-4 h-4" />
               ファイルを選択
@@ -354,25 +395,73 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
 
           {drafts.length > 0 && (
             <div className="space-y-4">
-              {drafts.map(draft => {
+              {/* Overall Progress Header */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Loader className="w-6 h-6 animate-spin text-blue-600" />
+                      <div className="absolute inset-0 rounded-full border-2 border-blue-200 animate-ping" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                        処理中: {drafts.filter(d => d.status === 'processing').length} / {drafts.length}件
+                      </h3>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        AIが名刺情報を解析しています...
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {Math.round((drafts.filter(d => d.status === 'ready').length / drafts.length) * 100)}%
+                    </div>
+                    <div className="text-xs text-blue-600 dark:text-blue-400">完了</div>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full bg-blue-100 dark:bg-blue-800 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${(drafts.filter(d => d.status === 'ready').length / drafts.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {drafts.map((draft, index) => {
                 const status = STATUS_STYLES[draft.status];
                 const isPdf = draft.mimeType.includes('pdf');
+                const overallProgress = ((index + 1) / drafts.length) * 100;
+
                 return (
                   <div
                     key={draft.id}
-                    className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-4"
+                    className={`rounded-2xl border p-4 flex flex-col gap-4 transition-all duration-300 ${draft.status === 'processing'
+                      ? 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-900/20'
+                      : draft.status === 'ready'
+                        ? 'border-green-300 bg-green-50/50 dark:border-green-700 dark:bg-green-900/20'
+                        : 'border-red-300 bg-red-50/50 dark:border-red-700 dark:bg-red-900/20'
+                      }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        {isPdf ? (
-                          <FileText className="w-10 h-10 text-slate-500" />
-                        ) : (
-                          <img
-                            src={draft.fileUrl}
-                            alt={draft.fileName}
-                            className="w-20 h-12 object-cover rounded border border-slate-200"
-                          />
-                        )}
+                        <div className="relative">
+                          {isPdf ? (
+                            <FileText className="w-10 h-10 text-slate-500" />
+                          ) : (
+                            <img
+                              src={draft.fileUrl}
+                              alt={draft.fileName}
+                              className="w-20 h-12 object-cover rounded border border-slate-200"
+                            />
+                          )}
+                          {draft.status === 'processing' && (
+                            <div className="absolute -top-1 -right-1">
+                              <Loader className="w-4 h-4 animate-spin text-blue-600" />
+                            </div>
+                          )}
+                        </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-slate-800 dark:text-slate-100">
@@ -384,11 +473,16 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                               </span>
                             )}
                           </div>
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${status.className}`}
-                          >
-                            {status.label}
-                          </span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${status.className}`}
+                            >
+                              {status.label}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              #{index + 1} / {drafts.length}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -410,84 +504,88 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                         </button>
                       </div>
                     </div>
+
+                    {/* Individual Progress Bar for Processing Items */}
+                    {draft.status === 'processing' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-blue-600 dark:text-blue-400 font-medium">
+                            AI解析中...
+                          </span>
+                          <span className="text-blue-600 dark:text-blue-400">
+                            {draft.processingProgress || 0}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-blue-100 dark:bg-blue-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+                            style={{ width: `${draft.processingProgress || 0}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400">
+                          <Loader className="w-3 h-3 animate-spin" />
+                          <span>AIが文字情報を抽出しています...</span>
+                        </div>
+                      </div>
+                    )}
+
                     {draft.status === 'error' && draft.error && (
                       <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
                         <AlertTriangle className="w-4 h-4" />
                         {draft.error}
                       </div>
                     )}
-                    {draft.status !== 'ready' && (
-                      <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-600">
-                        <p>AI解析が完了しない場合は、手入力で登録できます。</p>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => markManualReady(draft.id)}
-                            className="inline-flex items-center gap-2 rounded-md border border-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:border-amber-500 dark:text-amber-300"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            手動入力で承認対象にする
-                          </button>
-                          {draft.status === 'processing' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                              <Loader className="w-3 h-3 animate-spin" />
-                              解析結果が届いたら自動で上書きされます
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
                     {draft.status !== 'error' && (
                       <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {(
-                          [
-                            ['companyName', '会社名'],
-                            ['personName', '担当者名'],
-                            ['department', '部署名'],
-                            ['title', '役職'],
-                            ['phoneNumber', '電話番号'],
-                            ['mobileNumber', '携帯番号'],
-                            ['email', 'メール'],
-                            ['address', '住所'],
-                            ['websiteUrl', 'Webサイト'],
-                            ['notes', 'メモ'],
-                          ] as Array<[keyof BusinessCardContact, string]>
-                        ).map(([field, label]) => (
-                          <div key={field}>
-                            <label className="text-xs font-semibold text-slate-500 block mb-1">
-                              {label}
-                            </label>
-                            {field === 'notes' ? (
-                              <textarea
-                                value={draft.contact[field] || ''}
-                                onChange={e => handleContactChange(draft.id, field, e.target.value)}
-                                className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm p-2"
-                                rows={2}
-                              />
-                            ) : (
-                              <input
-                                type="text"
-                                value={draft.contact[field] || ''}
-                                onChange={e => handleContactChange(draft.id, field, e.target.value)}
-                                className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm p-2"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="md:col-span-2 flex justify-end">
-                        {draft.status === 'ready' && (
-                          <button
-                            type="button"
-                            onClick={() => handleSendToCustomerForm(draft)}
-                            className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            フォームで登録
-                          </button>
-                        )}
-                      </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(
+                            [
+                              ['companyName', '会社名'],
+                              ['personName', '担当者名'],
+                              ['department', '部署名'],
+                              ['title', '役職'],
+                              ['phoneNumber', '電話番号'],
+                              ['mobileNumber', '携帯番号'],
+                              ['email', 'メール'],
+                              ['address', '住所'],
+                              ['websiteUrl', 'Webサイト'],
+                              ['notes', 'メモ'],
+                            ] as Array<[keyof BusinessCardContact, string]>
+                          ).map(([field, label]) => (
+                            <div key={field}>
+                              <label className="text-xs font-semibold text-slate-500 block mb-1">
+                                {label}
+                              </label>
+                              {field === 'notes' ? (
+                                <textarea
+                                  value={draft.contact[field] || ''}
+                                  onChange={e => handleContactChange(draft.id, field, e.target.value)}
+                                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm p-2"
+                                  rows={2}
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={draft.contact[field] || ''}
+                                  onChange={e => handleContactChange(draft.id, field, e.target.value)}
+                                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm p-2"
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="md:col-span-2 flex justify-end">
+                          {draft.status === 'ready' && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendToCustomerForm(draft)}
+                              className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              フォームで登録
+                            </button>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
@@ -497,24 +595,66 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
           )}
         </div>
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-            <div className="flex items-center gap-1">
-              <Loader className="w-4 h-4 animate-spin text-blue-500" />
-              <span>
-                解析中: {drafts.filter(d => d.status === 'processing').length}件
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              「フォームで登録」ボタンから既存の顧客登録フォームに遷移します。
-            </p>
+          <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
+            {drafts.some(d => d.status === 'processing') && (
+              <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="relative">
+                  <Loader className="w-5 h-5 animate-spin text-blue-600" />
+                  <div className="absolute inset-0 rounded-full border-2 border-blue-200 animate-ping" />
+                </div>
+                <div>
+                  <span className="font-semibold text-blue-900 dark:text-blue-100">
+                    処理中: {drafts.filter(d => d.status === 'processing').length}件
+                  </span>
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
+                    残り {drafts.filter(d => d.status !== 'ready').length}件
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {drafts.some(d => d.status === 'ready') && (
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg border border-green-200 dark:border-green-800">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <div>
+                  <span className="font-semibold text-green-900 dark:text-green-100">
+                    完了: {drafts.filter(d => d.status === 'ready').length}件
+                  </span>
+                  <div className="text-xs text-green-700 dark:text-green-300">
+                    登録可能です
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {drafts.some(d => d.status === 'error') && (
+              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <div>
+                  <span className="font-semibold text-red-900 dark:text-red-100">
+                    エラー: {drafts.filter(d => d.status === 'error').length}件
+                  </span>
+                  <div className="text-xs text-red-700 dark:text-red-300">
+                    再解析または手動入力を推奨
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-200"
-          >
-            閉じる
-          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-500 dark:text-slate-400 text-right">
+              <p>「フォームで登録」ボタンから</p>
+              <p>顧客登録フォームに遷移します</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              閉じる
+            </button>
+          </div>
         </div>
       </div>
     </div>

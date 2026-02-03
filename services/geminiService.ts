@@ -652,7 +652,7 @@ export const extractBusinessCardDetails = async (
     const filePart = { inlineData: { data: fileBase64, mimeType } };
     const instructionPart = {
       text:
-        "このファイルは日本語の名刺または名刺スキャンPDFです。記載されている企業名、担当者、連絡先をJSON形式で抽出してください。右上などに赤ペンで手書きされた社員番号があれば recipientEmployeeCode として抽出してください。項目が無い場合は空文字ではなくnullにしてください。",
+        "このファイルは日本語の名刺または名刺スキャンPDFです。記載されている企業名、担当者、連絡先をJSON形式で抽出してください。右上などに赤ペンで手書きされた社員番号があれば recipientEmployeeCode として抽出してください。項目が無い場合は空文字ではなくnullにしてください。必ずJSON形式で応答してください。",
     };
     const response = await ai.models.generateContent({
       model,
@@ -661,10 +661,27 @@ export const extractBusinessCardDetails = async (
         responseSchema: businessCardSchema,
       },
     });
-    const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr) || defaultResult;
+    
+    const rawText = response.text.trim();
+    
+    // JSONでない場合の処理
+    if (!rawText.startsWith('{') && !rawText.startsWith('[')) {
+      console.warn('[extractBusinessCardDetails] AIがJSON以外を返却:', rawText.substring(0, 100));
+      return {
+        ...defaultResult,
+        notes: `名刺形式が不明です。AI応答: ${rawText.substring(0, 200)}...`
+      };
+    }
+    
+    const jsonStr = stripCodeFences(rawText);
+    const parsed = JSON.parse(jsonStr);
+    return parsed || defaultResult;
   } catch (error) {
-    return defaultResult;
+    console.error('[extractBusinessCardDetails] エラー:', error);
+    return {
+      ...defaultResult,
+      notes: `解析エラー: ${error instanceof Error ? error.message : '不明なエラー'}`
+    };
   }
 };
 
