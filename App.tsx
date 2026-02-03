@@ -7,6 +7,7 @@ import CreateJobModal from './components/CreateJobModal';
 import JobDetailModal from './components/JobDetailModal';
 import CustomerList from './components/CustomerList';
 import CustomerDetailModal from './components/CustomerDetailModal';
+import BusinessCardOCR from './components/BusinessCardOCR';
 import { CompanyAnalysisModal } from './components/CompanyAnalysisModal';
 import LeadManagementPage from './components/sales/LeadManagementPage';
 import CreateLeadModal from './components/sales/CreateLeadModal';
@@ -375,6 +376,7 @@ const App: React.FC = () => {
         if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_AI_OFF === '1') return true;
         return false;
     });
+    const [showBulkOCR, setShowBulkOCR] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
     const estimatePageRef = useRef<number>(1);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
@@ -461,6 +463,7 @@ const App: React.FC = () => {
         }
         setCurrentPage(page);
         setSearchTerm('');
+        setShowBulkOCR(false); // OCR状態をリセット
     };
 
     const handleDailyReportPrefillApplied = () => {
@@ -1237,6 +1240,17 @@ const App: React.FC = () => {
                     />
                 );
             case 'sales_customers':
+                if (showBulkOCR) {
+                    return <BusinessCardOCR
+                        addToast={addToast}
+                        requestConfirmation={setConfirmationDialog}
+                        isAIOff={isAIOff}
+                        onCustomerAdded={(customer) => {
+                            loadAllData();
+                            setShowBulkOCR(false);
+                        }}
+                    />;
+                }
                 return <CustomerList
                     customers={customers || []}
                     searchTerm={searchTerm}
@@ -1257,6 +1271,7 @@ const App: React.FC = () => {
                         setCustomerDetailModalOpen(true);
                     }}
                     isAIOff={isAIOff}
+                    onShowBulkOCR={() => setShowBulkOCR(true)}
                 />;
             case 'newsletter':
                 return <NewsletterPage customers={customers} addToast={addToast} />;

@@ -17,9 +17,10 @@ interface CustomerListProps {
   currentUser: EmployeeUser | null;
   onNewCustomer: () => void;
   isAIOff: boolean;
+  onShowBulkOCR?: () => void;
 }
 
-const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSelectCustomer, onUpdateCustomer, onAnalyzeCustomer, addToast, currentUser, onNewCustomer, isAIOff }) => {
+const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSelectCustomer, onUpdateCustomer, onAnalyzeCustomer, addToast, currentUser, onNewCustomer, isAIOff, onShowBulkOCR }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'createdAt', direction: 'descending' });
   const [isGeneratingEmail, setIsGeneratingEmail] = useState<string | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -263,6 +264,17 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
           表示件数: {sortedCustomers.length}件 {searchTerm ? `(検索: "${searchTerm}")` : ''}
         </div>
         <div className="flex items-center gap-2">
+          {onShowBulkOCR && (
+            <button
+              type="button"
+              onClick={onShowBulkOCR}
+              disabled={isAIOff}
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-1.5 text-xs font-semibold text-white ${isAIOff ? 'bg-slate-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
+                }`}
+            >
+              新規一括OCR
+            </button>
+          )}
           <button
             type="button"
             onClick={handleExportToSheets}
