@@ -238,19 +238,22 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             // デバッグ情報を出力
             console.log('[BusinessCardOCR] AI応答データ:', extractedData);
 
+            // extractedDataがネストされている場合に対応
+            const data = extractedData.data || extractedData;
+
             const processedCard: ProcessedCard = {
                 ...tempCard,
                 status: 'pending_review',
                 extractedData: {
-                    customer_name: extractedData.companyName || '',
-                    representative_name: extractedData.personName || extractedData.name || extractedData.contactPerson || '',
-                    department: extractedData.department || '',
-                    position: extractedData.title || extractedData.position || '',
-                    address_1: extractedData.address || '',
-                    phone_number: extractedData.phoneNumber || extractedData.phone || extractedData.tel || '',
-                    fax: extractedData.faxNumber || extractedData.fax || '',
-                    email: extractedData.email || '',
-                    website_url: extractedData.websiteUrl || extractedData.website || extractedData.url || '',
+                    customer_name: data.companyName || '',
+                    representative_name: data.personName || data.name || data.contactPerson || '',
+                    department: data.department || '',
+                    position: data.title || data.position || '',
+                    address_1: data.address || '',
+                    phone_number: data.phoneNumber || data.phone || data.tel || '',
+                    fax: data.faxNumber || data.fax || '',
+                    email: data.email || '',
+                    website_url: data.websiteUrl || data.website || data.url || '',
                 }
             };
 
