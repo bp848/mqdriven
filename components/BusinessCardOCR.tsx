@@ -236,39 +236,19 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             // デバッグ情報を出力
             console.log('[BusinessCardOCR] AI応答データ:', extractedData);
 
-            // 複数のネスト構造に対応
-            let data = extractedData;
-
-            // data.data.data のような深いネストにも対応
-            while (data && typeof data === 'object' && data.data && typeof data.data === 'object') {
-                data = data.data;
-            }
-
-            // 文字列化されたオブジェクトをチェック
-            if (typeof data === 'string') {
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed && typeof parsed === 'object') {
-                        data = parsed;
-                    }
-                } catch (e) {
-                    // JSONでない場合はそのまま使用
-                }
-            }
-
             const processedCard: ProcessedCard = {
                 ...tempCard,
                 status: 'pending_review',
                 extractedData: {
-                    customer_name: (data && typeof data === 'object' ? data.companyName : '') || '',
-                    representative_name: (data && typeof data === 'object' ? (data.personName || data.name || data.contactPerson) : '') || '',
-                    department: (data && typeof data === 'object' ? data.department : '') || '',
-                    position: (data && typeof data === 'object' ? (data.title || data.position) : '') || '',
-                    address_1: (data && typeof data === 'object' ? data.address : '') || '',
-                    phone_number: (data && typeof data === 'object' ? (data.phoneNumber || data.phone || data.tel) : '') || '',
-                    fax: (data && typeof data === 'object' ? (data.faxNumber || data.fax) : '') || '',
-                    email: (data && typeof data === 'object' ? data.email : '') || '',
-                    website_url: (data && typeof data === 'object' ? (data.websiteUrl || data.website || data.url) : '') || '',
+                    customer_name: extractedData.companyName || '',
+                    representative_name: extractedData.personName || extractedData.name || extractedData.contactPerson || '',
+                    department: extractedData.department || '',
+                    position: extractedData.title || extractedData.position || '',
+                    address_1: extractedData.address || '',
+                    phone_number: extractedData.phoneNumber || extractedData.phone || extractedData.tel || '',
+                    fax: extractedData.faxNumber || extractedData.fax || '',
+                    email: extractedData.email || '',
+                    website_url: extractedData.websiteUrl || extractedData.website || extractedData.url || '',
                 }
             };
 

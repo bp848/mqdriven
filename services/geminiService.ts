@@ -772,7 +772,6 @@ export const extractBusinessCardDetails = async (
 
     const rawText = response.text.trim();
     console.log('[extractBusinessCardDetails] AI応答全文:', rawText);
-    console.log('[extractBusinessCardDetails] responseオブジェクト構造:', JSON.stringify(response, null, 2));
 
     // コードフェンスを確実に除去
     let jsonStr = rawText;
@@ -812,7 +811,7 @@ export const extractBusinessCardDetails = async (
 
     // AI応答がネストされている場合に対応
     let result = parsed;
-    console.log('[extractBusinessCardDetails] パース後の結果:', JSON.stringify(result, null, 2));
+    console.log('[extractBusinessCardDetails] パース結果:', parsed);
 
     // response.candidates[0].content.parts[0].text のような構造に対応
     if (result && result.response && result.response.candidates && result.response.candidates[0] && result.response.candidates[0].content && result.response.candidates[0].content.parts && result.response.candidates[0].content.parts[0]) {
@@ -2099,4 +2098,5 @@ JSONフォーマット:
       }
     });
   };
+};
 
