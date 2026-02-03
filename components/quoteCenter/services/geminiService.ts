@@ -21,7 +21,7 @@ export const processAIQuote = async (formData: QuoteFormData): Promise<QuoteResu
   });
 
   // 簡易的なレスポンス処理（実際はJSONパースが必要）
-  const responseText = response.response?.text() || '';
+  const responseText = response.text || '';
 
   // ダミーデータを返す（実際の実装ではJSONパース）
   return {

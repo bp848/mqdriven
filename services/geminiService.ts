@@ -630,8 +630,25 @@ export const extractBusinessCardDetails = async (
   fileBase64: string,
   mimeType: string
 ): Promise<BusinessCardContact> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
+  const defaultResult: BusinessCardContact = {
+    companyName: null,
+    department: null,
+    title: null,
+    personName: null,
+    personNameKana: null,
+    email: null,
+    phoneNumber: null,
+    mobileNumber: null,
+    faxNumber: null,
+    address: null,
+    postalCode: null,
+    websiteUrl: null,
+    notes: '手動で入力してください',
+    recipientEmployeeCode: null
+  };
+
+  try {
+    const ai = checkOnlineAndAIOff();
     const filePart = { inlineData: { data: fileBase64, mimeType } };
     const instructionPart = {
       text:
@@ -645,8 +662,10 @@ export const extractBusinessCardDetails = async (
       },
     });
     const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr);
-  });
+    return JSON.parse(jsonStr) || defaultResult;
+  } catch (error) {
+    return defaultResult;
+  }
 };
 
 const suggestJournalEntrySchema = {
@@ -1243,6 +1262,30 @@ export const generateClosingSummary = async (
     const response = await ai.models.generateContent({ model, contents: prompt });
     return response.text;
   });
+};
+
+/**
+ * Proactive context injection - AI automatically checks calendar at conversation start
+ */
+export const injectProactiveContext = async (): Promise<string> => {
+  console.log('[MCP] Injecting proactive context...');
+
+  try {
+    // For now, return simple context until MCP servers are ready
+    const context = `
+【本日の状況自動確認】
+📅 今日の予定: MCPサーバー接続待ち
+📧 重要なメール: MCPサーバー接続待ち
+
+上記情報を踏まえて、経営相談にお役立てください。
+`;
+
+    return context;
+
+  } catch (error) {
+    console.warn('[MCP] Proactive context injection failed:', error);
+    return '【本日の状況】現在、システム接続に問題があるため自動情報取得ができません。';
+  }
 };
 
 export const startBusinessConsultantChat = (): Chat => {

@@ -14,6 +14,8 @@ interface JournalEntryWithLines extends JournalEntry {
 const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) => {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [journalEntries, setJournalEntries] = useState<JournalEntryWithLines[]>([]);
+  const [archivedApplications, setArchivedApplications] = useState<ApplicationWithDetails[]>([]);
+  const [archivedJournalEntries, setArchivedJournalEntries] = useState<JournalEntryWithLines[]>([]);
   const [filteredApplications, setFilteredApplications] = useState<ApplicationWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,16 +32,28 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     try {
       // 謇ｿ隱肴ｸ医∩逕ｳ隲九ｒ蜿門ｾ・
       const allApplications = await dataService.getApplications(currentUser.id);
-      const targetApplications = allApplications.filter(app => 
-        app.status === ApplicationStatus.APPROVED && 
+      const targetApplications = allApplications.filter(app =>
+        app.status === ApplicationStatus.APPROVED &&
         (!app.accounting_status || app.accounting_status === AccountingStatus.NONE)
       );
       setApplications(targetApplications);
       setFilteredApplications(targetApplications);
 
+      const archivedApps = allApplications.filter(app =>
+        app.status === ApplicationStatus.APPROVED &&
+        app.accounting_status === AccountingStatus.POSTED
+      );
+      setArchivedApplications(archivedApps);
+
       // draft迥ｶ諷九・莉戊ｨｳ繧貞叙蠕・
       const draftEntries = await dataService.getJournalEntriesByStatus('draft');
       setJournalEntries(draftEntries.map(entry => ({
+        ...entry,
+        lines: entry.lines || []
+      })));
+
+      const postedEntries = await dataService.getJournalEntriesByStatus('posted');
+      setArchivedJournalEntries(postedEntries.map(entry => ({
         ...entry,
         lines: entry.lines || []
       })));
@@ -127,6 +141,12 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
       default:
         return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded">不明</span>;
     }
+  };
+
+  const getArchivedEntryForApplication = (applicationId: string): JournalEntryWithLines | null => {
+    return archivedJournalEntries.find(entry =>
+      entry.reference_id === applicationId && entry.status === 'posted'
+    ) || null;
   };
 
   // 逕ｳ隲九↓蟇ｾ蠢懊☆繧倶ｻ戊ｨｳ譏守ｴｰ繧貞叙蠕・
@@ -312,10 +332,54 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
             </div>
           </div>
         )}
+
+        {archivedApplications.length > 0 ? (
+          <div className="mt-6 border border-slate-200 rounded-2xl bg-slate-50/40 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">アーカイブ済みの仕訳</h3>
+                <p className="text-xs text-slate-500">
+                  仕訳確定済みの申請カードはこのエリアに移動し、レビュー一覧からは消えます。
+                </p>
+              </div>
+              <span className="text-sm font-semibold text-blue-600">{archivedApplications.length}件保存済み</span>
+            </div>
+            <div className="grid gap-3">
+              {archivedApplications.map((app) => {
+                const journalEntry = getArchivedEntryForApplication(app.id);
+                return (
+                  <div key={`archive-${app.id}`} className="flex items-start justify-between p-4 bg-white rounded-xl border border-slate-200">
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm text-slate-400">申請ID {app.id.slice(0, 8)}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-semibold text-slate-800">{app.formData?.title || app.formData?.description || '申請'}</h4>
+                        <span className="px-2 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded-full">
+                          仕訳確定済
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        {app.applicant?.name || '申請者不明'}・{app.approvedAt ? new Date(app.approvedAt).toLocaleDateString('ja-JP') : '承認日なし'}
+                      </p>
+                      <p className="text-sm font-semibold text-slate-800">{formatAmount(app)}</p>
+                      {journalEntry && (
+                        <p className="text-xs text-slate-500">
+                          {journalEntry.lines.length}行 (posted at {journalEntry.date ? new Date(journalEntry.date).toLocaleDateString('ja-JP') : '―'})
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right text-xs text-slate-500">
+                      <p>アーカイブ済</p>
+                      <p>{journalEntry?.created_at ? new Date(journalEntry.created_at).toLocaleDateString('ja-JP') : '登録日不明'}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 };
 
 export default JournalReviewPage;
-

@@ -3483,7 +3483,6 @@ const mapEstimateRow = (row: any): Estimate => {
     console.log('Mapping estimate:', {
         id: row.estimates_id || row.id,
         estimates_id: row.estimates_id,
-        id: row.id,
         projectName,
         customerName,
         status,

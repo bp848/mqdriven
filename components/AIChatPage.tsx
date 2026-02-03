@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { startBusinessConsultantChat } from '../services/geminiService';
+import { startBusinessConsultantChat, injectProactiveContext } from '../services/geminiService';
 import { Chat } from '@google/genai';
 import { Loader, Send, Sparkles } from './Icons';
 import { Job, Customer, JournalEntry, EmployeeUser } from '../types';
@@ -38,15 +38,36 @@ const AIChatPage: React.FC<AIChatPageProps> = ({ currentUser, jobs, customers, j
     }, [messages, isLoading]);
 
     useEffect(() => {
-        chatRef.current = startBusinessConsultantChat();
-        if (mounted.current) {
-            setMessages([{
-                id: 'init',
-                role: 'model',
-                content: 'こんにちは。私はあなたの会社の経営相談AIアシスタントです。売上向上のための戦略、コスト削減のアイデア、市場トレンド分析など、経営に関するご質問に何でもお答えします。どのようなことにお悩みですか？'
-            }]);
-            setIsLoading(false);
-        }
+        const initializeChat = async () => {
+            try {
+                // Inject proactive context first
+                const proactiveContext = await injectProactiveContext();
+
+                chatRef.current = startBusinessConsultantChat();
+                if (mounted.current) {
+                    setMessages([{
+                        id: 'init',
+                        role: 'model',
+                        content: `こんにちは。私はあなたの会社の経営相談AIアシスタントです。\n\n${proactiveContext}\n\n売上向上のための戦略、コスト削減のアイデア、市場トレンド分析など、経営に関するご質問に何でもお答えします。どのようなことにお悩みですか？`
+                    }]);
+                    setIsLoading(false);
+                }
+            } catch (error) {
+                console.error('Failed to initialize chat with proactive context:', error);
+                // Fallback to basic initialization
+                chatRef.current = startBusinessConsultantChat();
+                if (mounted.current) {
+                    setMessages([{
+                        id: 'init',
+                        role: 'model',
+                        content: 'こんにちは。私はあなたの会社の経営相談AIアシスタントです。売上向上のための戦略、コスト削減のアイデア、市場トレンド分析など、経営に関するご質問に何でもお答えします。どのようなことにお悩みですか？'
+                    }]);
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        initializeChat();
     }, []);
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -55,7 +76,7 @@ const AIChatPage: React.FC<AIChatPageProps> = ({ currentUser, jobs, customers, j
 
         const newUserMessage: Message = { id: `user-${Date.now()}`, role: 'user', content: input };
         setMessages(prev => [...prev, newUserMessage]);
-        
+
         const contextSummary = `
 --- データコンテキスト ---
 - 直近の案件数: ${jobs.length}
@@ -64,14 +85,14 @@ const AIChatPage: React.FC<AIChatPageProps> = ({ currentUser, jobs, customers, j
 --- 質問 ---
 ${input}
 `;
-        
+
         setInput('');
         setIsLoading(true);
 
         try {
             const stream = await chatRef.current.sendMessageStream({ message: contextSummary });
             const aiMessageId = `model-${Date.now()}`;
-            if(mounted.current) {
+            if (mounted.current) {
                 setMessages(prev => [...prev, { id: aiMessageId, role: 'model', content: '', sources: [] }]);
             }
 
@@ -81,7 +102,7 @@ ${input}
             for await (const chunk of stream) {
                 if (!mounted.current) return;
                 fullResponse += chunk.text;
-                
+
                 const rawChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
                 const sources = rawChunks.map((c: any) => c.web).filter(Boolean);
                 sources.forEach((source: any) => {
@@ -90,13 +111,13 @@ ${input}
                     }
                 });
 
-                setMessages(prev => prev.map(m => 
+                setMessages(prev => prev.map(m =>
                     m.id === aiMessageId ? { ...m, content: fullResponse, sources: Array.from(allSources.values()) } : m
                 ));
             }
         } catch (err) {
             const errorMessage = "申し訳ありません、エラーが発生しました。もう一度お試しください。";
-             if (mounted.current) {
+            if (mounted.current) {
                 setMessages(prev => [...prev, { id: `error-${Date.now()}`, role: 'model', content: errorMessage }]);
             }
         } finally {
@@ -119,8 +140,8 @@ ${input}
                     <div key={message.id} className={`flex items-start gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}>
                         {message.role === 'model' && <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center flex-shrink-0 text-sm font-bold">AI</div>}
                         <div className={`max-w-xl p-3 rounded-2xl whitespace-pre-wrap ${message.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-none'}`}>
-                           <div className="prose prose-sm dark:prose-invert max-w-none">{message.content}</div>
-                           {message.sources && message.sources.length > 0 && (
+                            <div className="prose prose-sm dark:prose-invert max-w-none">{message.content}</div>
+                            {message.sources && message.sources.length > 0 && (
                                 <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-600">
                                     <h4 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">情報源</h4>
                                     <ul className="list-disc pl-5 space-y-1 mt-1">
@@ -139,10 +160,10 @@ ${input}
                 ))}
                 {isLoading && messages[messages.length - 1]?.role === 'user' && (
                     <div className="flex items-start gap-3">
-                         <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center flex-shrink-0 text-sm font-bold">AI</div>
-                         <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-700 rounded-bl-none">
-                            <Loader className="w-5 h-5 animate-spin text-slate-500"/>
-                         </div>
+                        <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center flex-shrink-0 text-sm font-bold">AI</div>
+                        <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-700 rounded-bl-none">
+                            <Loader className="w-5 h-5 animate-spin text-slate-500" />
+                        </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
