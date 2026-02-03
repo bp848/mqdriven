@@ -110,11 +110,13 @@ const ProcessedCardCard: React.FC<{
                 <div>
                     <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white flex items-center justify-center">
                         {card.fileName.toLowerCase().endsWith('.pdf') ? (
-                            <iframe
-                                src={card.fileUrl}
-                                className="w-full h-full min-h-96"
-                                title={card.fileName}
-                            />
+                            <div className="p-4 text-center">
+                                <div className="w-16 h-16 mx-auto mb-2 bg-red-100 rounded-lg flex items-center justify-center">
+                                    <span className="text-red-600 font-bold text-xs">PDF</span>
+                                </div>
+                                <p className="text-sm text-slate-600">PDFファイル</p>
+                                <p className="text-xs text-slate-500 mt-1">処理済み</p>
+                            </div>
                         ) : (
                             <img src={card.fileUrl} alt={card.fileName} className="max-w-full max-h-96 w-auto h-auto object-contain" />
                         )}
