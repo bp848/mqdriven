@@ -18,6 +18,19 @@ interface MCPServerConfig {
   apiKey?: string;
 }
 
+const getEnvValue = (key: string): string | undefined => {
+  const metaEnv = (typeof import.meta !== 'undefined' && (import.meta as any).env)
+    ? (import.meta as any).env
+    : undefined;
+  if (metaEnv && metaEnv[key] !== undefined) {
+    return metaEnv[key];
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key];
+  }
+  return undefined;
+};
+
 // Tool execution result
 interface MCPToolResult {
   success: boolean;
@@ -51,24 +64,24 @@ class MCPService {
     this.serverConfigs.set('calendar', {
       name: 'Google Calendar',
       transportType: 'sse',
-      endpoint: process.env.MCP_CALENDAR_ENDPOINT || 'http://localhost:3001/mcp',
-      apiKey: process.env.GOOGLE_API_KEY
+      endpoint: getEnvValue('MCP_CALENDAR_ENDPOINT') || 'http://localhost:3001/mcp',
+      apiKey: getEnvValue('GOOGLE_API_KEY')
     });
 
     // Email MCP Server (for email functionality)
     this.serverConfigs.set('email', {
       name: 'Email Service',
       transportType: 'sse',
-      endpoint: process.env.MCP_EMAIL_ENDPOINT || 'http://localhost:3002/mcp',
-      apiKey: process.env.EMAIL_API_KEY
+      endpoint: getEnvValue('MCP_EMAIL_ENDPOINT') || 'http://localhost:3002/mcp',
+      apiKey: getEnvValue('EMAIL_API_KEY')
     });
 
     // Google Drive MCP Server (HTTP API for browser)
     this.serverConfigs.set('gdrive', {
       name: 'Google Drive',
       transportType: 'http',
-      endpoint: process.env.MCP_GDRIVE_ENDPOINT || 'http://localhost:3003/mcp',
-      apiKey: process.env.GOOGLE_API_KEY
+      endpoint: getEnvValue('MCP_GDRIVE_ENDPOINT') || 'http://localhost:3003/mcp',
+      apiKey: getEnvValue('GOOGLE_API_KEY')
     });
   }
 

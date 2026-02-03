@@ -1071,13 +1071,12 @@ const App: React.FC = () => {
         if (customerData.id) {
             await dataService.updateCustomer(customerData.id, customerData);
             addToast('顧客情報が更新されました。', 'success');
+            await loadAllData();
         } else {
-            await dataService.addCustomer(customerData);
-            addToast('新規顧客が登録されました。', 'success');
+            await handleCreateCustomerInline(customerData);
         }
         setCustomerDetailModalOpen(false);
         setCustomerInitialValues(null);
-        await loadAllData();
     };
 
     const handleUpdateCustomer = async (customerId: string, customerData: Partial<Customer>) => {

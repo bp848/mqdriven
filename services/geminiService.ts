@@ -1,4 +1,4 @@
-import { Type, Chat, FunctionDeclaration } from "@google/genai";
+﻿import { Type, Chat, FunctionDeclaration } from "@google/genai";
 import JSZip from "jszip";
 import {
   GEMINI_DEFAULT_MODEL,
@@ -695,6 +695,45 @@ const extractFromText = (text: string): Partial<BusinessCardContact> => {
   return result;
 };
 
+const buildDataUrl = (base64: string, mimeType: string) =>
+  `data:${mimeType};base64,${base64}`;
+
+const tryTesseractBusinessCard = async (
+  fileBase64: string,
+  mimeType: string,
+  fallback: BusinessCardContact
+): Promise<BusinessCardContact | null> => {
+  try {
+    const mod: any = await import('tesseract.js');
+    const recognize = mod?.recognize ?? mod?.default?.recognize;
+    if (typeof recognize !== 'function') {
+      return null;
+    }
+    const result = await recognize(buildDataUrl(fileBase64, mimeType), 'jpn+eng');
+    const text = result?.data?.text ?? '';
+    if (!text.trim()) {
+      return null;
+    }
+    const extracted = extractFromText(text);
+    const lines = text
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    const candidateLines = lines.filter(line => !line.includes('@') && !/[0-9]/.test(line));
+    const companyName = extracted.companyName ?? candidateLines[0] ?? null;
+    const personName = extracted.personName ?? candidateLines[1] ?? null;
+    return {
+      ...fallback,
+      ...extracted,
+      companyName,
+      personName,
+      notes: `OCR(Tesseract) ${text.trim().substring(0, 120)}...`,
+    };
+  } catch (error) {
+    console.warn('[extractBusinessCardDetails] Tesseract OCR failed', error);
+    return null;
+  }
+};
 export const extractBusinessCardDetails = async (
   fileBase64: string,
   mimeType: string
@@ -759,6 +798,10 @@ export const extractBusinessCardDetails = async (
     return parsed || defaultResult;
   } catch (error) {
     console.error('[extractBusinessCardDetails] エラー:', error);
+    const fallback = await tryTesseractBusinessCard(fileBase64, mimeType, defaultResult);
+    if (fallback) {
+      return fallback;
+    }
     return {
       ...defaultResult,
       notes: `解析エラー: ${error instanceof Error ? error.message : '不明なエラー'}`
@@ -2001,3 +2044,4 @@ export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationRe
     }
   });
 };
+

@@ -1,4 +1,5 @@
-// Google Drive MCP integration service
+﻿// Google Drive MCP integration service
+import mcpService from './mcpService';
 
 export interface GoogleDriveFile {
   id: string;
@@ -15,101 +16,208 @@ export interface GoogleDriveSearchResult {
 }
 
 class GoogleDriveService {
-  private async callMCP(method: string, params: any = {}): Promise<any> {
+  private toolCache: { search?: string; download?: string } = {};
+
+  private getToolName(tools: any[], kinds: string[], keywords: string[]): string | null {
+    const normalized = tools
+      .map(tool => ({
+        name: String(tool?.name ?? ''),
+        lower: String(tool?.name ?? '').toLowerCase(),
+      }))
+      .filter(entry => entry.name);
+
+    for (const kind of kinds) {
+      const candidate = normalized.find(entry => entry.lower === kind.toLowerCase());
+      if (candidate) return candidate.name;
+    }
+
+    const keywordMatch = normalized.find(entry =>
+      keywords.every(keyword => entry.lower.includes(keyword))
+    );
+    return keywordMatch ? keywordMatch.name : null;
+  }
+
+  private getToolDefinition(tools: any[], name: string): any | null {
+    return tools.find(tool => String(tool?.name ?? '') === name) ?? null;
+  }
+
+  private getSchemaProperties(toolDef: any): string[] {
+    const schema =
+      toolDef?.inputSchema ||
+      toolDef?.input_schema ||
+      toolDef?.parameters ||
+      toolDef?.argsSchema ||
+      toolDef?.schema ||
+      null;
+    const properties = schema?.properties || {};
+    return Object.keys(properties);
+  }
+
+  private pickArgumentKey(keys: string[], candidates: string[], fallback: string): string {
+    for (const candidate of candidates) {
+      const match = keys.find(key => key.toLowerCase() === candidate.toLowerCase());
+      if (match) return match;
+    }
+    return fallback;
+  }
+
+  private async resolveTools(): Promise<{ search: string; download: string; tools: any[] }> {
+    if (this.toolCache.search && this.toolCache.download) {
+      const cachedTools = await mcpService.listTools('gdrive');
+      return {
+        search: this.toolCache.search,
+        download: this.toolCache.download,
+        tools: cachedTools.gdrive || []
+      };
+    }
+
+    const toolsByServer = await mcpService.listTools('gdrive');
+    const tools = toolsByServer.gdrive || [];
+
+    const searchTool = this.getToolName(
+      tools,
+      ['search_files', 'searchFiles', 'gdrive_search_files', 'google_drive_file_search'],
+      ['search', 'file']
+    );
+    const downloadTool =
+      this.getToolName(
+        tools,
+        ['download_file', 'downloadFile', 'read_file', 'readFile', 'get_file'],
+        ['download', 'file']
+      ) ||
+      this.getToolName(tools, [], ['read', 'file']) ||
+      this.getToolName(tools, [], ['get', 'file']);
+
+    if (!searchTool) {
+      throw new Error('Google Drive MCP search tool not found.');
+    }
+    if (!downloadTool) {
+      throw new Error('Google Drive MCP download tool not found.');
+    }
+
+    this.toolCache = { search: searchTool, download: downloadTool };
+    return { search: searchTool, download: downloadTool, tools };
+  }
+
+  private tryParseJson(raw: any): any {
+    if (typeof raw !== 'string') return raw;
+    const trimmed = raw.trim();
+    if (!trimmed) return raw;
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return raw;
     try {
-      // This would integrate with the Google Drive MCP server
-      // For now, we'll simulate the response
-      if (method === 'search') {
-        return this.mockSearchResults(params.query);
-      }
-      if (method === 'download') {
-        return this.mockDownloadResult(params.fileId);
-      }
-      throw new Error(`Unknown method: ${method}`);
-    } catch (error) {
-      console.error('Google Drive MCP error:', error);
-      throw error;
+      return JSON.parse(trimmed);
+    } catch {
+      return raw;
     }
   }
 
-  private mockSearchResults(query: string): GoogleDriveSearchResult {
-    const mockFiles: GoogleDriveFile[] = [
-      {
-        id: '1mockExcelFileId',
-        name: '交通費精算_2024年1月.xlsx',
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        size: '15420',
-        createdTime: '2024-01-15T10:30:00.000Z',
-        webViewLink: 'https://docs.google.com/spreadsheets/d/1mockExcelFileId'
-      },
-      {
-        id: '2mockExcelFileId',
-        name: '出張経費_大阪出張.xlsx',
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        size: '8756',
-        createdTime: '2024-01-10T14:20:00.000Z',
-        webViewLink: 'https://docs.google.com/spreadsheets/d/2mockExcelFileId'
-      },
-      {
-        id: '3mockImageFileId',
-        name: '領収書_新幹線.jpg',
-        mimeType: 'image/jpeg',
-        size: '245680',
-        createdTime: '2024-01-08T09:15:00.000Z'
-      }
-    ];
-
-    // Filter by query if provided
-    const filteredFiles = query 
-      ? mockFiles.filter(file => 
-          file.name.toLowerCase().includes(query.toLowerCase()) ||
-          file.mimeType.includes('sheet') && query.toLowerCase().includes('excel')
-        )
-      : mockFiles;
+  private normalizeSearchResult(raw: any): GoogleDriveSearchResult {
+    const parsed = this.tryParseJson(raw);
+    const data = parsed?.data ?? parsed;
+    const files = data?.files || data?.items || (Array.isArray(data) ? data : []);
+    const mapped = (Array.isArray(files) ? files : []).map((file: any) => ({
+      id: String(file?.id ?? file?.fileId ?? file?.file_id ?? file?.key ?? file?.path ?? ''),
+      name: String(file?.name ?? file?.fileName ?? file?.filename ?? ''),
+      mimeType: String(file?.mimeType ?? file?.mime_type ?? file?.type ?? ''),
+      size: file?.size !== undefined && file?.size !== null ? String(file.size) : undefined,
+      createdTime: String(
+        file?.createdTime ??
+        file?.created_time ??
+        file?.modifiedTime ??
+        file?.modified_time ??
+        ''
+      ),
+      webViewLink: file?.webViewLink ?? file?.web_view_link ?? file?.webLink ?? file?.url ?? file?.link
+    }));
 
     return {
-      files: filteredFiles,
-      nextPageToken: filteredFiles.length > 0 ? 'mockNextPageToken' : undefined
+      files: mapped,
+      nextPageToken: data?.nextPageToken ?? data?.next_page_token
     };
   }
 
-  private mockDownloadResult(fileId: string): { data: ArrayBuffer; fileName: string } {
-    const mockFiles: Record<string, { name: string; content: string }> = {
-      '1mockExcelFileId': {
-        name: '交通費精算_2024年1月.xlsx',
-        content: 'mock excel content'
-      },
-      '2mockExcelFileId': {
-        name: '出張経費_大阪出張.xlsx',
-        content: 'mock excel content'
-      },
-      '3mockImageFileId': {
-        name: '領収書_新幹線.jpg',
-        content: 'mock image content'
+  private decodeBase64(base64: string): ArrayBuffer {
+    const normalized = base64.includes('base64,') ? base64.split('base64,')[1] : base64;
+    if (typeof atob === 'function') {
+      const binary = atob(normalized);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
       }
-    };
+      return bytes.buffer;
+    }
+    if (typeof Buffer !== 'undefined') {
+      const buffer = Buffer.from(normalized, 'base64');
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    }
+    throw new Error('Base64 decode is not available.');
+  }
 
-    const file = mockFiles[fileId];
-    if (!file) {
-      throw new Error('File not found');
+  private normalizeDownloadResult(raw: any, fallbackName: string): { data: ArrayBuffer; fileName: string } {
+    const parsed = this.tryParseJson(raw);
+    const data = parsed?.data ?? parsed;
+    const fileName = String(
+      data?.fileName ??
+      data?.file_name ??
+      data?.name ??
+      data?.filename ??
+      data?.file?.name ??
+      fallbackName
+    );
+
+    const content =
+      data?.content ??
+      data?.file?.content ??
+      data?.data ??
+      data?.bytes ??
+      data?.file?.data ??
+      data?.file?.bytes ??
+      data;
+
+    if (content instanceof ArrayBuffer) {
+      return { data: content, fileName };
     }
 
-    // Convert string to ArrayBuffer
-    const encoder = new TextEncoder();
-    const data = encoder.encode(file.content).buffer;
+    if (ArrayBuffer.isView(content)) {
+      return { data: content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength), fileName };
+    }
 
-    return {
-      data,
-      fileName: file.name
-    };
+    if (typeof content === 'string') {
+      return { data: this.decodeBase64(content), fileName };
+    }
+
+    throw new Error('Google Drive MCP returned unsupported download payload.');
+  }
+
+  private async callMCP(method: 'search' | 'download', params: any = {}): Promise<any> {
+    const { search, download, tools } = await this.resolveTools();
+    const toolName = method === 'search' ? search : download;
+    const toolDef = this.getToolDefinition(tools, toolName);
+    const keys = this.getSchemaProperties(toolDef);
+    const argumentKey =
+      method === 'search'
+        ? this.pickArgumentKey(keys, ['query', 'q', 'text', 'term', 'name', 'filename'], 'query')
+        : this.pickArgumentKey(keys, ['fileId', 'file_id', 'id', 'file', 'path'], 'fileId');
+
+    const args = method === 'search'
+      ? { [argumentKey]: params.query }
+      : { [argumentKey]: params.fileId };
+
+    const result = await mcpService.callTool('gdrive', toolName, args);
+    if (!result.success) {
+      throw new Error(result.error || 'Google Drive MCP request failed.');
+    }
+    return result.data;
   }
 
   async searchFiles(query?: string): Promise<GoogleDriveSearchResult> {
-    return this.callMCP('search', { query });
+    const raw = await this.callMCP('search', { query });
+    return this.normalizeSearchResult(raw);
   }
 
   async downloadFile(fileId: string): Promise<{ data: ArrayBuffer; fileName: string }> {
-    return this.callMCP('download', { fileId });
+    const raw = await this.callMCP('download', { fileId });
+    return this.normalizeDownloadResult(raw, fileId);
   }
 
   async searchExpenseFiles(): Promise<GoogleDriveSearchResult> {
@@ -124,7 +232,7 @@ class GoogleDriveService {
     ];
 
     const allFiles: GoogleDriveFile[] = [];
-    
+
     for (const query of searchQueries) {
       try {
         const result = await this.searchFiles(query);
@@ -135,7 +243,7 @@ class GoogleDriveService {
     }
 
     // Remove duplicates
-    const uniqueFiles = allFiles.filter((file, index, self) => 
+    const uniqueFiles = allFiles.filter((file, index, self) =>
       index === self.findIndex(f => f.id === file.id)
     );
 
@@ -157,7 +265,7 @@ class GoogleDriveService {
   }
 
   filterExpenseFiles(files: GoogleDriveFile[]): GoogleDriveFile[] {
-    return files.filter(file => 
+    return files.filter(file =>
       this.isExcelFile(file) || this.isImageFile(file)
     );
   }

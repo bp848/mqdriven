@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BusinessCardContact, Customer, EmployeeUser, Toast } from '../types';
 import { extractBusinessCardDetails } from '../services/geminiService';
 import { googleDriveService, GoogleDriveFile } from '../services/googleDriveService';
@@ -30,6 +30,7 @@ type CardDraft = {
   createdCustomer?: Customer | null;
   ocrError?: string;
   insertError?: string;
+  needsManualConfirmation?: boolean;
 };
 
 const readFileAsBase64 = (file: File): Promise<string> =>
@@ -39,10 +40,10 @@ const readFileAsBase64 = (file: File): Promise<string> =>
       if (typeof reader.result === 'string') {
         resolve(reader.result.split(',')[1]);
       } else {
-        reject(new Error('ファイルの読み込みに失敗しました。'));
+        reject(new Error('Failed to read file as base64.'));
       }
     };
-    reader.onerror = () => reject(reader.error || new Error('ファイルの読み込みに失敗しました。'));
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file as base64.'));
     reader.readAsDataURL(file);
   });
 
@@ -62,31 +63,54 @@ const normalizeContact = (contact: BusinessCardContact | null | undefined): Busi
   return normalized;
 };
 
-const buildContactNote = (contact: BusinessCardContact): string | undefined => {
-  const lines = [
-    contact.department ? `部署: ${contact.department}` : null,
-    contact.personNameKana ? `カナ: ${contact.personNameKana}` : null,
-    contact.phoneNumber ? `直通: ${contact.phoneNumber}` : null,
-    contact.mobileNumber ? `携帯: ${contact.mobileNumber}` : null,
-    contact.email ? `メール: ${contact.email}` : null,
-  ].filter(Boolean);
-  if (!lines.length) return undefined;
-  return `【担当者情報】\n${lines.join('\n')}`;
+const looksLikeFileName = (value?: string | null): boolean => {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /\.(pdf|png|jpe?g|gif|tif|tiff|bmp|webp)$/i.test(trimmed);
 };
 
-const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): Partial<Customer> => ({
-  customerName: contact.companyName || contact.personName || fallbackName,
-  representative: contact.personName || undefined,
-  representativeTitle: contact.title || undefined,
-  phoneNumber: contact.phoneNumber || contact.mobileNumber,
-  fax: contact.faxNumber,
-  address1: contact.address,
-  zipCode: contact.postalCode,
-  websiteUrl: contact.websiteUrl,
-  customerContactInfo: contact.email,
-  receivedByEmployeeCode: contact.recipientEmployeeCode || undefined,
-  note: [buildContactNote(contact), contact.notes].filter(Boolean).join('\n\n') || undefined,
-});
+const sanitizeCustomerName = (value?: string | null): string | undefined => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^(null|undefined|n\/a|-)$/.test(trimmed.toLowerCase())) return undefined;
+  if (looksLikeFileName(trimmed)) return undefined;
+  return trimmed;
+};
+
+const buildContactNote = (contact: BusinessCardContact): string | undefined => {
+  const lines = [
+    contact.department ? `Dept: ${contact.department}` : null,
+    contact.personNameKana ? `Kana: ${contact.personNameKana}` : null,
+    contact.phoneNumber ? `Phone: ${contact.phoneNumber}` : null,
+    contact.mobileNumber ? `Mobile: ${contact.mobileNumber}` : null,
+    contact.email ? `Email: ${contact.email}` : null,
+  ].filter(Boolean);
+  if (!lines.length) return undefined;
+  return `-- Contact --\n${lines.join('\n')}`;
+};
+
+const contactToCustomer = (contact: BusinessCardContact): Partial<Customer> => {
+  const customerName =
+    sanitizeCustomerName(contact.companyName) || sanitizeCustomerName(contact.personName);
+  return {
+    customerName,
+    representative: contact.personName || undefined,
+    representativeTitle: contact.title || undefined,
+    phoneNumber: contact.phoneNumber || contact.mobileNumber,
+    fax: contact.faxNumber,
+    address1: contact.address,
+    zipCode: contact.postalCode,
+    websiteUrl: contact.websiteUrl,
+    customerContactInfo: contact.email,
+    receivedByEmployeeCode: contact.recipientEmployeeCode || undefined,
+    note: [buildContactNote(contact), contact.notes].filter(Boolean).join('\n\n') || undefined,
+  };
+};
+
+const hasCustomerName = (payload?: Partial<Customer>) =>
+  Boolean(sanitizeCustomerName(payload?.customerName));
 
 const guessDriveMimeType = (fileName: string, fallback = 'image/jpeg'): string => {
   const lower = fileName.toLowerCase();
@@ -98,25 +122,25 @@ const guessDriveMimeType = (fileName: string, fallback = 'image/jpeg'): string =
 };
 
 const describeRepresentative = (name?: string | null, title?: string | null | undefined) => {
-  const safeName = name?.trim();
+  const safeName = name?.trim() || 'Unknown';
   const safeTitle = title?.trim();
-  if (safeTitle) {
-    return `${safeName || '不明'}（${safeTitle}）`;
-  }
-  return safeName || '不明';
+  return safeTitle ? `${safeName} (${safeTitle})` : safeName;
 };
 
+const fieldInputClass = 'w-full rounded-md border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm';
+const fieldLabelClass = 'text-xs font-semibold text-slate-500 dark:text-slate-300';
+
 const OCR_STATUS_STYLES: Record<OcrStatus, { label: string; className: string }> = {
-  processing: { label: 'OCR解析中', className: 'bg-blue-100 text-blue-700' },
-  ready: { label: '解析済', className: 'bg-emerald-100 text-emerald-700' },
-  error: { label: '解析失敗', className: 'bg-red-100 text-red-700' },
+  processing: { label: 'OCR Processing', className: 'bg-blue-100 text-blue-700' },
+  ready: { label: 'OCR Ready', className: 'bg-emerald-100 text-emerald-700' },
+  error: { label: 'OCR Error', className: 'bg-red-100 text-red-700' },
 };
 
 const INSERT_STATUS_STYLES: Record<InsertStatus, { label: string; className: string }> = {
-  idle: { label: '登録待ち', className: 'bg-slate-100 text-slate-600' },
-  saving: { label: '登録中', className: 'bg-blue-100 text-blue-700' },
-  success: { label: '登録済', className: 'bg-green-100 text-green-700' },
-  error: { label: '登録失敗', className: 'bg-red-100 text-red-700' },
+  idle: { label: 'Pending', className: 'bg-slate-100 text-slate-600' },
+  saving: { label: 'Saving', className: 'bg-blue-100 text-blue-700' },
+  success: { label: 'Registered', className: 'bg-green-100 text-green-700' },
+  error: { label: 'Register Error', className: 'bg-red-100 text-red-700' },
 };
 
 const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
@@ -134,6 +158,11 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
   const [selectedDriveFiles, setSelectedDriveFiles] = useState<string[]>([]);
+  const [driveImportReport, setDriveImportReport] = useState({
+    success: 0,
+    failure: 0,
+    errors: [] as string[],
+  });
   const [driveError, setDriveError] = useState('');
   const [isDriveLoading, setIsDriveLoading] = useState(false);
   const [isDriveImporting, setIsDriveImporting] = useState(false);
@@ -170,7 +199,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   }, [allUsers]);
 
   const formatRecipientLabel = (code?: string | null) => {
-    if (!code) return '―';
+    if (!code) return '-';
     const match = recipientOptions.find(opt => opt.value === code);
     if (match) {
       return match.department ? `${match.label} / ${match.department}` : match.label;
@@ -185,15 +214,25 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
 
   const autoCreateCustomer = useCallback(
     async (draftId: string, payload: Partial<Customer>) => {
+      if (!hasCustomerName(payload)) {
+        const message = 'Customer name is required before creating a customer.';
+        setDrafts(prev =>
+          prev.map(draft =>
+            draft.id === draftId ? { ...draft, insertStatus: 'error', insertError: message } : draft
+          )
+        );
+        addToast(message, 'error');
+        return;
+      }
       if (!onAutoCreateCustomer) {
         onApplyToForm(payload);
-        addToast('名刺の内容をフォームに反映しました。保存して登録してください。', 'success');
+        addToast('Applied card details to the form. Please save to register.', 'success');
         logActionEvent({
-          module: '名刺OCR',
+          module: 'BusinessCard OCR',
           severity: 'info',
           status: 'pending',
-          summary: `名刺OCR: ${payload.customerName || '不明'} をフォームに転記`,
-          detail: `担当: ${describeRepresentative(payload.representative, payload.representativeTitle)}`,
+          summary: `BusinessCard OCR: ${payload.customerName || 'Unknown'} applied to form`,
+          detail: `Contact: ${describeRepresentative(payload.representative, payload.representativeTitle)}`,
           ...actorInfo,
         });
         handleRemoveDraft(draftId);
@@ -220,21 +259,21 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
               : draft
           )
         );
-        addToast(`「${created.customerName || payload.customerName || '名刺'}」を自動登録しました。`, 'success');
+        addToast(`Registered "${created.customerName || payload.customerName || 'Business Card'}".`, 'success');
         onApplyToForm(created);
         logActionEvent({
-          module: '名刺OCR',
+          module: 'BusinessCard OCR',
           severity: 'info',
           status: 'success',
-          summary: `名刺OCR: ${created.customerName || payload.customerName || '不明'} を顧客登録`,
-          detail: `担当: ${describeRepresentative(
+          summary: `BusinessCard OCR: ${created.customerName || payload.customerName || 'Unknown'} registered`,
+          detail: `Contact: ${describeRepresentative(
             created.representative ?? payload.representative,
             created.representativeTitle ?? payload.representativeTitle
           )}`,
           ...actorInfo,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : '顧客登録に失敗しました。';
+        const message = error instanceof Error ? error.message : 'Failed to register customer.';
         setDrafts(prev =>
           prev.map(draft =>
             draft.id === draftId ? { ...draft, insertStatus: 'error', insertError: message } : draft
@@ -242,16 +281,16 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         );
         addToast(message, 'error');
         logActionEvent({
-          module: '名刺OCR',
+          module: 'BusinessCard OCR',
           severity: 'critical',
           status: 'failure',
-          summary: `名刺OCR: ${payload.customerName || '不明'} の自動登録でエラー`,
+          summary: `BusinessCard OCR: ${payload.customerName || 'Unknown'} registration failed`,
           detail: message,
           ...actorInfo,
         });
       }
     },
-    [onAutoCreateCustomer, onApplyToForm, addToast, actorInfo]
+    [onAutoCreateCustomer, onApplyToForm, addToast, actorInfo, hasCustomerName]
   );
 
   const runOcr = useCallback(
@@ -267,7 +306,9 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         const base64 = await readFileAsBase64(file);
         const parsed = await extractBusinessCardDetails(base64, file.type || 'application/octet-stream');
         const contact = normalizeContact(parsed);
-        const payload = contactToCustomer(contact, file.name);
+        const needsConfirmation =
+          !sanitizeCustomerName(contact.companyName) && !sanitizeCustomerName(contact.personName);
+        const payload = contactToCustomer(contact);
         const payloadWithMeta: Partial<Customer> = {
           ...payload,
           businessEvent: eventName || undefined,
@@ -276,31 +317,37 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         setDrafts(prev =>
           prev.map(draft =>
             draft.id === draftId
-              ? { ...draft, ocrStatus: 'ready', contact, customerPayload: payloadWithMeta, ocrError: undefined }
+              ? {
+                  ...draft,
+                  ocrStatus: 'ready',
+                  contact,
+                  customerPayload: payloadWithMeta,
+                  ocrError: undefined,
+                  needsManualConfirmation: needsConfirmation,
+                }
               : draft
           )
         );
         logActionEvent({
-          module: '名刺OCR',
+          module: 'BusinessCard OCR',
           severity: 'info',
           status: 'success',
-          summary: `名刺OCR: ${file.name} の解析が完了しました`,
-          detail: `会社: ${contact.companyName || '不明'} / 担当: ${describeRepresentative(contact.personName, contact.title)}`,
+          summary: `BusinessCard OCR: ${file.name} processed`,
+          detail: `Company: ${contact.companyName || 'Unknown'} / Contact: ${describeRepresentative(contact.personName, contact.title)}`,
           ...actorInfo,
         });
-        await autoCreateCustomer(draftId, payloadWithMeta);
       } catch (error) {
-        const message = error instanceof Error ? error.message : '名刺の解析に失敗しました。';
+        const message = error instanceof Error ? error.message : 'Business card OCR failed.';
         setDrafts(prev =>
           prev.map(draft =>
             draft.id === draftId ? { ...draft, ocrStatus: 'error', ocrError: message } : draft
           )
         );
         logActionEvent({
-          module: '名刺OCR',
+          module: 'BusinessCard OCR',
           severity: 'critical',
           status: 'failure',
-          summary: `名刺OCR: ${file.name} でエラーが発生しました`,
+          summary: `BusinessCard OCR: ${file.name} failed`,
           detail: message,
           ...actorInfo,
         });
@@ -333,13 +380,13 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
       if (isAIOff) {
-        addToast('AI機能が無効のため、名刺OCRを利用できません。', 'error');
+        addToast('AI is off. Enable AI to run business card OCR.', 'error');
         logActionEvent({
-          module: '名刺OCR',
+          module: 'Business Card OCR',
           severity: 'warning',
           status: 'failure',
-          summary: '名刺OCR機能が無効化されています',
-          detail: 'AI機能OFFのため、アップロードされた名刺を解析できませんでした。',
+          summary: 'Business card OCR skipped (AI off).',
+          detail: 'AI is off, so business card OCR could not run.',
           ...actorInfo,
         });
         return;
@@ -354,19 +401,19 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
 
   const handleDriveModalOpen = async () => {
     if (isAIOff) {
-      addToast('AI機能を有効化するとGoogle Driveから名刺を読み込めます。', 'info');
+      addToast('AI is off. Enable AI to load Google Drive files.', 'info');
       return;
     }
     setShowDriveModal(true);
     setDriveError('');
     setIsDriveLoading(true);
     try {
-      const { files } = await googleDriveService.searchFiles('名刺');
+      const { files } = await googleDriveService.searchFiles('business card');
       setDriveFiles(files || []);
       setSelectedDriveFiles([]);
     } catch (err) {
       console.error('Failed to load business card files from Drive', err);
-      setDriveError('Google Driveからファイル一覧を取得できませんでした。');
+      setDriveError('Failed to load files from Google Drive. Please try again.');
     } finally {
       setIsDriveLoading(false);
     }
@@ -386,29 +433,47 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
 
   const importDriveFiles = async () => {
     if (selectedDriveFiles.length === 0) {
-      setDriveError('インポートする名刺ファイルを選択してください。');
+      setDriveError('Select at least one Drive file to import.');
       return;
     }
 
     setIsDriveImporting(true);
-    try {
-      for (const fileId of selectedDriveFiles) {
-        const fileMeta = driveFiles.find(file => file.id === fileId);
+    setDriveImportReport({ success: 0, failure: 0, errors: [] });
+    let successCount = 0;
+    const failureMessages: string[] = [];
+    for (const fileId of selectedDriveFiles) {
+      const fileMeta = driveFiles.find(file => file.id === fileId);
+      try {
         const { data, fileName } = await googleDriveService.downloadFile(fileId);
         const mimeType = fileMeta?.mimeType || guessDriveMimeType(fileName);
         const file = new File([data], fileName, { type: mimeType });
         queueBusinessCardFile(file);
+        successCount += 1;
+      } catch (err: any) {
+        const message = err instanceof Error ? err.message : 'Failed to download file from Google Drive.';
+        failureMessages.push(`${fileMeta?.name || fileId}: ${message}`);
+        console.error('Drive file import failed', fileMeta?.name, err);
       }
-      addToast(`${selectedDriveFiles.length}件の名刺をGoogle Driveから取り込みました。`, 'success');
-      closeDriveModal();
-    } catch (err: any) {
-      console.error('Google Drive import failed', err);
-      const message = err instanceof Error ? err.message : 'Google Driveからの取り込みに失敗しました。';
-      setDriveError(message);
-      addToast('Google Driveからの取り込みに失敗しました。', 'error');
-    } finally {
-      setIsDriveImporting(false);
     }
+    setDriveImportReport({
+      success: successCount,
+      failure: failureMessages.length,
+      errors: failureMessages,
+    });
+    if (successCount > 0) {
+      const message =
+        failureMessages.length > 0
+          ? `${successCount} files imported. ${failureMessages.length} failed.`
+          : `${successCount} files imported from Google Drive.`;
+      addToast(message, failureMessages.length > 0 ? 'warning' : 'success');
+      if (failureMessages.length === 0) {
+        closeDriveModal();
+      }
+    } else {
+      setDriveError('No files were imported from Google Drive.');
+      addToast('No files were imported from Google Drive.', 'error');
+    }
+    setIsDriveImporting(false);
   };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -429,10 +494,10 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   const handleLoadToForm = (draft: CardDraft) => {
     if (draft.createdCustomer) {
       onApplyToForm(draft.createdCustomer);
-      addToast('登録済みの顧客をフォームに読み込みました。必要な項目を編集して保存してください。', 'success');
+      addToast('Customer created. Loaded into the form for review.', 'success');
     } else if (draft.customerPayload) {
       onApplyToForm(draft.customerPayload);
-      addToast('名刺の内容をフォームに読み込みました。保存して登録してください。', 'success');
+      addToast('Draft loaded into the form. Review and save when ready.', 'success');
     }
   };
 
@@ -442,86 +507,174 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
     }
   };
 
+  const updateDraftPayloadField = (draftId: string, field: keyof Customer, value: string) => {
+    setDrafts(prev =>
+      prev.map(draft => {
+        if (draft.id !== draftId) return draft;
+        const updatedPayload = {
+          ...(draft.customerPayload ?? {}),
+          [field]: value,
+        };
+        const needsManual = !hasCustomerName(updatedPayload);
+        return {
+          ...draft,
+          customerPayload: updatedPayload,
+          needsManualConfirmation: needsManual,
+        };
+      })
+    );
+  };
+
+  const confirmDraft = async (draft: CardDraft) => {
+    if (!draft.customerPayload || !hasCustomerName(draft.customerPayload)) return;
+    await autoCreateCustomer(draft.id, draft.customerPayload);
+  };
+
+  const [isBulkConfirming, setBulkConfirming] = useState(false);
+
+  const confirmReadyDrafts = async () => {
+    const readyDrafts = drafts.filter(
+      draft => draft.ocrStatus === 'ready' && draft.insertStatus !== 'success' && draft.customerPayload && hasCustomerName(draft.customerPayload)
+    );
+    if (!readyDrafts.length) return;
+    setBulkConfirming(true);
+    try {
+      for (const draft of readyDrafts) {
+        await confirmDraft(draft);
+      }
+    } finally {
+      setBulkConfirming(false);
+    }
+  };
+
+  const draftStats = useMemo(() => {
+    const stats = {
+      total: drafts.length,
+      processing: 0,
+      ready: 0,
+      unconfirmed: 0,
+      success: 0,
+      error: 0,
+    };
+    drafts.forEach(draft => {
+      if (draft.ocrStatus === 'processing') stats.processing += 1;
+      if (draft.ocrStatus === 'ready' && hasCustomerName(draft.customerPayload)) stats.ready += 1;
+      if (draft.ocrStatus === 'ready' && !hasCustomerName(draft.customerPayload)) stats.unconfirmed += 1;
+      if (draft.insertStatus === 'success') stats.success += 1;
+      if (draft.insertStatus === 'error' || draft.ocrStatus === 'error') stats.error += 1;
+    });
+    return stats;
+  }, [drafts]);
+
   return (
     <>
       <section className="mb-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
-      <div className="border-b border-slate-200 dark:border-slate-700 px-6 py-5 flex flex-col gap-2">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">名刺で自動入力</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              名刺をまとめてアップロードするだけで、AIが解析して顧客マスタ登録とフォーム反映まで自動で行います。
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={isAIOff}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
-            >
-              <Upload className="w-4 h-4" />
-              ファイルを選択
-            </button>
-            <button
-              type="button"
-              onClick={handleDriveModalOpen}
-              disabled={isDriveLoading || isDriveImporting || isAIOff}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
-            >
-              📁 Google Driveから追加
-            </button>
-          </div>
-        </div>
-        {isAIOff && (
-          <p className="text-sm text-red-500 font-semibold">
-            AI機能が無効のため、OCRは利用できません。
-          </p>
-        )}
-        {driveError && (
-          <p className="text-xs text-red-600 dark:text-red-400 mt-2">{driveError}</p>
-        )}
-        <div className="mt-4 grid grid-cols-1 gap-3">
-          <div className="grid grid-cols-1 gap-2 text-sm">
-            <label className="font-semibold text-slate-700 dark:text-slate-200">取得イベント</label>
-            <input
-              type="text"
-              value={eventName}
-              onChange={e => setEventName(e.target.value)}
-              placeholder="展示会・商談会・社内イベントなど"
-              className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-2 text-sm">
-            <label className="font-semibold text-slate-700 dark:text-slate-200">受領者（担当者）</label>
-            {recipientOptions.length > 0 ? (
-              <select
-                value={recipientCode}
-                onChange={e => setRecipientCode(e.target.value)}
-                className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+        <div className="border-b border-slate-200 dark:border-slate-700 px-6 py-5 flex flex-col gap-2">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Business Card Import</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Upload local files or import from Google Drive to run OCR and create drafts.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={isAIOff}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
               >
-                <option value="">選択してください</option>
-                {recipientOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                    {opt.department ? ` / ${opt.department}` : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
+                <Upload className="w-4 h-4" />
+                Choose Files
+              </button>
+              <button
+                type="button"
+                onClick={handleDriveModalOpen}
+                disabled={isDriveLoading || isDriveImporting || isAIOff}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
+              >
+                Google Drive
+              </button>
+            </div>
+          </div>
+          {draftStats.total > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <p>
+                Drafts {draftStats.total} / OCR {draftStats.processing} / Ready {draftStats.ready} / Unconfirmed {draftStats.unconfirmed} / Success {draftStats.success} / Error {draftStats.error}
+              </p>
+              <button
+                type="button"
+                onClick={confirmReadyDrafts}
+                disabled={draftStats.ready === 0 || isBulkConfirming}
+                className={`px-3 py-1.5 rounded-md text-white font-semibold ${draftStats.ready === 0 || isBulkConfirming ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {isBulkConfirming ? 'Confirming...' : `Confirm ${draftStats.ready} ready`}
+              </button>
+            </div>
+          )}
+          {isAIOff && (
+            <p className="text-sm text-red-500 font-semibold">AI is off. OCR is unavailable.</p>
+          )}
+          {driveError && (
+            <p className="text-xs text-red-600 dark:text-red-400 mt-2">{driveError}</p>
+          )}
+          {(driveImportReport.success > 0 || driveImportReport.failure > 0) && (
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-2 space-y-1">
+              <p>
+                Google Drive import: Success {driveImportReport.success} / Failed {driveImportReport.failure}
+              </p>
+              {driveImportReport.errors.length > 0 && (
+                <ul className="list-disc pl-4 text-orange-500">
+                  {driveImportReport.errors.map((error, index) => (
+                    <li key={`${error}-${index}`} className="text-justify">
+                      {error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-2 text-sm">
+              <label className="font-semibold text-slate-700 dark:text-slate-200">Business Event</label>
               <input
                 type="text"
-                value={recipientCode}
-                onChange={e => setRecipientCode(e.target.value)}
-                placeholder="名刺を受け取った担当者（IDまたは氏名）"
+                value={eventName}
+                onChange={e => setEventName(e.target.value)}
+                placeholder="Optional event or campaign name"
                 className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
               />
-            )}
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              名刺を受け取った担当者を選択します。表示名は氏名（部門）で、保存される値は社員IDです。
-            </p>
+            </div>
+            <div className="grid grid-cols-1 gap-2 text-sm">
+              <label className="font-semibold text-slate-700 dark:text-slate-200">Received By</label>
+              {recipientOptions.length > 0 ? (
+                <select
+                  value={recipientCode}
+                  onChange={e => setRecipientCode(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+                >
+                  <option value="">Select a recipient</option>
+                  {recipientOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                      {opt.department ? ` / ${opt.department}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={recipientCode}
+                  onChange={e => setRecipientCode(e.target.value)}
+                  placeholder="Enter employee code or name"
+                  className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-900 dark:text-white shadow-sm"
+                />
+              )}
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Used to tag who received the card.
+              </p>
+            </div>
           </div>
-        </div>
         <input
           ref={inputRef}
           type="file"
@@ -539,24 +692,29 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
       >
         <Upload className="w-10 h-10 mx-auto text-slate-400" />
         <p className="mt-3 text-base font-semibold text-slate-800 dark:text-slate-100">
-          ドラッグ＆ドロップでもアップロードできます（JPEG / PNG / PDF）
+          Drag and drop files here (JPEG / PNG / PDF).
         </p>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          解析結果は下部に表示され、フォームへワンクリックで取り込めます。
+          You can also click "Choose Files" or import from Google Drive.
         </p>
       </div>
       <div className="px-6 py-5 space-y-4 max-h-[360px] overflow-y-auto w-full">
         {drafts.length === 0 ? (
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-300 text-left">
-            <p>・名刺をアップロードするとAIが解析→顧客登録→右フォームへの反映まで自動で実施します。</p>
-            <p>・複数枚アップロードした場合はステータスを見ながら順番に編集・保存できます。</p>
-            <p>・ステータスに応じて登録状況が表示されます。</p>
+            <p>No business cards yet. Upload a file to start OCR.</p>
+            <p>OCR results appear as drafts. Review and confirm before creating customers.</p>
+            <p>Unconfirmed drafts will not create customers.</p>
           </div>
         ) : (
           drafts.map(draft => {
             const isPdf = draft.mimeType.includes('pdf');
             const ocrStatus = OCR_STATUS_STYLES[draft.ocrStatus];
             const insertStatus = INSERT_STATUS_STYLES[draft.insertStatus];
+            const canConfirm =
+              draft.ocrStatus === 'ready' &&
+              draft.insertStatus !== 'saving' &&
+              draft.insertStatus !== 'success' &&
+              hasCustomerName(draft.customerPayload);
             return (
               <div
                 key={draft.id}
@@ -590,6 +748,11 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                         >
                           {insertStatus.label}
                         </span>
+                        {draft.needsManualConfirmation && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-700">
+                            Unconfirmed
+                          </span>
+                        )}
                       </div>
                       {draft.ocrStatus === 'error' && draft.ocrError && (
                         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
@@ -612,7 +775,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                         onClick={() => runOcr(draft.id, draft.file)}
                         className="px-3 py-1 text-sm font-semibold text-blue-600 hover:underline"
                       >
-                        再解析
+                        Retry OCR
                       </button>
                     )}
                     <button
@@ -628,46 +791,130 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                 <div className="rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/40 dark:bg-slate-900/30 p-4">
                   <dl className="grid grid-cols-1 gap-y-3 text-sm text-slate-600 dark:text-slate-300">
                     <div>
-                      <dt className="text-xs font-semibold text-slate-500">会社名</dt>
+                      <dt className="text-xs font-semibold text-slate-500">Company</dt>
                       <dd className="font-medium text-slate-900 dark:text-white">
-                        {draft.customerPayload?.customerName || '―'}
+                        {draft.customerPayload?.customerName || '-'}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-semibold text-slate-500">担当者</dt>
+                      <dt className="text-xs font-semibold text-slate-500">Contact</dt>
                       <dd className="flex flex-wrap items-center gap-1">
-                        {draft.customerPayload?.representative || '―'}
+                        {draft.customerPayload?.representative || '-'}
                         {draft.customerPayload?.representative &&
                           draft.customerPayload?.representativeTitle && (
                             <span className="text-xs text-slate-500">
-                              （{draft.customerPayload.representativeTitle}）
+                              ({draft.customerPayload.representativeTitle})
                             </span>
                           )}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-semibold text-slate-500">電話 / メール</dt>
+                      <dt className="text-xs font-semibold text-slate-500">Phone / Email</dt>
                       <dd className="space-y-0.5">
-                        <p>{draft.customerPayload?.phoneNumber || '―'}</p>
-                        <p>{draft.customerPayload?.customerContactInfo || '―'}</p>
+                        <p>{draft.customerPayload?.phoneNumber || '-'}</p>
+                        <p>{draft.customerPayload?.customerContactInfo || '-'}</p>
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-semibold text-slate-500">住所</dt>
-                      <dd>{draft.customerPayload?.address1 || '―'}</dd>
+                      <dt className="text-xs font-semibold text-slate-500">Address</dt>
+                      <dd>{draft.customerPayload?.address1 || '-'}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-semibold text-slate-500">取得イベント</dt>
-                      <dd>{draft.customerPayload?.businessEvent || '―'}</dd>
+                      <dt className="text-xs font-semibold text-slate-500">Business Event</dt>
+                      <dd>{draft.customerPayload?.businessEvent || '-'}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-semibold text-slate-500">受領者（社員番号/氏名）</dt>
+                      <dt className="text-xs font-semibold text-slate-500">Received By</dt>
                       <dd>{formatRecipientLabel(draft.customerPayload?.receivedByEmployeeCode)}</dd>
                     </div>
                   </dl>
                 </div>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900/30 p-4">
+                  <div className="grid gap-3">
+                    <div>
+                      <label className={fieldLabelClass}>Customer Name</label>
+                      <input
+                        type="text"
+                        value={draft.customerPayload?.customerName || ''}
+                        onChange={e => updateDraftPayloadField(draft.id, 'customerName', e.target.value)}
+                        className={fieldInputClass}
+                        disabled={draft.insertStatus === 'success'}
+                      />
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className={fieldLabelClass}>Representative</label>
+                        <input
+                          type="text"
+                          value={draft.customerPayload?.representative || ''}
+                          onChange={e => updateDraftPayloadField(draft.id, 'representative', e.target.value)}
+                          className={fieldInputClass}
+                          disabled={draft.insertStatus === 'success'}
+                        />
+                      </div>
+                      <div>
+                        <label className={fieldLabelClass}>Title</label>
+                        <input
+                          type="text"
+                          value={draft.customerPayload?.representativeTitle || ''}
+                          onChange={e => updateDraftPayloadField(draft.id, 'representativeTitle', e.target.value)}
+                          className={fieldInputClass}
+                          disabled={draft.insertStatus === 'success'}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className={fieldLabelClass}>Phone</label>
+                        <input
+                          type="text"
+                          value={draft.customerPayload?.phoneNumber || ''}
+                          onChange={e => updateDraftPayloadField(draft.id, 'phoneNumber', e.target.value)}
+                          className={fieldInputClass}
+                          disabled={draft.insertStatus === 'success'}
+                        />
+                      </div>
+                      <div>
+                        <label className={fieldLabelClass}>Email</label>
+                        <input
+                          type="text"
+                          value={draft.customerPayload?.customerContactInfo || ''}
+                          onChange={e => updateDraftPayloadField(draft.id, 'customerContactInfo', e.target.value)}
+                          className={fieldInputClass}
+                          disabled={draft.insertStatus === 'success'}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={fieldLabelClass}>Address</label>
+                      <input
+                        type="text"
+                        value={draft.customerPayload?.address1 || ''}
+                        onChange={e => updateDraftPayloadField(draft.id, 'address1', e.target.value)}
+                        className={fieldInputClass}
+                        disabled={draft.insertStatus === 'success'}
+                      />
+                    </div>
+                  </div>
+                  {draft.needsManualConfirmation && (
+                    <p className="text-xs text-orange-500 mt-3">
+                      OCR could not confirm a company or person. Review the fields and confirm before creating.
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => confirmDraft(draft)}
+                    disabled={!canConfirm}
+                    className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold text-white ${
+                      canConfirm ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {draft.insertStatus === 'saving' ? 'Saving...' : 'Confirm & Create'}
+                  </button>
                   {draft.insertStatus === 'error' && draft.customerPayload && (
                     <button
                       type="button"
@@ -675,7 +922,7 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                       className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      再登録
+                      Retry Save
                     </button>
                   )}
                   {(draft.insertStatus === 'success' || (!onAutoCreateCustomer && draft.customerPayload)) && (
@@ -685,13 +932,13 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                       className="inline-flex items-center gap-2 rounded-md bg-green-600 text-white px-4 py-2 text-sm font-semibold hover:bg-green-700"
                     >
                       <CheckCircle className="w-4 h-4" />
-                      フォームで編集
+                      Open in Form
                     </button>
                   )}
-                  {draft.insertStatus === 'saving' && (
+                   {draft.insertStatus === 'saving' && (
                     <span className="inline-flex items-center gap-2 text-xs font-semibold text-blue-500">
                       <Loader className="w-4 h-4 animate-spin" />
-                      自動登録中...
+                      Saving...
                     </span>
                   )}
                 </div>
@@ -701,13 +948,15 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         )}
       </div>
       {drafts.length > 0 && (
-        <div className="border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-          <div className="flex items-center gap-2">
+        <div className="border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
             <Loader className="w-4 h-4 text-blue-500 animate-spin" />
-            <span>解析中: {drafts.filter(d => d.ocrStatus === 'processing').length}件 / 登録中: {drafts.filter(d => d.insertStatus === 'saving').length}件</span>
+            <span>
+              OCR processing {draftStats.processing} / Ready {draftStats.ready} / Unconfirmed {draftStats.unconfirmed} / Success {draftStats.success} / Error {draftStats.error}
+            </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            右側フォームで修正したい登録済みレコードは「フォームで編集」から読み込めます。
+            Review drafts and confirm before creating customers.
           </p>
         </div>
       )}
@@ -717,8 +966,12 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google Driveから名刺を選択</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">選択した名刺ファイルをOCRに取り込みます。</p>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Import business cards from Google Drive
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Select files to import and run OCR.
+                </p>
               </div>
               <button onClick={closeDriveModal} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                 <X className="w-5 h-5" />
@@ -726,10 +979,10 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
             </div>
             <div className="max-h-[420px] overflow-y-auto px-6 py-4 space-y-2">
               {isDriveLoading && (
-                <p className="text-sm text-slate-500">Google Driveファイルを読み込み中です...</p>
+                <p className="text-sm text-slate-500">Loading Google Drive files...</p>
               )}
               {!isDriveLoading && driveFiles.length === 0 && (
-                <p className="text-sm text-slate-500">対象の名刺ファイルが見つかりませんでした。</p>
+                <p className="text-sm text-slate-500">No business card files found.</p>
               )}
               {driveFiles.map(file => (
                 <label
@@ -754,14 +1007,14 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
                 onClick={closeDriveModal}
                 className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-600 hover:border-slate-400"
               >
-                キャンセル
+                Cancel
               </button>
               <button
                 onClick={importDriveFiles}
                 disabled={isDriveImporting || selectedDriveFiles.length === 0}
                 className={`px-4 py-2 text-sm font-semibold rounded-lg text-white ${isDriveImporting || selectedDriveFiles.length === 0 ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                {isDriveImporting ? '取り込み中…' : `選択した${selectedDriveFiles.length}件を取り込む`}
+                {isDriveImporting ? 'Importing...' : `Import ${selectedDriveFiles.length} files`}
               </button>
             </div>
           </div>
@@ -772,3 +1025,4 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
 };
 
 export default BusinessCardUploadSection;
+

@@ -3935,6 +3935,23 @@ const invokeFunction = async <T = any>(name: string, options?: { body?: any; hea
     return data as T;
 };
 
+export const exportCustomersToSheets = async (payload: {
+    userId: string;
+    rows: Record<string, any>[];
+    entity: 'customers';
+    spreadsheetId?: string;
+    sheetName?: string;
+    append?: boolean;
+}) => {
+    const data = await invokeFunction<{
+        spreadsheetId: string;
+        spreadsheetUrl: string;
+        sheetName: string;
+        updatedRows: number;
+    }>('google-sheets-export', { body: payload });
+    return data;
+};
+
 export const getCalendarEvents = async (userId: string): Promise<CalendarEvent[]> => {
     const data = await invokeFunction<{ events?: any[] }>('calendar-events', {
         body: { action: 'list', user_id: userId },
