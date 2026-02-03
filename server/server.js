@@ -38,6 +38,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 const registerAiRoutes = require('./aiRoutes');
+const { assistantRouter } = require('./assistant');
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 const BOARD_VISIBILITY_VALUES = new Set(['all', 'public', 'private', 'assigned']);
@@ -112,6 +113,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
 registerAiRoutes(app, supabase);
+app.use('/api/assistant', assistantRouter);
 
 // --- Google OAuth Setup ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
