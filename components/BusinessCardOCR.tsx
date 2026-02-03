@@ -76,7 +76,7 @@ const ProcessedCardCard: React.FC<{
         await onUpdate(card.id, { extractedData: localData });
         setIsSaving(false);
     };
-    
+
     const handleDelete = async () => {
         requestConfirmation({
             title: '名刺データを削除',
@@ -87,7 +87,7 @@ const ProcessedCardCard: React.FC<{
             }
         });
     };
-    
+
     const handleApprove = async () => {
         if (!localData.customer_name) return;
         setIsApproving(true);
@@ -190,7 +190,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
     const processFile = async (file: File): Promise<ProcessedCard> => {
         const tempId = `temp_${Date.now()}_${Math.random()}`;
         const fileUrl = URL.createObjectURL(file);
-        
+
         const tempCard: ProcessedCard = {
             id: tempId,
             fileName: file.name,
@@ -206,17 +206,17 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
         try {
             const base64String = await readFileAsBase64(file);
             const extractedData = await extractBusinessCardDetails(base64String, file.type);
-            
+
             const processedCard: ProcessedCard = {
                 ...tempCard,
                 status: 'pending_review',
                 extractedData: {
                     customer_name: extractedData.companyName,
-                    representative_name: extractedData.recipientName,
+                    representative_name: extractedData.personName,
                     department: extractedData.department,
-                    position: extractedData.position,
+                    position: extractedData.title,
                     address_1: extractedData.address,
-                    phone_number: extractedData.tel,
+                    phone_number: extractedData.phoneNumber,
                     email: extractedData.email,
                     website_url: extractedData.website,
                 }
@@ -252,7 +252,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
 
         setIsProcessing(true);
         const fileArray = Array.from(files);
-        
+
         try {
             await Promise.all(fileArray.map(file => processFile(file)));
             addToast(`${fileArray.length}件の名刺を処理しました`, 'success');
@@ -311,8 +311,17 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
 
         try {
             const supabase = getSupabase();
+
+            // customersテーブル用のデータマッピング
             const customerData = {
-                ...card.extractedData,
+                customer_name: card.extractedData.customer_name,
+                representative_name: card.extractedData.representative_name,
+                phone_number: card.extractedData.phone_number,
+                address_1: card.extractedData.address_1,
+                website_url: card.extractedData.website_url,
+                // 追加フィールド
+                customer_contact_info: card.extractedData.email,
+                note: `部署: ${card.extractedData.department || ''}\n役職: ${card.extractedData.position || ''}`,
                 created_at: new Date().toISOString(),
             };
 
@@ -327,7 +336,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             if (mounted.current) {
                 setProcessedCards(prev => prev.map(c => c.id === card.id ? { ...c, status: 'approved' } : c));
                 addToast(`「${card.extractedData.customer_name}」を顧客として登録しました`, 'success');
-                
+
                 if (onCustomerAdded) {
                     onCustomerAdded(data);
                 }
@@ -345,11 +354,10 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             </div>
 
             <div
-                className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                    isDragging
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50'
-                } ${isProcessing || isAIOff ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-blue-400'}`}
+                className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${isDragging
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50'
+                    } ${isProcessing || isAIOff ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-blue-400'}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -362,7 +370,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                     disabled={isProcessing || isAIOff}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 />
-                
+
                 <div className="pointer-events-none">
                     <Upload className="w-12 h-12 mx-auto text-slate-400 mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
