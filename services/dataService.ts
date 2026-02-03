@@ -4434,7 +4434,10 @@ export const uploadFile = async (
     const extension = safeExtension || 'bin';
     const filePath = `public/${uniqueId}.${extension}`;
 
-    const { data, error } = await supabase.storage.from(safeBucket).upload(filePath, file);
+    const contentType = file instanceof File ? file.type : file.type;
+    const { data, error } = await supabase.storage.from(safeBucket).upload(filePath, file, {
+        contentType: contentType || undefined,
+    });
     if (error) {
         console.error(`[uploadFile] Upload error for ${filePath}:`, error);
 
@@ -4448,7 +4451,9 @@ export const uploadFile = async (
             const retryFilePath = `public/${retryUniqueId}.${extension}`;
 
             console.log(`[uploadFile] Retrying with: ${retryFilePath}`);
-            const { data: retryData, error: retryError } = await supabase.storage.from(safeBucket).upload(retryFilePath, file);
+            const { data: retryData, error: retryError } = await supabase.storage.from(safeBucket).upload(retryFilePath, file, {
+                contentType: contentType || undefined,
+            });
             if (retryError) {
                 console.error(`[uploadFile] Retry failed:`, retryError);
                 throw formatSupabaseError(`Failed to upload to ${safeBucket} (even after retry)`, retryError as unknown as PostgrestError);

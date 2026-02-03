@@ -32,6 +32,19 @@ describe('BusinessCardImportModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    class MockFileReader {
+      public result: string | null = null;
+      public onload: (() => void) | null = null;
+      public onerror: (() => void) | null = null;
+
+      readAsDataURL() {
+        this.result = 'data:image/png;base64,ZmFrZQ==';
+        if (this.onload) this.onload();
+      }
+    }
+    global.FileReader = MockFileReader as unknown as typeof FileReader;
+    global.URL.createObjectURL = vi.fn(() => 'blob:preview-url');
+    global.URL.revokeObjectURL = vi.fn();
   });
 
   const renderComponent = (isAIOff = false) => {

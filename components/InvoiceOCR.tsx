@@ -373,6 +373,9 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
         try {
             onSaveExpenses(itemToApprove.extractedData);
             await handleUpdateItem(itemToApprove.id, { status: InboxItemStatus.Approved });
+            if (mounted.current) {
+                setItems(prev => prev.filter(item => item.id !== itemToApprove.id));
+            }
         } catch (err: any) {
             if (mounted.current) addToast(`承認処理に失敗しました: ${err.message}`, 'error');
         }
@@ -387,7 +390,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
                         <label htmlFor="file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-md hover:bg-blue-700 transition-colors ${isUploading || isAIOff ? 'bg-slate-400 cursor-not-allowed' : ''}`}>
                             <Upload className="w-5 h-5" />
                             <span>請求書・領収書を追加</span>
-                            <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" multiple disabled={isUploading || isAIOff} />
+                            <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp, application/pdf" multiple disabled={isUploading || isAIOff} />
                         </label>
                         {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 ml-4">AI機能無効のため、OCR機能は利用できません。</p>}
                     </div>

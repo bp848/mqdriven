@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { extractBusinessCardDetails } from '../services/geminiService';
 import { getSupabase } from '../services/supabaseClient';
 import { Customer, Toast, ConfirmationDialogProps } from '../types';
-import { Upload, Loader, X, CheckCircle, Save, Trash2, AlertTriangle, Users, PlusCircle } from './Icons';
+import { Upload, Loader, X, CheckCircle, Trash2, AlertTriangle, Users, PlusCircle } from './Icons';
 import { buildCustomerInsertPayload, mapExtractedDetailsToCustomer } from './businessCardOcrHelpers';
 
 interface BusinessCardOCRProps {
@@ -16,6 +16,7 @@ interface ProcessedCard {
     id: string;
     fileName: string;
     fileUrl: string;
+    mimeType: string;
     status: 'processing' | 'pending_review' | 'approved' | 'error';
     extractedData?: Partial<Customer>;
     errorMessage?: string;
@@ -50,13 +51,13 @@ const StatusBadge: React.FC<{ status: ProcessedCard['status'] }> = ({ status }) 
 
 const ProcessedCardCard: React.FC<{
     card: ProcessedCard;
-    onUpdate: (id: string, data: Partial<ProcessedCard>) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onApprove: (card: ProcessedCard) => Promise<void>;
     requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
-}> = ({ card, onUpdate, onDelete, onApprove, requestConfirmation }) => {
+    isSelected: boolean;
+    onToggleSelect: (id: string) => void;
+}> = ({ card, onDelete, onApprove, requestConfirmation, isSelected, onToggleSelect }) => {
     const [localData, setLocalData] = useState<Partial<Customer>>(card.extractedData || {});
-    const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
 
@@ -70,13 +71,6 @@ const ProcessedCardCard: React.FC<{
             ...localData,
             [name]: value
         });
-    };
-
-    const handleSave = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setIsSaving(true);
-        await onUpdate(card.id, { extractedData: localData });
-        setIsSaving(false);
     };
 
     const handleDelete = async (e: React.MouseEvent) => {
@@ -110,12 +104,20 @@ const ProcessedCardCard: React.FC<{
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white flex items-center justify-center">
-                        {card.fileName.toLowerCase().endsWith('.pdf') ? (
-                            <iframe
-                                src={card.fileUrl}
+                        {card.mimeType === 'application/pdf' || card.fileName.toLowerCase().endsWith('.pdf') ? (
+                            <object
+                                data={card.fileUrl}
+                                type="application/pdf"
                                 className="w-full h-full min-h-96"
-                                title={card.fileName}
-                            />
+                                aria-label={card.fileName}
+                            >
+                                <p className="text-sm text-slate-500">
+                                    PDFを表示できません。
+                                    <a className="ml-1 text-blue-600 hover:underline" href={card.fileUrl} target="_blank" rel="noopener noreferrer">
+                                        新しいタブで開く
+                                    </a>
+                                </p>
+                            </object>
                         ) : (
                             <img src={card.fileUrl} alt={card.fileName} className="max-w-full max-h-96 w-auto h-auto object-contain" />
                         )}
@@ -126,12 +128,6 @@ const ProcessedCardCard: React.FC<{
                     <div className="flex justify-between items-center mb-3">
                         <StatusBadge status={card.status} />
                         <div className="flex items-center gap-2">
-                            {card.status === 'pending_review' && (
-                                <button onClick={handleSave} disabled={isSaving} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2" aria-label="保存">
-                                    {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    保存
-                                </button>
-                            )}
                             <button onClick={handleDelete} disabled={isDeleting} className="p-2 text-slate-500 hover:text-red-600 disabled:opacity-50" aria-label="削除">
                                 {isDeleting ? <Loader className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                             </button>
@@ -196,10 +192,21 @@ const ProcessedCardCard: React.FC<{
                         </div>
                     )}
                     {card.status === 'pending_review' && (
-                        <button onClick={handleApprove} disabled={isApproving || !localData.customer_name} className="mt-auto w-full flex items-center justify-center gap-2 bg-green-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
-                            {isApproving ? <Loader className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                            顧客として登録
-                        </button>
+                        <div className="mt-auto flex items-center justify-between gap-3">
+                            <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    checked={isSelected}
+                                    onChange={() => onToggleSelect(card.id)}
+                                />
+                                登録対象に追加
+                            </label>
+                            <button onClick={handleApprove} disabled={isApproving || !localData.customer_name} className="flex items-center justify-center gap-2 bg-green-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
+                                {isApproving ? <Loader className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                                顧客として登録
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -225,6 +232,8 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
     const [processedCards, setProcessedCards] = useState<ProcessedCard[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+    const [isBulkApproving, setIsBulkApproving] = useState(false);
     const mounted = useRef(true);
 
     useEffect(() => {
@@ -242,6 +251,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             id: tempId,
             fileName: file.name,
             fileUrl,
+            mimeType: file.type || 'application/octet-stream',
             status: 'processing',
             createdAt: new Date().toISOString(),
         };
@@ -333,15 +343,13 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
         e.target.value = '';
     };
 
-    const handleUpdateCard = async (id: string, data: Partial<ProcessedCard>) => {
-        if (mounted.current) {
-            setProcessedCards(prev => prev.map(card => card.id === id ? { ...card, ...data } : card));
-            addToast('更新しました', 'success');
-        }
-    };
-
     const handleDeleteCard = async (id: string) => {
         if (mounted.current) {
+            setSelectedCardIds(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
             setProcessedCards(prev => prev.filter(card => card.id !== id));
             addToast('削除しました', 'success');
         }
@@ -364,7 +372,18 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             if (error) throw error;
 
             if (mounted.current) {
-                setProcessedCards(prev => prev.map(c => c.id === card.id ? { ...c, status: 'approved' } : c));
+                setProcessedCards(prev => {
+                    const target = prev.find(c => c.id === card.id);
+                    if (target?.fileUrl) {
+                        URL.revokeObjectURL(target.fileUrl);
+                    }
+                    return prev.filter(c => c.id !== card.id);
+                });
+                setSelectedCardIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(card.id);
+                    return next;
+                });
                 addToast(`「${card.extractedData.customer_name}」を顧客として登録しました`, 'success');
 
                 if (onCustomerAdded) {
@@ -373,6 +392,34 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             }
         } catch (err: any) {
             addToast(`顧客登録に失敗しました: ${err.message}`, 'error');
+        }
+    };
+
+    const toggleSelectCard = useCallback((id: string) => {
+        setSelectedCardIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }, []);
+
+    const handleBulkApprove = async () => {
+        if (isBulkApproving) return;
+        const targets = processedCards.filter(card => card.status === 'pending_review' && selectedCardIds.has(card.id));
+        if (targets.length === 0) return;
+        setIsBulkApproving(true);
+        try {
+            for (const card of targets) {
+                await handleApproveCard(card);
+            }
+        } finally {
+            if (mounted.current) {
+                setIsBulkApproving(false);
+            }
         }
     };
 
@@ -395,7 +442,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                 <input
                     type="file"
                     multiple
-                    accept="image/png, image/jpeg, image/webp, image/heic, image/heif"
+                    accept="image/png, image/jpeg, image/webp, image/heic, image/heif, application/pdf"
                     onChange={handleFileChange}
                     disabled={isProcessing || isAIOff}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
@@ -423,9 +470,22 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             {processedCards.length > 0 && (
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                            処理結果 ({processedCards.length}件)
-                        </h2>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                                処理結果 ({processedCards.length}件)
+                            </h2>
+                            {processedCards.some(card => card.status === 'pending_review') && (
+                                <button
+                                    type="button"
+                                    onClick={handleBulkApprove}
+                                    disabled={selectedCardIds.size === 0 || isBulkApproving}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                >
+                                    {isBulkApproving ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                    選択した名刺を登録 ({selectedCardIds.size})
+                                </button>
+                            )}
+                        </div>
                         <div className="flex gap-2">
                             <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
                                 解析中: {processedCards.filter(c => c.status === 'processing').length}
@@ -447,10 +507,11 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                             <ProcessedCardCard
                                 key={card.id}
                                 card={card}
-                                onUpdate={handleUpdateCard}
                                 onDelete={handleDeleteCard}
                                 onApprove={handleApproveCard}
                                 requestConfirmation={requestConfirmation}
+                                isSelected={selectedCardIds.has(card.id)}
+                                onToggleSelect={toggleSelectCard}
                             />
                         ))}
                     </div>
