@@ -203,11 +203,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
         return current;
     };
 
-    const [processedCards, setProcessedCards] = useState<ProcessedCard[]>(() => {
-        // localStorageから状態を復元
-        const saved = localStorage.getItem('businessCardOCR_data');
-        return saved ? JSON.parse(saved) : [];
-    });
+    const [processedCards, setProcessedCards] = useState<ProcessedCard[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const mounted = useRef(true);
@@ -218,11 +214,6 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             mounted.current = false;
         };
     }, []);
-
-    // localStorageに状態を保存
-    useEffect(() => {
-        localStorage.setItem('businessCardOCR_data', JSON.stringify(processedCards));
-    }, [processedCards]);
 
     const processFile = async (file: File): Promise<ProcessedCard> => {
         const tempId = `temp_${Date.now()}_${Math.random()}`;
