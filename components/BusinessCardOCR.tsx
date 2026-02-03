@@ -108,7 +108,7 @@ const ProcessedCardCard: React.FC<{
         <div className={`bg-white dark:bg-slate-800 p-4 rounded-xl shadow-md border ${card.status === 'approved' ? 'border-green-300 dark:border-green-700' : 'border-slate-200 dark:border-slate-700'}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden">
+                    <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white">
                         <img src={card.fileUrl} alt={card.fileName} className="w-full h-auto object-contain" />
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 truncate" title={card.fileName}>{card.fileName}</p>
@@ -118,8 +118,9 @@ const ProcessedCardCard: React.FC<{
                         <StatusBadge status={card.status} />
                         <div className="flex items-center gap-2">
                             {card.status === 'pending_review' && (
-                                <button onClick={handleSave} disabled={isSaving} className="p-2 text-slate-500 hover:text-blue-600 disabled:opacity-50" aria-label="保存">
-                                    {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                <button onClick={handleSave} disabled={isSaving} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2" aria-label="保存">
+                                    {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    保存
                                 </button>
                             )}
                             <button onClick={handleDelete} disabled={isDeleting} className="p-2 text-slate-500 hover:text-red-600 disabled:opacity-50" aria-label="削除">
@@ -178,6 +179,20 @@ const ProcessedCardCard: React.FC<{
 };
 
 const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConfirmation, isAIOff, onCustomerAdded }) => {
+    // ネストされた値を安全に取得するヘルパー関数
+    const getNestedValue = (obj: any, ...keys: (string | number)[]): any => {
+        if (!obj) return undefined;
+        let current = obj;
+        for (const key of keys) {
+            if (current && typeof current === 'object' && key in current) {
+                current = current[key];
+            } else {
+                return undefined;
+            }
+        }
+        return current;
+    };
+
     const [processedCards, setProcessedCards] = useState<ProcessedCard[]>(() => {
         // localStorageから状態を復元
         const saved = localStorage.getItem('businessCardOCR_data');
@@ -223,15 +238,34 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                 ...tempCard,
                 status: 'pending_review',
                 extractedData: {
-                    customer_name: extractedData.companyName,
-                    representative_name: extractedData.recipientName,
-                    department: extractedData.department,
-                    position: extractedData.position,
-                    address_1: extractedData.address,
-                    phone_number: extractedData.tel,
-                    fax: extractedData.fax,
-                    email: extractedData.email,
-                    website_url: extractedData.website,
+                    customer_name: getNestedValue(extractedData, 'companyName', 'japanese') ||
+                        getNestedValue(extractedData, 'companyName', 'ja') ||
+                        extractedData.companyName || '',
+                    representative_name: getNestedValue(extractedData, 'name', 'japanese') ||
+                        getNestedValue(extractedData, 'name', 'ja') ||
+                        extractedData.personName ||
+                        extractedData.contactPerson ||
+                        extractedData.recipientName || '',
+                    department: extractedData.department || '',
+                    position: getNestedValue(extractedData, 'title', 'japanese', 0) ||
+                        getNestedValue(extractedData, 'title', 'ja') ||
+                        extractedData.title ||
+                        extractedData.position || '',
+                    address_1: getNestedValue(extractedData, 'address', 'japanese') ||
+                        getNestedValue(extractedData, 'address', 'ja') ||
+                        extractedData.address || '',
+                    phone_number: extractedData.phone ||
+                        extractedData.phoneNumber ||
+                        extractedData.tel ||
+                        getNestedValue(extractedData, 'contactInformation', 'phone') || '',
+                    fax: extractedData.fax ||
+                        extractedData.faxNumber ||
+                        getNestedValue(extractedData, 'contactInformation', 'fax') || '',
+                    email: extractedData.email ||
+                        getNestedValue(extractedData, 'contactInformation', 'email') || '',
+                    website_url: extractedData.website ||
+                        extractedData.url ||
+                        extractedData.websiteUrl || '',
                 }
             };
 
