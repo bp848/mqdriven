@@ -794,8 +794,45 @@ export const extractBusinessCardDetails = async (
       };
     }
 
-    const parsed = JSON.parse(jsonStr);
-    return parsed || defaultResult;
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseError) {
+      console.error('[extractBusinessCardDetails] JSONパースエラー:', parseError);
+      const fallback = await tryTesseractBusinessCard(fileBase64, mimeType, defaultResult);
+      if (fallback) {
+        return fallback;
+      }
+      return {
+        ...defaultResult,
+        notes: `JSONパースエラー: ${parseError instanceof Error ? parseError.message : '不明なエラー'}`
+      };
+    }
+
+    // AI応答がネストされている場合に対応
+    let result = parsed;
+
+    // response.candidates[0].content.parts[0].text のような構造に対応
+    if (result && result.response && result.response.candidates && result.response.candidates[0] && result.response.candidates[0].content && result.response.candidates[0].content.parts && result.response.candidates[0].content.parts[0]) {
+      const candidateText = result.response.candidates[0].content.parts[0].text;
+      if (typeof candidateText === 'string') {
+        try {
+          const candidateParsed = JSON.parse(candidateText);
+          result = candidateParsed;
+        } catch (e) {
+          console.warn('[extractBusinessCardDetails] 候補テキストのJSONパース失敗');
+        }
+      }
+    }
+
+    // 最終的な結果を検証
+    if (!result || typeof result !== 'object') {
+      console.warn('[extractBusinessCardDetails] AI応答が無効な形式');
+      return defaultResult;
+    }
+
+    console.log('[extractBusinessCardDetails] 最終解析結果:', result);
+    return result || defaultResult;
   } catch (error) {
     console.error('[extractBusinessCardDetails] エラー:', error);
     const fallback = await tryTesseractBusinessCard(fileBase64, mimeType, defaultResult);
