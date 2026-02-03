@@ -1333,6 +1333,30 @@ const eventsByDate = useMemo(() => {
         }
     };
 
+    const handleBidirectionalSync = async () => {
+        if (syncDisabled) return;
+        setSyncRunning(true);
+        setSyncMessage('双方向同期を実行しています...');
+        try {
+            const pushResult = await syncSystemCalendarToGoogle(viewingUserId);
+            const pullResult = await pullGoogleCalendarToSystem(viewingUserId);
+            const pushSummary = pushResult?.summary ?? {};
+            const pullSummary = pullResult?.summary ?? {};
+            setSyncMessage(
+                `双方向同期: ERP→Google 作成${pushSummary.created ?? 0} / 更新${pushSummary.updated ?? 0} / Google→ERP 反映${pullSummary.pulled ?? 0} / 削除${pullSummary.deleted ?? 0}`
+            );
+            addToast?.('Googleカレンダーとの双方向同期が完了しました。', 'success');
+            await loadRemoteEvents();
+            onRefreshGoogleAuthStatus?.();
+        } catch (err: any) {
+            const message = err?.message || '双方向同期に失敗しました。';
+            setSyncMessage(message);
+            addToast?.(message, 'error');
+        } finally {
+            setSyncRunning(false);
+        }
+    };
+
     const handleReloadEvents = async () => {
         await loadRemoteEvents();
         setSyncMessage('予定を再取得しました。');
@@ -1537,6 +1561,18 @@ const eventsByDate = useMemo(() => {
                                 }`}
                             >
                                 システム→Google
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleBidirectionalSync}
+                                disabled={syncDisabled}
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                    syncDisabled
+                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                双方向同期
                             </button>
                             <button
                                 type="button"

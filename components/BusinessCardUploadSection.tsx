@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BusinessCardContact, Customer, EmployeeUser, Toast } from '../types';
 import { extractBusinessCardDetails } from '../services/geminiService';
-import { Upload, Loader, CheckCircle, AlertTriangle, Trash2, FileText, RefreshCw } from './Icons';
+import { googleDriveService, GoogleDriveFile } from '../services/googleDriveService';
+import { Upload, Loader, CheckCircle, AlertTriangle, Trash2, FileText, RefreshCw, X } from './Icons';
 import { buildActionActorInfo, logActionEvent } from '../services/actionConsoleService';
 
 interface BusinessCardUploadSectionProps {
@@ -87,6 +88,15 @@ const contactToCustomer = (contact: BusinessCardContact, fallbackName: string): 
   note: [buildContactNote(contact), contact.notes].filter(Boolean).join('\n\n') || undefined,
 });
 
+const guessDriveMimeType = (fileName: string, fallback = 'image/jpeg'): string => {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  return fallback;
+};
+
 const describeRepresentative = (name?: string | null, title?: string | null | undefined) => {
   const safeName = name?.trim();
   const safeTitle = title?.trim();
@@ -121,6 +131,12 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   const [eventName, setEventName] = useState('');
   const [recipientCode, setRecipientCode] = useState('');
   const actorInfo = useMemo(() => buildActionActorInfo(currentUser ?? null), [currentUser]);
+  const [showDriveModal, setShowDriveModal] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
+  const [selectedDriveFiles, setSelectedDriveFiles] = useState<string[]>([]);
+  const [driveError, setDriveError] = useState('');
+  const [isDriveLoading, setIsDriveLoading] = useState(false);
+  const [isDriveImporting, setIsDriveImporting] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const draftsRef = useRef<CardDraft[]>(drafts);
   const mounted = useRef(true);
@@ -293,6 +309,26 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
     [actorInfo, autoCreateCustomer]
   );
 
+  const queueBusinessCardFile = useCallback(
+    (file: File) => {
+      const id = generateId();
+      const previewUrl = URL.createObjectURL(file);
+      const draft: CardDraft = {
+        id,
+        file,
+        fileName: file.name,
+        fileUrl: previewUrl,
+        mimeType: file.type || 'application/octet-stream',
+        ocrStatus: 'processing',
+        insertStatus: 'idle',
+        contact: {},
+      };
+      setDrafts(prev => [...prev, draft]);
+      runOcr(id, file);
+    },
+    [runOcr]
+  );
+
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
@@ -308,28 +344,72 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
         });
         return;
       }
-      Array.from(files).forEach(file => {
-        const id = generateId();
-        const previewUrl = URL.createObjectURL(file);
-        const draft: CardDraft = {
-          id,
-          file,
-          fileName: file.name,
-          fileUrl: previewUrl,
-          mimeType: file.type || 'application/octet-stream',
-          ocrStatus: 'processing',
-          insertStatus: 'idle',
-          contact: {},
-        };
-        setDrafts(prev => [...prev, draft]);
-        runOcr(id, file);
-      });
+      Array.from(files).forEach(queueBusinessCardFile);
       if (inputRef.current) {
         inputRef.current.value = '';
       }
     },
-    [addToast, isAIOff, runOcr, actorInfo]
+    [isAIOff, addToast, queueBusinessCardFile, actorInfo]
   );
+
+  const handleDriveModalOpen = async () => {
+    if (isAIOff) {
+      addToast('AI機能を有効化するとGoogle Driveから名刺を読み込めます。', 'info');
+      return;
+    }
+    setShowDriveModal(true);
+    setDriveError('');
+    setIsDriveLoading(true);
+    try {
+      const { files } = await googleDriveService.searchFiles('名刺');
+      setDriveFiles(files || []);
+      setSelectedDriveFiles([]);
+    } catch (err) {
+      console.error('Failed to load business card files from Drive', err);
+      setDriveError('Google Driveからファイル一覧を取得できませんでした。');
+    } finally {
+      setIsDriveLoading(false);
+    }
+  };
+
+  const closeDriveModal = () => {
+    setShowDriveModal(false);
+    setDriveError('');
+    setSelectedDriveFiles([]);
+  };
+
+  const toggleDriveFileSelection = (fileId: string) => {
+    setSelectedDriveFiles(prev =>
+      prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
+    );
+  };
+
+  const importDriveFiles = async () => {
+    if (selectedDriveFiles.length === 0) {
+      setDriveError('インポートする名刺ファイルを選択してください。');
+      return;
+    }
+
+    setIsDriveImporting(true);
+    try {
+      for (const fileId of selectedDriveFiles) {
+        const fileMeta = driveFiles.find(file => file.id === fileId);
+        const { data, fileName } = await googleDriveService.downloadFile(fileId);
+        const mimeType = fileMeta?.mimeType || guessDriveMimeType(fileName);
+        const file = new File([data], fileName, { type: mimeType });
+        queueBusinessCardFile(file);
+      }
+      addToast(`${selectedDriveFiles.length}件の名刺をGoogle Driveから取り込みました。`, 'success');
+      closeDriveModal();
+    } catch (err: any) {
+      console.error('Google Drive import failed', err);
+      const message = err instanceof Error ? err.message : 'Google Driveからの取り込みに失敗しました。';
+      setDriveError(message);
+      addToast('Google Driveからの取り込みに失敗しました。', 'error');
+    } finally {
+      setIsDriveImporting(false);
+    }
+  };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -363,7 +443,8 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
   };
 
   return (
-    <section className="mb-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+    <>
+      <section className="mb-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
       <div className="border-b border-slate-200 dark:border-slate-700 px-6 py-5 flex flex-col gap-2">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -372,20 +453,33 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
               名刺をまとめてアップロードするだけで、AIが解析して顧客マスタ登録とフォーム反映まで自動で行います。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={isAIOff}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
-          >
-            <Upload className="w-4 h-4" />
-            ファイルを選択
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              disabled={isAIOff}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
+            >
+              <Upload className="w-4 h-4" />
+              ファイルを選択
+            </button>
+            <button
+              type="button"
+              onClick={handleDriveModalOpen}
+              disabled={isDriveLoading || isDriveImporting || isAIOff}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
+            >
+              📁 Google Driveから追加
+            </button>
+          </div>
         </div>
         {isAIOff && (
           <p className="text-sm text-red-500 font-semibold">
             AI機能が無効のため、OCRは利用できません。
           </p>
+        )}
+        {driveError && (
+          <p className="text-xs text-red-600 dark:text-red-400 mt-2">{driveError}</p>
         )}
         <div className="mt-4 grid grid-cols-1 gap-3">
           <div className="grid grid-cols-1 gap-2 text-sm">
@@ -617,7 +711,63 @@ const BusinessCardUploadSection: React.FC<BusinessCardUploadSectionProps> = ({
           </p>
         </div>
       )}
-    </section>
+      </section>
+      {showDriveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google Driveから名刺を選択</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">選択した名刺ファイルをOCRに取り込みます。</p>
+              </div>
+              <button onClick={closeDriveModal} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="max-h-[420px] overflow-y-auto px-6 py-4 space-y-2">
+              {isDriveLoading && (
+                <p className="text-sm text-slate-500">Google Driveファイルを読み込み中です...</p>
+              )}
+              {!isDriveLoading && driveFiles.length === 0 && (
+                <p className="text-sm text-slate-500">対象の名刺ファイルが見つかりませんでした。</p>
+              )}
+              {driveFiles.map(file => (
+                <label
+                  key={file.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-3 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400"
+                >
+                  <div className="flex-grow text-sm text-slate-800 dark:text-slate-100">
+                    <p className="font-semibold truncate">{file.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(file.createdTime).toLocaleString()}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={selectedDriveFiles.includes(file.id)}
+                    onChange={() => toggleDriveFileSelection(file.id)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
+              <button
+                onClick={closeDriveModal}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-600 hover:border-slate-400"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={importDriveFiles}
+                disabled={isDriveImporting || selectedDriveFiles.length === 0}
+                className={`px-4 py-2 text-sm font-semibold rounded-lg text-white ${isDriveImporting || selectedDriveFiles.length === 0 ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {isDriveImporting ? '取り込み中…' : `選択した${selectedDriveFiles.length}件を取り込む`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -626,6 +626,75 @@ const businessCardSchema = {
   },
 };
 
+// テキストから名刺情報を抽出する関数
+const extractFromText = (text: string): Partial<BusinessCardContact> => {
+  const result: Partial<BusinessCardContact> = {};
+
+  // 会社名の抽出
+  const companyPatterns = [
+    /(?:会社名|企業名|社名)[:：]\s*([^\n\r]+)/,
+    /([^\n\r]*(?:株式会社|有限会社|合名会社|合同会社| LLP| LLC))/,
+  ];
+
+  for (const pattern of companyPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      result.companyName = match[1].trim();
+      break;
+    }
+  }
+
+  // 担当者名の抽出
+  const personPatterns = [
+    /(?:担当者|氏名|名前)[:：]\s*([^\n\r]+)/,
+    /(?:担当|営業|代表)[:：]\s*([^\n\r]+)/,
+  ];
+
+  for (const pattern of personPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      result.personName = match[1].trim();
+      break;
+    }
+  }
+
+  // メールアドレスの抽出
+  const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailMatch) {
+    result.email = emailMatch[1];
+  }
+
+  // 電話番号の抽出
+  const phonePatterns = [
+    /(?:TEL|電話|電話番号)[:：]\s*([0-9\-()]+)/,
+    /(?:0\d{1,4}[-(]?\d{1,4}[-)]?\d{3,4}[-]?\d{4})/,
+  ];
+
+  for (const pattern of phonePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      result.phoneNumber = match[1].trim();
+      break;
+    }
+  }
+
+  // 携帯電話の抽出
+  const mobilePatterns = [
+    /(?:携帯|MOBILE|CELL)[:：]\s*([0-9\-()]+)/,
+    /(?:0[7-9]0[-(]?\d{4}[-)]?\d{4})/,
+  ];
+
+  for (const pattern of mobilePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      result.mobileNumber = match[1].trim();
+      break;
+    }
+  }
+
+  return result;
+};
+
 export const extractBusinessCardDetails = async (
   fileBase64: string,
   mimeType: string
@@ -661,18 +730,23 @@ export const extractBusinessCardDetails = async (
         responseSchema: businessCardSchema,
       },
     });
-    
+
     const rawText = response.text.trim();
-    
-    // JSONでない場合の処理
+    console.log('[extractBusinessCardDetails] AI応答全文:', rawText);
+
+    // JSONでない場合の処理 - テキストから情報を抽出
     if (!rawText.startsWith('{') && !rawText.startsWith('[')) {
-      console.warn('[extractBusinessCardDetails] AIがJSON以外を返却:', rawText.substring(0, 100));
+      console.warn('[extractBusinessCardDetails] AIがJSON以外を返却、テキスト解析を試行');
+
+      // テキストから情報を抽出する簡易的な処理
+      const extracted = extractFromText(rawText);
       return {
         ...defaultResult,
-        notes: `名刺形式が不明です。AI応答: ${rawText.substring(0, 200)}...`
+        ...extracted,
+        notes: `AIテキスト解析: ${rawText.substring(0, 100)}...`
       };
     }
-    
+
     const jsonStr = stripCodeFences(rawText);
     const parsed = JSON.parse(jsonStr);
     return parsed || defaultResult;

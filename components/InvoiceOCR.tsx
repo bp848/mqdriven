@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { extractInvoiceDetails } from '../services/geminiService';
 import { getInboxItems, addInboxItem, updateInboxItem, deleteInboxItem, uploadFile } from '../services/dataService';
+import { googleDriveService, GoogleDriveFile } from '../services/googleDriveService';
 import { InboxItem, InvoiceData, InboxItemStatus, Toast, ConfirmationDialogProps } from '../types';
 import { Upload, Loader, X, CheckCircle, Save, Trash2, AlertTriangle, RefreshCw } from './Icons';
 
@@ -37,6 +38,16 @@ const StatusBadge: React.FC<{ status: InboxItemStatus }> = ({ status }) => {
     };
     const { text, className } = statusMap[status];
     return <span className={`px-2.5 py-1 text-sm font-medium rounded-full ${className}`}>{text}</span>;
+};
+
+const guessDriveMimeType = (fileName: string, fallback = 'application/pdf'): string => {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return fallback;
 };
 
 const InboxItemCard: React.FC<{
@@ -174,6 +185,12 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
     const [isLoading, setIsLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState('');
+    const [showDriveModal, setShowDriveModal] = useState(false);
+    const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
+    const [selectedDriveFiles, setSelectedDriveFiles] = useState<string[]>([]);
+    const [driveError, setDriveError] = useState('');
+    const [isDriveLoading, setIsDriveLoading] = useState(false);
+    const [isDriveImporting, setIsDriveImporting] = useState(false);
     const mounted = useRef(true);
 
     useEffect(() => {
@@ -242,6 +259,65 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
         }
     };
 
+    const handleDriveModalOpen = async () => {
+        if (isAIOff) {
+            addToast('AI機能を有効化するとGoogle Driveからのインポートが利用できます。', 'info');
+            return;
+        }
+        setShowDriveModal(true);
+        setDriveError('');
+        setIsDriveLoading(true);
+        try {
+            const { files } = await googleDriveService.searchExpenseFiles();
+            setDriveFiles(files || []);
+            setSelectedDriveFiles([]);
+        } catch (err) {
+            console.error('Failed to load Google Drive files', err);
+            setDriveError('Google Driveからファイル一覧を取得できませんでした。');
+        } finally {
+            setIsDriveLoading(false);
+        }
+    };
+
+    const closeDriveModal = () => {
+        setShowDriveModal(false);
+        setDriveError('');
+        setSelectedDriveFiles([]);
+    };
+
+    const toggleDriveFileSelection = (fileId: string) => {
+        setSelectedDriveFiles(prev =>
+            prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
+        );
+    };
+
+    const importDriveFiles = async () => {
+        if (selectedDriveFiles.length === 0) {
+            setDriveError('インポートするファイルを選択してください。');
+            return;
+        }
+
+        setIsDriveImporting(true);
+        try {
+            for (const fileId of selectedDriveFiles) {
+                const fileMeta = driveFiles.find(file => file.id === fileId);
+                const { data, fileName } = await googleDriveService.downloadFile(fileId);
+                const mimeType = fileMeta?.mimeType || guessDriveMimeType(fileName);
+                const file = new File([data], fileName, { type: mimeType });
+                await processFile(file);
+            }
+            addToast(`${selectedDriveFiles.length}件のファイルをGoogle Driveから読み込みました。`, 'success');
+            closeDriveModal();
+        } catch (err: any) {
+            console.error('Google Drive import failed', err);
+            const message = err instanceof Error ? err.message : 'Google Driveファイルのインポートに失敗しました。';
+            setDriveError(message);
+            addToast('Google Driveからのインポートに失敗しました。', 'error');
+        } finally {
+            setIsDriveImporting(false);
+        }
+    };
+
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -304,18 +380,37 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
 
 
     return (
-        <div className="space-y-6">
-            <div>
-                <div className="flex justify-between items-center">
-                    <label htmlFor="file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-md hover:bg-blue-700 transition-colors ${isUploading || isAIOff ? 'bg-slate-400 cursor-not-allowed' : ''}`}>
-                        <Upload className="w-5 h-5" />
-                        <span>請求書・領収書を追加</span>
-                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" multiple disabled={isUploading || isAIOff} />
-                    </label>
-                    {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 ml-4">AI機能無効のため、OCR機能は利用できません。</p>}
+        <>
+            <div className="space-y-6">
+                <div>
+                    <div className="flex justify-between items-center">
+                        <label htmlFor="file-upload" className={`relative inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-md hover:bg-blue-700 transition-colors ${isUploading || isAIOff ? 'bg-slate-400 cursor-not-allowed' : ''}`}>
+                            <Upload className="w-5 h-5" />
+                            <span>請求書・領収書を追加</span>
+                            <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" multiple disabled={isUploading || isAIOff} />
+                        </label>
+                        {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 ml-4">AI機能無効のため、OCR機能は利用できません。</p>}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={handleDriveModalOpen}
+                            disabled={isDriveLoading || isDriveImporting || isAIOff}
+                            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white ${isDriveLoading || isDriveImporting || isAIOff ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                        >
+                            📁 Google Driveから追加
+                        </button>
+                        {(isDriveLoading || isDriveImporting) && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {isDriveImporting ? 'ファイルを取り込んでいます…' : 'ファイル一覧を読み込み中…'}
+                            </span>
+                        )}
+                    </div>
+                    {driveError && (
+                        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{driveError}</p>
+                    )}
+                    {isUploading && !isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">アップロードと解析を実行中です...</p>}
                 </div>
-                 {isUploading && !isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">アップロードと解析を実行中です...</p>}
-            </div>
 
             {error && (
                 <div className="bg-red-100 dark:bg-red-900/50 p-4 rounded-lg text-red-700 dark:text-red-300">
@@ -342,7 +437,63 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
                     </div>
                 )
             )}
-        </div>
+            </div>
+            {showDriveModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+                    <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Google Driveから読み込む</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">選択したファイルを請求書OCRに連携します。</p>
+                            </div>
+                            <button onClick={closeDriveModal} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="max-h-[400px] overflow-y-auto px-6 py-4 space-y-2">
+                            {isDriveLoading && (
+                                <p className="text-sm text-slate-500">Google Driveファイルを読み込み中です...</p>
+                            )}
+                            {!isDriveLoading && driveFiles.length === 0 && (
+                                <p className="text-sm text-slate-500">対象ファイルが見つかりませんでした。</p>
+                            )}
+                            {driveFiles.map(file => (
+                                <label
+                                    key={file.id}
+                                    className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-3 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400"
+                                >
+                                    <div className="flex-grow text-sm text-slate-800 dark:text-slate-100">
+                                        <p className="font-semibold truncate">{file.name}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(file.createdTime).toLocaleString()}</p>
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedDriveFiles.includes(file.id)}
+                                        onChange={() => toggleDriveFileSelection(file.id)}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                </label>
+                            ))}
+                        </div>
+                        <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
+                            <button
+                                onClick={closeDriveModal}
+                                className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-600 hover:border-slate-400"
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={importDriveFiles}
+                                disabled={isDriveImporting || selectedDriveFiles.length === 0}
+                                className={`px-4 py-2 text-sm font-semibold rounded-lg text-white ${isDriveImporting || selectedDriveFiles.length === 0 ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                                {isDriveImporting ? '取り込み中…' : `選択した${selectedDriveFiles.length}件を取り込む`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 
