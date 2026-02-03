@@ -773,8 +773,16 @@ export const extractBusinessCardDetails = async (
     const rawText = response.text.trim();
     console.log('[extractBusinessCardDetails] AI応答全文:', rawText);
 
+    // コードフェンスを確実に除去
+    let jsonStr = rawText;
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
     // JSONでない場合の処理 - テキストから情報を抽出
-    if (!rawText.startsWith('{') && !rawText.startsWith('[')) {
+    if (!jsonStr.startsWith('{') && !jsonStr.startsWith('[')) {
       console.warn('[extractBusinessCardDetails] AIがJSON以外を返却、テキスト解析を試行');
 
       // テキストから情報を抽出する簡易的な処理
@@ -784,14 +792,6 @@ export const extractBusinessCardDetails = async (
         ...extracted,
         notes: `AIテキスト解析: ${rawText.substring(0, 100)}...`
       };
-    }
-
-    // コードフェンスを確実に除去
-    let jsonStr = rawText;
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
     const parsed = JSON.parse(jsonStr);
