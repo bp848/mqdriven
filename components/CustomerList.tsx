@@ -258,19 +258,6 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
-      {/* Debug info */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-yellow-50 border-b border-yellow-200 p-2 text-xs">
-          <div>Customers count: {customers.length}</div>
-          <div>First customer: {customers[0] ? JSON.stringify({
-            id: customers[0].id,
-            customer_name: customers[0].customer_name,
-            customerName: customers[0].customerName,
-            phone_number: customers[0].phone_number,
-            phoneNumber: customers[0].phoneNumber
-          }, null, 2) : 'No customers'}</div>
-        </div>
-      )}
       <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 px-6 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs text-slate-600 dark:text-slate-400">
           表示件数: {sortedCustomers.length}件 {searchTerm ? `(検索: "${searchTerm}")` : ''}
