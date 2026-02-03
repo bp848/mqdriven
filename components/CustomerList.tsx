@@ -29,7 +29,10 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportResult, setExportResult] = useState<{ url: string; message: string } | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const mounted = useRef(true);
+
+  const ITEMS_PER_PAGE = 50;
 
   useEffect(() => {
     mounted.current = true;
@@ -37,6 +40,10 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
       mounted.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const handleEditClick = (e: React.MouseEvent, customer: Customer) => {
     e.stopPropagation();
@@ -180,6 +187,17 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     return sortableItems;
   }, [filteredCustomers, sortConfig]);
 
+  // Pagination calculations
+  const paginatedCustomers = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return sortedCustomers.slice(startIndex, endIndex);
+  }, [sortedCustomers, currentPage]);
+
+  const totalPages = Math.ceil(sortedCustomers.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, sortedCustomers.length);
+
   const requestSort = (key: string) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -261,7 +279,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 px-6 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs text-slate-600 dark:text-slate-400">
-          表示件数: {sortedCustomers.length}件 {searchTerm ? `(検索: "${searchTerm}")` : ''}
+          {sortedCustomers.length > 0 ? `${startIndex}-${endIndex}件 / 全${sortedCustomers.length}件` : '0件'} {searchTerm ? `(検索: "${searchTerm}")` : ''}
         </div>
         <div className="flex items-center gap-2">
           {onShowBulkOCR && (
@@ -308,7 +326,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
             </tr>
           </thead>
           <tbody>
-            {sortedCustomers.map((customer) => {
+            {paginatedCustomers.map((customer) => {
               const isEditing = editingRowId === customer.id;
               return (
                 <tr key={customer.id} onClick={() => onSelectCustomer(customer)} className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 odd:bg-slate-50 dark:odd:bg-slate-800/50 cursor-pointer">
@@ -358,9 +376,18 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
                 </tr>
               )
             })}
+            {paginatedCustomers.length === 0 && sortedCustomers.length > 0 && (
+              <tr>
+                <td colSpan={6}>
+                  <div className="text-center py-8 text-slate-500">
+                    該当ページにデータがありません
+                  </div>
+                </td>
+              </tr>
+            )}
             {sortedCustomers.length === 0 && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <EmptyState
                     icon={Users}
                     title="検索結果がありません"
@@ -372,6 +399,62 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="border-t border-slate-200 dark:border-slate-700 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-slate-600 dark:text-slate-400">
+              {startIndex}-{endIndex}件 / 全{sortedCustomers.length}件
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                前へ
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 text-sm border rounded-md ${currentPage === pageNum
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                次へ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
