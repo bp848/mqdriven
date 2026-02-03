@@ -143,17 +143,17 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
       )
     );
 
-    // Simulate progress updates
+    // 大量処理用の進捗更新（間隔を短く）
     const progressInterval = setInterval(() => {
       setDrafts(prev =>
         prev.map(draft =>
           draft.id === draftId ? {
             ...draft,
-            processingProgress: Math.min((draft.processingProgress || 0) + 15, 85)
+            processingProgress: Math.min((draft.processingProgress || 0) + 25, 85)
           } : draft
         )
       );
-    }, 800);
+    }, 500); // 500ms間隔に短縮
 
     try {
       const base64 = await readFileAsBase64(file);
@@ -226,21 +226,52 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
         }
         return;
       }
-      Array.from(files).forEach(file => {
-        const id = generateId();
-        const previewUrl = URL.createObjectURL(file);
-        const draft: CardDraft = {
-          id,
-          file,
-          fileName: file.name,
-          fileUrl: previewUrl,
-          mimeType: file.type || 'application/octet-stream',
-          status: 'processing',
-          contact: {},
-        };
-        setDrafts(prev => [...prev, draft]);
-        runOcr(id, file);
-      });
+
+      // 大量一括処理用のバッチ処理
+      const fileArray = Array.from(files);
+      const batchSize = 5; // 一度に処理する数
+      let currentIndex = 0;
+
+      const processBatch = async () => {
+        const batch = fileArray.slice(currentIndex, currentIndex + batchSize);
+
+        // バッチ内のファイルを一括で追加
+        batch.forEach(file => {
+          const id = generateId();
+          const previewUrl = URL.createObjectURL(file);
+          const draft: CardDraft = {
+            id,
+            file,
+            fileName: file.name,
+            fileUrl: previewUrl,
+            mimeType: file.type || 'application/octet-stream',
+            status: 'processing',
+            contact: {},
+            processingStartTime: Date.now(),
+            processingProgress: 0,
+          };
+          setDrafts(prev => [...prev, draft]);
+        });
+
+        // バッチ内のファイルを並列処理
+        const batchPromises = batch.map((file, index) => {
+          const draftId = currentIndex + index;
+          return runOcr(draftId.toString(), file);
+        });
+
+        await Promise.all(batchPromises);
+
+        currentIndex += batchSize;
+
+        // 次のバッチがあれば処理
+        if (currentIndex < fileArray.length) {
+          setTimeout(processBatch, 1000); // 1秒待機して次のバッチ
+        }
+      };
+
+      // 最初のバッチを開始
+      processBatch();
+
       if (inputRef.current) {
         inputRef.current.value = '';
       }
@@ -406,9 +437,19 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                     <div>
                       <h3 className="font-semibold text-blue-900 dark:text-blue-100">
                         処理中: {drafts.filter(d => d.status === 'processing').length} / {drafts.length}件
+                        {drafts.length > 10 && (
+                          <span className="text-sm font-normal text-blue-700 dark:text-blue-300">
+                            （バッチ処理中）
+                          </span>
+                        )}
                       </h3>
                       <p className="text-sm text-blue-700 dark:text-blue-300">
                         AIが名刺情報を解析しています...
+                        {drafts.length > 20 && (
+                          <span className="block text-xs mt-1">
+                            大量処理の場合、時間がかかることがあります
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -427,6 +468,13 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
                     style={{ width: `${(drafts.filter(d => d.status === 'ready').length / drafts.length) * 100}%` }}
                   />
                 </div>
+
+                {/* 大量処理時のメッセージ */}
+                {drafts.length > 50 && (
+                  <div className="mt-2 text-xs text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 rounded p-2">
+                    ⚡ 大量一括処理モード: 5件ずつ並列処理中
+                  </div>
+                )}
               </div>
 
               {drafts.map((draft, index) => {
