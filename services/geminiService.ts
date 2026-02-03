@@ -772,6 +772,7 @@ export const extractBusinessCardDetails = async (
 
     const rawText = response.text.trim();
     console.log('[extractBusinessCardDetails] AI応答全文:', rawText);
+    console.log('[extractBusinessCardDetails] responseオブジェクト構造:', JSON.stringify(response, null, 2));
 
     // コードフェンスを確実に除去
     let jsonStr = rawText;
@@ -811,16 +812,19 @@ export const extractBusinessCardDetails = async (
 
     // AI応答がネストされている場合に対応
     let result = parsed;
+    console.log('[extractBusinessCardDetails] パース後の結果:', JSON.stringify(result, null, 2));
 
     // response.candidates[0].content.parts[0].text のような構造に対応
     if (result && result.response && result.response.candidates && result.response.candidates[0] && result.response.candidates[0].content && result.response.candidates[0].content.parts && result.response.candidates[0].content.parts[0]) {
       const candidateText = result.response.candidates[0].content.parts[0].text;
+      console.log('[extractBusinessCardDetails] 候補テキスト:', candidateText);
       if (typeof candidateText === 'string') {
         try {
           const candidateParsed = JSON.parse(candidateText);
           result = candidateParsed;
+          console.log('[extractBusinessCardDetails] 候補テキストパース後:', JSON.stringify(result, null, 2));
         } catch (e) {
-          console.warn('[extractBusinessCardDetails] 候補テキストのJSONパース失敗');
+          console.warn('[extractBusinessCardDetails] 候補テキストのJSONパース失敗:', e);
         }
       }
     }
@@ -832,6 +836,21 @@ export const extractBusinessCardDetails = async (
     }
 
     console.log('[extractBusinessCardDetails] 最終解析結果:', result);
+
+    // 各フィールドの値を確認
+    const fieldCheck = {
+      companyName: result.companyName,
+      personName: result.personName,
+      department: result.department,
+      title: result.title,
+      phoneNumber: result.phoneNumber,
+      faxNumber: result.faxNumber,
+      email: result.email,
+      address: result.address,
+      websiteUrl: result.websiteUrl
+    };
+    console.log('[extractBusinessCardDetails] フィールドチェック:', fieldCheck);
+
     return result || defaultResult;
   } catch (error) {
     console.error('[extractBusinessCardDetails] エラー:', error);
@@ -844,45 +863,44 @@ export const extractBusinessCardDetails = async (
       notes: `解析エラー: ${error instanceof Error ? error.message : '不明なエラー'}`
     };
   }
-};
 
-const suggestJournalEntrySchema = {
-  type: Type.OBJECT,
-  properties: {
-    debitAccount: {
-      type: Type.STRING,
-      description: "借方の勘定科目（勘定科目候補から選択）。該当が無い場合は要確認。",
+  const suggestJournalEntrySchema = {
+    type: Type.OBJECT,
+    properties: {
+      debitAccount: {
+        type: Type.STRING,
+        description: "借方の勘定科目（勘定科目候補から選択）。該当が無い場合は要確認。",
+      },
+      creditAccount: {
+        type: Type.STRING,
+        description: "貸方の勘定科目（勘定科目候補から選択）。該当が無い場合は要確認。",
+      },
+      amount: {
+        type: Type.NUMBER,
+        description: "取引金額（正の数）。",
+      },
+      description: {
+        type: Type.STRING,
+        description: "摘要（短く、何の支払い/何の取引かが分かるように）。",
+      },
+      reasoning: {
+        type: Type.STRING,
+        description: "根拠（どの情報から判断したか/不確実な点）。",
+      },
+      confidence: {
+        type: Type.NUMBER,
+        description: "自信度(0-1)。",
+      },
     },
-    creditAccount: {
-      type: Type.STRING,
-      description: "貸方の勘定科目（勘定科目候補から選択）。該当が無い場合は要確認。",
-    },
-    amount: {
-      type: Type.NUMBER,
-      description: "取引金額（正の数）。",
-    },
-    description: {
-      type: Type.STRING,
-      description: "摘要（短く、何の支払い/何の取引かが分かるように）。",
-    },
-    reasoning: {
-      type: Type.STRING,
-      description: "根拠（どの情報から判断したか/不確実な点）。",
-    },
-    confidence: {
-      type: Type.NUMBER,
-      description: "自信度(0-1)。",
-    },
-  },
-  required: ["debitAccount", "creditAccount", "amount"],
-};
+    required: ["debitAccount", "creditAccount", "amount"],
+  };
 
-export const suggestJournalEntry = async (
-  prompt: string
-): Promise<AIJournalSuggestion> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const fullPrompt = `以下の取引内容を会計仕訳（2行）に変換してください。
+  export const suggestJournalEntry = async (
+    prompt: string
+  ): Promise<AIJournalSuggestion> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const fullPrompt = `以下の取引内容を会計仕訳（2行）に変換してください。
 出力は必ずJSONのみ（コードフェンス禁止）。
 勘定科目は必ず「勘定科目候補」に含まれるものから選択し、該当が無い場合のみ「要確認」としてください。
 
@@ -898,91 +916,91 @@ JSON形式:
   "reasoning": "根拠",
   "confidence": 0.0
 }`;
-    const response = await ai.models.generateContent({
-      model,
-      contents: fullPrompt,
-      config: {
-        responseSchema: suggestJournalEntrySchema,
-      },
-    });
-    const rawText = stripCodeFences(response.text);
-    const normalizeSuggestion = (value: AIJournalSuggestion): AIJournalSuggestion => {
-      const debitAccount = typeof value.debitAccount === "string" && value.debitAccount.trim()
-        ? value.debitAccount.trim()
-        : "要確認";
-      const creditAccount = typeof value.creditAccount === "string" && value.creditAccount.trim()
-        ? value.creditAccount.trim()
-        : "要確認";
-      const amount = typeof value.amount === "number" && Number.isFinite(value.amount) ? value.amount : 0;
-      const description = typeof value.description === "string" && value.description.trim()
-        ? value.description.trim()
-        : "AI提案が不明瞭なため要確認";
-      const reasoning = typeof value.reasoning === "string" && value.reasoning.trim()
-        ? value.reasoning.trim()
-        : description;
-      const confidence = typeof value.confidence === "number" && Number.isFinite(value.confidence)
-        ? value.confidence
-        : 0;
-      return {
-        ...value,
-        debitAccount,
-        creditAccount,
-        amount,
-        description,
-        reasoning,
-        confidence,
-      };
-    };
-    try {
-      return normalizeSuggestion(JSON.parse(rawText));
-    } catch (error) {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          return normalizeSuggestion(JSON.parse(match[0]));
-        } catch {
-          // fall through
-        }
-      }
-      const cleanReasoning = stripMarkdown(rawText);
-      console.warn("AI returned non-JSON response for journal suggestion:", cleanReasoning);
-      return normalizeSuggestion({
-        debitAccount: "要確認",
-        creditAccount: "要確認",
-        amount: 0,
-        description: "AI提案が不明瞭なため要確認",
-        reasoning: cleanReasoning,
-        confidence: 0,
+      const response = await ai.models.generateContent({
+        model,
+        contents: fullPrompt,
+        config: {
+          responseSchema: suggestJournalEntrySchema,
+        },
       });
-    }
-  });
-};
+      const rawText = stripCodeFences(response.text);
+      const normalizeSuggestion = (value: AIJournalSuggestion): AIJournalSuggestion => {
+        const debitAccount = typeof value.debitAccount === "string" && value.debitAccount.trim()
+          ? value.debitAccount.trim()
+          : "要確認";
+        const creditAccount = typeof value.creditAccount === "string" && value.creditAccount.trim()
+          ? value.creditAccount.trim()
+          : "要確認";
+        const amount = typeof value.amount === "number" && Number.isFinite(value.amount) ? value.amount : 0;
+        const description = typeof value.description === "string" && value.description.trim()
+          ? value.description.trim()
+          : "AI提案が不明瞭なため要確認";
+        const reasoning = typeof value.reasoning === "string" && value.reasoning.trim()
+          ? value.reasoning.trim()
+          : description;
+        const confidence = typeof value.confidence === "number" && Number.isFinite(value.confidence)
+          ? value.confidence
+          : 0;
+        return {
+          ...value,
+          debitAccount,
+          creditAccount,
+          amount,
+          description,
+          reasoning,
+          confidence,
+        };
+      };
+      try {
+        return normalizeSuggestion(JSON.parse(rawText));
+      } catch (error) {
+        const match = rawText.match(/\{[\s\S]*\}/);
+        if (match) {
+          try {
+            return normalizeSuggestion(JSON.parse(match[0]));
+          } catch {
+            // fall through
+          }
+        }
+        const cleanReasoning = stripMarkdown(rawText);
+        console.warn("AI returned non-JSON response for journal suggestion:", cleanReasoning);
+        return normalizeSuggestion({
+          debitAccount: "要確認",
+          creditAccount: "要確認",
+          amount: 0,
+          description: "AI提案が不明瞭なため要確認",
+          reasoning: cleanReasoning,
+          confidence: 0,
+        });
+      }
+    });
+  };
 
-export const generateSalesEmail = async (
-  customer: Customer,
-  senderName: string
-): Promise<{ subject: string; body: string }> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `顧客名「${customer.customerName}」向けの営業提案メールを作成してください。送信者は「${senderName}」です。`;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    const text = response.text;
-    const subjectMatch = text.match(/件名:\s*(.*)/);
-    const bodyMatch = text.match(/本文:\s*([\s\S]*)/);
-    return {
-      subject: subjectMatch ? subjectMatch[1].trim() : "ご提案の件",
-      body: bodyMatch ? bodyMatch[1].trim() : text,
-    };
-  });
-};
+  export const generateSalesEmail = async (
+    customer: Customer,
+    senderName: string
+  ): Promise<{ subject: string; body: string }> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `顧客名「${customer.customerName}」向けの営業提案メールを作成してください。送信者は「${senderName}」です。`;
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      const text = response.text;
+      const subjectMatch = text.match(/件名:\s*(.*)/);
+      const bodyMatch = text.match(/本文:\s*([\s\S]*)/);
+      return {
+        subject: subjectMatch ? subjectMatch[1].trim() : "ご提案の件",
+        body: bodyMatch ? bodyMatch[1].trim() : text,
+      };
+    });
+  };
 
-export const generateLeadReplyEmail = async (
-  lead: Lead,
-  senderName: string
-): Promise<{ subject: string; body: string }> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のリード情報に対して、初回の返信メールを作成してください。
+  export const generateLeadReplyEmail = async (
+    lead: Lead,
+    senderName: string
+  ): Promise<{ subject: string; body: string }> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のリード情報に対して、初回の返信メールを作成してください。
 会社名: ${lead.company}
 担当者名: ${lead.name}様
 問い合わせ内容: ${lead.message || "記載なし"}
@@ -999,106 +1017,106 @@ URL: www.b-p.co.jp
 ――――――――――
 
 送信者: ${senderName}`;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    const text = response.text;
-    const subjectMatch = text.match(/件名:\s*(.*)/);
-    const bodyMatch = text.match(/本文:\s*([\s\S]*)/);
-    return {
-      subject: subjectMatch ? subjectMatch[1].trim() : "お問い合わせありがとうございます",
-      body: bodyMatch ? bodyMatch[1].trim() : text,
-    };
-  });
-};
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      const text = response.text;
+      const subjectMatch = text.match(/件名:\s*(.*)/);
+      const bodyMatch = text.match(/本文:\s*([\s\S]*)/);
+      return {
+        subject: subjectMatch ? subjectMatch[1].trim() : "お問い合わせありがとうございます",
+        body: bodyMatch ? bodyMatch[1].trim() : text,
+      };
+    });
+  };
 
-// FIX: Add missing 'analyzeLeadData' function.
-export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のリードデータ（${leads.length}件）を分析し、営業活動に関する簡潔なインサイトや提案を1つ生成してください。
+  // FIX: Add missing 'analyzeLeadData' function.
+  export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のリードデータ（${leads.length}件）を分析し、営業活動に関する簡潔なインサイトや提案を1つ生成してください。
         特に、有望なリードの傾向や、アプローチすべきセグメントなどを指摘してください。
         
         データサンプル:
         ${JSON.stringify(
-      leads
-        .slice(0, 3)
-        .map((l) => ({
-          company: l.company,
-          status: l.status,
-          inquiryType: l.inquiryType,
-          message: l.message,
-        })),
-      null,
-      2
-    )}
+        leads
+          .slice(0, 3)
+          .map((l) => ({
+            company: l.company,
+            status: l.status,
+            inquiryType: l.inquiryType,
+            message: l.message,
+          })),
+        null,
+        2
+      )}
         `;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
-  });
-};
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      return response.text;
+    });
+  };
 
-export const getDashboardSuggestion = async (jobs: Job[]): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const recentJobs = jobs.slice(0, 5).map((j) => ({
-      title: j.title,
-      price: j.price,
-      variableCost: j.variableCost,
-      margin: j.price - j.variableCost,
-      marginRate: j.price > 0 ? ((j.price - j.variableCost) / j.price) * 100 : 0,
-    }));
+  export const getDashboardSuggestion = async (jobs: Job[]): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const recentJobs = jobs.slice(0, 5).map((j) => ({
+        title: j.title,
+        price: j.price,
+        variableCost: j.variableCost,
+        margin: j.price - j.variableCost,
+        marginRate: j.price > 0 ? ((j.price - j.variableCost) / j.price) * 100 : 0,
+      }));
 
-    const prompt = `あなたは印刷会社の経営コンサルタントです。以下の最近の案件データ（${recentJobs.length}件）を分析し、経営改善のための具体的で簡潔な提案を1つしてください。多角的な視点（収益性、効率性、戦略的価値）から分析し、 actionable な提案を生成してください。
+      const prompt = `あなたは印刷会社の経営コンサルタントです。以下の最近の案件データ（${recentJobs.length}件）を分析し、経営改善のための具体的で簡潔な提案を1つしてください。多角的な視点（収益性、効率性、戦略的価値）から分析し、 actionable な提案を生成してください。
 
 データサンプル:
 ${JSON.stringify(recentJobs, null, 2)}
 `;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
-  });
-};
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      return response.text;
+    });
+  };
 
-export const generateDailyReportSummary = async (
-  customerName: string,
-  activityContent: string
-): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のキーワードを元に、営業日報の活動内容をビジネス文書としてまとめてください。
+  export const generateDailyReportSummary = async (
+    customerName: string,
+    activityContent: string
+  ): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のキーワードを元に、営業日報の活動内容をビジネス文書としてまとめてください。
 訪問先: ${customerName}
 キーワード: ${activityContent}`;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
-  });
-};
-
-// 手書き日報画像からテキストを抽出して活動内容用のテキストを返す
-export const extractDailyReportFromImage = async (
-  imageBase64: string,
-  mimeType: string
-): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const imagePart = { inlineData: { data: imageBase64, mimeType } };
-    const textPart = {
-      text:
-        "この画像は日本語の手書き業務日報です。日付、訪問先や対応先、主な活動内容、明日の予定などを読み取り、ビジネス文書としてそのまま日報フォームの『活動内容』に貼り付けられる形のテキストに整形して出力してください。箇条書きではなく、日本語の文章で簡潔にまとめてください。",
-    };
-    const response = await ai.models.generateContent({
-      model,
-      contents: { parts: [imagePart, textPart] },
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      return response.text;
     });
-    return response.text;
-  });
-};
+  };
 
-export const optimizeScheduleRequestText = async (rawText: string): Promise<string> => {
-  const trimmed = rawText?.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下の文章は、現場の社員に依頼事項を伝えるための下書きです。文脈が散らかっていたり口語表現が強い場合でも、
+  // 手書き日報画像からテキストを抽出して活動内容用のテキストを返す
+  export const extractDailyReportFromImage = async (
+    imageBase64: string,
+    mimeType: string
+  ): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const imagePart = { inlineData: { data: imageBase64, mimeType } };
+      const textPart = {
+        text:
+          "この画像は日本語の手書き業務日報です。日付、訪問先や対応先、主な活動内容、明日の予定などを読み取り、ビジネス文書としてそのまま日報フォームの『活動内容』に貼り付けられる形のテキストに整形して出力してください。箇条書きではなく、日本語の文章で簡潔にまとめてください。",
+      };
+      const response = await ai.models.generateContent({
+        model,
+        contents: { parts: [imagePart, textPart] },
+      });
+      return response.text;
+    });
+  };
+
+  export const optimizeScheduleRequestText = async (rawText: string): Promise<string> => {
+    const trimmed = rawText?.trim();
+    if (!trimmed) {
+      return "";
+    }
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下の文章は、現場の社員に依頼事項を伝えるための下書きです。文脈が散らかっていたり口語表現が強い場合でも、
 1) 依頼の目的
 2) やってほしい内容（箇条書きで最大5項目）
 3) 期限や注意点
@@ -1106,216 +1124,216 @@ export const optimizeScheduleRequestText = async (rawText: string): Promise<stri
 
 下書き:
 ${trimmed}`;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    const text = response.text ?? "";
-    const cleaned = stripCodeFences(text);
-    return cleaned || trimmed;
-  });
-};
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      const text = response.text ?? "";
+      const cleaned = stripCodeFences(text);
+      return cleaned || trimmed;
+    });
+  };
 
-export const generateWeeklyReportSummary = async (keywords: string): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のキーワードを元に、週報の報告内容をビジネス文書としてまとめてください。
+  export const generateWeeklyReportSummary = async (keywords: string): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のキーワードを元に、週報の報告内容をビジネス文書としてまとめてください。
 キーワード: ${keywords}`;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
-  });
-};
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      return response.text;
+    });
+  };
 
-const draftEstimateSchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: {
-      type: Type.STRING,
-      description:
-        "見積の件名。顧客の依頼内容を反映し、具体的で分かりやすいものにする。例：「2025年度 会社案内パンフレット制作」",
-    },
-    items: {
-      type: Type.ARRAY,
-      description: "見積の明細項目。印刷会社の標準的な項目で構成する。",
+  const draftEstimateSchema = {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description:
+          "見積の件名。顧客の依頼内容を反映し、具体的で分かりやすいものにする。例：「2025年度 会社案内パンフレット制作」",
+      },
       items: {
-        type: Type.OBJECT,
-        properties: {
-          division: {
-            type: Type.STRING,
-            description: "項目区分",
-            enum: [
-              "用紙代",
-              "デザイン・DTP代",
-              "刷版代",
-              "印刷代",
-              "加工代",
-              "その他",
-              "初期費用",
-              "月額費用",
-            ],
+        type: Type.ARRAY,
+        description: "見積の明細項目。印刷会社の標準的な項目で構成する。",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            division: {
+              type: Type.STRING,
+              description: "項目区分",
+              enum: [
+                "用紙代",
+                "デザイン・DTP代",
+                "刷版代",
+                "印刷代",
+                "加工代",
+                "その他",
+                "初期費用",
+                "月額費用",
+              ],
+            },
+            content: {
+              type: Type.STRING,
+              description:
+                "具体的な作業内容や品名。用紙の種類や厚さ、加工の種類などを記載。",
+            },
+            quantity: {
+              type: Type.NUMBER,
+              description: "数量。単位と対応させる。",
+            },
+            unit: {
+              type: Type.STRING,
+              description: "単位（例：部, 枚, 式, 連, 月）",
+            },
+            unitPrice: { type: Type.NUMBER, description: "単価" },
+            price: { type: Type.NUMBER, description: "金額 (数量 * 単価)" },
+            cost: { type: Type.NUMBER, description: "この項目にかかる原価" },
           },
-          content: {
-            type: Type.STRING,
-            description:
-              "具体的な作業内容や品名。用紙の種類や厚さ、加工の種類などを記載。",
-          },
-          quantity: {
-            type: Type.NUMBER,
-            description: "数量。単位と対応させる。",
-          },
-          unit: {
-            type: Type.STRING,
-            description: "単位（例：部, 枚, 式, 連, 月）",
-          },
-          unitPrice: { type: Type.NUMBER, description: "単価" },
-          price: { type: Type.NUMBER, description: "金額 (数量 * 単価)" },
-          cost: { type: Type.NUMBER, description: "この項目にかかる原価" },
+          required: ["division", "content", "quantity", "unit", "unitPrice", "price", "cost"],
         },
-        required: ["division", "content", "quantity", "unit", "unitPrice", "price", "cost"],
+      },
+      deliveryDate: {
+        type: Type.STRING,
+        description: "希望納期 (YYYY-MM-DD形式)",
+      },
+      paymentTerms: {
+        type: Type.STRING,
+        description: "支払条件。例：「月末締め翌月末払い」",
+      },
+      deliveryMethod: {
+        type: Type.STRING,
+        description: "納品方法。例：「指定倉庫へ一括納品」",
+      },
+      notes: {
+        type: Type.STRING,
+        description: "補足事項や備考。見積の有効期限なども記載する。",
       },
     },
-    deliveryDate: {
-      type: Type.STRING,
-      description: "希望納期 (YYYY-MM-DD形式)",
-    },
-    paymentTerms: {
-      type: Type.STRING,
-      description: "支払条件。例：「月末締め翌月末払い」",
-    },
-    deliveryMethod: {
-      type: Type.STRING,
-      description: "納品方法。例：「指定倉庫へ一括納品」",
-    },
-    notes: {
-      type: Type.STRING,
-      description: "補足事項や備考。見積の有効期限なども記載する。",
-    },
-  },
-  required: ["title", "items", "deliveryDate", "paymentTerms"],
-};
+    required: ["title", "items", "deliveryDate", "paymentTerms"],
+  };
 
-export const draftEstimate = async (prompt: string): Promise<Partial<Estimate>> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const fullPrompt = `あなたは日本の印刷会社で20年以上の経験を持つベテランの見積担当者です。以下の顧客からの要望に基づき、現実的で詳細な見積の下書きをJSON形式で作成してください。原価計算も行い、適切な利益を乗せた単価と金額を設定してください。
+  export const draftEstimate = async (prompt: string): Promise<Partial<Estimate>> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const fullPrompt = `あなたは日本の印刷会社で20年以上の経験を持つベテランの見積担当者です。以下の顧客からの要望に基づき、現実的で詳細な見積の下書きをJSON形式で作成してください。原価計算も行い、適切な利益を乗せた単価と金額を設定してください。
 
 【重要】もし顧客の要望が倉庫管理、定期発送、サブスクリプション型のサービスを示唆している場合、必ず「初期費用」と「月額費用」の項目を立てて見積を作成してください。その際の単位は、初期費用なら「式」、月額費用なら「月」としてください。
 
 顧客の要望: "${prompt}"`;
-    const response = await ai.models.generateContent({
-      model,
-      contents: fullPrompt,
-      config: {
-        responseSchema: draftEstimateSchema as any,
-      },
+      const response = await ai.models.generateContent({
+        model,
+        contents: fullPrompt,
+        config: {
+          responseSchema: draftEstimateSchema as any,
+        },
+      });
+      let jsonStr = response.text.trim();
+      // JSONブロックを抽出
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+      }
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+      }
+      const parsed = JSON.parse(jsonStr);
+      // Ensure items array exists
+      if (!parsed.items) {
+        parsed.items = [];
+      }
+      return parsed;
     });
-    let jsonStr = response.text.trim();
-    // JSONブロックを抽出
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
-    }
-    const parsed = JSON.parse(jsonStr);
-    // Ensure items array exists
-    if (!parsed.items) {
-      parsed.items = [];
-    }
-    return parsed;
-  });
-};
+  };
 
-export const draftEstimateFromSpecFile = async (
-  fileBase64: string,
-  mimeType: string,
-): Promise<Partial<Estimate>> => {
-  const normalizedMime = (mimeType || "application/octet-stream").toLowerCase();
-  const isPdfOrImage = ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(
-    normalizedMime,
-  );
-  const isDocx =
-    normalizedMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const isXlsx =
-    normalizedMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-    normalizedMime === "application/vnd.ms-excel";
-  const isTextLike =
-    normalizedMime.startsWith("text/") ||
-    normalizedMime === "application/json" ||
-    normalizedMime === "application/csv";
+  export const draftEstimateFromSpecFile = async (
+    fileBase64: string,
+    mimeType: string,
+  ): Promise<Partial<Estimate>> => {
+    const normalizedMime = (mimeType || "application/octet-stream").toLowerCase();
+    const isPdfOrImage = ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(
+      normalizedMime,
+    );
+    const isDocx =
+      normalizedMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const isXlsx =
+      normalizedMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      normalizedMime === "application/vnd.ms-excel";
+    const isTextLike =
+      normalizedMime.startsWith("text/") ||
+      normalizedMime === "application/json" ||
+      normalizedMime === "application/csv";
 
-  // Avoid unsupported MIME errors by handling text/Excel/Word before calling Gemini with inline data
-  if (isTextLike) {
-    const text = decodeTextFromBase64(fileBase64);
-    if (!text) {
-      throw new Error("テキストを読み取れませんでした。ファイル内容を確認してください。");
+    // Avoid unsupported MIME errors by handling text/Excel/Word before calling Gemini with inline data
+    if (isTextLike) {
+      const text = decodeTextFromBase64(fileBase64);
+      if (!text) {
+        throw new Error("テキストを読み取れませんでした。ファイル内容を確認してください。");
+      }
+      return draftEstimate(`以下の仕様書内容を読み取り、見積の下書きを作成してください。\n\n${text}`);
     }
-    return draftEstimate(`以下の仕様書内容を読み取り、見積の下書きを作成してください。\n\n${text}`);
-  }
 
-  if (isDocx) {
-    const text = await extractDocxTextFromBase64(fileBase64);
-    if (text) {
-      return draftEstimate(
-        `以下のWord仕様書を読み取り、見積の下書きを作成してください。\n\n${text}`,
+    if (isDocx) {
+      const text = await extractDocxTextFromBase64(fileBase64);
+      if (text) {
+        return draftEstimate(
+          `以下のWord仕様書を読み取り、見積の下書きを作成してください。\n\n${text}`,
+        );
+      }
+      // If extraction failed, fall through to try inline upload as a last resort
+    }
+
+    if (isXlsx) {
+      const text = await extractXlsxStringsFromBase64(fileBase64);
+      if (text) {
+        return draftEstimate(
+          `以下のExcel仕様書を読み取り、見積の下書きを作成してください。\n\n${text}`,
+        );
+      }
+      throw new Error(
+        "Excelファイルを解析できませんでした。PDFや画像、テキスト形式でアップロードしてください。",
       );
     }
-    // If extraction failed, fall through to try inline upload as a last resort
-  }
 
-  if (isXlsx) {
-    const text = await extractXlsxStringsFromBase64(fileBase64);
-    if (text) {
-      return draftEstimate(
-        `以下のExcel仕様書を読み取り、見積の下書きを作成してください。\n\n${text}`,
+    if (!isPdfOrImage) {
+      throw new Error(
+        "このファイル形式はサポートされていません。PDF/画像/テキスト/Excel(.xlsx)/Word(.docx)でアップロードしてください。",
       );
     }
-    throw new Error(
-      "Excelファイルを解析できませんでした。PDFや画像、テキスト形式でアップロードしてください。",
-    );
-  }
 
-  if (!isPdfOrImage) {
-    throw new Error(
-      "このファイル形式はサポートされていません。PDF/画像/テキスト/Excel(.xlsx)/Word(.docx)でアップロードしてください。",
-    );
-  }
-
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const filePart = { inlineData: { data: fileBase64, mimeType } };
-    const instructionPart = {
-      text: `このファイルは印刷物などの仕様書/PDF/スキャン画像です。内容を読み取り、以下のJSONフォーマットで見積の下書きを作成してください。数量、用紙、加工、納期、支払条件が読み取れない場合は推定し、備考にその旨を記載してください。`,
-    };
-    const response = await ai.models.generateContent({
-      model,
-      contents: { parts: [filePart, instructionPart] },
-      config: {
-        responseSchema: draftEstimateSchema as any,
-      },
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const filePart = { inlineData: { data: fileBase64, mimeType } };
+      const instructionPart = {
+        text: `このファイルは印刷物などの仕様書/PDF/スキャン画像です。内容を読み取り、以下のJSONフォーマットで見積の下書きを作成してください。数量、用紙、加工、納期、支払条件が読み取れない場合は推定し、備考にその旨を記載してください。`,
+      };
+      const response = await ai.models.generateContent({
+        model,
+        contents: { parts: [filePart, instructionPart] },
+        config: {
+          responseSchema: draftEstimateSchema as any,
+        },
+      });
+      let jsonStr = response.text.trim();
+      // JSONブロックを抽出
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+      }
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+      }
+      const parsed = JSON.parse(jsonStr);
+      if (!Array.isArray(parsed.items)) {
+        parsed.items = [];
+      }
+      return parsed;
     });
-    let jsonStr = response.text.trim();
-    // JSONブロックを抽出
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
-    }
-    const parsed = JSON.parse(jsonStr);
-    if (!Array.isArray(parsed.items)) {
-      parsed.items = [];
-    }
-    return parsed;
-  });
-};
+  };
 
-export const generateProposalSection = async (
-  sectionTitle: string,
-  customer: Customer,
-  job?: Job | null,
-  estimate?: Estimate | null
-): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    let context = `
+  export const generateProposalSection = async (
+    sectionTitle: string,
+    customer: Customer,
+    job?: Job | null,
+    estimate?: Estimate | null
+  ): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      let context = `
 顧客情報:
 - 顧客名: ${customer.customerName}
 - 事業内容: ${customer.companyContent || "N/A"}
@@ -1324,95 +1342,95 @@ export const generateProposalSection = async (
 - Webサイト: ${customer.websiteUrl || "N/A"}
 `;
 
-    if (job) {
-      context += `
+      if (job) {
+        context += `
 関連案件情報:
 - 案件名: ${job.title}
 - 案件詳細: ${job.details}
 - 金額: ${formatJPY(job.price)}
 `;
-    }
+      }
 
-    if (estimate) {
-      context += `
+      if (estimate) {
+        context += `
 関連見積情報:
 - 見積件名: ${estimate.title}
 - 見積合計: ${formatJPY(estimate.total === undefined || estimate.total === null ? undefined : Number(estimate.total))}
 - 見積項目: ${estimate.items
-          .map((i) => `${i.content} (${formatJPY(i.price)})`)
-          .join(", ")}
+            .map((i) => `${i.content} (${formatJPY(i.price)})`)
+            .join(", ")}
 `;
-    }
+      }
 
-    const prompt = `
+      const prompt = `
 あなたはプロのビジネスコンサルタントです。以下のコンテキスト情報と、必要に応じてWeb検索の結果を活用して、提案書の「${sectionTitle}」セクションの文章を作成してください。プロフェッショナルで、説得力があり、顧客の利益に焦点を当てた文章を生成してください。
 
 ${context}
 
 「${sectionTitle}」セクションの下書きを生成してください。
 `;
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+      return response.text;
     });
-    return response.text;
-  });
-};
+  };
 
-const scoreLeadSchema = {
-  type: Type.OBJECT,
-  properties: {
-    score: {
-      type: Type.INTEGER,
-      description: "このリードの有望度を0から100のスコアで評価してください。",
+  const scoreLeadSchema = {
+    type: Type.OBJECT,
+    properties: {
+      score: {
+        type: Type.INTEGER,
+        description: "このリードの有望度を0から100のスコアで評価してください。",
+      },
+      rationale: {
+        type: Type.STRING,
+        description: "スコアの根拠を簡潔に説明してください。",
+      },
     },
-    rationale: {
-      type: Type.STRING,
-      description: "スコアの根拠を簡潔に説明してください。",
-    },
-  },
-  required: ["score", "rationale"],
-};
+    required: ["score", "rationale"],
+  };
 
-export const scoreLead = async (lead: Lead): Promise<LeadScore> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のリード情報を分析し、有望度をスコアリングしてください。
+  export const scoreLead = async (lead: Lead): Promise<LeadScore> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のリード情報を分析し、有望度をスコアリングしてください。
 会社名: ${lead.company}
 問い合わせ種別: ${lead.inquiryTypes?.join(", ") || lead.inquiryType}
 メッセージ: ${lead.message}`;
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseSchema: scoreLeadSchema,
-      },
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseSchema: scoreLeadSchema,
+        },
+      });
+      const jsonStr = response.text.trim();
+      return JSON.parse(jsonStr);
     });
-    const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr);
-  });
-};
+  };
 
-export const startBugReportChat = (): Chat => {
-  const ai = checkOnlineAndAIOff(); // Will throw if AI is off or offline
-  const systemInstruction = `あなたはバグ報告と改善要望を受け付けるアシスタントです。ユーザーからの報告内容をヒアリングし、以下のJSON形式で最終的に出力してください。
+  export const startBugReportChat = (): Chat => {
+    const ai = checkOnlineAndAIOff(); // Will throw if AI is off or offline
+    const systemInstruction = `あなたはバグ報告と改善要望を受け付けるアシスタントです。ユーザーからの報告内容をヒアリングし、以下のJSON形式で最終的に出力してください。
     { "report_type": "bug" | "improvement", "summary": "簡潔な件名", "description": "詳細な内容" }
     このJSONを出力するまでは、自然な会話でユーザーから情報を引き出してください。`;
-  return ai.chats.create({ model, config: { systemInstruction } });
-};
+    return ai.chats.create({ model, config: { systemInstruction } });
+  };
 
-export const processApplicationChat = async (
-  history: { role: "user" | "model"; content: string }[],
-  appCodes: ApplicationCode[],
-  users: User[],
-  routes: ApprovalRoute[]
-): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `あなたは申請アシスタントです。ユーザーとの会話履歴と以下のマスター情報に基づき、ユーザーの申請を手伝ってください。
+  export const processApplicationChat = async (
+    history: { role: "user" | "model"; content: string }[],
+    appCodes: ApplicationCode[],
+    users: User[],
+    routes: ApprovalRoute[]
+  ): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `あなたは申請アシスタントです。ユーザーとの会話履歴と以下のマスター情報に基づき、ユーザーの申請を手伝ってください。
 最終的に、ユーザーの申請内容を以下のJSON形式で出力してください。それまでは自然な会話を続けてください。
 { "applicationCodeId": "...", "formData": { ... }, "approvalRouteId": "..." }
 
@@ -1420,37 +1438,37 @@ export const processApplicationChat = async (
 申請種別マスター: ${JSON.stringify(appCodes)}
 承認ルートマスター: ${JSON.stringify(routes)}
 `;
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
-  });
-};
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      return response.text;
+    });
+  };
 
-// --- From older chat models ---
-export const generateClosingSummary = async (
-  type: "月次" | "年次",
-  currentJobs: Job[],
-  prevJobs: Job[],
-  currentJournal: JournalEntry[],
-  prevJournal: JournalEntry[]
-): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のデータに基づき、${type}決算のサマリーを生成してください。前月比や課題、改善提案を含めてください。`;
-    // In a real scenario, you'd pass the data, but for brevity we'll just send the prompt.
-    const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
-  });
-};
+  // --- From older chat models ---
+  export const generateClosingSummary = async (
+    type: "月次" | "年次",
+    currentJobs: Job[],
+    prevJobs: Job[],
+    currentJournal: JournalEntry[],
+    prevJournal: JournalEntry[]
+  ): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のデータに基づき、${type}決算のサマリーを生成してください。前月比や課題、改善提案を含めてください。`;
+      // In a real scenario, you'd pass the data, but for brevity we'll just send the prompt.
+      const response = await ai.models.generateContent({ model, contents: prompt });
+      return response.text;
+    });
+  };
 
-/**
- * Proactive context injection - AI automatically checks calendar at conversation start
- */
-export const injectProactiveContext = async (): Promise<string> => {
-  console.log('[MCP] Injecting proactive context...');
+  /**
+   * Proactive context injection - AI automatically checks calendar at conversation start
+   */
+  export const injectProactiveContext = async (): Promise<string> => {
+    console.log('[MCP] Injecting proactive context...');
 
-  try {
-    // For now, return simple context until MCP servers are ready
-    const context = `
+    try {
+      // For now, return simple context until MCP servers are ready
+      const context = `
 【本日の状況自動確認】
 📅 今日の予定: MCPサーバー接続待ち
 📧 重要なメール: MCPサーバー接続待ち
@@ -1458,32 +1476,32 @@ export const injectProactiveContext = async (): Promise<string> => {
 上記情報を踏まえて、経営相談にお役立てください。
 `;
 
-    return context;
+      return context;
 
-  } catch (error) {
-    console.warn('[MCP] Proactive context injection failed:', error);
-    return '【本日の状況】現在、システム接続に問題があるため自動情報取得ができません。';
-  }
-};
+    } catch (error) {
+      console.warn('[MCP] Proactive context injection failed:', error);
+      return '【本日の状況】現在、システム接続に問題があるため自動情報取得ができません。';
+    }
+  };
 
-export const startBusinessConsultantChat = (): Chat => {
-  const ai = checkOnlineAndAIOff(); // Will throw if AI is off or offline
-  const systemInstruction = `あなたは、中小企業の印刷会社を専門とする経験豊富な経営コンサルタントです。あなたの目的は、経営者がデータに基づいたより良い意思決定を行えるよう支援することです。提供されたデータコンテキストとユーザーからの質問に基づき、Web検索も活用して、具体的で実行可能なアドバイスを提供してください。専門的かつデータに基づいた、簡潔な回答を心がけてください。`;
-  return ai.chats.create({
-    model,
-    config: {
-      systemInstruction,
-      tools: [{ googleSearch: {} }],
-    },
-  });
-};
+  export const startBusinessConsultantChat = (): Chat => {
+    const ai = checkOnlineAndAIOff(); // Will throw if AI is off or offline
+    const systemInstruction = `あなたは、中小企業の印刷会社を専門とする経験豊富な経営コンサルタントです。あなたの目的は、経営者がデータに基づいたより良い意思決定を行えるよう支援することです。提供されたデータコンテキストとユーザーからの質問に基づき、Web検索も活用して、具体的で実行可能なアドバイスを提供してください。専門的かつデータに基づいた、簡潔な回答を心がけてください。`;
+    return ai.chats.create({
+      model,
+      config: {
+        systemInstruction,
+        tools: [{ googleSearch: {} }],
+      },
+    });
+  };
 
-export const generateLeadAnalysisAndProposal = async (
-  lead: Lead
-): Promise<{ analysisReport: string; draftProposal: string }> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のリード情報とWeb検索の結果を組み合わせて、企業分析レポートと提案書のドラフトを生成し、指定されたJSON形式で出力してください。
+  export const generateLeadAnalysisAndProposal = async (
+    lead: Lead
+  ): Promise<{ analysisReport: string; draftProposal: string }> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のリード情報とWeb検索の結果を組み合わせて、企業分析レポートと提案書のドラフトを生成し、指定されたJSON形式で出力してください。
 
 リード情報:
 - 会社名: ${lead.company}
@@ -1500,40 +1518,40 @@ Web検索を活用して、企業の事業内容、最近の動向、および�
 }
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+
+      let jsonStr = response.text.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+      }
+
+      try {
+        return JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("Failed to parse JSON from Gemini for lead analysis:", e);
+        console.error("Received text:", jsonStr);
+        // Fallback: return the text as part of the analysis if JSON parsing fails.
+        return {
+          analysisReport:
+            "AIからの応答を解析できませんでした。以下に生の応答を示します。\n\n" + jsonStr,
+          draftProposal: "AIからの応答を解析できませんでした。",
+        };
+      }
     });
+  };
 
-    let jsonStr = response.text.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      console.error("Failed to parse JSON from Gemini for lead analysis:", e);
-      console.error("Received text:", jsonStr);
-      // Fallback: return the text as part of the analysis if JSON parsing fails.
-      return {
-        analysisReport:
-          "AIからの応答を解析できませんでした。以下に生の応答を示します。\n\n" + jsonStr,
-        draftProposal: "AIからの応答を解析できませんでした。",
-      };
-    }
-  });
-};
-
-export const generateMarketResearchReport = async (
-  topic: string
-): Promise<MarketResearchReport> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `以下のトピックについて、Web検索を活用して詳細な市場調査レポートを、必ず指定されたJSON形式で作成してください。
+  export const generateMarketResearchReport = async (
+    topic: string
+  ): Promise<MarketResearchReport> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `以下のトピックについて、Web検索を活用して詳細な市場調査レポートを、必ず指定されたJSON形式で作成してください。
 
 調査トピック: "${topic}"
 
@@ -1547,38 +1565,38 @@ JSONフォーマット:
     "opportunities": ["調査結果から導き出されるビジネスチャンスや機会。箇条書きで複数挙げる。"],
     "threats": ["市場に潜む脅威やリスク。箇条書きで複数挙げる。"]
 }`;
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 32768 },
-      },
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          thinkingConfig: { thinkingBudget: 32768 },
+        },
+      });
+
+      let jsonStr = response.text.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+      }
+      const result = JSON.parse(jsonStr);
+
+      const rawChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const sources = rawChunks
+        .map((chunk: any) => chunk.web)
+        .filter(Boolean)
+        .map((webChunk: any) => ({ uri: webChunk.uri, title: webChunk.title }));
+      const uniqueSources = Array.from(new Map(sources.map((item) => [item.uri, item])).values());
+
+      return { ...result, sources: uniqueSources };
     });
+  };
 
-    let jsonStr = response.text.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    const result = JSON.parse(jsonStr);
-
-    const rawChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const sources = rawChunks
-      .map((chunk: any) => chunk.web)
-      .filter(Boolean)
-      .map((webChunk: any) => ({ uri: webChunk.uri, title: webChunk.title }));
-    const uniqueSources = Array.from(new Map(sources.map((item) => [item.uri, item])).values());
-
-    return { ...result, sources: uniqueSources };
-  });
-};
-
-export const generateCustomProposalContent = async (
-  lead: Lead
-): Promise<CustomProposalContent> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `あなたは「文唱堂印刷株式会社」の優秀なセールスコンサルタントです。以下のリード情報を基に、Webリサーチを徹底的に行い、その企業のためだけの本格的な提案資料のコンテンツを、必ず指定されたJSON形式で生成してください。
+  export const generateCustomProposalContent = async (
+    lead: Lead
+  ): Promise<CustomProposalContent> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `あなたは「文唱堂印刷株式会社」の優秀なセールスコンサルタントです。以下のリード情報を基に、Webリサーチを徹底的に行い、その企業のためだけの本格的な提案資料のコンテンツを、必ず指定されたJSON形式で生成してください。
 
 ## リード情報
 - 企業名: ${lead.company}
@@ -1596,35 +1614,35 @@ export const generateCustomProposalContent = async (
     "proposal": "上記の課題を解決するための、自社（文唱堂印刷）の具体的なサービス提案。提供する価値やメリットを明確にする。",
     "conclusion": "提案の締めくくりと、次のアクションを促す力強い結びの言葉。"
 }`;
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 32768 },
-      },
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          thinkingConfig: { thinkingBudget: 32768 },
+        },
+      });
+
+      let jsonStr = response.text.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+      }
+      try {
+        return JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("Failed to parse JSON from Gemini for custom proposal:", e);
+        console.error("Received text:", jsonStr);
+        throw new Error("AIからの提案書コンテンツの生成に失敗しました。");
+      }
     });
+  };
 
-    let jsonStr = response.text.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      console.error("Failed to parse JSON from Gemini for custom proposal:", e);
-      console.error("Received text:", jsonStr);
-      throw new Error("AIからの提案書コンテンツの生成に失敗しました。");
-    }
-  });
-};
-
-export const generateLeadSummary = async (
-  lead: Lead
-): Promise<string> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `あなたは「文唱堂印刷株式会社」の営業担当者です。以下のリード情報を分析し、戦略的な要約を作成してください。
+  export const generateLeadSummary = async (
+    lead: Lead
+  ): Promise<string> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `あなたは「文唱堂印刷株式会社」の営業担当者です。以下のリード情報を分析し、戦略的な要約を作成してください。
 
 ## リード情報
 - 企業名: ${lead.company}
@@ -1711,25 +1729,25 @@ export const generateLeadSummary = async (
 【要約】他社からのサービス提案メール
 【戦略】対応不要（営業メールのため）`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // 高速モデルに変更
-      contents: prompt,
-      config: {
-        maxOutputTokens: 500, // トークン数を制限して高速化
-        temperature: 0.1, // 低い温度で一貫性を確保
-      },
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash", // 高速モデルに変更
+        contents: prompt,
+        config: {
+          maxOutputTokens: 500, // トークン数を制限して高速化
+          temperature: 0.1, // 低い温度で一貫性を確保
+        },
+      });
+
+      return response.text.trim();
     });
+  };
 
-    return response.text.trim();
-  });
-};
-
-export const createLeadProposalPackage = async (
-  lead: Lead
-): Promise<LeadProposalPackage> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `あなたは「文唱堂印刷株式会社」の非常に優秀なセールスコンサルタントです。以下のリード情報を分析し、次のタスクを実行してください。
+  export const createLeadProposalPackage = async (
+    lead: Lead
+  ): Promise<LeadProposalPackage> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `あなたは「文唱堂印刷株式会社」の非常に優秀なセールスコンサルタントです。以下のリード情報を分析し、次のタスクを実行してください。
 
 ## リード情報
 - 企業名: ${lead.company}
@@ -1785,251 +1803,251 @@ export const createLeadProposalPackage = async (
 - 単価設定は原価計算に基づき、適切な利益率を考慮してください。
 - **環境配慮**: 必ず見積もりの備考欄に「当社の工場はクリーンエネルギーで運営されており、CO2排出量を削減することができます。環境対策費：0円」という文言を含めてください。
 `;
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // 高速モデルに変更
-      contents: prompt,
-      config: {
-        maxOutputTokens: 2000, // トークン数を増やして完全な見積を生成
-        temperature: 0.1, // 低い温度で一貫性を確保
-      },
-    });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash", // 高速モデルに変更
+        contents: prompt,
+        config: {
+          maxOutputTokens: 2000, // トークン数を増やして完全な見積を生成
+          temperature: 0.1, // 低い温度で一貫性を確保
+        },
+      });
 
-    let jsonStr = response.text.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
-    }
-    try {
-      const result = JSON.parse(jsonStr);
-      // 見積もりデータが空の場合はフォールバックを生成
-      if (!result.isSalesLead && (!result.estimate || result.estimate.length === 0)) {
-        result.estimate = generateFallbackEstimate(lead);
+      let jsonStr = response.text.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
       }
-      return result;
-    } catch (e) {
-      console.error("Failed to parse JSON from Gemini for lead proposal package:", e);
-      console.error("Received text:", jsonStr);
-      // フォールバック見積もりを生成
-      return generateFallbackPackage(lead);
-    }
-  });
-};
-
-// Compatibility exports for legacy callers.
-export const generateLeadProposalPackage = createLeadProposalPackage;
-
-export const extractDocumentText = async (..._args: any[]): Promise<string> => {
-  return '';
-};
-
-export const transcribeAudio = async (..._args: any[]): Promise<string> => {
-  return '';
-};
-
-export const createBlob = (..._args: any[]): Blob => {
-  return new Blob();
-};
-
-export const decodeAudioData = async (..._args: any[]): Promise<AudioBuffer> => {
-  throw new Error('decodeAudioData is not implemented.');
-};
-
-export const decode = (..._args: any[]): string => {
-  return '';
-};
-
-export const startLiveChatSession = async (..._args: any[]): Promise<void> => {
-  return;
-};
-
-export const createProjectFromInputs = async (..._args: any[]): Promise<any> => {
-  return null;
-};
-
-// フォールバック見積もり生成関数
-const generateFallbackEstimate = (lead: Lead) => {
-  const message = lead.message || '';
-
-  // 雑誌印刷の具体例から仕様を抽出
-  const isMagazine = message.includes('雑誌') || message.includes('インディペンデント');
-  const size = message.includes('B5') ? 'B5' : message.includes('A4') ? 'A4' : 'A4';
-  const pages = message.match(/(\d+)ページ/) ? parseInt(message.match(/(\d+)ページ/)![1]) : 32;
-  const quantity = message.match(/(\d+)部/) ? parseInt(message.match(/(\d+)部/)![1]) : 500;
-  const color = message.includes('カラー') ? 'フルカラー' : 'モノクロ';
-
-  const basePrice = isMagazine ? 150000 : 80000;
-  const pagePrice = pages * 500;
-  const quantityPrice = quantity * 100;
-
-  return [
-    {
-      division: '用紙代' as const,
-      content: `${size}判 ${color}用紙`,
-      quantity: quantity,
-      unit: '部',
-      unitPrice: Math.round(basePrice / Number(quantity)),
-      price: basePrice,
-      cost: Math.round(basePrice * 0.7),
-      costRate: 0.7,
-      subtotal: basePrice
-    },
-    {
-      division: '印刷代' as const,
-      content: `${pages}ページ ${color}印刷`,
-      quantity: pages,
-      unit: 'ページ',
-      unitPrice: Math.round(pagePrice / Number(pages)),
-      price: pagePrice,
-      cost: Math.round(pagePrice * 0.6),
-      costRate: 0.6,
-      subtotal: pagePrice
-    },
-    {
-      division: '加工代' as const,
-      content: '製本・仕上げ',
-      quantity: 1,
-      unit: '式',
-      unitPrice: quantityPrice,
-      price: quantityPrice,
-      cost: Math.round(quantityPrice * 0.5),
-      costRate: 0.5,
-      subtotal: quantityPrice
-    }
-  ];
-};
-
-const generateFallbackPackage = (lead: Lead): LeadProposalPackage => {
-  return {
-    isSalesLead: false,
-    reason: '',
-    proposal: {
-      coverTitle: `【印刷サービス提案】${lead.company}`,
-      businessUnderstanding: `${lead.company}様の印刷ニーズに基づき、最適な印刷ソリューションをご提案いたします。`,
-      challenges: '品質とコストのバランスを取りながら、短期間での納品が求められています。',
-      proposal: '最新の印刷技術と経験豊富なスタッフで、高品質な印刷物を効率的に製作いたします。',
-      conclusion: '貴社の要望に沿った最適な印刷ソリューションをご提供できるよう全力でサポートいたします。'
-    },
-    estimate: generateFallbackEstimate(lead)
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+      }
+      try {
+        const result = JSON.parse(jsonStr);
+        // 見積もりデータが空の場合はフォールバックを生成
+        if (!result.isSalesLead && (!result.estimate || result.estimate.length === 0)) {
+          result.estimate = generateFallbackEstimate(lead);
+        }
+        return result;
+      } catch (e) {
+        console.error("Failed to parse JSON from Gemini for lead proposal package:", e);
+        console.error("Received text:", jsonStr);
+        // フォールバック見積もりを生成
+        return generateFallbackPackage(lead);
+      }
+    });
   };
-};
 
-// 環境対策備考を生成する関数
-const generateEnvironmentalNote = (): string => {
-  return `当社の工場はクリーンエネルギーで運営されており、CO2排出量を削減することができます。
+  // Compatibility exports for legacy callers.
+  export const generateLeadProposalPackage = createLeadProposalPackage;
+
+  export const extractDocumentText = async (..._args: any[]): Promise<string> => {
+    return '';
+  };
+
+  export const transcribeAudio = async (..._args: any[]): Promise<string> => {
+    return '';
+  };
+
+  export const createBlob = (..._args: any[]): Blob => {
+    return new Blob();
+  };
+
+  export const decodeAudioData = async (..._args: any[]): Promise<AudioBuffer> => {
+    throw new Error('decodeAudioData is not implemented.');
+  };
+
+  export const decode = (..._args: any[]): string => {
+    return '';
+  };
+
+  export const startLiveChatSession = async (..._args: any[]): Promise<void> => {
+    return;
+  };
+
+  export const createProjectFromInputs = async (..._args: any[]): Promise<any> => {
+    return null;
+  };
+
+  // フォールバック見積もり生成関数
+  const generateFallbackEstimate = (lead: Lead) => {
+    const message = lead.message || '';
+
+    // 雑誌印刷の具体例から仕様を抽出
+    const isMagazine = message.includes('雑誌') || message.includes('インディペンデント');
+    const size = message.includes('B5') ? 'B5' : message.includes('A4') ? 'A4' : 'A4';
+    const pages = message.match(/(\d+)ページ/) ? parseInt(message.match(/(\d+)ページ/)![1]) : 32;
+    const quantity = message.match(/(\d+)部/) ? parseInt(message.match(/(\d+)部/)![1]) : 500;
+    const color = message.includes('カラー') ? 'フルカラー' : 'モノクロ';
+
+    const basePrice = isMagazine ? 150000 : 80000;
+    const pagePrice = pages * 500;
+    const quantityPrice = quantity * 100;
+
+    return [
+      {
+        division: '用紙代' as const,
+        content: `${size}判 ${color}用紙`,
+        quantity: quantity,
+        unit: '部',
+        unitPrice: Math.round(basePrice / Number(quantity)),
+        price: basePrice,
+        cost: Math.round(basePrice * 0.7),
+        costRate: 0.7,
+        subtotal: basePrice
+      },
+      {
+        division: '印刷代' as const,
+        content: `${pages}ページ ${color}印刷`,
+        quantity: pages,
+        unit: 'ページ',
+        unitPrice: Math.round(pagePrice / Number(pages)),
+        price: pagePrice,
+        cost: Math.round(pagePrice * 0.6),
+        costRate: 0.6,
+        subtotal: pagePrice
+      },
+      {
+        division: '加工代' as const,
+        content: '製本・仕上げ',
+        quantity: 1,
+        unit: '式',
+        unitPrice: quantityPrice,
+        price: quantityPrice,
+        cost: Math.round(quantityPrice * 0.5),
+        costRate: 0.5,
+        subtotal: quantityPrice
+      }
+    ];
+  };
+
+  const generateFallbackPackage = (lead: Lead): LeadProposalPackage => {
+    return {
+      isSalesLead: false,
+      reason: '',
+      proposal: {
+        coverTitle: `【印刷サービス提案】${lead.company}`,
+        businessUnderstanding: `${lead.company}様の印刷ニーズに基づき、最適な印刷ソリューションをご提案いたします。`,
+        challenges: '品質とコストのバランスを取りながら、短期間での納品が求められています。',
+        proposal: '最新の印刷技術と経験豊富なスタッフで、高品質な印刷物を効率的に製作いたします。',
+        conclusion: '貴社の要望に沿った最適な印刷ソリューションをご提供できるよう全力でサポートいたします。'
+      },
+      estimate: generateFallbackEstimate(lead)
+    };
+  };
+
+  // 環境対策備考を生成する関数
+  const generateEnvironmentalNote = (): string => {
+    return `当社の工場はクリーンエネルギーで運営されており、CO2排出量を削減することができます。
 環境対策費：0円
 
 ※環境に配慮した印刷サービスを無償で提供いたします。`;
-};
+  };
 
-/**
- * 【開発者への引き継ぎ：実装上の重要事項】
- * 以下の `coreTools` は、AIがSupabase（project_ref: rwjhpfghhgstvplmggks）や
- * Google Driveを操作するためのツール定義です。
- * 
- * 【お詫び】
- * 現在、フロントエンドのみで動作させるため、実際のDB検索結果をAIが受け取って再計算する
- * 実装が不十分です。現在はAIが「検索したつもり」で推論値を返しています。
- * 実装時は、以下の関数呼び出し（ToolCall）をサーバー側でキャッチし、
- * 実際のMCP実行結果をAIに返却（FunctionResponse）するようにリファクタリングしてください。
- */
-const coreTools: FunctionDeclaration[] = [
-  {
-    name: 'supabase_db_query',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Supabaseから顧客情報、過去の成約単価、マスタ原価を取得します。',
-      properties: {
-        sql_query: { type: Type.STRING, description: '実行するSQL、または抽出条件' },
-        clientName: { type: Type.STRING }
-      },
-      required: ['clientName']
-    }
-  },
-  {
-    name: 'google_drive_file_search',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Google Drive内の過去見積Excelや仕様書PDFから、類似案件の仕様と金額を検索します。',
-      properties: {
-        keyword: { type: Type.STRING, description: '検索キーワード（例：パンフレット A4 4P）' }
-      },
-      required: ['keyword']
-    }
-  },
-  {
-    name: 'wiki_knowledge_fetch',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'DeepWikiから顧客固有の検品基準、品質要件、過去のトラブル情報を取得します。',
-      properties: {
-        clientName: { type: Type.STRING }
+  /**
+   * 【開発者への引き継ぎ：実装上の重要事項】
+   * 以下の `coreTools` は、AIがSupabase（project_ref: rwjhpfghhgstvplmggks）や
+   * Google Driveを操作するためのツール定義です。
+   * 
+   * 【お詫び】
+   * 現在、フロントエンドのみで動作させるため、実際のDB検索結果をAIが受け取って再計算する
+   * 実装が不十分です。現在はAIが「検索したつもり」で推論値を返しています。
+   * 実装時は、以下の関数呼び出し（ToolCall）をサーバー側でキャッチし、
+   * 実際のMCP実行結果をAIに返却（FunctionResponse）するようにリファクタリングしてください。
+   */
+  const coreTools: FunctionDeclaration[] = [
+    {
+      name: 'supabase_db_query',
+      parameters: {
+        type: Type.OBJECT,
+        description: 'Supabaseから顧客情報、過去の成約単価、マスタ原価を取得します。',
+        properties: {
+          sql_query: { type: Type.STRING, description: '実行するSQL、または抽出条件' },
+          clientName: { type: Type.STRING }
+        },
+        required: ['clientName']
+      }
+    },
+    {
+      name: 'google_drive_file_search',
+      parameters: {
+        type: Type.OBJECT,
+        description: 'Google Drive内の過去見積Excelや仕様書PDFから、類似案件の仕様と金額を検索します。',
+        properties: {
+          keyword: { type: Type.STRING, description: '検索キーワード（例：パンフレット A4 4P）' }
+        },
+        required: ['keyword']
+      }
+    },
+    {
+      name: 'wiki_knowledge_fetch',
+      parameters: {
+        type: Type.OBJECT,
+        description: 'DeepWikiから顧客固有の検品基準、品質要件、過去のトラブル情報を取得します。',
+        properties: {
+          clientName: { type: Type.STRING }
+        }
       }
     }
-  }
-];
+  ];
 
-// AI見積もりアプリ用の関数
-const extractSpecSchema = {
-  type: Type.OBJECT,
-  properties: {
-    projectName: { type: Type.STRING, description: '案件名' },
-    category: { type: Type.STRING, description: '印刷品目カテゴリ' },
-    quantity: { type: Type.INTEGER, description: '数量（部数）' },
-    size: { type: Type.STRING, description: 'サイズ（例：A4, B5）' },
-    paperType: { type: Type.STRING, description: '用紙種類' },
-    pages: { type: Type.INTEGER, description: 'ページ数' },
-    colors: { type: Type.STRING, description: '色数（例：4/4, 4/0）', enum: ['4/4', '4/0', '1/1', '1/0'] },
-    finishing: { type: Type.ARRAY, items: { type: Type.STRING }, description: '加工オプション' },
-    requestedDelivery: { type: Type.STRING, description: '希望納期' },
-  },
-};
+  // AI見積もりアプリ用の関数
+  const extractSpecSchema = {
+    type: Type.OBJECT,
+    properties: {
+      projectName: { type: Type.STRING, description: '案件名' },
+      category: { type: Type.STRING, description: '印刷品目カテゴリ' },
+      quantity: { type: Type.INTEGER, description: '数量（部数）' },
+      size: { type: Type.STRING, description: 'サイズ（例：A4, B5）' },
+      paperType: { type: Type.STRING, description: '用紙種類' },
+      pages: { type: Type.INTEGER, description: 'ページ数' },
+      colors: { type: Type.STRING, description: '色数（例：4/4, 4/0）', enum: ['4/4', '4/0', '1/1', '1/0'] },
+      finishing: { type: Type.ARRAY, items: { type: Type.STRING }, description: '加工オプション' },
+      requestedDelivery: { type: Type.STRING, description: '希望納期' },
+    },
+  };
 
-export const extractSpecFromInput = async (
-  inputText: string,
-  imageBase64?: string
-): Promise<Partial<PrintSpec>> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const prompt = `
+  export const extractSpecFromInput = async (
+    inputText: string,
+    imageBase64?: string
+  ): Promise<Partial<PrintSpec>> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const prompt = `
     文唱堂印刷の基幹AIとして、入力内容から印刷仕様（品名、カテゴリ、部数、サイズ、紙、頁数、色数、加工）を抽出してください。
     システム構成: ${JSON.stringify(INTEGRATION_MANIFESTO)}
     入力: ${inputText}
   `;
 
-    const parts: any[] = [{ text: prompt }];
+      const parts: any[] = [{ text: prompt }];
 
-    if (imageBase64) {
-      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-      const mimeType = imageBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpeg';
-      parts.push({ inlineData: { data: base64Data, mimeType: `image/${mimeType}` } });
-    }
+      if (imageBase64) {
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const mimeType = imageBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpeg';
+        parts.push({ inlineData: { data: base64Data, mimeType: `image/${mimeType}` } });
+      }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts },
-      config: {
-        responseSchema: extractSpecSchema,
-      },
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: { parts },
+        config: {
+          responseSchema: extractSpecSchema,
+        },
+      });
+
+      let jsonStr = response.text.trim();
+      // JSONブロックを抽出
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+      }
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
+      }
+      return JSON.parse(jsonStr);
     });
+  };
 
-    let jsonStr = response.text.trim();
-    // JSONブロックを抽出
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.substring(3, jsonStr.length - 3).trim();
-    }
-    return JSON.parse(jsonStr);
-  });
-};
-
-export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationResult> => {
-  const ai = checkOnlineAndAIOff();
-  return withRetry(async () => {
-    const contextPrompt = `
+  export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationResult> => {
+    const ai = checkOnlineAndAIOff();
+    return withRetry(async () => {
+      const contextPrompt = `
     【基幹連携見積シミュレーション開始】
     1. supabase_db_query を実行し、顧客「${spec.clientName}」の過去成約履歴と現在のマスタ単価を取得せよ。
     2. google_drive_file_search を実行し、今回の「${spec.category}」に近い過去の見積書を検索せよ。
@@ -2041,44 +2059,44 @@ export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationRe
     案件仕様: ${JSON.stringify(spec)}
   `;
 
-    // Note: Gemini API does not support tools + responseMimeType together.
-    // We remove responseMimeType and parse JSON manually from the response.
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: contextPrompt,
-      config: {
-        tools: [{ functionDeclarations: coreTools }],
+      // Note: Gemini API does not support tools + responseMimeType together.
+      // We remove responseMimeType and parse JSON manually from the response.
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contextPrompt,
+        config: {
+          tools: [{ functionDeclarations: coreTools }],
+        }
+      });
+
+      let jsonStr = stripCodeFences(response.text);
+      try {
+        return JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("Failed to parse estimation result JSON:", e);
+        console.error("Received text:", jsonStr);
+        // Return a fallback estimation result
+        return {
+          options: [
+            {
+              id: "standard",
+              label: "標準プラン",
+              pq: 100000,
+              vq: 60000,
+              mq: 40000,
+              f: 20000,
+              g: 20000,
+              mRatio: 0.4,
+              estimatedLeadTime: "2週間",
+              probability: 70,
+              description: "標準的な見積もりプランです。詳細な仕様確認後に正式見積もりを作成します。"
+            }
+          ],
+          aiReasoning: "AIからの応答を解析できませんでした。フォールバック値を使用しています。",
+          co2Reduction: 0,
+          comparisonWithPast: { averagePrice: 0, differencePercentage: 0 }
+        };
       }
     });
-
-    let jsonStr = stripCodeFences(response.text);
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      console.error("Failed to parse estimation result JSON:", e);
-      console.error("Received text:", jsonStr);
-      // Return a fallback estimation result
-      return {
-        options: [
-          {
-            id: "standard",
-            label: "標準プラン",
-            pq: 100000,
-            vq: 60000,
-            mq: 40000,
-            f: 20000,
-            g: 20000,
-            mRatio: 0.4,
-            estimatedLeadTime: "2週間",
-            probability: 70,
-            description: "標準的な見積もりプランです。詳細な仕様確認後に正式見積もりを作成します。"
-          }
-        ],
-        aiReasoning: "AIからの応答を解析できませんでした。フォールバック値を使用しています。",
-        co2Reduction: 0,
-        comparisonWithPast: { averagePrice: 0, differencePercentage: 0 }
-      };
-    }
-  });
-};
+  };
 
