@@ -249,46 +249,15 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                 ...tempCard,
                 status: 'pending_review',
                 extractedData: {
-                    customer_name: getNestedValue(extractedData, 'companyName', 'japanese') ||
-                        getNestedValue(extractedData, 'companyName', 'ja') ||
-                        extractedData.companyName || '',
-                    representative_name: getNestedValue(extractedData, 'name', 'japanese') ||
-                        getNestedValue(extractedData, 'name', 'ja') ||
-                        getNestedValue(extractedData, 'personName', 'japanese') ||
-                        getNestedValue(extractedData, 'personName', 'ja') ||
-                        extractedData.personName ||
-                        extractedData.contactPerson ||
-                        extractedData.recipientName ||
-                        extractedData.name ||
-                        getNestedValue(extractedData, 'contactPerson', 'japanese') ||
-                        getNestedValue(extractedData, 'contactPerson', 'ja') || '',
+                    customer_name: extractedData.companyName || '',
+                    representative_name: extractedData.personName || extractedData.name || extractedData.contactPerson || '',
                     department: extractedData.department || '',
-                    position: getNestedValue(extractedData, 'title', 'japanese', 0) ||
-                        getNestedValue(extractedData, 'title', 'ja', 0) ||
-                        getNestedValue(extractedData, 'title', 'japanese') ||
-                        getNestedValue(extractedData, 'title', 'ja') ||
-                        extractedData.title ||
-                        extractedData.position || '',
-                    address_1: getNestedValue(extractedData, 'address', 'japanese') ||
-                        getNestedValue(extractedData, 'address', 'ja') ||
-                        extractedData.address || '',
-                    phone_number: getNestedValue(extractedData, 'phoneNumber') ||
-                        getNestedValue(extractedData, 'phone') ||
-                        getNestedValue(extractedData, 'tel') ||
-                        getNestedValue(extractedData, 'contactInformation', 'phone') ||
-                        getNestedValue(extractedData, 'contact', 'phone') ||
-                        getNestedValue(extractedData, 'mobile') ||
-                        getNestedValue(extractedData, 'mobileNumber') || '',
-                    fax: getNestedValue(extractedData, 'faxNumber') ||
-                        getNestedValue(extractedData, 'fax') ||
-                        getNestedValue(extractedData, 'contactInformation', 'fax') ||
-                        getNestedValue(extractedData, 'contact', 'fax') || '',
-                    email: getNestedValue(extractedData, 'email') ||
-                        getNestedValue(extractedData, 'contactInformation', 'email') ||
-                        getNestedValue(extractedData, 'contact', 'email') || '',
-                    website_url: extractedData.website ||
-                        extractedData.url ||
-                        extractedData.websiteUrl || '',
+                    position: extractedData.title || extractedData.position || '',
+                    address_1: extractedData.address || '',
+                    phone_number: extractedData.phoneNumber || extractedData.phone || extractedData.tel || '',
+                    fax: extractedData.faxNumber || extractedData.fax || '',
+                    email: extractedData.email || '',
+                    website_url: extractedData.websiteUrl || extractedData.website || extractedData.url || '',
                 }
             };
 
