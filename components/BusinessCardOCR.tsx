@@ -109,13 +109,15 @@ const ProcessedCardCard: React.FC<{
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white flex items-center justify-center">
-                        <div className="p-4 text-center">
-                            <div className="w-16 h-16 mx-auto mb-2 bg-slate-100 rounded-lg flex items-center justify-center">
-                                <span className="text-slate-600 font-bold text-xs">無効</span>
-                            </div>
-                            <p className="text-sm text-slate-600">プレビュー無効</p>
-                            <p className="text-xs text-slate-500 mt-1">機能停止中</p>
-                        </div>
+                        {card.fileName.toLowerCase().endsWith('.pdf') ? (
+                            <iframe
+                                src={card.fileUrl}
+                                className="w-full h-full min-h-96"
+                                title={card.fileName}
+                            />
+                        ) : (
+                            <img src={card.fileUrl} alt={card.fileName} className="max-w-full max-h-96 w-auto h-auto object-contain" />
+                        )}
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 truncate" title={card.fileName}>{card.fileName}</p>
                 </div>
@@ -123,12 +125,14 @@ const ProcessedCardCard: React.FC<{
                     <div className="flex justify-between items-center mb-3">
                         <StatusBadge status={card.status} />
                         <div className="flex items-center gap-2">
-                            <button disabled className="px-3 py-2 text-sm bg-slate-400 text-white rounded-lg opacity-50 flex items-center gap-2 cursor-not-allowed" aria-label="保存無効">
-                                <Save className="w-4 h-4" />
-                                保存無効
-                            </button>
-                            <button disabled className="p-2 text-slate-400 opacity-50 cursor-not-allowed" aria-label="削除無効">
-                                <Trash2 className="w-5 h-5" />
+                            {card.status === 'pending_review' && (
+                                <button onClick={handleSave} disabled={isSaving} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2" aria-label="保存">
+                                    {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    保存
+                                </button>
+                            )}
+                            <button onClick={handleDelete} disabled={isDeleting} className="p-2 text-slate-500 hover:text-red-600 disabled:opacity-50" aria-label="削除">
+                                {isDeleting ? <Loader className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                             </button>
                         </div>
                     </div>
