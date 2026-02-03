@@ -747,7 +747,14 @@ export const extractBusinessCardDetails = async (
       };
     }
 
-    const jsonStr = stripCodeFences(rawText);
+    // コードフェンスを確実に除去
+    let jsonStr = rawText;
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
     const parsed = JSON.parse(jsonStr);
     return parsed || defaultResult;
   } catch (error) {
