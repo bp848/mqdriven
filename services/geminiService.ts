@@ -760,7 +760,7 @@ export const extractBusinessCardDetails = async (
     const filePart = { inlineData: { data: fileBase64, mimeType } };
     const instructionPart = {
       text:
-        "このファイルは日本語の名刺または名刺スキャンPDFです。記載されている企業名、担当者、連絡先をJSON形式で抽出してください。右上などに赤ペンで手書きされた社員番号があれば recipientEmployeeCode として抽出してください。項目が無い場合は空文字ではなくnullにしてください。必ずJSON形式で応答してください。",
+        "このファイルは日本語の名刺または名刺スキャンPDFです。以下のすべての項目を必ず抽出してください。見つからない場合でもnullではなく空文字で返してください。\n\n必須項目:\n- companyName: 会社名\n- personName: 担当者名\n- department: 部署名\n- title: 役職名\n- phoneNumber: 電話番号\n- faxNumber: FAX番号\n- email: メールアドレス\n- address: 住所\n- websiteUrl: ウェブサイトURL\n\n右上などに赤ペンで手書きされた社員番号があればrecipientEmployeeCodeとして抽出してください。\n\n必ずJSON形式で応答してください。",
     };
     const response = await ai.models.generateContent({
       model,

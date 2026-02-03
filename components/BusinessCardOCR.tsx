@@ -109,7 +109,17 @@ const ProcessedCardCard: React.FC<{
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <div className="w-full h-auto max-h-96 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white flex items-center justify-center">
-                        <img src={card.fileUrl} alt={card.fileName} className="max-w-full max-h-96 w-auto h-auto object-contain" />
+                        {card.fileName.toLowerCase().endsWith('.pdf') ? (
+                            <div className="p-4 text-center">
+                                <div className="w-16 h-16 mx-auto mb-2 bg-red-100 rounded-lg flex items-center justify-center">
+                                    <span className="text-red-600 font-bold text-xs">PDF</span>
+                                </div>
+                                <p className="text-sm text-slate-600">PDFファイル</p>
+                                <p className="text-xs text-slate-500 mt-1">クリックして表示</p>
+                            </div>
+                        ) : (
+                            <img src={card.fileUrl} alt={card.fileName} className="max-w-full max-h-96 w-auto h-auto object-contain" />
+                        )}
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 truncate" title={card.fileName}>{card.fileName}</p>
                 </div>
@@ -264,16 +274,18 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                     address_1: getNestedValue(extractedData, 'address', 'japanese') ||
                         getNestedValue(extractedData, 'address', 'ja') ||
                         extractedData.address || '',
-                    phone_number: extractedData.phone ||
-                        extractedData.phoneNumber ||
-                        extractedData.tel ||
+                    phone_number: getNestedValue(extractedData, 'phoneNumber') ||
+                        getNestedValue(extractedData, 'phone') ||
+                        getNestedValue(extractedData, 'tel') ||
                         getNestedValue(extractedData, 'contactInformation', 'phone') ||
-                        getNestedValue(extractedData, 'contact', 'phone') || '',
-                    fax: extractedData.fax ||
-                        extractedData.faxNumber ||
+                        getNestedValue(extractedData, 'contact', 'phone') ||
+                        getNestedValue(extractedData, 'mobile') ||
+                        getNestedValue(extractedData, 'mobileNumber') || '',
+                    fax: getNestedValue(extractedData, 'faxNumber') ||
+                        getNestedValue(extractedData, 'fax') ||
                         getNestedValue(extractedData, 'contactInformation', 'fax') ||
                         getNestedValue(extractedData, 'contact', 'fax') || '',
-                    email: extractedData.email ||
+                    email: getNestedValue(extractedData, 'email') ||
                         getNestedValue(extractedData, 'contactInformation', 'email') ||
                         getNestedValue(extractedData, 'contact', 'email') || '',
                     website_url: extractedData.website ||
