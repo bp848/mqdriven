@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { extractBusinessCardDetails } from '../services/geminiService';
 import { getSupabase } from '../services/supabaseClient';
 import { Customer, Toast, ConfirmationDialogProps } from '../types';
+import { buildCustomerInsertPayload, mapExtractedDetailsToCustomer } from './businessCardOcrHelpers';
 import { Upload, Loader, X, CheckCircle, Save, Trash2, AlertTriangle, Users, PlusCircle } from './Icons';
 
 interface BusinessCardOCRProps {
@@ -161,8 +162,20 @@ const ProcessedCardCard: React.FC<{
                                 <input id={`phoneNumber-${card.id}`} name="phone_number" type="text" value={localData.phone_number || ''} onChange={handleChange} placeholder="電話番号" className={inputClass} readOnly={card.status === 'approved'} />
                             </div>
                             <div>
+                                <label htmlFor={`fax-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">FAX</label>
+                                <input id={`fax-${card.id}`} name="fax" type="text" value={localData.fax || ''} onChange={handleChange} placeholder="FAX" className={inputClass} readOnly={card.status === 'approved'} />
+                            </div>
+                            <div>
+                                <label htmlFor={`mobile-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">携帯</label>
+                                <input id={`mobile-${card.id}`} name="mobile_number" type="text" value={localData.mobile_number || ''} onChange={handleChange} placeholder="携帯" className={inputClass} readOnly={card.status === 'approved'} />
+                            </div>
+                            <div>
                                 <label htmlFor={`email-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">メールアドレス</label>
                                 <input id={`email-${card.id}`} name="email" type="email" value={localData.email || ''} onChange={handleChange} placeholder="メールアドレス" className={inputClass} readOnly={card.status === 'approved'} />
+                            </div>
+                            <div>
+                                <label htmlFor={`zip-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">郵便番号</label>
+                                <input id={`zip-${card.id}`} name="zip_code" type="text" value={localData.zip_code || ''} onChange={handleChange} placeholder="郵便番号" className={inputClass} readOnly={card.status === 'approved'} />
                             </div>
                             <div>
                                 <label htmlFor={`address-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">住所</label>
@@ -171,6 +184,14 @@ const ProcessedCardCard: React.FC<{
                             <div>
                                 <label htmlFor={`website-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">Webサイト</label>
                                 <input id={`website-${card.id}`} name="website_url" type="url" value={localData.website_url || ''} onChange={handleChange} placeholder="Webサイト" className={inputClass} readOnly={card.status === 'approved'} />
+                            </div>
+                            <div>
+                                <label htmlFor={`receivedBy-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">受領者社員番号</label>
+                                <input id={`receivedBy-${card.id}`} name="received_by_employee_code" type="text" value={localData.received_by_employee_code || ''} onChange={handleChange} placeholder="受領者社員番号" className={inputClass} readOnly={card.status === 'approved'} />
+                            </div>
+                            <div>
+                                <label htmlFor={`note-${card.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">メモ/備考</label>
+                                <textarea id={`note-${card.id}`} name="note" value={localData.note || ''} onChange={handleChange} placeholder="メモ/備考" className={inputClass} readOnly={card.status === 'approved'} rows={3} />
                             </div>
                         </div>
                     )}
@@ -239,17 +260,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             const processedCard: ProcessedCard = {
                 ...tempCard,
                 status: 'pending_review',
-                extractedData: {
-                    customer_name: extractedData.companyName || '',
-                    representative_name: extractedData.personName || extractedData.name || extractedData.contactPerson || '',
-                    department: extractedData.department || '',
-                    position: extractedData.title || extractedData.position || '',
-                    address_1: extractedData.address || '',
-                    phone_number: extractedData.phoneNumber || extractedData.phone || extractedData.tel || '',
-                    fax: extractedData.faxNumber || extractedData.fax || '',
-                    email: extractedData.email || '',
-                    website_url: extractedData.websiteUrl || extractedData.website || extractedData.url || '',
-                }
+                extractedData: mapExtractedDetailsToCustomer(extractedData)
             };
 
             if (mounted.current) {
@@ -343,18 +354,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
             const supabase = getSupabase();
 
             // customersテーブル用のデータマッピング
-            const customerData = {
-                customer_name: card.extractedData.customer_name,
-                representative_name: card.extractedData.representative_name,
-                phone_number: card.extractedData.phone_number,
-                fax: card.extractedData.fax,
-                address_1: card.extractedData.address_1,
-                website_url: card.extractedData.website_url,
-                // 追加フィールド
-                customer_contact_info: card.extractedData.email,
-                note: `部署: ${card.extractedData.department || ''}\n役職: ${card.extractedData.position || ''}`,
-                created_at: new Date().toISOString(),
-            };
+            const customerData = buildCustomerInsertPayload(card.extractedData, new Date().toISOString());
 
             const { data, error } = await supabase
                 .from('customers')
