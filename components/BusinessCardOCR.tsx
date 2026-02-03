@@ -71,19 +71,22 @@ const ProcessedCardCard: React.FC<{
         });
     };
 
-    const handleSave = async () => {
+    const handleSave = async (e: React.MouseEvent) => {
+        e.stopPropagation();
         setIsSaving(true);
         await onUpdate(card.id, { extractedData: localData });
         setIsSaving(false);
     };
 
-    const handleDelete = async () => {
+    const handleDelete = async (e: React.MouseEvent) => {
+        e.stopPropagation();
         requestConfirmation({
             title: '名刺データを削除',
             message: `本当に「${card.fileName}」の解析データを削除しますか？この操作は元に戻せません。`,
             onConfirm: async () => {
                 setIsDeleting(true);
                 await onDelete(card.id);
+                setIsDeleting(false);
             }
         });
     };
