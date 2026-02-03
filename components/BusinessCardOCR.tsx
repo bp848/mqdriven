@@ -212,11 +212,12 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                 status: 'pending_review',
                 extractedData: {
                     customer_name: extractedData.companyName,
-                    representative_name: extractedData.personName,
+                    representative_name: extractedData.recipientName,
                     department: extractedData.department,
-                    position: extractedData.title,
+                    position: extractedData.position,
                     address_1: extractedData.address,
-                    phone_number: extractedData.phoneNumber,
+                    phone_number: extractedData.tel,
+                    fax: extractedData.fax,
                     email: extractedData.email,
                     website_url: extractedData.website,
                 }
@@ -317,6 +318,7 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                 customer_name: card.extractedData.customer_name,
                 representative_name: card.extractedData.representative_name,
                 phone_number: card.extractedData.phone_number,
+                fax: card.extractedData.fax,
                 address_1: card.extractedData.address_1,
                 website_url: card.extractedData.website_url,
                 // 追加フィールド
