@@ -463,7 +463,7 @@ const App: React.FC = () => {
         }
         setCurrentPage(page);
         setSearchTerm('');
-        setShowBulkOCR(false); // OCR状態をリセット
+        // OCR状態はリセットしない - ページ離脱時も状態を維持
     };
 
     const handleDailyReportPrefillApplied = () => {
