@@ -809,48 +809,8 @@ export const extractBusinessCardDetails = async (
       };
     }
 
-    // AI応答がネストされている場合に対応
-    let result = parsed;
     console.log('[extractBusinessCardDetails] パース結果:', parsed);
-
-    // response.candidates[0].content.parts[0].text のような構造に対応
-    if (result && result.response && result.response.candidates && result.response.candidates[0] && result.response.candidates[0].content && result.response.candidates[0].content.parts && result.response.candidates[0].content.parts[0]) {
-      const candidateText = result.response.candidates[0].content.parts[0].text;
-      console.log('[extractBusinessCardDetails] 候補テキスト:', candidateText);
-      if (typeof candidateText === 'string') {
-        try {
-          const candidateParsed = JSON.parse(candidateText);
-          result = candidateParsed;
-          console.log('[extractBusinessCardDetails] 候補テキストパース後:', JSON.stringify(result, null, 2));
-        } catch (e) {
-          console.warn('[extractBusinessCardDetails] 候補テキストのJSONパース失敗:', e);
-        }
-      }
-    }
-
-    // 最終的な結果を検証
-    if (!result || typeof result !== 'object') {
-      console.warn('[extractBusinessCardDetails] AI応答が無効な形式');
-      return defaultResult;
-    }
-
-    console.log('[extractBusinessCardDetails] 最終解析結果:', result);
-
-    // 各フィールドの値を確認
-    const fieldCheck = {
-      companyName: result.companyName,
-      personName: result.personName,
-      department: result.department,
-      title: result.title,
-      phoneNumber: result.phoneNumber,
-      faxNumber: result.faxNumber,
-      email: result.email,
-      address: result.address,
-      websiteUrl: result.websiteUrl
-    };
-    console.log('[extractBusinessCardDetails] フィールドチェック:', fieldCheck);
-
-    return result || defaultResult;
+    return parsed || defaultResult;
   } catch (error) {
     console.error('[extractBusinessCardDetails] エラー:', error);
     const fallback = await tryTesseractBusinessCard(fileBase64, mimeType, defaultResult);
