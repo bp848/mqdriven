@@ -33,7 +33,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
   useEffect(() => {
     mounted.current = true;
     return () => {
-        mounted.current = false;
+      mounted.current = false;
     };
   }, []);
 
@@ -54,12 +54,12 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     if (!editingRowId) return;
     setIsSaving(true);
     try {
-        await onUpdateCustomer(editingRowId, editedData);
+      await onUpdateCustomer(editingRowId, editedData);
     } finally {
-        if (mounted.current) {
-            setIsSaving(false);
-            setEditingRowId(null);
-        }
+      if (mounted.current) {
+        setIsSaving(false);
+        setEditingRowId(null);
+      }
     }
   };
 
@@ -71,8 +71,8 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
   const handleGenerateProposal = async (e: React.MouseEvent, customer: Customer) => {
     e.stopPropagation();
     if (isAIOff) {
-        addToast('AI機能は現在無効です。', 'error');
-        return;
+      addToast('AI機能は現在無効です。', 'error');
+      return;
     }
     if (!currentUser) {
       addToast('ログインユーザー情報が見つかりません。', 'error');
@@ -86,36 +86,36 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
       const mailto = `mailto:${customer.customerContactInfo || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(finalBody)}`;
       window.open(mailto, '_blank');
       if (mounted.current) {
-          addToast(`「${customer.customerName}」向けのメール下書きを作成しました。`, 'success');
+        addToast(`「${customer.customerName}」向けのメール下書きを作成しました。`, 'success');
       }
     } catch (error) {
       if (mounted.current) {
-          addToast(error instanceof Error ? error.message : 'メール作成に失敗しました', 'error');
+        addToast(error instanceof Error ? error.message : 'メール作成に失敗しました', 'error');
       }
     } finally {
       if (mounted.current) {
-          setIsGeneratingEmail(null);
+        setIsGeneratingEmail(null);
       }
     }
   };
-  
+
   const handleEnrich = async (e: React.MouseEvent, customer: Customer) => {
     e.stopPropagation();
     if (isAIOff) {
-        addToast('AI機能は現在無効です。', 'error');
-        return;
+      addToast('AI機能は現在無効です。', 'error');
+      return;
     }
     setEnrichingId(customer.id);
     try {
-        const enrichedData = await enrichCustomerData(customer.customerName);
-        await onUpdateCustomer(customer.id, enrichedData);
-        addToast(`「${customer.customerName}」の情報をAIで更新しました。`, 'success');
+      const enrichedData = await enrichCustomerData(customer.customerName);
+      await onUpdateCustomer(customer.id, enrichedData);
+      addToast(`「${customer.customerName}」の情報をAIで更新しました。`, 'success');
     } catch (error) {
-        addToast(error instanceof Error ? `情報補完エラー: ${error.message}` : '企業情報の補完に失敗しました。', 'error');
+      addToast(error instanceof Error ? `情報補完エラー: ${error.message}` : '企業情報の補完に失敗しました。', 'error');
     } finally {
-        if (mounted.current) {
-            setEnrichingId(null);
-        }
+      if (mounted.current) {
+        setEnrichingId(null);
+      }
     }
   };
 
@@ -127,23 +127,23 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     if (!keyword) return customers;
 
     const keys: Array<keyof Customer | string> = [
+      'customer_name',
       'customerName',
+      'customer_name_kana',
       'customerNameKana',
+      'representative_name',
       'representative',
+      'representative_title',
       'representativeTitle',
+      'customer_contact_info',
       'customerContactInfo',
+      'phone_number',
       'phoneNumber',
+      'address_1',
       'address1',
+      'website_url',
       'websiteUrl',
       'note',
-      'customer_name',
-      'customer_name_kana',
-      'representative_name',
-      'representative_title',
-      'customer_contact_info',
-      'phone_number',
-      'address_1',
-      'website_url',
     ];
 
     return customers.filter(customer =>
@@ -156,13 +156,13 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         if (sortConfig.key === 'createdAt') {
-          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          const aTime = a.created_at ? new Date(a.created_at).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+          const bTime = b.created_at ? new Date(b.created_at).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
           return sortConfig.direction === 'ascending' ? aTime - bTime : bTime - aTime;
         }
 
-        const aValue = a[sortConfig.key as keyof Customer];
-        const bValue = b[sortConfig.key as keyof Customer];
+        const aValue = a[sortConfig.key as keyof Customer] || a[`customer_${sortConfig.key}` as keyof Customer] || a[sortConfig.key.replace(/([A-Z])/g, '_$1').toLowerCase() as keyof Customer];
+        const bValue = b[sortConfig.key as keyof Customer] || b[`customer_${sortConfig.key}` as keyof Customer] || b[sortConfig.key.replace(/([A-Z])/g, '_$1').toLowerCase() as keyof Customer];
 
         if (aValue === null || aValue === undefined) return 1;
         if (bValue === null || bValue === undefined) return -1;
@@ -186,19 +186,19 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     }
     setSortConfig({ key, direction });
   };
-  
+
   const exportRows = useMemo(() => {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
     return sortedCustomers.map(customer => ({
-      customerName: customer.customerName,
-      phoneNumber: customer.phoneNumber,
-      address1: customer.address1,
-      websiteUrl: customer.websiteUrl,
-      createdAt: customer.createdAt,
-      representative: customer.representative,
-      representativeTitle: customer.representativeTitle,
-      customerContactInfo: customer.customerContactInfo,
-      customerCode: customer.customerCode,
+      customerName: customer.customer_name || customer.customerName,
+      phoneNumber: customer.phone_number || customer.phoneNumber,
+      address1: customer.address_1 || customer.address1,
+      websiteUrl: customer.website_url || customer.websiteUrl,
+      createdAt: customer.created_at || customer.createdAt,
+      representative: customer.representative_name || customer.representative,
+      representativeTitle: customer.representative_title || customer.representativeTitle,
+      customerContactInfo: customer.customer_contact_info || customer.customerContactInfo,
+      customerCode: customer.customer_code || customer.customerCode,
       detailUrl: customer.id ? `${baseUrl}/?page=sales_customers&customerId=${customer.id}` : '',
     }));
   }, [sortedCustomers]);
@@ -236,7 +236,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
     return <EmptyState icon={Users} title="顧客が登録されていません" message="最初の顧客を登録して、取引を開始しましょう。" action={{ label: "新規顧客登録", onClick: onNewCustomer, icon: PlusCircle }} />;
   }
 
-  const InlineEditInput: React.FC<{name: keyof Customer, value: any, onChange: (e:React.ChangeEvent<HTMLInputElement>) => void}> = ({ name, value, onChange}) => (
+  const InlineEditInput: React.FC<{ name: keyof Customer, value: any, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ name, value, onChange }) => (
     <input
       type="text"
       name={name}
@@ -267,9 +267,8 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
             type="button"
             onClick={handleExportToSheets}
             disabled={isExporting}
-            className={`inline-flex items-center gap-2 rounded-md px-4 py-1.5 text-xs font-semibold text-white ${
-              isExporting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+            className={`inline-flex items-center gap-2 rounded-md px-4 py-1.5 text-xs font-semibold text-white ${isExporting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
           >
             {isExporting ? '出力中…' : 'Sheetsへエクスポート'}
           </button>
@@ -288,7 +287,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
         <table className="w-full text-base text-left text-slate-500 dark:text-slate-400 min-w-[1000px]">
           <thead className="text-sm text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
             <tr>
-              <SortableHeader sortKey="customerName" label="顧客名" sortConfig={sortConfig} requestSort={requestSort}/>
+              <SortableHeader sortKey="customerName" label="顧客名" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="phoneNumber" label="電話番号" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="address1" label="住所" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader sortKey="websiteUrl" label="Webサイト" sortConfig={sortConfig} requestSort={requestSort} />
@@ -300,60 +299,61 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
             {sortedCustomers.map((customer) => {
               const isEditing = editingRowId === customer.id;
               return (
-              <tr key={customer.id} onClick={() => onSelectCustomer(customer)} className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 odd:bg-slate-50 dark:odd:bg-slate-800/50 cursor-pointer">
-                <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
-                  {isEditing ? <InlineEditInput name="customerName" value={editedData.customerName} onChange={handleFieldChange} /> : customer.customerName}
-                </td>
-                <td className="px-6 py-4">
-                    {isEditing ? <InlineEditInput name="phoneNumber" value={editedData.phoneNumber} onChange={handleFieldChange} /> : customer.phoneNumber || '-'}
-                </td>
-                <td className="px-6 py-4 truncate max-w-sm">
-                    {isEditing ? <InlineEditInput name="address1" value={editedData.address1} onChange={handleFieldChange} /> : customer.address1 || '-'}
-                </td>
-                <td className="px-6 py-4 truncate max-w-xs">
+                <tr key={customer.id} onClick={() => onSelectCustomer(customer)} className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 odd:bg-slate-50 dark:odd:bg-slate-800/50 cursor-pointer">
+                  <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
+                    {isEditing ? <InlineEditInput name="customerName" value={editedData.customerName} onChange={handleFieldChange} /> : customer.customer_name || customer.customerName}
+                  </td>
+                  <td className="px-6 py-4">
+                    {isEditing ? <InlineEditInput name="phoneNumber" value={editedData.phoneNumber} onChange={handleFieldChange} /> : customer.phone_number || customer.phoneNumber || '-'}
+                  </td>
+                  <td className="px-6 py-4 truncate max-w-sm">
+                    {isEditing ? <InlineEditInput name="address1" value={editedData.address1} onChange={handleFieldChange} /> : customer.address_1 || customer.address1 || '-'}
+                  </td>
+                  <td className="px-6 py-4 truncate max-w-xs">
                     {isEditing ? <InlineEditInput name="websiteUrl" value={editedData.websiteUrl} onChange={handleFieldChange} /> : (
-                      customer.websiteUrl ? <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 hover:underline">{customer.websiteUrl}</a> : '-'
+                      customer.website_url || customer.websiteUrl ? <a href={customer.website_url || customer.websiteUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-600 hover:underline">{customer.website_url || customer.websiteUrl}</a> : '-'
                     )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                    {formatDate(customer.createdAt)}
-                </td>
-                <td className="px-6 py-4 text-center">
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                    {formatDate(customer.created_at || customer.createdAt)}
+                  </td>
+                  <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        {isEditing ? (
-                            <>
-                                <button onClick={handleSaveEdit} disabled={isSaving} className="p-2 rounded-full text-slate-500 hover:bg-green-100 hover:text-green-600 dark:hover:bg-green-900/50" title="保存">
-                                    {isSaving ? <Loader className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
-                                </button>
-                                <button onClick={handleCancelEdit} className="p-2 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/50" title="キャンセル">
-                                    <X className="w-5 h-5"/>
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <button onClick={() => onSelectCustomer(customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="詳細表示"><Eye className="w-5 h-5"/></button>
-                                <button onClick={(e) => handleEditClick(e, customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="インライン編集"><Pencil className="w-5 h-5"/></button>
-                                {!isAIOff && <button onClick={(e) => handleEnrich(e, customer)} disabled={enrichingId === customer.id} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="AIで企業情報補完">
-                                    {enrichingId === customer.id ? <Loader className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                                </button>}
-                                <button onClick={(e) => {e.stopPropagation(); onAnalyzeCustomer(customer)}} disabled={isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="AI企業分析"><Lightbulb className="w-5 h-5"/></button>
-                                <button onClick={(e) => handleGenerateProposal(e, customer)} disabled={isGeneratingEmail === customer.id || isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="提案メール作成">
-                                  {isGeneratingEmail === customer.id ? <Loader className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
-                                </button>
-                            </>
-                        )}
+                      {isEditing ? (
+                        <>
+                          <button onClick={handleSaveEdit} disabled={isSaving} className="p-2 rounded-full text-slate-500 hover:bg-green-100 hover:text-green-600 dark:hover:bg-green-900/50" title="保存">
+                            {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                          </button>
+                          <button onClick={handleCancelEdit} className="p-2 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/50" title="キャンセル">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => onSelectCustomer(customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="詳細表示"><Eye className="w-5 h-5" /></button>
+                          <button onClick={(e) => handleEditClick(e, customer)} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="インライン編集"><Pencil className="w-5 h-5" /></button>
+                          {!isAIOff && <button onClick={(e) => handleEnrich(e, customer)} disabled={enrichingId === customer.id} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700" title="AIで企業情報補完">
+                            {enrichingId === customer.id ? <Loader className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                          </button>}
+                          <button onClick={(e) => { e.stopPropagation(); onAnalyzeCustomer(customer) }} disabled={isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="AI企業分析"><Lightbulb className="w-5 h-5" /></button>
+                          <button onClick={(e) => handleGenerateProposal(e, customer)} disabled={isGeneratingEmail === customer.id || isAIOff} className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" title="提案メール作成">
+                            {isGeneratingEmail === customer.id ? <Loader className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+                          </button>
+                        </>
+                      )}
                     </div>
-                </td>
-              </tr>
-            )})}
-             {sortedCustomers.length === 0 && (
+                  </td>
+                </tr>
+              )
+            })}
+            {sortedCustomers.length === 0 && (
               <tr>
                 <td colSpan={5}>
-                    <EmptyState 
-                        icon={Users}
-                        title="検索結果がありません"
-                        message="検索条件を変更して、もう一度お試しください。"
-                    />
+                  <EmptyState
+                    icon={Users}
+                    title="検索結果がありません"
+                    message="検索条件を変更して、もう一度お試しください。"
+                  />
                 </td>
               </tr>
             )}
