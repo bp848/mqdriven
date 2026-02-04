@@ -444,13 +444,24 @@ const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
     );
     const projectCode = order.project_code || order.order_code || order.project_id || '';
 
+    // Extract customer name from joined data, fallback to client_custmer
+    const customerName = order.projects?.customers?.customer_name ||
+        order.client_custmer ||
+        order.customer_name ||
+        '';
+
+    const projectCodeFromDb = order.projects?.project_code ||
+        order.project_code ||
+        order.order_code ||
+        order.project_id || '';
+
     return {
-        id: order.id ?? order.order_id,
-        supplierName: order.client_custmer || order.customer_name || '',
+        id: order.id ?? order.order_id ?? order.row_uuid,
+        supplierName: customerName,
         paymentRecipientId: order.payment_recipient_id ?? null,
-        itemName: projectCode,
+        itemName: projectCodeFromDb,
         projectId: order.project_id ?? null,
-        projectCode,
+        projectCode: projectCodeFromDb,
         orderCode: order.order_code ?? null,
         orderDate: order.order_date || order.create_date || '',
         quantity,
@@ -1136,7 +1147,21 @@ const fetchPurchaseOrdersWithFilters = async (filters: ProjectBudgetFilter = {})
         return viewRows.map(dbOrderToPurchaseOrder);
     }
 
-    let tableQuery = supabase.from('orders').select('*').order('order_date', { ascending: false });
+    // Enhanced query with joins to get customer names from projects and customers tables
+    let tableQuery = supabase
+        .from('orders')
+        .select(`
+            *,
+            projects (
+                project_code,
+                project_name,
+                customer_code,
+                customers (
+                    customer_name
+                )
+            )
+        `)
+        .order('order_date', { ascending: false });
     if (filters.startDate) tableQuery = tableQuery.gte('order_date', filters.startDate);
     if (filters.endDate) tableQuery = tableQuery.lte('order_date', filters.endDate);
 

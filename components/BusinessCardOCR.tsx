@@ -407,6 +407,17 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
         });
     }, []);
 
+    const selectAllPendingCards = useCallback(() => {
+        const pendingCardIds = processedCards
+            .filter(card => card.status === 'pending_review')
+            .map(card => card.id);
+        setSelectedCardIds(new Set(pendingCardIds));
+    }, [processedCards]);
+
+    const deselectAllCards = useCallback(() => {
+        setSelectedCardIds(new Set());
+    }, []);
+
     const handleBulkApprove = async () => {
         if (isBulkApproving) return;
         const targets = processedCards.filter(card => card.status === 'pending_review' && selectedCardIds.has(card.id));
@@ -475,15 +486,33 @@ const BusinessCardOCR: React.FC<BusinessCardOCRProps> = ({ addToast, requestConf
                                 処理結果 ({processedCards.length}件)
                             </h2>
                             {processedCards.some(card => card.status === 'pending_review') && (
-                                <button
-                                    type="button"
-                                    onClick={handleBulkApprove}
-                                    disabled={selectedCardIds.size === 0 || isBulkApproving}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-                                >
-                                    {isBulkApproving ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                                    選択した名刺を登録 ({selectedCardIds.size})
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={selectAllPendingCards}
+                                        disabled={processedCards.filter(card => card.status === 'pending_review').length === 0}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-slate-600 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                    >
+                                        全て選択
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={deselectAllCards}
+                                        disabled={selectedCardIds.size === 0}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-slate-600 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                    >
+                                        選択解除
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleBulkApprove}
+                                        disabled={selectedCardIds.size === 0 || isBulkApproving}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                    >
+                                        {isBulkApproving ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                        選択した名刺を登録 ({selectedCardIds.size})
+                                    </button>
+                                </div>
                             )}
                         </div>
                         <div className="flex gap-2">

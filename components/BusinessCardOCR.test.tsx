@@ -110,4 +110,81 @@ describe('BusinessCardOCR', () => {
       expect(screen.queryByText('bulk-card.pdf')).not.toBeInTheDocument();
     });
   });
+
+  it('selects all pending cards when "全て選択" is clicked', async () => {
+    const { container } = render(
+      <BusinessCardOCR
+        addToast={addToast}
+        requestConfirmation={requestConfirmation}
+        isAIOff={false}
+        onCustomerAdded={onCustomerAdded}
+      />
+    );
+
+    // Upload multiple files to create multiple pending cards
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file1 = new File(['dummy1'], 'card1.pdf', { type: 'application/pdf' });
+    const file2 = new File(['dummy2'], 'card2.pdf', { type: 'application/pdf' });
+    await userEvent.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(geminiService.extractBusinessCardDetails).toHaveBeenCalledTimes(2);
+    });
+
+    // Initially no cards should be selected
+    const checkboxes = screen.getAllByRole('checkbox', { name: '登録対象に追加' });
+    expect(checkboxes).toHaveLength(2);
+    checkboxes.forEach(checkbox => {
+      expect(checkbox).not.toBeChecked();
+    });
+
+    // Click "全て選択" button
+    const selectAllButton = await screen.findByRole('button', { name: '全て選択' });
+    await userEvent.click(selectAllButton);
+
+    // All pending cards should now be selected
+    checkboxes.forEach(checkbox => {
+      expect(checkbox).toBeChecked();
+    });
+
+    // Bulk registration button should show count of selected cards
+    const bulkButton = await screen.findByRole('button', { name: /選択した名刺を登録 \(2\)/ });
+    expect(bulkButton).toBeInTheDocument();
+  });
+
+  it('deselects all cards when "選択解除" is clicked', async () => {
+    const { container } = render(
+      <BusinessCardOCR
+        addToast={addToast}
+        requestConfirmation={requestConfirmation}
+        isAIOff={false}
+        onCustomerAdded={onCustomerAdded}
+      />
+    );
+
+    // Upload a file and select it manually first
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['dummy'], 'card.pdf', { type: 'application/pdf' });
+    await userEvent.upload(input, file);
+
+    await waitFor(() => {
+      expect(geminiService.extractBusinessCardDetails).toHaveBeenCalledTimes(1);
+    });
+
+    // Select the card manually
+    const checkbox = await screen.findByRole('checkbox', { name: '登録対象に追加' });
+    await userEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    // Click "選択解除" button
+    const deselectButton = await screen.findByRole('button', { name: '選択解除' });
+    await userEvent.click(deselectButton);
+
+    // Card should be deselected
+    expect(checkbox).not.toBeChecked();
+
+    // Bulk registration button should be disabled and show count of 0
+    const bulkButton = await screen.findByRole('button', { name: /選択した名刺を登録 \(0\)/ });
+    expect(bulkButton).toBeDisabled();
+  });
 });
