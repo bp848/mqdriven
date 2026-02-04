@@ -4,6 +4,8 @@ export type ToolName =
   | 'calendar_today'
   | 'drive_search'
   | 'drive_suggest_path'
+  | 'gmail_get'
+  | 'gmail_inbox'
   | 'gmail_draft'
   | 'ocr_image'
   | 'finalize_save'

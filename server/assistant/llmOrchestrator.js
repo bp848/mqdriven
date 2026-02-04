@@ -2,6 +2,8 @@
 const { appendEvent, readEventsForToday } = require('./eventLog');
 
 const USER_ID_HEADER = 'x-user-id';
+const DEFAULT_DRIVE_QUERY = '最新';
+const DEFAULT_GMAIL_MAX_RESULTS = 5;
 
 function getUserId(req) {
   return req?.headers?.[USER_ID_HEADER] || 'unknown-user';
@@ -19,6 +21,39 @@ function recordAction(userId, action, target, source) {
   });
 }
 
+function formatGmailInbox(messages) {
+  if (!messages?.length) return '受信メールはありませんでした。';
+  return messages
+    .map((msg, index) => {
+      const from = msg.from || '送信者不明';
+      const subject = msg.subject || '（件名なし）';
+      const snippet = msg.snippet || '';
+      return `${index + 1}. ${from} / ${subject}${snippet ? `\n   ${snippet}` : ''}`;
+    })
+    .join('\n');
+}
+
+function buildGmailActions(messages) {
+  if (!messages?.length) return [];
+  return messages.map((msg, index) => ({
+    id: `mail_${msg.id || index}`,
+    label: `メール ${index + 1} を開く`,
+    tool: 'gmail_get',
+    args: { messageId: msg.id },
+  }));
+}
+
+function formatDriveHits(hits) {
+  if (!hits?.length) return '該当ファイルは見つかりませんでした。';
+  return hits
+    .map((hit, index) => {
+      const title = hit.title || '（無題）';
+      const snippet = hit.snippet || '';
+      return `${index + 1}. ${title}${snippet ? `\n   ${snippet}` : ''}`;
+    })
+    .join('\n');
+}
+
 async function handleChat(req, message, uploadedFiles) {
   const userId = getUserId(req);
 
@@ -30,6 +65,35 @@ async function handleChat(req, message, uploadedFiles) {
   });
 
   const lower = (message || '').toLowerCase();
+
+  if (lower.includes('gws') || lower.includes('workspace') || lower.includes('まとめ') || lower.includes('ダイジェスト')) {
+    const [today, inbox, drive] = await Promise.all([
+      mcp.calendar_today(),
+      mcp.gmail_list('', DEFAULT_GMAIL_MAX_RESULTS),
+      mcp.drive_search(DEFAULT_DRIVE_QUERY),
+    ]);
+    recordAction(userId, 'calendar_read', 'today', 'google_calendar');
+    recordAction(userId, 'mail_read', 'inbox', 'gmail');
+    recordAction(userId, 'drive_search', DEFAULT_DRIVE_QUERY, 'google_drive');
+
+    const assistantText =
+      `GWSの最新状況です。\n\n【今日の予定】\n` +
+      today.items.map((item) => `${item.time}  ${item.title}`).join('\n') +
+      `\n\n【受信メール（${inbox.source}）】\n` +
+      formatGmailInbox(inbox.messages) +
+      `\n\n【Drive検索（"${DEFAULT_DRIVE_QUERY}"）】\n` +
+      formatDriveHits(drive.hits) +
+      `\n\n次に何をしますか？`;
+
+    const actions = [
+      { id: 'gws_calendar', label: '今日の予定', tool: 'calendar_today' },
+      { id: 'gws_inbox', label: '受信メール', tool: 'gmail_inbox' },
+      { id: 'gws_drive', label: 'Drive検索', tool: 'drive_search', args: { query: DEFAULT_DRIVE_QUERY } },
+      { id: 'gws_report', label: '日報（自動）生成', tool: 'generate_daily_report' },
+    ];
+
+    return { assistantText, actions };
+  }
 
   if (lower.includes('予定') || lower.includes('スケジュール') || lower.includes('今日')) {
     const today = await mcp.calendar_today();
@@ -71,6 +135,15 @@ async function handleChat(req, message, uploadedFiles) {
     };
   }
 
+  if (lower.includes('受信') || lower.includes('inbox') || lower.includes('メール確認')) {
+    const inbox = await mcp.gmail_list('', DEFAULT_GMAIL_MAX_RESULTS);
+    recordAction(userId, 'mail_read', 'inbox', 'gmail');
+    return {
+      assistantText: `受信メールを取得しました（${inbox.source}）。\n` + formatGmailInbox(inbox.messages),
+      actions: buildGmailActions(inbox.messages),
+    };
+  }
+
   if (lower.includes('メール') || lower.includes('mail') || lower.includes('gmail')) {
     const assistantText =
       `承知しました。メールは「送信」ではなく、まず下書きを作ります。\n宛先・件名・要点をください。\n` +
@@ -97,6 +170,15 @@ async function handleChat(req, message, uploadedFiles) {
       assistantText,
       preview: { activeTab: 'Manual', manual: { hits: res.hits } },
       actions: [{ id: 'report', label: '日報（自動）生成', tool: 'generate_daily_report' }],
+    };
+  }
+
+  if (lower.includes('ドライブ') || lower.includes('drive') || lower.includes('ファイル')) {
+    const res = await mcp.drive_search(message);
+    recordAction(userId, 'drive_search', message, 'google_drive');
+    return {
+      assistantText: 'Driveを検索しました。',
+      preview: { activeTab: 'Manual', manual: { hits: res.hits } },
     };
   }
 
@@ -132,6 +214,34 @@ async function runTool(req, tool, args) {
       assistantText: `検索しました（${res.source}）。`,
       preview: { activeTab: 'Manual', manual: { hits: res.hits } },
     };
+  }
+
+  if (tool === 'gmail_inbox') {
+    const query = String(args?.query || '');
+    const maxResults = Number.isFinite(args?.maxResults) ? Number(args.maxResults) : DEFAULT_GMAIL_MAX_RESULTS;
+    const res = await mcp.gmail_list(query, maxResults);
+    recordAction(userId, 'mail_read', query || 'inbox', 'gmail');
+    return {
+      assistantText: `受信メールを取得しました（${res.source}）。\n` + formatGmailInbox(res.messages),
+      actions: buildGmailActions(res.messages),
+    };
+  }
+
+  if (tool === 'gmail_get') {
+    const messageId = String(args?.messageId || '');
+    const res = await mcp.gmail_get(messageId);
+    recordAction(userId, 'mail_read', messageId || 'detail', 'gmail');
+    if (!res.message) {
+      return { assistantText: 'メールが見つかりませんでした。' };
+    }
+    const { from, subject, snippet, body, date } = res.message;
+    const assistantText =
+      `メール詳細です。\n` +
+      `From: ${from || '送信者不明'}\n` +
+      `Subject: ${subject || '（件名なし）'}\n` +
+      `Date: ${date || '（日付不明）'}\n\n` +
+      `${body || snippet || '本文がありません。'}`;
+    return { assistantText };
   }
 
   if (tool === 'drive_suggest_path') {

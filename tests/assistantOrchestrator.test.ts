@@ -58,6 +58,26 @@ describe('assistant orchestrator', () => {
     expect(response.actions?.some((action) => action.tool === 'ocr_image')).toBe(true);
   });
 
+  it('summarizes GWS data and logs actions', async () => {
+    tempDir = createTempDir();
+    process.env.ASSISTANT_LOG_DIR = tempDir;
+
+    const { handleChat } = loadOrchestrator();
+    const { readEventsForToday } = loadEventLog();
+
+    const response = await handleChat({ headers: {} }, 'GWSのまとめを教えて', []);
+
+    expect(response.assistantText).toContain('GWSの最新状況');
+    expect(response.assistantText).toContain('受信メール');
+    expect(response.assistantText).toContain('Drive検索');
+    expect(response.actions?.some((action) => action.tool === 'gmail_inbox')).toBe(true);
+
+    const events = readEventsForToday();
+    expect(events.some((entry) => entry.type === 'calendar_read')).toBe(true);
+    expect(events.some((entry) => entry.type === 'mail_read')).toBe(true);
+    expect(events.some((entry) => entry.type === 'drive_search')).toBe(true);
+  });
+
   it('logs calendar read actions', async () => {
     tempDir = createTempDir();
     process.env.ASSISTANT_LOG_DIR = tempDir;
@@ -80,6 +100,27 @@ describe('assistant orchestrator', () => {
 
     expect(response.preview?.draft?.content).toContain('sample.pdf');
     expect(response.actions?.some((action) => action.tool === 'finalize_save')).toBe(true);
+  });
+
+  it('lists inbox and provides message actions', async () => {
+    tempDir = createTempDir();
+    process.env.ASSISTANT_LOG_DIR = tempDir;
+
+    const { runTool } = loadOrchestrator();
+    const response = await runTool({ headers: {} }, 'gmail_inbox', {});
+
+    expect(response.assistantText).toContain('受信メール');
+    expect(response.actions?.some((action) => action.tool === 'gmail_get')).toBe(true);
+  });
+
+  it('retrieves a gmail message by id', async () => {
+    tempDir = createTempDir();
+    process.env.ASSISTANT_LOG_DIR = tempDir;
+
+    const { runTool } = loadOrchestrator();
+    const response = await runTool({ headers: {} }, 'gmail_get', { messageId: 'mock-1' });
+
+    expect(response.assistantText).toContain('メール詳細');
   });
 
   it('logs mail draft actions', async () => {

@@ -1,0 +1,38 @@
+diff --git a/server/assistant/types.ts b/server/assistant/types.ts
+index d1254a93fd2a9315f3851f758d768fe2d5a4cbec..b7d4a7acfcf4f1276ef6689fe1f8a4e961d0111c 100644
+--- a/server/assistant/types.ts
++++ b/server/assistant/types.ts
+@@ -1,31 +1,33 @@
+ ﻿export type ChatMsg = { role: 'user' | 'assistant'; text: string; ts: number };
+ 
+ export type ToolName =
+   | 'calendar_today'
+   | 'drive_search'
+   | 'drive_suggest_path'
++  | 'gmail_get'
++  | 'gmail_inbox'
+   | 'gmail_draft'
+   | 'ocr_image'
+   | 'finalize_save'
+   | 'log_event'
+   | 'generate_daily_report';
+ 
+ export type ToolAction = {
+   id: string;
+   label: string;
+   tool: ToolName;
+   args?: any;
+   danger?: boolean;
+ };
+ 
+ export type Preview = {
+   activeTab?: 'Draft' | 'Files' | 'Manual' | 'Log';
+   draft?: { title: string; content: string };
+   files?: { suggestedPath: string; suggestedName: string; note?: string };
+   manual?: { hits: { title: string; snippet: string; url?: string }[] };
+   log?: { markdown: string };
+ };
+ 
+ export type ChatResponse = {
+   assistantText?: string;
+   actions?: ToolAction[];
