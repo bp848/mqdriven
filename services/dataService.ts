@@ -3,6 +3,7 @@ import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from '
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js';
 import type { PostgrestError } from '@supabase/supabase-js';
+import { validateKatakana } from '../utils/katakanaValidation';
 import {
     EmployeeUser,
     AccountingStatus,
@@ -1929,6 +1930,7 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
         return {
             id: user.id,
             name: user.name || '未設定',
+            nameKana: user.name_kana ?? null,
             department: departmentName,
             title: titleName,
             email: user.email || '',
@@ -1973,11 +1975,29 @@ export async function getUsers(): Promise<EmployeeUser[]> {
     throw new Error('Failed to fetch users: maximum retries exceeded');
 }
 
-export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean }): Promise<void> => {
+export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean, nameKana?: string | null }): Promise<void> => {
+    // カタカナバリデーション
+    if (userData.nameKana) {
+        const validation = validateKatakana(userData.nameKana, {
+            allowHalfWidth: false,
+            autoNormalize: true
+        });
+
+        if (!validation.isValid) {
+            throw new Error(validation.errorMessage || '名前カナの形式が正しくありません');
+        }
+
+        // 自動正規化された場合は正規化された値を使用
+        if (validation.normalizedText) {
+            userData.nameKana = validation.normalizedText;
+        }
+    }
+
     const supabase = getSupabase();
     const basePayload: Record<string, any> = {
         email: userData.email,
         name: userData.name,
+        name_kana: userData.nameKana ?? null,
         role: userData.role,
     };
     const payloadWithIsActive = {
@@ -1999,12 +2019,32 @@ export const addUser = async (userData: { name: string, email: string | null, ro
 };
 
 export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<void> => {
+    // カタカナバリデーション
+    if (updates.nameKana) {
+        const validation = validateKatakana(updates.nameKana, {
+            allowHalfWidth: false,
+            autoNormalize: true
+        });
+
+        if (!validation.isValid) {
+            throw new Error(validation.errorMessage || '名前カナの形式が正しくありません');
+        }
+
+        // 自動正規化された場合は正規化された値を使用
+        if (validation.normalizedText) {
+            updates.nameKana = validation.normalizedText;
+        }
+    }
+
     const supabase = getSupabase();
     const basePayload: Record<string, any> = {
         name: updates.name,
         email: updates.email,
         role: updates.role,
     };
+    if (updates.nameKana !== undefined) {
+        (basePayload as any).name_kana = updates.nameKana;
+    }
     if (updates.isActive !== undefined) {
         (basePayload as any).is_active = updates.isActive;
     }
