@@ -7,6 +7,18 @@ function getUserId(req) {
   return req?.headers?.[USER_ID_HEADER] || 'unknown-user';
 }
 
+function recordAction(userId, action, target, source) {
+  appendEvent({
+    ts: Date.now(),
+    userId,
+    type: action,
+    payload: {
+      source,
+      target,
+    },
+  });
+}
+
 async function handleChat(req, message, uploadedFiles) {
   const userId = getUserId(req);
 
@@ -21,6 +33,7 @@ async function handleChat(req, message, uploadedFiles) {
 
   if (lower.includes('予定') || lower.includes('スケジュール') || lower.includes('今日')) {
     const today = await mcp.calendar_today();
+    recordAction(userId, 'calendar_read', 'today', 'google_calendar');
     const assistantText =
       `おはようございます。今日の予定です。\n` +
       today.items.map((item) => `${item.time}  ${item.title}`).join('\n') +
@@ -77,6 +90,7 @@ async function handleChat(req, message, uploadedFiles) {
 
   if (lower.includes('マニュアル') || lower.includes('手順')) {
     const res = await mcp.drive_search(message);
+    recordAction(userId, 'drive_search', message, 'google_drive');
     const assistantText =
       '了解。関連マニュアルを探しました。\n右の「Manual」に候補を出しました。必要なら“音声で読む用”に短縮もします。';
     return {
@@ -106,12 +120,14 @@ async function runTool(req, tool, args) {
 
   if (tool === 'calendar_today') {
     const today = await mcp.calendar_today();
+    recordAction(userId, 'calendar_read', 'today', 'google_calendar');
     return { assistantText: today.items.map((item) => `${item.time}  ${item.title}`).join('\n') };
   }
 
   if (tool === 'drive_search') {
     const q = String(args?.query || '');
     const res = await mcp.drive_search(q);
+    recordAction(userId, 'drive_search', q, 'google_drive');
     return {
       assistantText: `検索しました（${res.source}）。`,
       preview: { activeTab: 'Manual', manual: { hits: res.hits } },
@@ -131,6 +147,7 @@ async function runTool(req, tool, args) {
       args?.body ||
       `橋本社長様\n\nいつもありがとうございます。\n本日の業務報告です。\n\n（ここに要点）\n\n以上、ご報告申し上げます。\n--`;
     const draft = await mcp.gmail_draft(to, subject, body);
+    recordAction(userId, 'mail_draft', subject || '（件名未設定）', 'gmail');
 
     return {
       assistantText: '下書きを作成しました（送信はしていません）。',
@@ -163,6 +180,7 @@ async function runTool(req, tool, args) {
 
   if (tool === 'finalize_save') {
     appendEvent({ ts: Date.now(), userId, type: 'save.finalized', payload: args });
+    recordAction(userId, 'drive_save', args?.suggestedName || '保存確定', 'google_drive');
     return {
       assistantText: '保存を確定しました（現状はログのみ）。次に何をしますか？',
       actions: [

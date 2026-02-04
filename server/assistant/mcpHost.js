@@ -1,47 +1,134 @@
-﻿function parseServers() {
-  const raw = process.env.MCP_SERVERS;
-  if (!raw) return [{ name: 'google', kind: 'mock' }];
-  try {
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.length) return arr;
-    return [{ name: 'google', kind: 'mock' }];
-  } catch {
-    return [{ name: 'google', kind: 'mock' }];
+﻿const { McpClientManager, parseMcpServers } = require('../mcp/mcpClient');
+
+const mockCalendarItems = [
+  { title: '朝礼・環境整備', time: '08:20-09:30' },
+  { title: 'ミーティング', time: '09:30-10:00' },
+  { title: '10号機', time: '10:00-13:00' },
+];
+
+const extractTextContent = (result) => {
+  if (!result?.content) return '';
+  return result.content
+    .map((block) => {
+      if (block?.type === 'text' && typeof block.text === 'string') return block.text;
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+};
+
+const getStructuredArray = (structured, keys) => {
+  if (!structured || typeof structured !== 'object') return null;
+  for (const key of keys) {
+    const value = structured[key];
+    if (Array.isArray(value)) return value;
   }
-}
+  return null;
+};
+
+const formatTimeRange = (startValue, endValue) => {
+  if (!startValue && !endValue) return '';
+  const format = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toTimeString().slice(0, 5);
+  };
+  const start = format(startValue);
+  const end = format(endValue);
+  if (start && end) return `${start}-${end}`;
+  return start || end;
+};
+
+const normalizeCalendarItems = (result) => {
+  const structured = result?.structuredContent || null;
+  const items = getStructuredArray(structured, ['items', 'events']);
+  if (!items) return null;
+  return items.map((item) => {
+    const title = item.summary || item.title || item.subject || '（無題）';
+    const start = item.start?.dateTime || item.start?.date || item.start;
+    const end = item.end?.dateTime || item.end?.date || item.end;
+    const time = formatTimeRange(start, end);
+    return { title, time };
+  });
+};
+
+const normalizeDriveHits = (result) => {
+  const structured = result?.structuredContent || null;
+  const items = getStructuredArray(structured, ['files', 'items', 'hits']);
+  if (!items) return null;
+  return items.map((item) => ({
+    title: item.name || item.title || '（無題）',
+    snippet: item.description || item.summary || '',
+    url: item.url || item.webViewLink || '',
+  }));
+};
+
+const getTodayRange = () => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+};
 
 class McpHost {
   constructor() {
-    this.servers = parseServers();
+    this.servers = parseMcpServers(process.env.MCP_SERVERS);
+    this.manager = new McpClientManager(this.servers);
   }
 
   hasRealGoogle() {
-    return this.servers.some((server) => server.name === 'google' && server.kind === 'stdio');
+    return this.manager.hasServer('google');
+  }
+
+  async callGoogleTool(name, args) {
+    if (!this.hasRealGoogle()) return null;
+    try {
+      return await this.manager.callTool('google', name, args);
+    } catch {
+      return null;
+    }
   }
 
   async calendar_today() {
-    return {
-      items: [
-        { title: '朝礼・環境整備', time: '08:20-09:30' },
-        { title: 'ミーティング', time: '09:30-10:00' },
-        { title: '10号機', time: '10:00-13:00' },
-      ],
-      source: this.hasRealGoogle() ? 'google(mcp)' : 'mock',
-    };
+    if (!this.hasRealGoogle()) {
+      return { items: mockCalendarItems, source: 'mock' };
+    }
+    const { timeMin, timeMax } = getTodayRange();
+    const result = await this.callGoogleTool('calendar.list', { timeMin, timeMax });
+    const items = normalizeCalendarItems(result);
+    if (items) {
+      return { items, source: 'google(mcp)' };
+    }
+    return { items: mockCalendarItems, source: 'mock' };
   }
 
   async drive_search(query) {
-    return {
-      hits: [
-        {
-          title: `【手順書】${query}（サンプル）`,
-          snippet:
-            '1) 対象ファイルをアップロード\n2) OCR実行\n3) 結果を確認\n4) 保存を確定\n',
-          url: '',
-        },
-      ],
-      source: this.hasRealGoogle() ? 'google(mcp)' : 'mock',
-    };
+    if (!this.hasRealGoogle()) {
+      return {
+        hits: [
+          {
+            title: `【手順書】${query}（サンプル）`,
+            snippet:
+              '1) 対象ファイルをアップロード\n2) OCR実行\n3) 結果を確認\n4) 保存を確定\n',
+            url: '',
+          },
+        ],
+        source: 'mock',
+      };
+    }
+    const result = await this.callGoogleTool('drive.search', { query });
+    const hits = normalizeDriveHits(result);
+    if (hits) {
+      return { hits, source: 'google(mcp)' };
+    }
+    const text = extractTextContent(result);
+    if (text) {
+      return { hits: [{ title: text, snippet: '', url: '' }], source: 'google(mcp)' };
+    }
+    return { hits: [], source: 'google(mcp)' };
   }
 
   async drive_suggest_path(context) {
@@ -53,7 +140,26 @@ class McpHost {
   }
 
   async gmail_draft(to, subject, body) {
-    return { ok: true, draftId: 'mock-draft', to, subject, body };
+    if (!this.hasRealGoogle()) {
+      return { ok: true, draftId: 'mock-draft', to, subject, body };
+    }
+    const result = await this.callGoogleTool('gmail.create_draft', { to, subject, body });
+    if (!result) {
+      return { ok: false, draftId: '', to, subject, body };
+    }
+    const structured = result.structuredContent || {};
+    const draftId = structured.draftId || structured.id || '';
+    return { ok: !result.isError, draftId, to, subject, body };
+  }
+
+  async gmail_send_draft(draftId) {
+    if (!this.hasRealGoogle()) {
+      return { ok: true, draftId: draftId || 'mock-draft' };
+    }
+    const result = await this.callGoogleTool('gmail.send_draft', { draftId });
+    const structured = result?.structuredContent || {};
+    const sentId = structured.id || draftId || '';
+    return { ok: !result?.isError, draftId: sentId };
   }
 }
 
