@@ -28,7 +28,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     if (!currentUser) return;
     setIsLoading(true);
     setError(null);
-    
+
     try {
       // 謇ｿ隱肴ｸ医∩逕ｳ隲九ｒ蜿門ｾ・
       const allApplications = await dataService.getApplications(currentUser.id);
@@ -75,7 +75,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     try {
       // 莉戊ｨｳ譏守ｴｰ繧堤函謌・
       const result = await dataService.generateJournalLinesFromApplication(application.id);
-      
+
       alert(`仕訳を生成しました。${result.lines.length}行の仕訳が作成されました。`);
       await loadData(); // 繝・・繧ｿ繧貞・隱ｭ縺ｿ霎ｼ縺ｿ
     } catch (error: any) {
@@ -92,11 +92,34 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     }
 
     try {
+      const entry = journalEntries.find(target => String(target.id) === String(journalEntryId));
+      const sourceApplicationId = entry?.reference_id;
+      const applicationToArchive = sourceApplicationId
+        ? applications.find(app => app.id === sourceApplicationId)
+        : undefined;
+
       // 莉戊ｨｳ繧堤｢ｺ螳夲ｼ・tatus繧恥osted縺ｫ譖ｴ譁ｰ・・
       await dataService.updateJournalEntryStatus(String(journalEntryId), 'posted');
-      
+
+      if (entry) {
+        setJournalEntries(prev => prev.filter(item => String(item.id) !== String(journalEntryId)));
+        setArchivedJournalEntries(prev => [
+          { ...entry, status: 'posted' },
+          ...prev,
+        ]);
+      }
+
+      if (applicationToArchive) {
+        const archivedApplication: ApplicationWithDetails = {
+          ...applicationToArchive,
+          accounting_status: AccountingStatus.POSTED,
+        };
+        setApplications(prev => prev.filter(app => app.id !== applicationToArchive.id));
+        setFilteredApplications(prev => prev.filter(app => app.id !== applicationToArchive.id));
+        setArchivedApplications(prev => [archivedApplication, ...prev]);
+      }
+
       alert('仕訳を確定しました。');
-      await loadData(); // 繝・・繧ｿ繧貞・隱ｭ縺ｿ霎ｼ縺ｿ
     } catch (error: any) {
       console.error('莉戊ｨｳ遒ｺ螳壹お繝ｩ繝ｼ:', error);
       alert(`莉戊ｨｳ縺ｮ遒ｺ螳壹↓螟ｱ謨励＠縺ｾ縺励◆: ${error.message}`);
@@ -106,18 +129,18 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
   // 繝輔ぅ繝ｫ繧ｿ繝ｪ繝ｳ繧ｰ
   useEffect(() => {
     let filtered = applications;
-    
+
     if (searchTerm) {
-      filtered = filtered.filter(app => 
+      filtered = filtered.filter(app =>
         app.formData?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         app.applicant?.name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     if (statusFilter !== 'all') {
       filtered = filtered.filter(app => app.accounting_status === statusFilter);
     }
-    
+
     setFilteredApplications(filtered);
   }, [applications, searchTerm, statusFilter]);
 
@@ -151,7 +174,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
 
   // 逕ｳ隲九↓蟇ｾ蠢懊☆繧倶ｻ戊ｨｳ譏守ｴｰ繧貞叙蠕・
   const getJournalLinesForApplication = (applicationId: string): JournalEntryWithLines | null => {
-    return journalEntries.find(entry => 
+    return journalEntries.find(entry =>
       entry.reference_id === applicationId && entry.status === 'draft'
     ) || null;
   };
@@ -188,7 +211,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as AccountingStatus | 'all')}
@@ -252,7 +275,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
                             {app.applicationCode?.name || '申請種別'}
                           </span>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-slate-600">
                           <div>
                             <span className="font-medium">申請者</span>
@@ -271,7 +294,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
                             <div className="font-mono text-xs">{app.id.slice(0, 8)}...</div>
                           </div>
                         </div>
-                        
+
                         {/* 莉戊ｨｳ譏守ｴｰ縺ｮ陦ｨ遉ｺ */}
                         {journalEntry && (
                           <div className="mt-4 p-4 bg-slate-50 rounded-lg">
@@ -298,14 +321,14 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
                             </div>
                           </div>
                         )}
-                        
+
                         {app.formData?.description && (
                           <div className="mt-3 p-3 bg-slate-50 rounded text-sm text-slate-600">
                             {app.formData.description}
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="ml-4 flex flex-col gap-2">
                         {!journalEntry ? (
                           <button
