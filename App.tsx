@@ -64,6 +64,7 @@ import ActionConsolePage from './components/admin/ActionConsolePage';
 import KnowledgeBasePage from './components/KnowledgeBasePage';
 import DatabaseSetupInstructionsModal from './components/DatabaseSetupInstructionsModal';
 import NewsletterPage from './components/NewsletterPage';
+import EmailAutoReplyPage from './components/EmailAutoReplyPage';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
@@ -225,6 +226,7 @@ const PAGE_TITLES: Record<Page, string> = {
     settings: '設定',
     prompt_management: 'プロンプト管理',
     newsletter: 'ニュースレター',
+    email_auto_reply: 'メール自動返信',
     strac_analysis: 'STRAC分析',
 };
 
@@ -1274,6 +1276,8 @@ const App: React.FC = () => {
                 />;
             case 'newsletter':
                 return <NewsletterPage customers={customers} addToast={addToast} />;
+            case 'email_auto_reply':
+                return <EmailAutoReplyPage currentUser={currentUser} isAIOff={isAIOff} />;
             case 'sales_leads':
                 return <LeadManagementPage
                     leads={leads}

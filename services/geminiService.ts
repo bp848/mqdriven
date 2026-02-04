@@ -988,6 +988,24 @@ URL: www.b-p.co.jp
   });
 };
 
+export const generateGmailAutoReply = async (
+  message: { from?: string; subject?: string; body?: string },
+  senderName: string
+): Promise<{ subject: string; body: string }> => {
+  const ai = checkOnlineAndAIOff();
+  return withRetry(async () => {
+    const prompt = `以下のメールに対して、返信メールの下書きを作成してください。\n送信者: ${senderName}\n\n差出人: ${message.from || "不明"}\n件名: ${message.subject || "（件名なし）"}\n本文: ${message.body || "（本文なし）"}\n\n返信メールは丁寧で簡潔にし、最後に署名を含めてください。`;
+    const response = await ai.models.generateContent({ model, contents: prompt });
+    const text = response.text;
+    const subjectMatch = text.match(/件名:\s*(.*)/);
+    const bodyMatch = text.match(/本文:\s*([\s\S]*)/);
+    return {
+      subject: subjectMatch ? subjectMatch[1].trim() : `Re: ${message.subject || ""}`.trim(),
+      body: bodyMatch ? bodyMatch[1].trim() : text,
+    };
+  });
+};
+
 // FIX: Add missing 'analyzeLeadData' function.
 export const analyzeLeadData = async (leads: Lead[]): Promise<string> => {
   const ai = checkOnlineAndAIOff();

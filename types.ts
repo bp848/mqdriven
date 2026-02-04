@@ -35,6 +35,7 @@ export type Page =
   | 'dtp_tools'
   | 'prompt_management'
   | 'newsletter'
+  | 'email_auto_reply'
   | 'simple_estimates'
   | 'print_estimate_app'
   | 'strac_analysis';
