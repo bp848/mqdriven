@@ -107,6 +107,7 @@ export enum InboxItemStatus {
 export interface User extends LooseRecord {
   id: string;
   name: string;
+  nameKana?: string;
   email?: string;
   employee_number?: string;
   department_id?: string;

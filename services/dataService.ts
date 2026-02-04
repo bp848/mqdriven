@@ -1,5 +1,6 @@
 import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 import { sendApprovalNotification, sendApprovalRouteCreatedNotification } from './notificationService';
+import { enrichCustomerData } from './geminiService';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient as SupabaseClientType } from '@supabase/supabase-js';
 import type { PostgrestError } from '@supabase/supabase-js';
@@ -534,6 +535,47 @@ const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
 };
 
 const IMMUTABLE_CUSTOMER_FIELDS: (keyof Customer)[] = ['id', 'createdAt'];
+
+const GROUNDABLE_CUSTOMER_FIELDS: string[] = [
+    'websiteUrl',
+    'companyContent',
+    'annualSales',
+    'employeesCount',
+    'address1',
+    'phoneNumber',
+    'representative',
+];
+
+const isEmptyCustomerValue = (value: unknown): boolean => {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim().length === 0;
+    return false;
+};
+
+const applyCustomerGrounding = async (customer: Partial<Customer>): Promise<Partial<Customer>> => {
+    const customerName = typeof customer.customerName === 'string' ? customer.customerName.trim() : '';
+    if (!customerName) return customer;
+    const needsGrounding = GROUNDABLE_CUSTOMER_FIELDS.some(field =>
+        isEmptyCustomerValue((customer as Record<string, unknown>)[field])
+    );
+    if (!needsGrounding) return customer;
+    try {
+        const grounded = await enrichCustomerData(customerName);
+        const merged: Partial<Customer> = { ...customer };
+        GROUNDABLE_CUSTOMER_FIELDS.forEach(field => {
+            const current = (merged as Record<string, unknown>)[field];
+            const incoming = (grounded as Record<string, unknown>)[field];
+            if (isEmptyCustomerValue(current) && !isEmptyCustomerValue(incoming)) {
+                (merged as Record<string, unknown>)[field] = incoming;
+            }
+        });
+        return merged;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.warn('[dataService] Failed to enrich customer data', message);
+        return customer;
+    }
+};
 
 const customerToDbCustomer = (customer: Partial<Customer>): any => {
     const dbData: { [key: string]: any } = {};
@@ -1610,9 +1652,10 @@ export const addCustomer = async (customerData: Partial<Customer>): Promise<Cust
         ...customerData,
         createdAt: customerData.createdAt ?? new Date().toISOString(),
     };
+    const groundedPayload = await applyCustomerGrounding(payload);
     const { data, error } = await supabase
         .from('customers')
-        .insert(customerToDbCustomer(payload))
+        .insert(customerToDbCustomer(groundedPayload))
         .select()
         .single();
     ensureSupabaseSuccess(error, 'Failed to add customer');
@@ -1866,12 +1909,21 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
     try {
         // First fetch users
         console.log('[dataService] Fetching users...');
+        const userSelectColumns = 'id, name, name_kana, email, role, created_at, department_id, position_id, is_active';
         const result = await supabase
             .from('users')
-            .select('id, name, email, role, created_at, department_id, position_id, is_active')
+            .select(userSelectColumns)
             .order('name', { ascending: true });
         userRows = result.data;
         userError = result.error;
+        if (userError && isMissingColumnError(userError)) {
+            const fallbackResult = await supabase
+                .from('users')
+                .select('id, name, email, role, created_at, department_id, position_id, is_active')
+                .order('name', { ascending: true });
+            userRows = fallbackResult.data;
+            userError = fallbackResult.error;
+        }
 
         if (userError) {
             console.error('[dataService] Users query failed:', userError);
@@ -2000,22 +2052,24 @@ export const addUser = async (userData: { name: string, email: string | null, ro
         name_kana: userData.nameKana ?? null,
         role: userData.role,
     };
-    const payloadWithIsActive = {
+    const payload: Record<string, any> = {
         ...basePayload,
         is_active: userData.isActive ?? true,
     };
 
-    const { error } = await supabase.from('users').insert(payloadWithIsActive);
-    if (error) {
-        if (isMissingColumnError(error)) {
-            const { error: retryError } = await supabase.from('users').insert(basePayload);
-            if (retryError) {
-                throw formatSupabaseError('Failed to add user (user must exist in auth.users)', retryError);
-            }
+    let error: PostgrestError | null | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const attemptPayload = { ...payload };
+        const result = await supabase.from('users').insert(attemptPayload);
+        error = result.error;
+        if (!error) {
             return;
         }
-        throw formatSupabaseError('Failed to add user (user must exist in auth.users)', error);
+        if (!isMissingColumnError(error) || !stripMissingColumns(payload, error)) {
+            break;
+        }
     }
+    throw formatSupabaseError('Failed to add user (user must exist in auth.users)', error);
 };
 
 export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Promise<void> => {
@@ -2049,8 +2103,19 @@ export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Pr
         (basePayload as any).is_active = updates.isActive;
     }
 
-    const { error: userError } = await supabase.from('users').update(basePayload).eq('id', id);
-    if (userError) throw formatSupabaseError('Failed to update user', userError);
+    let userError: PostgrestError | null | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const attemptPayload = { ...basePayload };
+        const { error } = await supabase.from('users').update(attemptPayload).eq('id', id);
+        userError = error;
+        if (!userError) {
+            return;
+        }
+        if (!isMissingColumnError(userError) || !stripMissingColumns(basePayload, userError)) {
+            break;
+        }
+    }
+    throw formatSupabaseError('Failed to update user', userError);
 };
 
 export const deleteUser = async (userId: string): Promise<void> => {
