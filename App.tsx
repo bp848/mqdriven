@@ -1247,7 +1247,6 @@ const App: React.FC = () => {
                         isAIOff={isAIOff}
                         onCustomerAdded={(customer) => {
                             loadAllData();
-                            setShowBulkOCR(false);
                         }}
                     />;
                 }
