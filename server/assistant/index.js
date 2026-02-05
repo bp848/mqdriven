@@ -1,5 +1,5 @@
-﻿const { assistantRouter } = require('./router');
+﻿const { createAssistantRouter } = require('./router');
 
 module.exports = {
-  assistantRouter,
+  createAssistantRouter,
 };

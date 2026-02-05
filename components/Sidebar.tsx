@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, Mail } from './Icons';
+import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, Mail, MessageSquare } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -107,6 +107,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     name: 'ツール',
     icon: BookOpen,
     items: [
+      { page: 'assistant', name: 'AIチャットボット', icon: MessageSquare },
       { page: 'ai_business_consultant', name: 'ビジネスコンサルタントAI' },
       { page: 'ai_market_research', name: '市場リサーチAI' },
       { page: 'ai_transcription', name: '議事録AI文字起こし' },

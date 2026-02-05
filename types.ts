@@ -36,6 +36,7 @@ export type Page =
   | 'prompt_management'
   | 'newsletter'
   | 'email_auto_reply'
+  | 'assistant'
   | 'simple_estimates'
   | 'print_estimate_app'
   | 'strac_analysis';

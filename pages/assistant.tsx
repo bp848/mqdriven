@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { EmployeeUser } from "../types";
 
 type ChatMsg = { role: "user" | "assistant"; text: string; ts: number };
 type ToolAction =
@@ -13,7 +14,11 @@ type PreviewState = {
   log?: { markdown: string };
 };
 
-export default function AssistantPage() {
+type AssistantPageProps = {
+  currentUser: EmployeeUser | null;
+};
+
+export default function AssistantPage({ currentUser }: AssistantPageProps) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState<ChatMsg[]>([]);
@@ -27,17 +32,24 @@ export default function AssistantPage() {
 
   const canSend = useMemo(() => msg.trim().length > 0 || files.length > 0, [msg, files]);
 
+  const requestHeaders = useMemo(() => {
+    if (!currentUser?.id) return undefined;
+    return { "x-user-id": currentUser.id };
+  }, [currentUser?.id]);
+
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch("/api/assistant/today");
+        const r = await fetch("/api/assistant/today", {
+          headers: requestHeaders,
+        });
         const j = await r.json();
         setToday(j.items ?? []);
       } catch {
         setToday([]);
       }
     })();
-  }, []);
+  }, [requestHeaders]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -58,7 +70,11 @@ export default function AssistantPage() {
       files.forEach((f) => form.append("files", f));
       setFiles([]);
 
-      const r = await fetch("/api/assistant/chat", { method: "POST", body: form });
+      const r = await fetch("/api/assistant/chat", {
+        method: "POST",
+        headers: requestHeaders,
+        body: form,
+      });
       const j = await r.json();
 
       if (j.assistantText) {
@@ -85,7 +101,10 @@ export default function AssistantPage() {
     try {
       const r = await fetch("/api/assistant/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(requestHeaders ?? {}),
+        },
         body: JSON.stringify({ tool: a.tool, args: a.args ?? {} }),
       });
       const j = await r.json();
@@ -153,6 +172,60 @@ export default function AssistantPage() {
         </div>
 
         <div style={{ padding: 12, borderTop: "1px solid #e5e7eb" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+            <button
+              onClick={() => runAction({ id: "gws_summary", label: "GWSまとめ", tool: "gws_summary" })}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #e5e7eb",
+                background: "white",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              GWSまとめ
+            </button>
+            <button
+              onClick={() => runAction({ id: "gmail_inbox", label: "受信メール", tool: "gmail_inbox" })}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #e5e7eb",
+                background: "white",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              受信メール
+            </button>
+            <button
+              onClick={() => runAction({ id: "drive_search", label: "Drive検索", tool: "drive_search", args: { query: "最新" } })}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #e5e7eb",
+                background: "white",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              Drive検索
+            </button>
+            <button
+              onClick={() => runAction({ id: "daily_report", label: "日報生成", tool: "generate_daily_report" })}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #e5e7eb",
+                background: "white",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              日報生成
+            </button>
+          </div>
           {actions.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
               {actions.map((a) => (

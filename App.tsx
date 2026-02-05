@@ -69,6 +69,7 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
+import AssistantPage from './pages/assistant';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -227,6 +228,7 @@ const PAGE_TITLES: Record<Page, string> = {
     prompt_management: 'プロンプト管理',
     newsletter: 'ニュースレター',
     email_auto_reply: 'メール自動返信',
+    assistant: 'AIチャットボット',
     strac_analysis: 'STRAC分析',
 };
 
@@ -1278,6 +1280,8 @@ const App: React.FC = () => {
                 return <NewsletterPage customers={customers} addToast={addToast} />;
             case 'email_auto_reply':
                 return <EmailAutoReplyPage currentUser={currentUser} isAIOff={isAIOff} />;
+            case 'assistant':
+                return <AssistantPage currentUser={currentUser} />;
             case 'sales_leads':
                 return <LeadManagementPage
                     leads={leads}
