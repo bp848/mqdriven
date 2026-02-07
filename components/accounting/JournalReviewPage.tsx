@@ -92,6 +92,43 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     setHiddenIds(prev => new Set(prev).add(appId));
   };
 
+  // 休暇申請をカレンダーに登録
+  const createCalendarEventForLeave = async (app: ApplicationWithDetails) => {
+    try {
+      // 休暇申請かどうかを判定
+      if (!app.applicationCode?.name.includes('休暇') &&
+        !app.applicationCode?.name.includes('休み')) {
+        return;
+      }
+
+      const leaveType = app.formData?.leaveType || '有休';
+      const applicantName = app.applicant?.name || '不明';
+      const approverName = currentUser?.name || '管理者';
+
+      // 予定タイトル
+      const eventTitle = `【休暇】${applicantName}（${leaveType}）`;
+
+      // 予定説明
+      const eventDescription = `この人は休みです\n\n休暇種別：${leaveType}\n申請番号：${app.id}\n承認者：${approverName}`;
+
+      // カレンダー登録APIを呼び出し（仮実装）
+      // TODO: 実際のカレンダーAPI実装
+      console.log('カレンダー登録:', {
+        title: eventTitle,
+        description: eventDescription,
+        startDate: app.formData?.startDate || app.approvedAt,
+        endDate: app.formData?.endDate || app.approvedAt,
+        isAllDay: app.formData?.isAllDay || true,
+        applicationId: app.id
+      });
+
+      console.log('休暇カレンダー登録完了:', app.id);
+    } catch (error: any) {
+      console.error('カレンダー登録エラー:', error);
+      // エラーでも承認処理は続行
+    }
+  };
+
   // 莉戊ｨｳ遒ｺ螳壼・逅・
   const handleConfirmJournal = async (journalEntryId: string | number) => {
     if (!currentUser) {
@@ -125,6 +162,9 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
         setApplications(prev => prev.filter(app => app.id !== applicationToArchive.id));
         setFilteredApplications(prev => prev.filter(app => app.id !== applicationToArchive.id));
         setArchivedApplications(prev => [archivedApplication, ...prev]);
+
+        // 休暇申請の場合はカレンダーに登録
+        await createCalendarEventForLeave(applicationToArchive);
       }
 
       alert('仕訳を確定しました。');
@@ -142,10 +182,15 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     filtered = filtered.filter(app => !hiddenIds.has(app.id));
 
     if (searchTerm) {
-      filtered = filtered.filter(app =>
-        app.formData?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.applicant?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      filtered = filtered.filter(app => {
+        const subject = getApplicationSubject(app).toLowerCase();
+        const applicantName = app.applicant?.name?.toLowerCase() || '';
+        const description = (app.formData?.description || app.formData?.purpose || '').toLowerCase();
+
+        return subject.includes(searchTerm.toLowerCase()) ||
+          applicantName.includes(searchTerm.toLowerCase()) ||
+          description.includes(searchTerm.toLowerCase());
+      });
     }
 
     if (statusFilter !== 'all') {
@@ -181,6 +226,40 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     return archivedJournalEntries.find(entry =>
       entry.reference_id === applicationId && entry.status === 'posted'
     ) || null;
+  };
+
+  // 件名を生成する関数（ファイル名を除外）
+  const getApplicationSubject = (app: ApplicationWithDetails): string => {
+    // 1. 申請データの件名を優先
+    if (app.formData?.title && app.formData.title.trim() && !isFileName(app.formData.title)) {
+      return app.formData.title;
+    }
+    if (app.formData?.subject && app.formData.subject.trim() && !isFileName(app.formData.subject)) {
+      return app.formData.subject;
+    }
+
+    // 2. 申請内容の先頭N文字
+    const description = app.formData?.description || app.formData?.purpose || '';
+    if (description.trim() && !isFileName(description)) {
+      return description.length > 50 ? description.substring(0, 50) + '...' : description;
+    }
+
+    // 3. 申請種別の定型文
+    const applicationTypeName = app.applicationCode?.name || '申請';
+    return applicationTypeName;
+  };
+
+  // ファイル名かどうかを判定する関数
+  const isFileName = (text: string): boolean => {
+    // 拡張子付きのファイル名パターン
+    const fileNamePatterns = [
+      /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|png|jpg|jpeg|heic|gif|zip|rar)$/i,
+      /^[A-Za-z0-9_\-]+\.[A-Za-z0-9]+$/, // 基本的なファイル名形式
+      /^\d{4,}\./, // 数字だけのファイル名（例：20240201.pdf）
+      /^[A-F0-9]{8,}\./i // ハッシュのようなファイル名
+    ];
+
+    return fileNamePatterns.some(pattern => pattern.test(text.trim()));
   };
 
   // 逕ｳ隲九↓蟇ｾ蠢懊☆繧倶ｻ戊ｨｳ譏守ｴｰ繧貞叙蠕・
@@ -282,7 +361,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="font-semibold text-slate-800">
-                            {app.formData?.title || app.formData?.description || '申請'}
+                            {getApplicationSubject(app)}
                           </h3>
                           {journalEntry ? (
                             <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
