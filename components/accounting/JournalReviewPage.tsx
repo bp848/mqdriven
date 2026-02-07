@@ -23,6 +23,9 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AccountingStatus | 'all'>('all');
 
+  // 非表示用の状態
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+
   // 謇ｿ隱肴ｸ医∩逕ｳ隲九→draft迥ｶ諷九・莉戊ｨｳ繧貞叙蠕・
   const loadData = useCallback(async () => {
     if (!currentUser) return;
@@ -84,6 +87,11 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     }
   };
 
+  // カードを非表示にする
+  const handleHideCard = (appId: string) => {
+    setHiddenIds(prev => new Set(prev).add(appId));
+  };
+
   // 莉戊ｨｳ遒ｺ螳壼・逅・
   const handleConfirmJournal = async (journalEntryId: string | number) => {
     if (!currentUser) {
@@ -126,9 +134,12 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     }
   };
 
-  // 繝輔ぅ繝ｫ繧ｿ繝ｪ繝ｳ繧ｰ
+  // フィルタリング
   useEffect(() => {
     let filtered = applications;
+
+    // 非表示カードを除外
+    filtered = filtered.filter(app => !hiddenIds.has(app.id));
 
     if (searchTerm) {
       filtered = filtered.filter(app =>
@@ -142,7 +153,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     }
 
     setFilteredApplications(filtered);
-  }, [applications, searchTerm, statusFilter]);
+  }, [applications, searchTerm, statusFilter, hiddenIds]);
 
   useEffect(() => {
     loadData();
@@ -330,6 +341,15 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
                       </div>
 
                       <div className="ml-4 flex flex-col gap-2">
+                        {/* 非表示リンク */}
+                        <button
+                          onClick={() => handleHideCard(app.id)}
+                          className="px-3 py-1 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="このカードを非表示にする"
+                        >
+                          非表示にする
+                        </button>
+
                         {!journalEntry ? (
                           <button
                             onClick={() => handleGenerateJournal(app)}
