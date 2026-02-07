@@ -268,8 +268,17 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
               {filteredApplications.map((app) => {
                 const journalEntry = getJournalLinesForApplication(app.id);
                 return (
-                  <div key={app.id} className="p-6 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start justify-between">
+                  <div key={app.id} className="p-6 hover:bg-slate-50 transition-colors relative">
+                    {/* 非表示リンク - 右上に配置 */}
+                    <button
+                      onClick={() => handleHideCard(app.id)}
+                      className="absolute top-4 right-4 px-3 py-1 text-xs bg-white border border-slate-300 text-slate-600 hover:text-red-600 hover:border-red-300 rounded transition-colors shadow-sm"
+                      title="このカードを非表示にする"
+                    >
+                      ✕ 非表示
+                    </button>
+
+                    <div className="flex items-start justify-between pr-20"> {/* 右側にスペースを確保 */}
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="font-semibold text-slate-800">
@@ -341,15 +350,6 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
                       </div>
 
                       <div className="ml-4 flex flex-col gap-2">
-                        {/* 非表示リンク */}
-                        <button
-                          onClick={() => handleHideCard(app.id)}
-                          className="px-3 py-1 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="このカードを非表示にする"
-                        >
-                          非表示にする
-                        </button>
-
                         {!journalEntry ? (
                           <button
                             onClick={() => handleGenerateJournal(app)}
