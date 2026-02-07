@@ -27,6 +27,27 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
 
   // 謇ｿ隱肴ｸ医∩逕ｳ隲九→draft迥ｶ諷九・莉戊ｨｳ繧貞叙蠕・
+  // 会計仕訳対象かどうかを判定
+  const isAccountingTarget = (app: ApplicationWithDetails): boolean => {
+    // 休暇申請は除外
+    if (app.applicationCode?.name?.includes('休暇') ||
+      app.applicationCode?.name?.includes('休み')) {
+      return false;
+    }
+
+    // 金額が0またはnullは除外
+    const amount = app.formData?.totalAmount || app.formData?.amount || 0;
+    if (amount <= 0) {
+      return false;
+    }
+
+    // 経費精算、交通費、金額を伴う稟議申請のみ対象
+    const targetTypes = ['経費精算', '交通費', '稟議'];
+    return targetTypes.some(type =>
+      app.applicationCode?.name?.includes(type)
+    );
+  };
+
   const loadData = useCallback(async () => {
     if (!currentUser) return;
     setIsLoading(true);
@@ -37,14 +58,16 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
       const allApplications = await dataService.getApplications(currentUser.id);
       const targetApplications = allApplications.filter(app =>
         app.status === ApplicationStatus.APPROVED &&
-        (!app.accounting_status || app.accounting_status === AccountingStatus.NONE)
+        (!app.accounting_status || app.accounting_status === AccountingStatus.NONE) &&
+        isAccountingTarget(app) // 会計仕訳対象のみ
       );
       setApplications(targetApplications);
       setFilteredApplications(targetApplications);
 
       const archivedApps = allApplications.filter(app =>
         app.status === ApplicationStatus.APPROVED &&
-        app.accounting_status === AccountingStatus.POSTED
+        app.accounting_status === AccountingStatus.POSTED &&
+        isAccountingTarget(app) // 会計仕訳対象のみ
       );
       setArchivedApplications(archivedApps);
 
@@ -75,6 +98,12 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
       return;
     }
 
+    // 安全装置：会計仕訳対象かチェック
+    if (!isAccountingTarget(application)) {
+      alert('この申請は仕訳生成対象外です。');
+      return;
+    }
+
     try {
       // 莉戊ｨｳ譏守ｴｰ繧堤函謌・
       const result = await dataService.generateJournalLinesFromApplication(application.id);
@@ -90,43 +119,6 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
   // カードを非表示にする
   const handleHideCard = (appId: string) => {
     setHiddenIds(prev => new Set(prev).add(appId));
-  };
-
-  // 休暇申請をカレンダーに登録
-  const createCalendarEventForLeave = async (app: ApplicationWithDetails) => {
-    try {
-      // 休暇申請かどうかを判定
-      if (!app.applicationCode?.name.includes('休暇') &&
-        !app.applicationCode?.name.includes('休み')) {
-        return;
-      }
-
-      const leaveType = app.formData?.leaveType || '有休';
-      const applicantName = app.applicant?.name || '不明';
-      const approverName = currentUser?.name || '管理者';
-
-      // 予定タイトル
-      const eventTitle = `【休暇】${applicantName}（${leaveType}）`;
-
-      // 予定説明
-      const eventDescription = `この人は休みです\n\n休暇種別：${leaveType}\n申請番号：${app.id}\n承認者：${approverName}`;
-
-      // カレンダー登録APIを呼び出し（仮実装）
-      // TODO: 実際のカレンダーAPI実装
-      console.log('カレンダー登録:', {
-        title: eventTitle,
-        description: eventDescription,
-        startDate: app.formData?.startDate || app.approvedAt,
-        endDate: app.formData?.endDate || app.approvedAt,
-        isAllDay: app.formData?.isAllDay || true,
-        applicationId: app.id
-      });
-
-      console.log('休暇カレンダー登録完了:', app.id);
-    } catch (error: any) {
-      console.error('カレンダー登録エラー:', error);
-      // エラーでも承認処理は続行
-    }
   };
 
   // 莉戊ｨｳ遒ｺ螳壼・逅・
@@ -162,9 +154,6 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
         setApplications(prev => prev.filter(app => app.id !== applicationToArchive.id));
         setFilteredApplications(prev => prev.filter(app => app.id !== applicationToArchive.id));
         setArchivedApplications(prev => [archivedApplication, ...prev]);
-
-        // 休暇申請の場合はカレンダーに登録
-        await createCalendarEventForLeave(applicationToArchive);
       }
 
       alert('仕訳を確定しました。');
@@ -244,9 +233,10 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
       return description.length > 50 ? description.substring(0, 50) + '...' : description;
     }
 
-    // 3. 申請種別の定型文
+    // 3. 例外処理：件名が空で、内容も空の場合
     const applicationTypeName = app.applicationCode?.name || '申請';
-    return applicationTypeName;
+    const shortId = app.id.slice(0, 8);
+    return `${applicationTypeName} #${shortId}`;
   };
 
   // ファイル名かどうかを判定する関数
