@@ -34,14 +34,20 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
       const allApplications = await dataService.getApplications(currentUser.id);
       const targetApplications = allApplications.filter(app =>
         app.status === ApplicationStatus.APPROVED &&
-        (!app.accounting_status || app.accounting_status === AccountingStatus.NONE)
+        (!app.accounting_status || app.accounting_status === AccountingStatus.NONE) &&
+        // 休暇申請を除外
+        !app.applicationCode?.name?.includes('休暇') &&
+        !app.applicationCode?.name?.includes('休み')
       );
       setApplications(targetApplications);
       setFilteredApplications(targetApplications);
 
       const archivedApps = allApplications.filter(app =>
         app.status === ApplicationStatus.APPROVED &&
-        app.accounting_status === AccountingStatus.POSTED
+        app.accounting_status === AccountingStatus.POSTED &&
+        // 休暇申請を除外
+        !app.applicationCode?.name?.includes('休暇') &&
+        !app.applicationCode?.name?.includes('休み')
       );
       setArchivedApplications(archivedApps);
 
