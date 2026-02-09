@@ -166,8 +166,9 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
 
     const filteredUsers = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
-        if (!term) return users;
-        return users.filter(user => {
+        let filtered = users.filter(user => user.isActive !== false); // 無効ユーザーを除外
+        if (!term) return filtered;
+        return filtered.filter(user => {
             const fields = [
                 user.name,
                 user.email,
@@ -197,9 +198,8 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                     />
                     <button
                         onClick={() => handleOpenModal()}
-                        className={`flex items-center justify-center gap-2 font-semibold py-2 px-4 rounded-lg ${
-                            canManageUsers ? 'bg-blue-600 text-white' : 'bg-slate-400 text-slate-200 cursor-not-allowed'
-                        }`}
+                        className={`flex items-center justify-center gap-2 font-semibold py-2 px-4 rounded-lg ${canManageUsers ? 'bg-blue-600 text-white' : 'bg-slate-400 text-slate-200 cursor-not-allowed'
+                            }`}
                         disabled={!canManageUsers}
                     >
                         <PlusCircle className="w-5 h-5" />
@@ -254,11 +254,10 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                     </td>
                                     <td className="px-6 py-4">
                                         <span
-                                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                user.isActive === false
+                                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.isActive === false
                                                     ? 'bg-slate-200 text-slate-600'
                                                     : 'bg-emerald-100 text-emerald-800'
-                                            }`}
+                                                }`}
                                         >
                                             {user.isActive === false ? '無効' : '有効'}
                                         </span>
