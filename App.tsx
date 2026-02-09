@@ -1222,25 +1222,6 @@ const App: React.FC = () => {
                         onNewJob={() => setCreateJobModalOpen(true)}
                     />
                 );
-            case 'project_management':
-                return (
-                    <ProjectManagementPage
-                        projects={projects || []}
-                        isLoading={isLoading}
-                        onRefresh={loadAllData}
-                    />
-                );
-            case 'fax_ocr_intake':
-                return (
-                    <FaxOcrIntakePage
-                        currentUser={currentUser}
-                        addToast={addToast}
-                        onNavigateToOrders={() => handleNavigate('sales_orders')}
-                        onNavigateToEstimates={() => handleNavigate('sales_estimates')}
-                        customers={customers}
-                        paymentRecipients={paymentRecipients}
-                    />
-                );
             case 'sales_customers':
                 if (showBulkOCR) {
                     return <BusinessCardOCR
@@ -1298,8 +1279,6 @@ const App: React.FC = () => {
                         addToast('既存顧客のリードを追加しました。', 'success');
                     }}
                 />;
-            case 'sales_pipeline':
-                return <SalesPipelinePage jobs={jobs} onUpdateJob={handleUpdateJob} onCardClick={(job) => { setSelectedJob(job); setJobDetailModalOpen(true); }} />;
             case 'admin_user_management':
                 return <UserManagementPage addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} />;
             case 'admin_route_management':
@@ -1329,7 +1308,7 @@ const App: React.FC = () => {
                     addToast={addToast}
                     currentUser={currentUser}
                 />;
-            case 'accounting_journal': case 'sales_billing': case 'purchasing_invoices': case 'purchasing_payments': case 'hr_labor_cost': case 'accounting_trial_balance': case 'accounting_period_closing':
+            case 'accounting_journal':
                 return <AccountingPage page={currentPage} journalEntries={journalEntries || []} accountItems={accountItems || []} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs || []} applications={applications || []} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers || []} employees={employees || []} onRefreshData={loadAllData} />;
             case 'inventory_management':
                 return <InventoryManagementPage inventoryItems={inventoryItems || []} onSelectItem={(item) => { setSelectedInventoryItem(item); setIsCreateInventoryItemModalOpen(true); }} />;

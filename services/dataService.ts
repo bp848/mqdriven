@@ -74,10 +74,25 @@ const mapProjectStatus = (status?: string | null): JobStatus => {
 };
 
 const mapOrderStatus = (status?: string | null): PurchaseOrderStatus => {
+    // Map orders_v2 Japanese status to PurchaseOrderStatus
+    const statusMapping: Record<string, PurchaseOrderStatus> = {
+        '入金待ち': PurchaseOrderStatus.Ordered,
+        '請求待ち': PurchaseOrderStatus.Ordered,
+        '作業完了待ち': PurchaseOrderStatus.Ordered,
+        'ordered': PurchaseOrderStatus.Ordered,
+        '発注済': PurchaseOrderStatus.Ordered,
+        '受領済': PurchaseOrderStatus.Received,
+        'キャンセル': PurchaseOrderStatus.Cancelled,
+        'cancelled': PurchaseOrderStatus.Cancelled,
+    };
+
+    if (status && statusMapping[status]) {
+        return statusMapping[status];
+    }
     if (status && poStatusValues.has(status)) {
         return status as PurchaseOrderStatus;
     }
-    // Fallback to the standard 窶懃匱豕ｨ貂遺・state so UI badges remain consistent.
+    // Fallback to the standard state so UI badges remain consistent.
     return PurchaseOrderStatus.Ordered;
 };
 
@@ -1195,7 +1210,7 @@ export const getJobs = async (): Promise<Job[]> => {
     });
 };
 
-const fetchPurchaseOrdersWithFilters = async (filters: ProjectBudgetFilter = {}): Promise<PurchaseOrder[]> => {
+export const fetchPurchaseOrdersWithFilters = async (filters: ProjectBudgetFilter = {}): Promise<PurchaseOrder[]> => {
     const supabase = getSupabase();
 
     // First try orders_v2 table (new structure)
@@ -3643,7 +3658,7 @@ const mapEstimateRow = (row: any): Estimate => {
 
     // Project and customer names
     const projectName = toStringOrNull(row.project_name) || toStringOrNull(row.pattern_name);
-    const customerName = toStringOrNull(row.customer_name) || projectName || `鬘ｧ螳｢${row.estimates_id || row.id || '荳肴・'}`;
+    const customerName = toStringOrNull(row.customers?.customer_name) || toStringOrNull(row.customer_name) || projectName || `顧客${row.estimates_id || row.id || ''}`;
 
     // Display name
     const displayName = projectName || toStringOrNull(row.specification) || `隕狗ｩ・${row.estimates_id || row.id}`;
@@ -3917,11 +3932,17 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const from = Math.max(0, (page - 1) * pageSize);
     const to = from + pageSize - 1;
 
-    // 蜆ｪ蜈・ 鬘ｧ螳｢蜷・譯井ｻｶ蜷阪′隗｣豎ｺ貂医∩縺ｮ繝薙Η繝ｼ繧貞茜逕ｨ
-    console.log('Fetching from estimates_working_view...');
+    // 顧客情報をJOINして取得
+    console.log('Fetching from estimates_working_view with customer join...');
     const { data, error, count } = await supabase
         .from('estimates_working_view')
-        .select('*', { count: 'exact' })
+        .select(`
+            *,
+            customers!inner (
+                customer_name,
+                customer_code
+            )
+        `, { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 

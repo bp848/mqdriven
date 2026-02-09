@@ -186,6 +186,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                 <div>
                     <h2 className="text-xl font-semibold">ユーザー管理</h2>
                     <p className="mt-1 text-base text-slate-500">ユーザーの追加、編集、役割の変更を行います。</p>
+                    <p className="mt-1 text-sm text-slate-400">全 {users.length} 件中 {filteredUsers.length} 件を表示</p>
                 </div>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <input
@@ -255,8 +256,8 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                     <td className="px-6 py-4">
                                         <span
                                             className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.isActive === false
-                                                    ? 'bg-slate-200 text-slate-600'
-                                                    : 'bg-emerald-100 text-emerald-800'
+                                                ? 'bg-slate-200 text-slate-600'
+                                                : 'bg-emerald-100 text-emerald-800'
                                                 }`}
                                         >
                                             {user.isActive === false ? '無効' : '有効'}
