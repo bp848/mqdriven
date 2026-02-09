@@ -431,6 +431,32 @@ const insertInitialOrder = async (
     }
 };
 
+const ordersV2ToPurchaseOrder = (order: any): PurchaseOrder => {
+    const quantity = toNumberOrZero(order.quantity ?? 0);
+    const unitPrice = toNumberOrNull(order.unit_price);
+    const amount = toNumberOrNull(order.amount) ?? (unitPrice !== null ? unitPrice * quantity : null);
+    const costAmount = toNumberOrNull(order.variable_cost);
+
+    return {
+        id: order.id,
+        supplierName: order.customer_name || '',
+        paymentRecipientId: null,
+        itemName: order.item_name || '',
+        projectId: order.project_id ?? null,
+        projectCode: order.order_code || '',
+        orderCode: order.order_code || null,
+        orderDate: order.order_date || '',
+        quantity,
+        unitPrice: unitPrice ?? 0,
+        amount: amount ?? 0,
+        subamount: amount,
+        copies: quantity,
+        totalCost: costAmount ?? 0,
+        status: mapOrderStatus(order.status || 'ordered'),
+        raw: order,
+    };
+};
+
 const dbOrderToPurchaseOrder = (order: any): PurchaseOrder => {
     const quantity = toNumberOrZero(order.quantity ?? order.quantity_num ?? order.copies ?? 0);
     const salesAmount = toNumberOrNull(
@@ -1171,6 +1197,25 @@ export const getJobs = async (): Promise<Job[]> => {
 
 const fetchPurchaseOrdersWithFilters = async (filters: ProjectBudgetFilter = {}): Promise<PurchaseOrder[]> => {
     const supabase = getSupabase();
+
+    // First try orders_v2 table (new structure)
+    const tryOrdersV2 = async () => {
+        let query = supabase.from('orders_v2').select('*').order('created_at', { ascending: false });
+        if (filters.startDate) query = query.gte('order_date', filters.startDate);
+        if (filters.endDate) query = query.lte('order_date', filters.endDate);
+        const { data, error } = await query;
+        if (error) {
+            console.warn('[fetchPurchaseOrdersWithFilters] orders_v2 unavailable:', error.message);
+            return null;
+        }
+        return data;
+    };
+
+    // Try orders_v2 first
+    const ordersV2Data = await tryOrdersV2();
+    if (ordersV2Data && ordersV2Data.length > 0) {
+        return ordersV2Data.map(ordersV2ToPurchaseOrder);
+    }
 
     // Prefer orders_list_view for cleaned numeric fields; fallback to raw table if unavailable.
     const tryView = async () => {
