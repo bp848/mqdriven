@@ -175,8 +175,9 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  // Icon-only on mobile; compact width so content stays visible
-  const sidebarWidth = isCollapsed ? 'w-14 sm:w-20' : 'w-16 sm:w-56';
+  // Drawer visibility: only show when explicitly opened
+  const isDrawerOpen = isMobileOpen || !isCollapsed;
+  const sidebarWidth = 'w-64 sm:w-60';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   return (
@@ -185,24 +186,24 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       <button
         type="button"
         onClick={toggleMobileDrawer}
-        className="sm:hidden fixed top-3 left-3 z-50 inline-flex items-center justify-center rounded-lg bg-slate-800 text-white w-10 h-10 shadow-lg"
+        className="fixed top-3 left-3 z-50 inline-flex items-center justify-center rounded-lg bg-slate-800 text-white w-10 h-10 shadow-lg"
         aria-label="メニューを開く"
       >
         <ChevronRight className={`w-5 h-5 transition-transform ${isMobileOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Mobile backdrop */}
-      {isMobileOpen && (
+      {/* Backdrop */}
+      {isDrawerOpen && (
         <div
-          className="sm:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
           onClick={closeMobileDrawer}
           aria-hidden="true"
         />
       )}
 
       <aside
-        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-50
-        sm:translate-x-0 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} sm:transform-none fixed sm:static inset-y-0 left-0`}
+        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 z-50
+        ${isDrawerOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 pointer-events-none w-0'} fixed inset-y-0 left-0`}
       >
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
         <div className="flex items-center gap-2">
