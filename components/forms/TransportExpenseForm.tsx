@@ -58,7 +58,14 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
 
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
-    const totalAmount = useMemo(() => details.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [details]);
+    const totalAmount = useMemo(() => {
+        // 累計金額ではなく、各行の実費（差分）を合計する
+        return details.reduce((sum, item) => {
+            const amount = Number(item.amount) || 0;
+            // 負の値は無効とする（累計入力の検出）
+            return sum + (amount >= 0 ? amount : 0);
+        }, 0);
+    }, [details]);
 
     const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
 
@@ -180,13 +187,27 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     }
 
                     if (departure && arrival) {
+                        // 累計金額を検出し、差分金額に変換
+                        let parsedAmount = parseInt(amount.replace(/[^\d]/g, '')) || 0;
+
+                        // 前の行との差分を計算して累計を検出
+                        if (newDetails.length > 0 && parsedAmount > 0) {
+                            const lastAmount = newDetails[newDetails.length - 1].amount;
+                            const diff = parsedAmount - lastAmount;
+
+                            // 差分が0の場合は累計と判断し、差分金額を計算
+                            if (diff >= 0 && diff <= parsedAmount) {
+                                parsedAmount = diff;
+                            }
+                        }
+
                         newDetails.push({
                             id: `row_paste_${Date.now()}_${Math.random()}`,
                             travelDate: date,
                             departure: departure.trim(),
                             arrival: arrival.trim(),
                             transportMode: TRANSPORT_MODES.includes(transport) ? transport : TRANSPORT_MODES[0],
-                            amount: parseInt(amount.replace(/[^\d]/g, '')) || 0,
+                            amount: parsedAmount,
                         });
                     }
                 }
@@ -378,13 +399,27 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     }
 
                     if (departure && arrival) {
+                        // 累計金額を検出し、差分金額に変換
+                        let parsedAmount = parseInt(amount.replace(/[^\d]/g, '')) || 0;
+
+                        // 前の行との差分を計算して累計を検出
+                        if (newDetails.length > 0 && parsedAmount > 0) {
+                            const lastAmount = newDetails[newDetails.length - 1].amount;
+                            const diff = parsedAmount - lastAmount;
+
+                            // 差分が0の場合は累計と判断し、差分金額を計算
+                            if (diff >= 0 && diff <= parsedAmount) {
+                                parsedAmount = diff;
+                            }
+                        }
+
                         newDetails.push({
                             id: `row_excel_${Date.now()}_${i}`,
                             travelDate: date,
                             departure: departure.trim(),
                             arrival: arrival.trim(),
                             transportMode: TRANSPORT_MODES.includes(transport) ? transport : TRANSPORT_MODES[0],
-                            amount: parseInt(amount.replace(/[^\d]/g, '')) || 0,
+                            amount: parsedAmount,
                         });
                     }
                 }
@@ -678,6 +713,9 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                         <div className="text-right">
                             <span className="text-sm text-slate-500 dark:text-slate-400">合計金額: </span>
                             <span className="text-xl font-bold text-slate-800 dark:text-white">¥{totalAmount.toLocaleString()}</span>
+                            <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                ※各行は実費（差分）を入力してください
+                            </div>
                         </div>
                     </div>
                 </div>
