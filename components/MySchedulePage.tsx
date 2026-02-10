@@ -69,6 +69,37 @@ const APPLICATION_STATUS_STYLES: Record<ApplicationStatus, { label: string; clas
     cancelled: { label: '取下げ', className: 'bg-slate-200 text-slate-700 border border-slate-300' },
 };
 
+const buildDailyReportPlanEvents = (application: ApplicationWithDetails): CalendarEvent[] => {
+    const formData = application.formData ?? {};
+    const reportDate =
+        (typeof formData.reportDate === 'string' && formData.reportDate) ||
+        extractDatePart(application.submittedAt ?? application.createdAt) ||
+        '';
+    if (!reportDate) return [];
+    const planItems = Array.isArray(formData.planItems) ? formData.planItems : [];
+    const actualItems = Array.isArray(formData.actualItems) ? formData.actualItems : [];
+    const sourceItems = planItems.length > 0 ? planItems : actualItems;
+    if (sourceItems.length === 0) return [];
+
+    return sourceItems.map((item: any, index: number) => {
+        const action = item?.action || item?.result || item?.description || '日報計画';
+        const customer = item?.customerName ? ` / ${item.customerName}` : '';
+        const purpose = item?.purpose ? `目的: ${item.purpose}` : '';
+        const result = item?.result ? `実績: ${item.result}` : '';
+        const description = [purpose, result].filter(Boolean).join(' / ') || item?.purpose || item?.result || undefined;
+        return {
+            id: `daily-report-${application.id}-${item?.id ?? index}`,
+            date: reportDate,
+            title: `日報: ${action}${customer}`,
+            type: 'custom',
+            time: item?.start || undefined,
+            description,
+            origin: 'daily_report_plan',
+            metadata: { source: 'daily_report' },
+        } as CalendarEvent;
+    });
+};
+
 const DAILY_REPORT_STATUS_LABELS: Record<DailyReportCalendarStatus, string> = {
     submitted: '提出済',
     missing_today: '未提出',
@@ -495,7 +526,7 @@ const DayView: React.FC<{
     const handleDeleteActualItem = (id: string) => {
         onUpdateActualItems(actualItems.filter(item => item.id !== id));
     };
-    
+
     const inputClass = `w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed`;
 
     return (
@@ -512,36 +543,36 @@ const DayView: React.FC<{
                 )}
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Actual Column */}
-            <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">実績</h3>
-                <div className="mt-4 space-y-2">
-                    {actualItems.map(item => (
-                        <div key={item.id} className="flex items-center gap-2 group bg-white dark:bg-slate-800/50 p-2 rounded-lg">
-                            <input type="time" value={item.start} onChange={e => handleUpdateActualItem(item.id, { start: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                {/* Actual Column */}
+                <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
+                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">実績</h3>
+                    <div className="mt-4 space-y-2">
+                        {actualItems.map(item => (
+                            <div key={item.id} className="flex items-center gap-2 group bg-white dark:bg-slate-800/50 p-2 rounded-lg">
+                                <input type="time" value={item.start} onChange={e => handleUpdateActualItem(item.id, { start: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                                <span className="text-slate-400">～</span>
+                                <input type="time" value={item.end} onChange={e => handleUpdateActualItem(item.id, { end: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
+                                <input type="text" value={item.description} onChange={e => handleUpdateActualItem(item.id, { description: e.target.value })} className={`${inputClass} flex-grow`} disabled={!canEdit} />
+                                {canEdit && <button type="button" onClick={() => handleDeleteActualItem(item.id)} className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4" /></button>}
+                            </div>
+                        ))}
+                    </div>
+                    {canEdit && (
+                        <form onSubmit={handleAddActualItem} className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3 flex items-center gap-2">
+                            <input type="time" value={newActualItem.start} onChange={e => setNewActualItem({ ...newActualItem, start: e.target.value })} className={`${inputClass} w-24`} />
                             <span className="text-slate-400">～</span>
-                            <input type="time" value={item.end} onChange={e => handleUpdateActualItem(item.id, { end: e.target.value })} className={`${inputClass} w-24`} disabled={!canEdit} />
-                            <input type="text" value={item.description} onChange={e => handleUpdateActualItem(item.id, { description: e.target.value })} className={`${inputClass} flex-grow`} disabled={!canEdit} />
-                            {canEdit && <button type="button" onClick={() => handleDeleteActualItem(item.id)} className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4" /></button>}
-                        </div>
-                    ))}
+                            <input type="time" value={newActualItem.end} onChange={e => setNewActualItem({ ...newActualItem, end: e.target.value })} className={`${inputClass} w-24`} />
+                            <input type="text" value={newActualItem.description} onChange={e => setNewActualItem({ ...newActualItem, description: e.target.value })} placeholder="実績を入力" className={`${inputClass} flex-grow`} required />
+                            <button type="submit" className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><PlusCircle className="w-4 h-4" /></button>
+                        </form>
+                    )}
+                    {actualItems.length === 0 && !canEdit && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">この日の実績はありません。</p>
+                    )}
                 </div>
-                {canEdit && (
-                    <form onSubmit={handleAddActualItem} className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3 flex items-center gap-2">
-                        <input type="time" value={newActualItem.start} onChange={e => setNewActualItem({...newActualItem, start: e.target.value})} className={`${inputClass} w-24`} />
-                        <span className="text-slate-400">～</span>
-                        <input type="time" value={newActualItem.end} onChange={e => setNewActualItem({...newActualItem, end: e.target.value})} className={`${inputClass} w-24`} />
-                        <input type="text" value={newActualItem.description} onChange={e => setNewActualItem({...newActualItem, description: e.target.value})} placeholder="実績を入力" className={`${inputClass} flex-grow`} required />
-                        <button type="submit" className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><PlusCircle className="w-4 h-4" /></button>
-                    </form>
-                )}
-                 {actualItems.length === 0 && !canEdit && (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">この日の実績はありません。</p>
-                )}
-            </div>
 
-            {/* Plan Column */}
-            <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
+                {/* Plan Column */}
+                <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                 <div className="flex items-start justify-between gap-2">
                     <div>
                         <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">予定</h3>
@@ -555,34 +586,36 @@ const DayView: React.FC<{
                             <div className="flex flex-wrap items-start justify-between gap-2">
                                 <div>
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{typeLabels[event.type]}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        {event.origin === 'daily_report_plan' ? '日報計画' : typeLabels[event.type]}
+                                    </p>
                                     {event.origin === 'daily_report_plan' && (
                                         <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300 mt-1">
                                             日報から自動追加
                                         </p>
                                     )}
                                 </div>
-                                {event.time && (
-                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-full">{event.time}</span>
+                                    {event.time && (
+                                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-full">{event.time}</span>
+                                    )}
+                                </div>
+                                {event.description && (
+                                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{event.description}</p>
                                 )}
-                            </div>
-                            {event.description && (
-                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{event.description}</p>
-                            )}
-                            {event.type === 'custom' && canEdit && (
+                            {event.type === 'custom' && canEdit && event.origin !== 'daily_report_plan' && (
                                 <button
                                     type="button"
                                     onClick={() => onDeleteEvent(event.id)}
                                     className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
                                 >
-                                    <Trash2 className="w-3 h-3" />
-                                    削除
-                                </button>
-                            )}
-                        </div>
-                    ))}
+                                        <Trash2 className="w-3 h-3" />
+                                        削除
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </div>
             </div>
         </div>
     );
@@ -608,11 +641,10 @@ const WeekView: React.FC<{
                         type="button"
                         key={date}
                         onClick={() => onSelectDate(date)}
-                        className={`w-full rounded-2xl border p-3 text-left transition ${
-                            isSelected
+                        className={`w-full rounded-2xl border p-3 text-left transition ${isSelected
                                 ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
                                 : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
-                        }`}
+                            }`}
                     >
                         <div className="flex items-center justify-between">
                             <div className="text-[12px] font-semibold text-slate-500 dark:text-slate-300">{dayLabel}</div>
@@ -635,13 +667,14 @@ const WeekView: React.FC<{
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="font-semibold text-[13px] text-slate-900 dark:text-white line-clamp-2">{event.title}</p>
                                         <span
-                                            className={`text-[10px] px-2 py-0.5 rounded-full ${
-                                                event.origin === 'google'
+                                            className={`text-[10px] px-2 py-0.5 rounded-full ${event.origin === 'google'
                                                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
-                                                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                                            }`}
+                                                    : event.origin === 'daily_report_plan'
+                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                                }`}
                                         >
-                                            {event.origin === 'google' ? 'Google' : 'システム'}
+                                            {event.origin === 'google' ? 'Google' : event.origin === 'daily_report_plan' ? '日報' : 'システム'}
                                         </span>
                                     </div>
                                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -688,13 +721,12 @@ const MonthView: React.FC<{
                         type="button"
                         key={date}
                         onClick={() => onSelectDate(date)}
-                        className={`flex h-full flex-col items-start gap-1.5 rounded-xl border p-3 text-left text-[13px] transition ${
-                            isSelected
+                        className={`flex h-full flex-col items-start gap-1.5 rounded-xl border p-3 text-left text-[13px] transition ${isSelected
                                 ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
                                 : inMonth
                                     ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
                                     : 'border-transparent bg-slate-100/60 dark:bg-slate-900/40'
-                        }`}
+                            }`}
                     >
                         <span className={`text-base font-semibold ${inMonth ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
                             {dayNumber}
@@ -711,7 +743,12 @@ const MonthView: React.FC<{
                             <div className="w-full rounded-lg bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-2 text-left">
                                 <p className="text-[12px] font-semibold text-slate-900 dark:text-white line-clamp-1">{topEvent.title}</p>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
-                                    {topEvent.time ? topEvent.time : '終日'} {topEvent.origin === 'google' ? '・Google' : ''}
+                                    {topEvent.time ? topEvent.time : '終日'}
+                                    {topEvent.origin === 'google'
+                                        ? '・Google'
+                                        : topEvent.origin === 'daily_report_plan'
+                                            ? '・日報'
+                                            : ''}
                                 </p>
                             </div>
                         )}
@@ -849,6 +886,22 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         });
         return map;
     }, [dailyReportAppsForViewingUser]);
+
+    const dailyReportDetailByDate = useMemo(() => {
+        const map = new Map<string, { actualItems: ScheduleItem[]; planItems: ScheduleItem[] }>();
+        dailyReportAppsForViewingUser.forEach((application) => {
+            const formData = application.formData ?? {};
+            const reportDate =
+                (typeof formData.reportDate === 'string' && formData.reportDate) ||
+                extractDatePart(application.submittedAt ?? application.createdAt) ||
+                '';
+            if (!reportDate) return;
+            const actualItems = coerceScheduleItems(formData.actualItems);
+            const planItems = coerceScheduleItems(formData.planItems);
+            map.set(reportDate, { actualItems, planItems });
+        });
+        return map;
+    }, [dailyReportAppsForViewingUser]);
     const dailyReportStats = useMemo(() => {
         if (dailyReportEntries.length === 0) {
             return {
@@ -873,7 +926,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         const averageMinutes =
             entriesWithMinutes.length > 0
                 ? entriesWithMinutes.reduce((sum, entry) => sum + entry.totalMinutes, 0) /
-                  entriesWithMinutes.length
+                entriesWithMinutes.length
                 : 0;
         const pendingCount = dailyReportEntries.filter(
             (entry) => entry.status === 'pending_approval',
@@ -904,11 +957,11 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const selectableUsers = useMemo(() => {
         const map = new Map<string, EmployeeUser>();
         allUsers.forEach((user) => {
-            if (user?.id) {
+            if (user?.id && user.is_active !== false) {
                 map.set(user.id, user);
             }
         });
-        if (currentUser?.id) {
+        if (currentUser?.id && currentUser.is_active !== false) {
             map.set(currentUser.id, currentUser);
         }
         return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
@@ -968,7 +1021,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     useEffect(() => {
         loadRemoteEvents();
     }, [loadRemoteEvents]);
-    
+
     useEffect(() => {
         if (typeof window === 'undefined') {
             setActualItems([]);
@@ -977,15 +1030,21 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         try {
             const raw = window.localStorage.getItem(actualsStorageKey);
             const parsed = raw ? JSON.parse(raw) as ScheduleItem[] : [];
-            if (Array.isArray(parsed)) {
+            if (Array.isArray(parsed) && parsed.length > 0) {
                 setActualItems(parsed.filter(item => item && typeof item.description === 'string'));
-            } else {
-                setActualItems([]);
+                return;
             }
-        } catch {
+            const detail = dailyReportDetailByDate.get(selectedDate);
+            if (detail?.actualItems?.length) {
+                setActualItems(detail.actualItems);
+                return;
+            }
             setActualItems([]);
+        } catch {
+            const detail = dailyReportDetailByDate.get(selectedDate);
+            setActualItems(detail?.actualItems ?? []);
         }
-    }, [actualsStorageKey]);
+    }, [actualsStorageKey, selectedDate, dailyReportDetailByDate]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -1281,34 +1340,41 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     const aggregatedEvents = useMemo(() => {
         const entries: CalendarEvent[] = [];
 
-    jobs.forEach((job) => {
-        const plannedDate = extractDatePart(job.dueDate || job.createdAt);
-        if (!plannedDate) return;
-        entries.push({
-            id: `job-${job.id}`,
-            date: plannedDate,
-            title: job.title,
-            type: 'job',
-            description: job.details || job.clientName || undefined,
-            origin: 'system',
+        jobs.forEach((job) => {
+            const plannedDate = extractDatePart(job.dueDate || job.createdAt);
+            if (!plannedDate) return;
+            entries.push({
+                id: `job-${job.id}`,
+                date: plannedDate,
+                title: job.title,
+                type: 'job',
+                description: job.details || job.clientName || undefined,
+                origin: 'system',
+            });
         });
-    });
 
         purchaseOrders.forEach((order) => {
             const orderDate = extractDatePart(order.orderDate);
             if (!orderDate) return;
             entries.push({
-            id: `po-${order.id}`,
-            date: orderDate,
-            title: `発注：${order.itemName}`,
-            type: 'purchaseOrder',
-            description: order.supplierName || undefined,
-            origin: 'system',
+                id: `po-${order.id}`,
+                date: orderDate,
+                title: `発注：${order.itemName}`,
+                type: 'purchaseOrder',
+                description: order.supplierName || undefined,
+                origin: 'system',
+            });
         });
-    });
 
         applications.forEach((application) => {
             const code = application.applicationCode?.code;
+            if (code === 'DLY') {
+                const dailyEvents = buildDailyReportPlanEvents(application);
+                if (dailyEvents.length > 0) {
+                    entries.push(...dailyEvents);
+                    return;
+                }
+            }
             const formDate =
                 code === 'DLY'
                     ? extractDatePart(application.formData?.reportDate)
@@ -1324,17 +1390,30 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 '社内申請';
             const statusLabel =
                 APPLICATION_STATUS_STYLES[application.status as ApplicationStatus]?.label || '';
+            const formData = application.formData ?? {};
+            const detailCandidate = Array.isArray(formData.details) && formData.details.length > 0
+                ? formData.details[0]
+                : null;
+            const candidateName =
+                detailCandidate?.projectName ||
+                detailCandidate?.projectTitle ||
+                detailCandidate?.project_id ||
+                detailCandidate?.customerName ||
+                detailCandidate?.customCustomerName ||
+                formData.projectName ||
+                formData.customerName ||
+                '';
             const title =
                 code === 'DLY'
                     ? `日報${statusLabel ? `（${statusLabel}）` : ''}`
-                    : `申請：${label}`;
+                    : `申請：${label}${candidateName ? `・${candidateName}` : ''}`;
 
             entries.push({
                 id: `application-${application.id}`,
                 date: applicationDate,
                 title,
                 type: 'application',
-                description: application.applicant?.name || undefined,
+                description: candidateName ? `案件候補: ${candidateName}` : application.applicant?.name || undefined,
                 origin: 'system',
             });
         });
@@ -1650,13 +1729,12 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 type="button"
                                 onClick={handleGoogleAuthAction}
                                 disabled={googleActionDisabled}
-                                className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${
-                                    googleActionDisabled
+                                className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${googleActionDisabled
                                         ? 'bg-slate-400 cursor-not-allowed'
                                         : googleAuthConnected
                                             ? 'bg-red-600 hover:bg-red-700'
                                             : 'bg-blue-600 hover:bg-blue-700'
-                                }`}
+                                    }`}
                             >
                                 {googleActionInFlight
                                     ? '処理中...'
@@ -1687,11 +1765,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     type="button"
                                     key={option.id}
                                     onClick={() => setViewMode(option.id)}
-                                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                        viewMode === option.id
+                                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${viewMode === option.id
                                             ? 'border-blue-500 bg-blue-100 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-300'
                                             : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300'
-                                    }`}
+                                        }`}
                                 >
                                     {option.label}
                                 </button>
@@ -1704,11 +1781,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 type="button"
                                 onClick={handlePullFromGoogle}
                                 disabled={syncDisabled}
-                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                                    syncDisabled
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${syncDisabled
                                         ? 'border-slate-200 text-slate-400 cursor-not-allowed'
                                         : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
-                                }`}
+                                    }`}
                             >
                                 Google→システム
                             </button>
@@ -1716,11 +1792,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 type="button"
                                 onClick={handleSyncToGoogle}
                                 disabled={syncDisabled}
-                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                                    syncDisabled
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${syncDisabled
                                         ? 'border-slate-200 text-slate-400 cursor-not-allowed'
                                         : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
-                                }`}
+                                    }`}
                             >
                                 システム→Google
                             </button>
@@ -1728,11 +1803,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 type="button"
                                 onClick={handleBidirectionalSync}
                                 disabled={syncDisabled}
-                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                                    syncDisabled
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${syncDisabled
                                         ? 'border-slate-200 text-slate-400 cursor-not-allowed'
                                         : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
-                                }`}
+                                    }`}
                             >
                                 双方向同期
                             </button>
@@ -1740,11 +1814,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 type="button"
                                 onClick={handleReloadEvents}
                                 disabled={eventsLoading}
-                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                                    eventsLoading
+                                className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${eventsLoading
                                         ? 'border-slate-200 text-slate-400 cursor-not-allowed'
                                         : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
-                                }`}
+                                    }`}
                             >
                                 最新を再取得
                             </button>
@@ -1762,11 +1835,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             onClick={handleCreateDailyReport}
                             disabled={dailyReportButtonDisabled}
                             title={dailyReportButtonTitle}
-                            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                dailyReportButtonDisabled
+                            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${dailyReportButtonDisabled
                                     ? 'border-slate-200 text-slate-400 cursor-not-allowed'
                                     : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-                            }`}
+                                }`}
                         >
                             <PlusCircle className="w-4 h-4" />
                             日報作成
@@ -1843,11 +1915,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             type="button"
                             onClick={handleImportDailyReport}
                             disabled={isDailyReportTextEmpty}
-                            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-                                isDailyReportTextEmpty
+                            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${isDailyReportTextEmpty
                                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                                     : 'bg-blue-600 text-white hover:bg-blue-700'
-                            }`}
+                                }`}
                         >
                             <PlusCircle className="w-4 h-4" />
                             実績を取り込む
@@ -1928,9 +1999,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     value={newEvent.title}
                                     onChange={(e) => setNewEvent((prev) => ({ ...prev, title: e.target.value }))}
                                     ref={newEventTitleRef}
-                                    className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${
-                                        !canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
-                                    }`}
+                                    className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${!canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
                                     placeholder="顧客訪問 / 社内MTG"
                                     required
                                     disabled={!canEditCurrentCalendar}
@@ -1946,9 +2016,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                             setHasManualNewEventDate(true);
                                             setNewEvent((prev) => ({ ...prev, date: e.target.value }));
                                         }}
-                                        className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${
-                                            !canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
+                                        className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${!canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
+                                            }`}
                                         required
                                         disabled={!canEditCurrentCalendar}
                                     />
@@ -1959,9 +2028,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                         type="time"
                                         value={newEvent.time}
                                         onChange={(e) => setNewEvent((prev) => ({ ...prev, time: e.target.value }))}
-                                        className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${
-                                            !canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
+                                        className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${!canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
+                                            }`}
                                         disabled={!canEditCurrentCalendar}
                                     />
                                 </div>
@@ -1971,9 +2039,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 <textarea
                                     value={newEvent.description}
                                     onChange={(e) => setNewEvent((prev) => ({ ...prev, description: e.target.value }))}
-                                    className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${
-                                        !canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
-                                    }`}
+                                    className={`mt-1 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2 text-sm ${!canEditCurrentCalendar ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
                                     rows={3}
                                     placeholder="参加メンバー、持ち物など"
                                     disabled={!canEditCurrentCalendar}
@@ -1981,11 +2048,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             </div>
                             <button
                                 type="submit"
-                                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-white ${
-                                    canEditCurrentCalendar
+                                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-white ${canEditCurrentCalendar
                                         ? 'bg-emerald-600 hover:bg-emerald-700'
                                         : 'bg-slate-400 cursor-not-allowed'
-                                }`}
+                                    }`}
                                 disabled={!canEditCurrentCalendar}
                             >
                                 <PlusCircle className="w-4 h-4" />
