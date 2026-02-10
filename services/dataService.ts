@@ -5299,3 +5299,241 @@ export const saveEstimate = async (params: {
     ensureSupabaseSuccess(error, 'Failed to save estimate');
     return data.id;
 };
+
+// ORDER_V2 Sales Analysis Functions
+export interface SalesAnalysisData {
+    id: string;
+    order_code: string;
+    order_type: 'sales' | 'purchase' | 'subcontract' | 'internal';
+    order_date: string;
+    delivery_date: string | null;
+    quantity: number;
+    unit_price: number;
+    amount: number;
+    variable_cost: number;
+    status: string;
+    project_id: string;
+    project_code: string;
+    project_name: string;
+    customer_id: string;
+    customer_name: string;
+    customer_code: string;
+    sales_amount: number;
+    purchase_amount: number;
+    sales_variable_cost: number;
+    gross_profit: number;
+    profit_margin: number;
+    order_month: string;
+    order_quarter: string;
+    order_year: string;
+    status_category: 'active' | 'completed' | 'cancelled' | 'other';
+    delivery_days: number | null;
+    is_overdue: boolean;
+}
+
+export interface SalesDashboardMetrics {
+    thisMonthSales: number;
+    thisMonthOrders: number;
+    thisMonthProfit: number;
+    thisMonthMargin: number;
+    totalSales: number;
+    totalOrders: number;
+    totalProfit: number;
+    totalMargin: number;
+    overdueOrders: number;
+    activeOrders: number;
+    monthlySalesData: Array<{ month: string; sales: number; profit: number; orders: number }>;
+    topCustomers: Array<{ customer_name: string; sales: number; orders: number }>;
+    orderTypeBreakdown: Array<{ type: string; amount: number; count: number }>;
+    statusBreakdown: Array<{ status: string; count: number; amount: number }>;
+}
+
+export const fetchSalesAnalysisData = async (filters?: {
+    startDate?: string;
+    endDate?: string;
+    orderType?: string;
+}): Promise<SalesAnalysisData[]> => {
+    const supabase = getSupabase();
+
+    let query = supabase
+        .from('v_sales_analysis')
+        .select('*')
+        .order('order_date', { ascending: false });
+
+    if (filters?.startDate) {
+        query = query.gte('order_date', filters.startDate);
+    }
+    if (filters?.endDate) {
+        query = query.lte('order_date', filters.endDate);
+    }
+    if (filters?.orderType) {
+        query = query.eq('order_type', filters.orderType);
+    }
+
+    const { data, error } = await query;
+    ensureSupabaseSuccess(error, 'Failed to fetch sales analysis data');
+
+    return (data || []).map(row => ({
+        id: row.id,
+        order_code: row.order_code,
+        order_type: row.order_type,
+        order_date: row.order_date,
+        delivery_date: row.delivery_date,
+        quantity: toNumberOrZero(row.quantity),
+        unit_price: toNumberOrZero(row.unit_price),
+        amount: toNumberOrZero(row.amount),
+        variable_cost: toNumberOrZero(row.variable_cost),
+        status: row.status,
+        project_id: row.project_id,
+        project_code: row.project_code,
+        project_name: row.project_name,
+        customer_id: row.customer_id,
+        customer_name: row.customer_name,
+        customer_code: row.customer_code,
+        sales_amount: toNumberOrZero(row.sales_amount),
+        purchase_amount: toNumberOrZero(row.purchase_amount),
+        sales_variable_cost: toNumberOrZero(row.sales_variable_cost),
+        gross_profit: toNumberOrZero(row.gross_profit),
+        profit_margin: toNumberOrZero(row.profit_margin),
+        order_month: row.order_month,
+        order_quarter: row.order_quarter,
+        order_year: row.order_year,
+        status_category: row.status_category,
+        delivery_days: row.delivery_days,
+        is_overdue: row.is_overdue,
+    }));
+};
+
+export const fetchSalesDashboardMetrics = async (): Promise<SalesDashboardMetrics> => {
+    const supabase = getSupabase();
+
+    // Get current date ranges
+    const today = new Date();
+    const thisMonth = today.getMonth();
+    const thisYear = today.getFullYear();
+    const monthStart = new Date(thisYear, thisMonth, 1).toISOString().split('T')[0];
+
+    // Fetch all sales analysis data
+    const { data, error } = await supabase
+        .from('v_sales_analysis')
+        .select('*')
+        .order('order_date', { ascending: false });
+
+    ensureSupabaseSuccess(error, 'Failed to fetch sales dashboard metrics');
+    const allData = data || [];
+
+    // Calculate metrics
+    const thisMonthData = allData.filter(row => {
+        const orderDate = new Date(row.order_date);
+        return orderDate.getFullYear() === thisYear && orderDate.getMonth() === thisMonth;
+    });
+
+    const thisMonthSales = thisMonthData
+        .filter(row => row.order_type === 'sales')
+        .reduce((sum, row) => sum + toNumberOrZero(row.amount), 0);
+
+    const thisMonthOrders = thisMonthData.length;
+
+    const thisMonthProfit = thisMonthData
+        .filter(row => row.order_type === 'sales')
+        .reduce((sum, row) => sum + toNumberOrZero(row.gross_profit), 0);
+
+    const thisMonthMargin = thisMonthSales > 0 ? (thisMonthProfit / thisMonthSales) * 100 : 0;
+
+    const totalSales = allData
+        .filter(row => row.order_type === 'sales')
+        .reduce((sum, row) => sum + toNumberOrZero(row.amount), 0);
+
+    const totalOrders = allData.length;
+
+    const totalProfit = allData
+        .filter(row => row.order_type === 'sales')
+        .reduce((sum, row) => sum + toNumberOrZero(row.gross_profit), 0);
+
+    const totalMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+
+    const overdueOrders = allData.filter(row => row.is_overdue).length;
+    const activeOrders = allData.filter(row => row.status_category === 'active').length;
+
+    // Monthly sales data (last 12 months)
+    const monthlySalesData: Array<{ month: string; sales: number; profit: number; orders: number }> = [];
+    for (let i = 0; i < 12; i++) {
+        const d = new Date(thisYear, thisMonth - i, 1);
+        const monthKey = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthData = allData.filter(row => {
+            const orderDate = new Date(row.order_date);
+            return orderDate.getFullYear() === d.getFullYear() && orderDate.getMonth() === d.getMonth();
+        });
+
+        monthlySalesData.push({
+            month: monthKey,
+            sales: monthData
+                .filter(row => row.order_type === 'sales')
+                .reduce((sum, row) => sum + toNumberOrZero(row.amount), 0),
+            profit: monthData
+                .filter(row => row.order_type === 'sales')
+                .reduce((sum, row) => sum + toNumberOrZero(row.gross_profit), 0),
+            orders: monthData.length,
+        });
+    }
+
+    // Top customers
+    const customerMap = new Map<string, { sales: number; orders: number; name: string }>();
+    allData
+        .filter(row => row.order_type === 'sales' && row.customer_name)
+        .forEach(row => {
+            const customer = row.customer_name;
+            const current = customerMap.get(customer) || { sales: 0, orders: 0, name: customer };
+            current.sales += toNumberOrZero(row.amount);
+            current.orders += 1;
+            customerMap.set(customer, current);
+        });
+
+    const topCustomers = Array.from(customerMap.values())
+        .sort((a, b) => b.sales - a.sales)
+        .slice(0, 10)
+        .map(({ name, sales, orders }) => ({ customer_name: name, sales, orders }));
+
+    // Order type breakdown
+    const orderTypeMap = new Map<string, { amount: number; count: number }>();
+    allData.forEach(row => {
+        const type = row.order_type;
+        const current = orderTypeMap.get(type) || { amount: 0, count: 0 };
+        current.amount += toNumberOrZero(row.amount);
+        current.count += 1;
+        orderTypeMap.set(type, current);
+    });
+
+    const orderTypeBreakdown = Array.from(orderTypeMap.entries())
+        .map(([type, data]) => ({ type, amount: data.amount, count: data.count }));
+
+    // Status breakdown
+    const statusMap = new Map<string, { count: number; amount: number }>();
+    allData.forEach(row => {
+        const status = row.status_category;
+        const current = statusMap.get(status) || { count: 0, amount: 0 };
+        current.count += 1;
+        current.amount += toNumberOrZero(row.amount);
+        statusMap.set(status, current);
+    });
+
+    const statusBreakdown = Array.from(statusMap.entries())
+        .map(([status, data]) => ({ status, count: data.count, amount: data.amount }));
+
+    return {
+        thisMonthSales,
+        thisMonthOrders,
+        thisMonthProfit,
+        thisMonthMargin,
+        totalSales,
+        totalOrders,
+        totalProfit,
+        totalMargin,
+        overdueOrders,
+        activeOrders,
+        monthlySalesData: monthlySalesData.reverse(),
+        topCustomers,
+        orderTypeBreakdown,
+        statusBreakdown,
+    };
+};

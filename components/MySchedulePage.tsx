@@ -573,28 +573,28 @@ const DayView: React.FC<{
 
                 {/* Plan Column */}
                 <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                <div className="flex items-start justify-between gap-2">
-                    <div>
-                        <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">予定</h3>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">日報の計画/実績から自動挿入されます</p>
+                    <div className="flex items-start justify-between gap-2">
+                        <div>
+                            <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">予定</h3>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">日報の計画/実績から自動挿入されます</p>
+                        </div>
                     </div>
-                </div>
-                <div className="mt-4 space-y-3">
-                    {planEvents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">日報の計画/実績が未入力です。</p>}
-                    {planEvents.map((event) => (
-                        <div key={event.id} className="rounded-xl bg-white dark:bg-slate-800/50 p-3 shadow-sm border border-slate-200 dark:border-slate-700">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        {event.origin === 'daily_report_plan' ? '日報計画' : typeLabels[event.type]}
-                                    </p>
-                                    {event.origin === 'daily_report_plan' && (
-                                        <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300 mt-1">
-                                            日報から自動追加
+                    <div className="mt-4 space-y-3">
+                        {planEvents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">日報の計画/実績が未入力です。</p>}
+                        {planEvents.map((event) => (
+                            <div key={event.id} className="rounded-xl bg-white dark:bg-slate-800/50 p-3 shadow-sm border border-slate-200 dark:border-slate-700">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{event.title}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            {event.origin === 'daily_report_plan' ? '日報計画' : typeLabels[event.type]}
                                         </p>
-                                    )}
-                                </div>
+                                        {event.origin === 'daily_report_plan' && (
+                                            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300 mt-1">
+                                                日報から自動追加
+                                            </p>
+                                        )}
+                                    </div>
                                     {event.time && (
                                         <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-full">{event.time}</span>
                                     )}
@@ -602,12 +602,12 @@ const DayView: React.FC<{
                                 {event.description && (
                                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{event.description}</p>
                                 )}
-                            {event.type === 'custom' && canEdit && event.origin !== 'daily_report_plan' && (
-                                <button
-                                    type="button"
-                                    onClick={() => onDeleteEvent(event.id)}
-                                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
-                                >
+                                {event.type === 'custom' && canEdit && event.origin !== 'daily_report_plan' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onDeleteEvent(event.id)}
+                                        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
+                                    >
                                         <Trash2 className="w-3 h-3" />
                                         削除
                                     </button>
@@ -642,8 +642,8 @@ const WeekView: React.FC<{
                         key={date}
                         onClick={() => onSelectDate(date)}
                         className={`w-full rounded-2xl border p-3 text-left transition ${isSelected
-                                ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
-                                : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                            ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
+                            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
                             }`}
                     >
                         <div className="flex items-center justify-between">
@@ -668,10 +668,10 @@ const WeekView: React.FC<{
                                         <p className="font-semibold text-[13px] text-slate-900 dark:text-white line-clamp-2">{event.title}</p>
                                         <span
                                             className={`text-[10px] px-2 py-0.5 rounded-full ${event.origin === 'google'
-                                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
-                                                    : event.origin === 'daily_report_plan'
-                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
+                                                : event.origin === 'daily_report_plan'
+                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                                                 }`}
                                         >
                                             {event.origin === 'google' ? 'Google' : event.origin === 'daily_report_plan' ? '日報' : 'システム'}
@@ -722,10 +722,10 @@ const MonthView: React.FC<{
                         key={date}
                         onClick={() => onSelectDate(date)}
                         className={`flex h-full flex-col items-start gap-1.5 rounded-xl border p-3 text-left text-[13px] transition ${isSelected
-                                ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
-                                : inMonth
-                                    ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
-                                    : 'border-transparent bg-slate-100/60 dark:bg-slate-900/40'
+                            ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/40 shadow-sm'
+                            : inMonth
+                                ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                                : 'border-transparent bg-slate-100/60 dark:bg-slate-900/40'
                             }`}
                     >
                         <span className={`text-base font-semibold ${inMonth ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
@@ -1735,10 +1735,10 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onClick={handleGoogleAuthAction}
                                 disabled={googleActionDisabled}
                                 className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${googleActionDisabled
-                                        ? 'bg-slate-400 cursor-not-allowed'
-                                        : googleAuthConnected
-                                            ? 'bg-red-600 hover:bg-red-700'
-                                            : 'bg-blue-600 hover:bg-blue-700'
+                                    ? 'bg-slate-400 cursor-not-allowed'
+                                    : googleAuthConnected
+                                        ? 'bg-red-600 hover:bg-red-700'
+                                        : 'bg-blue-600 hover:bg-blue-700'
                                     }`}
                             >
                                 {googleActionInFlight
@@ -1771,8 +1771,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                     key={option.id}
                                     onClick={() => setViewMode(option.id)}
                                     className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${viewMode === option.id
-                                            ? 'border-blue-500 bg-blue-100 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-300'
-                                            : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300'
+                                        ? 'border-blue-500 bg-blue-100 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-300'
+                                        : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300'
                                         }`}
                                 >
                                     {option.label}
@@ -1787,8 +1787,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onClick={handlePullFromGoogle}
                                 disabled={syncDisabled}
                                 className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${syncDisabled
-                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
                                     }`}
                             >
                                 Google→システム
@@ -1798,8 +1798,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onClick={handleSyncToGoogle}
                                 disabled={syncDisabled}
                                 className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${syncDisabled
-                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
                                     }`}
                             >
                                 システム→Google
@@ -1809,8 +1809,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onClick={handleBidirectionalSync}
                                 disabled={syncDisabled}
                                 className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${syncDisabled
-                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
                                     }`}
                             >
                                 双方向同期
@@ -1820,8 +1820,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                                 onClick={handleReloadEvents}
                                 disabled={eventsLoading}
                                 className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${eventsLoading
-                                        ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
+                                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700'
                                     }`}
                             >
                                 最新を再取得
@@ -1841,8 +1841,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             disabled={dailyReportButtonDisabled}
                             title={dailyReportButtonTitle}
                             className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${dailyReportButtonDisabled
-                                    ? 'border-slate-200 text-slate-400 cursor-not-allowed'
-                                    : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                                ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                                 }`}
                         >
                             <PlusCircle className="w-4 h-4" />
@@ -1921,8 +1921,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             onClick={handleImportDailyReport}
                             disabled={isDailyReportTextEmpty}
                             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${isDailyReportTextEmpty
-                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
                                 }`}
                         >
                             <PlusCircle className="w-4 h-4" />
@@ -2054,8 +2054,8 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                             <button
                                 type="submit"
                                 className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-white ${canEditCurrentCalendar
-                                        ? 'bg-emerald-600 hover:bg-emerald-700'
-                                        : 'bg-slate-400 cursor-not-allowed'
+                                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                                    : 'bg-slate-400 cursor-not-allowed'
                                     }`}
                                 disabled={!canEditCurrentCalendar}
                             >
