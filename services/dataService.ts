@@ -5427,61 +5427,46 @@ export const fetchSalesDashboardMetrics = async (): Promise<SalesDashboardMetric
 
     const metrics = sqlResult[0];
 
-    // 月次データを取得
-    const { data: monthlyData, error: monthlyError } = await supabase
-        .from('v_sales_analysis')
-        .select('order_month, sales_amount, gross_profit')
-        .eq('order_type', 'sales')
-        .gte('order_month', new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1).toISOString().split('T')[0])
-        .order('order_month');
+    // RPC関数から直接月次データを取得
+    const monthlySalesData = (metrics.monthly_sales || []).map((item: any) => ({
+        month: item.month,
+        sales: Number(item.sales),
+        profit: 0, // RPC関数に利益データがない場合は0
+        orders: 0   // RPC関数に注文数データがない場合は0
+    }));
 
-    const monthlySalesData: Array<{ month: string; sales: number; profit: number; orders: number }> = [];
-
-    if (!monthlyError && monthlyData) {
-        monthlyData.forEach(row => {
-            monthlySalesData.push({
-                month: new Date(row.order_month).toISOString().slice(0, 7).replace('-', '/'),
-                sales: row.sales_amount || 0,
-                profit: row.gross_profit || 0,
-                orders: 0 // 注文数は別途取得
-            });
-        });
-    }
-
-    // トップ顧客データを取得
-    const { data: customerData, error: customerError } = await supabase
-        .from('v_sales_analysis')
-        .select('customer_name, sales_amount')
-        .eq('order_type', 'sales')
-        .gte('order_date', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-        .order('sales_amount', { ascending: false })
-        .limit(10);
-
-    const topCustomers = customerData || [];
+    // トップ顧客データをRPC関数から取得
+    const topCustomersData = (metrics.top_customers || []).map((item: any) => ({
+        customer: item.name,
+        sales: Number(item.amount),
+        orders: item.count || 0
+    }));
 
     return {
-        thisMonthSales: metrics.current_month_sales || 0,
-        thisMonthOrders: metrics.current_month_orders || 0,
-        thisMonthProfit: metrics.current_month_profit || 0,
-        thisMonthMargin: metrics.current_month_margin || 0,
-        totalSales: metrics.current_month_sales || 0, // 今月と同じ
-        totalOrders: metrics.current_month_orders || 0,
-        totalProfit: metrics.current_month_profit || 0,
-        totalMargin: metrics.current_month_margin || 0,
-        overdueOrders: metrics.overdue_orders || 0,
-        activeOrders: metrics.active_orders || 0,
-        monthlySalesData: monthlySalesData.reverse(),
-        topCustomers: topCustomers.map(c => ({
-            customer_name: c.customer_name,
-            sales: c.sales_amount,
-            orders: 1
-        })),
-        orderTypeBreakdown: [],
-        statusBreakdown: [],
+        thisMonthSales: Number(metrics.current_month_sales) || 0,
+        thisMonthOrders: Number(metrics.current_month_orders) || 0,
+        thisMonthProfit: Number(metrics.current_month_profit) || 0,
+        thisMonthMargin: Number(metrics.current_month_margin) || 0,
+        totalSales: Number(metrics.current_month_sales) || 0,
+        totalOrders: Number(metrics.current_month_orders) || 0,
+        totalProfit: Number(metrics.current_month_profit) || 0,
+        totalMargin: Number(metrics.current_month_margin) || 0,
+        overdueOrders: Number(metrics.overdue_orders) || 0,
+        activeOrders: Number(metrics.active_orders) || 0,
+        monthlySalesData: monthlySalesData,
+        topCustomers: topCustomersData,
+        orderTypeBreakdown: [
+            { type: 'completed', count: Number(metrics.order_types?.completed) || 0 },
+            { type: 'active', count: Number(metrics.order_types?.active) || 0 }
+        ],
+        statusBreakdown: [
+            { status: 'completed', count: Number(metrics.order_types?.completed) || 0 },
+            { status: 'active', count: Number(metrics.order_types?.active) || 0 }
+        ],
         topSalesReps: [],
         pipelineStats: {
-            quotes: metrics.current_month_orders || 0,
-            orders: metrics.current_month_orders || 0,
+            quotes: Number(metrics.current_month_orders) || 0,
+            orders: Number(metrics.current_month_orders) || 0,
             delivered: Math.floor((metrics.current_month_orders || 0) * 0.98)
         },
         monthlyPerformance: monthlySalesData.slice(0, 6),
