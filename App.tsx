@@ -69,6 +69,7 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
+import PageShell from './components/ui/PageShell';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -1612,7 +1613,9 @@ const App: React.FC = () => {
                 <div className={`flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
                     <Header {...headerConfig} />
                     <div className="mt-8">
-                        {renderContent()}
+                        <PageShell>
+                            {renderContent()}
+                        </PageShell>
                     </div>
                 </div>
                 {isLoading && !dbError && (

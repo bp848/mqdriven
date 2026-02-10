@@ -607,7 +607,7 @@ const TransportExpenseForm: React.FC<TransportExpenseFormProps> = ({ onSuccess, 
                     {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                 </div>
             )}
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up">
+            <form onSubmit={handleSubmit} className="p-8 rounded-2xl shadow-sm space-y-8 animate-fade-in-up">
 
                 {formLoadError && (
                     <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">

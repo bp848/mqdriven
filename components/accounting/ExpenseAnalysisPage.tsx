@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  getExpenseLinesData, 
-  getExpenseByMonthAccount, 
-  getExpenseByMonthSupplier, 
-  getExpenseByMonthProject 
+import {
+  getExpenseLinesData,
+  getExpenseByMonthAccount,
+  getExpenseByMonthSupplier,
+  getExpenseByMonthProject
 } from '../../services/dataService';
 import { Loader, TrendingUp } from '../Icons';
 import EmptyState from '../ui/EmptyState';
@@ -113,7 +113,7 @@ const ExpenseAnalysisPage: React.FC = () => {
   if (!hasData) {
     return (
       <div className="text-center py-8">
-        <EmptyState 
+        <EmptyState
           icon={TrendingUp}
           title="データ未集計"
           message="経費データがまだ集計されていません"
@@ -132,7 +132,7 @@ const ExpenseAnalysisPage: React.FC = () => {
       </div>
 
       {/* Summary Card */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
+      <div className="rounded-lg shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400">総経費額</p>
@@ -167,11 +167,10 @@ const ExpenseAnalysisPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+                }`}
             >
               {tab.label}
             </button>
@@ -184,7 +183,7 @@ const ExpenseAnalysisPage: React.FC = () => {
         {activeTab === 'details' && (
           <div className="overflow-x-auto">
             {expenseLines.length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={TrendingUp}
                 title="データ未集計"
                 message="経費明細データがまだ集計されていません"
@@ -312,7 +311,7 @@ const ExpenseAnalysisPage: React.FC = () => {
         {activeTab === 'byAccount' && (
           <div className="overflow-x-auto">
             {byAccount.length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={TrendingUp}
                 title="データ未集計"
                 message="勘定科目別の集計データがまだ集計されていません"
@@ -361,7 +360,7 @@ const ExpenseAnalysisPage: React.FC = () => {
         {activeTab === 'bySupplier' && (
           <div className="overflow-x-auto">
             {bySupplier.length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={TrendingUp}
                 title="データ未集計"
                 message="仕入先別の集計データがまだ集計されていません"
@@ -404,7 +403,7 @@ const ExpenseAnalysisPage: React.FC = () => {
         {activeTab === 'byProject' && (
           <div className="overflow-x-auto">
             {byProject.length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={TrendingUp}
                 title="データ未集計"
                 message="プロジェクト別の集計データがまだ集計されていません"

@@ -117,6 +117,9 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
     );
   }
 
+  const inputClass = "w-full p-2 rounded-md border border-slate-300 dark:border-slate-600 focus:ring-blue-500 focus:border-blue-500";
+  const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1";
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -125,10 +128,9 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
           {isAdmin ? '管理者編集可能' : '参照専用'}
         </div>
       </div>
-
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead>
             <tr>
               <SortableHeader
                 title="日付"

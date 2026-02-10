@@ -181,7 +181,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
     }, [users, searchTerm]);
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm">
+        <div className="rounded-2xl shadow-sm">
             <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-xl font-semibold">ユーザー管理</h2>

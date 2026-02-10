@@ -88,7 +88,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = ({ jobs, leads }) => {
                 <StatCard title="コンバージョン率 (累計)" value={`${salesData.conversionRate.toFixed(1)}%`} icon={<TrendingUp className="w-6 h-6 text-purple-600" />} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm">
+                <div className="p-6 rounded-2xl shadow-sm">
                     <h3 className="text-xl font-semibold mb-4">月別売上</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={salesData.salesChartData}>
@@ -100,7 +100,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = ({ jobs, leads }) => {
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm">
+                <div className="p-6 rounded-2xl shadow-sm">
                     <h3 className="text-xl font-semibold mb-4">リードソース分析</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <PieChart>

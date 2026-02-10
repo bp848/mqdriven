@@ -74,7 +74,7 @@ const SalesPipelinePage: React.FC<SalesPipelinePageProps> = ({ jobs, onUpdateJob
     }, [jobs]);
 
     return (
-        <div className="flex gap-4 overflow-x-auto pb-4 -mx-8 px-8 h-full">
+        <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 h-full">
             {COLUMNS_ORDER.map(status => {
                 const jobsInColumn = jobsByStatus[status];
                 const totalP = jobsInColumn.reduce((sum, job) => sum + job.price, 0);
