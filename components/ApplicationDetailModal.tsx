@@ -561,17 +561,9 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
             return '-';
         }
         
-        // Handle markdown files and text content
         if (typeof value === 'string') {
-            // Check if it's markdown content
-            if (value.includes('#') || value.includes('**') || value.includes('*')) {
-                return (
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                        <div className="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded-lg whitespace-pre-wrap font-mono">{value}</div>
-                    </div>
-                );
-            }
-            // Check if it's a file path to .md file
+            const trimmed = value.trim();
+            if (!trimmed) return '-';
             if (value.endsWith('.md') && value.length < 200) {
                 return (
                     <div className="flex items-center gap-2">
@@ -580,6 +572,11 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                     </div>
                 );
             }
+            return (
+                <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200 text-left leading-relaxed">
+                    {value}
+                </p>
+            );
         }
         
         return value;
@@ -675,6 +672,51 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         };
     });
 
+    const primaryMetaRows = [
+        { label: '申請ID', value: application.id },
+        { label: '申請種別', value: applicationCode?.name || null },
+        { label: '申請者', value: application.applicant?.name || null },
+        { label: 'ステータス', value: <ApplicationStatusBadge status={application.status} /> },
+        { label: '提出日時', value: application.submittedAt ? new Date(application.submittedAt).toLocaleString('ja-JP') : null },
+        { label: '更新日時', value: application.updatedAt ? new Date(application.updatedAt).toLocaleString('ja-JP') : null },
+        { label: '承認ルート', value: approvalRoute?.name || null },
+    ];
+
+    const visibleFormRows = formDataRows.filter(row => isFilled(row.value));
+    const compactFormRows = visibleFormRows.filter(row => typeof row.value !== 'object').slice(0, 12);
+    const extraFormRowCount = Math.max(0, visibleFormRows.length - compactFormRows.length);
+
+    const renderInfoSection = (title: string, rows: { label: string; value: React.ReactNode }[], footer?: React.ReactNode) => {
+        const visibleRows = rows.filter(row => isFilled(row.value));
+        if (!visibleRows.length) return null;
+        return (
+            <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
+                <dl className="space-y-2">
+                    {visibleRows.map((row, index) => {
+                        const isBlockValue =
+                            typeof row.value === 'string'
+                                ? row.value.includes('\n') || row.value.length > 40
+                                : typeof row.value === 'object' || React.isValidElement(row.value);
+                        return (
+                            <div key={`${title}-row-${index}`} className="flex items-start justify-between gap-4 text-sm">
+                                <dt className="text-slate-500 dark:text-slate-400">{row.label}</dt>
+                                <dd
+                                    className={`font-semibold text-slate-900 dark:text-white break-words max-w-[60%] ${
+                                        isBlockValue ? 'text-left' : 'text-right'
+                                    }`}
+                                >
+                                    {renderValue(row.value)}
+                                </dd>
+                            </div>
+                        );
+                    })}
+                </dl>
+                {footer}
+            </section>
+        );
+    };
+
     return (
         <>
             <div className="fixed inset-0 z-50 bg-slate-950/70 p-4 md:p-8 font-sans">
@@ -716,12 +758,24 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                             <div key={`summary-list-${sectionIndex}`} className="rounded-2xl border border-white/40 dark:border-slate-700/60 bg-white/90 dark:bg-slate-900/60 p-4">
                                                 <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{section.title}</h3>
                                                 <dl className="mt-4 space-y-2">
-                                                    {section.items.map((item, itemIndex) => (
-                                                        <div key={`summary-list-item-${sectionIndex}-${itemIndex}`} className="flex items-start justify-between gap-4 text-sm">
-                                                            <dt className="text-slate-500 dark:text-slate-400">{item.label}</dt>
-                                                            <dd className="text-right font-semibold text-slate-900 dark:text-white break-words max-w-[60%]">{typeof item.value === 'string' ? item.value : item.value}</dd>
-                                                        </div>
-                                                    ))}
+                                                    {section.items.map((item, itemIndex) => {
+                                                        const isBlockValue =
+                                                            typeof item.value === 'string'
+                                                                ? item.value.includes('\n') || item.value.length > 40
+                                                                : typeof item.value === 'object' || React.isValidElement(item.value);
+                                                        return (
+                                                            <div key={`summary-list-item-${sectionIndex}-${itemIndex}`} className="flex items-start justify-between gap-4 text-sm">
+                                                                <dt className="text-slate-500 dark:text-slate-400">{item.label}</dt>
+                                                                <dd
+                                                                    className={`font-semibold text-slate-900 dark:text-white break-words max-w-[60%] ${
+                                                                        isBlockValue ? 'text-left' : 'text-right'
+                                                                    }`}
+                                                                >
+                                                                    {renderValue(item.value)}
+                                                                </dd>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </dl>
                                             </div>
                                         ))}
@@ -808,6 +862,37 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                             </div>
 
                             <div className="min-h-0 overflow-y-auto space-y-6 pl-1">
+                                {renderInfoSection('申請情報', primaryMetaRows)}
+
+                                {routeStepRows.length > 0 && (
+                                    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6 space-y-4">
+                                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">承認ルート</h3>
+                                        <div className="space-y-3">
+                                            {routeStepRows.map((step) => (
+                                                <div key={`route-step-${step.level}`} className="flex items-start justify-between gap-4 text-sm">
+                                                    <div>
+                                                        <p className="text-xs uppercase tracking-wider text-slate-400 dark:text-slate-500">Level {step.level}</p>
+                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{step.approverName}</p>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400">{step.approverId}</p>
+                                                    </div>
+                                                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                                        {step.status}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {renderInfoSection(
+                                    'フォーム入力',
+                                    compactFormRows,
+                                    extraFormRowCount > 0 ? (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            他 {extraFormRowCount} 件は左カラムに表示しています。
+                                        </p>
+                                    ) : null,
+                                )}
                                 
                                 {showRejectionReason && (
                                     <section className="rounded-3xl border border-red-200 dark:border-red-500/50 bg-red-50 dark:bg-red-900/30 p-6">

@@ -47,6 +47,34 @@ const pickFirstString = (values: any[]): string | null => {
   return null;
 };
 
+const buildDailyReportSummary = (data: any): string | null => {
+  if (!data || typeof data !== 'object') return null;
+  const planItems = Array.isArray(data.planItems) ? data.planItems : [];
+  const actualItems = Array.isArray(data.actualItems) ? data.actualItems : [];
+
+  const pickFromItem = (item: any): string | null => {
+    if (!item || typeof item !== 'object') return null;
+    const customer = typeof item.customerName === 'string' ? item.customerName.trim() : '';
+    const action = typeof item.action === 'string' ? item.action.trim() : '';
+    if (customer && action) return `${customer} / ${action}`;
+    return customer || action || null;
+  };
+
+  const planSummary = pickFromItem(planItems[0]);
+  const actualSummary = pickFromItem(actualItems[0]);
+  const activitySummary =
+    typeof data.activityContent === 'string' ? data.activityContent.trim().split('\n')[0] : null;
+  const reportDate = typeof data.reportDate === 'string' ? data.reportDate : null;
+
+  return pickFirstString([
+    planSummary,
+    actualSummary,
+    data.customerName,
+    activitySummary,
+    reportDate,
+  ]);
+};
+
 const deriveApplicationSummary = (app: ApplicationWithDetails) => {
   const data: any = app.formData || {};
   const invoice = data.invoice || {};
@@ -86,6 +114,12 @@ const deriveApplicationSummary = (app: ApplicationWithDetails) => {
     data.customer?.name,
     data.client?.name,
   ]) || '-';
+
+  const isDailyReport = (app.applicationCode?.code || '').toUpperCase() === 'DLY';
+  if (isDailyReport) {
+    const dailySummary = buildDailyReportSummary(data);
+    return { amount: formattedAmount, payee, customer: dailySummary || customer };
+  }
 
   return { amount: formattedAmount, payee, customer };
 };
