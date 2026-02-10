@@ -156,12 +156,16 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   approvalsCount,
 }) => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isMobileOpen, setIsMobileOpen] = React.useState(false);
   const [expandedItems, setExpandedItems] = React.useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({});
 
   const toggleSidebar = () => {
     setIsCollapsed(prev => !prev);
   };
+
+  const toggleMobileDrawer = () => setIsMobileOpen(prev => !prev);
+  const closeMobileDrawer = () => setIsMobileOpen(false);
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => ({ ...prev, [categoryId]: !(prev[categoryId] ?? false) }));
@@ -176,9 +180,30 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   return (
-    <aside
-      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-40`}
-    >
+    <>
+      {/* Mobile open button */}
+      <button
+        type="button"
+        onClick={toggleMobileDrawer}
+        className="sm:hidden fixed top-3 left-3 z-50 inline-flex items-center justify-center rounded-lg bg-slate-800 text-white w-10 h-10 shadow-lg"
+        aria-label="メニューを開く"
+      >
+        <ChevronRight className={`w-5 h-5 transition-transform ${isMobileOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Mobile backdrop */}
+      {isMobileOpen && (
+        <div
+          className="sm:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
+          onClick={closeMobileDrawer}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-50
+        sm:translate-x-0 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} sm:transform-none fixed sm:static inset-y-0 left-0`}
+      >
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
         <div className="flex items-center gap-2">
           <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
@@ -235,6 +260,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                             setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
                           } else {
                             onNavigate(item.page);
+                            closeMobileDrawer();
                           }
                         }}
                         className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
@@ -277,7 +303,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                               <li key={child.page}>
                                 <a
                                   href="#"
-                                  onClick={(e) => { e.preventDefault(); onNavigate(child.page); }}
+                                  onClick={(e) => { e.preventDefault(); onNavigate(child.page); closeMobileDrawer(); }}
                                   className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                                     } ml-8`}
                                 >
