@@ -46,6 +46,8 @@ type ApplicationStatus = Application['status'];
 
 const calendarWeekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
 
+type DailyReportCalendarStatus = 'submitted' | 'missing_today' | 'overdue' | 'future';
+
 const viewModeOptions: { id: ViewMode; label: string }[] = [
     { id: 'day', label: '日別' },
     { id: 'week', label: '週別' },
@@ -65,6 +67,20 @@ const APPLICATION_STATUS_STYLES: Record<ApplicationStatus, { label: string; clas
     approved: { label: '承認済', className: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
     rejected: { label: '差戻し', className: 'bg-rose-100 text-rose-700 border border-rose-200' },
     cancelled: { label: '取下げ', className: 'bg-slate-200 text-slate-700 border border-slate-300' },
+};
+
+const DAILY_REPORT_STATUS_LABELS: Record<DailyReportCalendarStatus, string> = {
+    submitted: '提出済',
+    missing_today: '未提出',
+    overdue: '遅延',
+    future: '対象外',
+};
+
+const DAILY_REPORT_STATUS_CLASS: Record<DailyReportCalendarStatus, string> = {
+    submitted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200',
+    missing_today: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
+    overdue: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200',
+    future: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 
 interface ParsedDailyReportTextResult {
@@ -166,6 +182,21 @@ const parseTimeToMinutes = (value?: string): number | null => {
     const minutes = Number(minutePart);
     if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
     return hours * 60 + minutes;
+};
+
+const resolveDailyReportStatus = (
+    date: string,
+    reportMap: Map<string, { endTime?: string }>,
+    expectedEndTime: string,
+    now: Date,
+): DailyReportCalendarStatus => {
+    if (reportMap.has(date)) return 'submitted';
+    const todayIso = formatDate(now);
+    if (date > todayIso) return 'future';
+    if (date < todayIso) return 'overdue';
+    const endMinutes = parseTimeToMinutes(expectedEndTime) ?? parseTimeToMinutes('18:00') ?? 18 * 60;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    return nowMinutes < endMinutes ? 'missing_today' : 'overdue';
 };
 
 const calculateScheduleItemMinutes = (item: ScheduleItem): number => {
@@ -440,7 +471,8 @@ const DayView: React.FC<{
     onUpdateActualItems: (items: ScheduleItem[]) => void;
     onDeleteEvent: (id: string) => void;
     canEdit: boolean;
-}> = ({ selectedDate, planEvents, actualItems, onUpdateActualItems, onDeleteEvent, canEdit }) => {
+    dailyReportStatus?: DailyReportCalendarStatus;
+}> = ({ selectedDate, planEvents, actualItems, onUpdateActualItems, onDeleteEvent, canEdit, dailyReportStatus }) => {
     const [newActualItem, setNewActualItem] = useState({ start: '', end: '', description: '' });
 
     const handleAddActualItem = (e: React.FormEvent) => {
@@ -467,7 +499,19 @@ const DayView: React.FC<{
     const inputClass = `w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed`;
 
     return (
-        <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="mt-4 space-y-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">日報提出状況</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{selectedDate}</p>
+                </div>
+                {dailyReportStatus && (
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${DAILY_REPORT_STATUS_CLASS[dailyReportStatus]}`}>
+                        日報 {DAILY_REPORT_STATUS_LABELS[dailyReportStatus]}
+                    </span>
+                )}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Actual Column */}
             <div className="rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                 <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">実績</h3>
@@ -539,6 +583,7 @@ const DayView: React.FC<{
                     ))}
                 </div>
             </div>
+            </div>
         </div>
     );
 };
@@ -548,7 +593,8 @@ const WeekView: React.FC<{
     eventsByDate: Record<string, CalendarEvent[]>;
     selectedDate: string;
     onSelectDate: (date: string) => void;
-}> = ({ weekDates, eventsByDate, selectedDate, onSelectDate }) => (
+    dailyReportStatusByDate: Record<string, DailyReportCalendarStatus>;
+}> = ({ weekDates, eventsByDate, selectedDate, onSelectDate, dailyReportStatusByDate }) => (
     <div className="mt-4 space-y-3">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-7">
             {weekDates.map((date) => {
@@ -556,6 +602,7 @@ const WeekView: React.FC<{
                 const dayLabel = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(new Date(date));
                 const dayNumber = new Date(date).getDate();
                 const isSelected = date === selectedDate;
+                const reportStatus = dailyReportStatusByDate[date];
                 return (
                     <button
                         type="button"
@@ -571,6 +618,11 @@ const WeekView: React.FC<{
                             <div className="text-[12px] font-semibold text-slate-500 dark:text-slate-300">{dayLabel}</div>
                             <div className="text-2xl font-bold text-slate-900 dark:text-white">{dayNumber}</div>
                         </div>
+                        {reportStatus && (
+                            <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${DAILY_REPORT_STATUS_CLASS[reportStatus]}`}>
+                                日報 {DAILY_REPORT_STATUS_LABELS[reportStatus]}
+                            </span>
+                        )}
                         <div className="mt-2 space-y-2">
                             {events.length === 0 && (
                                 <p className="text-[12px] text-slate-500 dark:text-slate-400">予定なし</p>
@@ -614,7 +666,8 @@ const MonthView: React.FC<{
     eventsByDate: Record<string, CalendarEvent[]>;
     selectedDate: string;
     onSelectDate: (date: string) => void;
-}> = ({ days, eventsByDate, selectedDate, onSelectDate }) => (
+    dailyReportStatusByDate: Record<string, DailyReportCalendarStatus>;
+}> = ({ days, eventsByDate, selectedDate, onSelectDate, dailyReportStatusByDate }) => (
     <div className="mt-4">
         <div className="grid grid-cols-7 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
             {calendarWeekdayLabels.map((label) => (
@@ -629,6 +682,7 @@ const MonthView: React.FC<{
                 const dayNumber = new Date(date).getDate();
                 const isSelected = date === selectedDate;
                 const topEvent = events[0];
+                const reportStatus = dailyReportStatusByDate[date];
                 return (
                     <button
                         type="button"
@@ -645,6 +699,11 @@ const MonthView: React.FC<{
                         <span className={`text-base font-semibold ${inMonth ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
                             {dayNumber}
                         </span>
+                        {reportStatus && (
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${DAILY_REPORT_STATUS_CLASS[reportStatus]}`}>
+                                日報 {DAILY_REPORT_STATUS_LABELS[reportStatus]}
+                            </span>
+                        )}
                         <span className="text-[12px] font-medium text-slate-600 dark:text-slate-300">
                             {events.length > 0 ? `${events.length} 件` : '予定なし'}
                         </span>
@@ -758,6 +817,38 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
             .filter((entry) => !!entry.reportDate)
             .sort((a, b) => b.reportDate.localeCompare(a.reportDate));
     }, [applications, currentUserId]);
+
+    const dailyReportAppsForViewingUser = useMemo(
+        () =>
+            applications.filter(
+                (application) =>
+                    application.applicationCode?.code === 'DLY' &&
+                    (application.applicantId === viewingUserId || application.applicant?.id === viewingUserId),
+            ),
+        [applications, viewingUserId],
+    );
+
+    const dailyReportByDate = useMemo(() => {
+        const map = new Map<string, { endTime?: string }>();
+        dailyReportAppsForViewingUser.forEach((application) => {
+            const formData = application.formData ?? {};
+            const reportDate =
+                (typeof formData.reportDate === 'string' && formData.reportDate) ||
+                extractDatePart(application.submittedAt ?? application.createdAt) ||
+                '';
+            if (!reportDate) return;
+            const endTime = typeof formData.endTime === 'string' ? formData.endTime : undefined;
+            if (!map.has(reportDate)) {
+                map.set(reportDate, { endTime });
+                return;
+            }
+            const existing = map.get(reportDate);
+            if (!existing?.endTime && endTime) {
+                map.set(reportDate, { endTime });
+            }
+        });
+        return map;
+    }, [dailyReportAppsForViewingUser]);
     const dailyReportStats = useMemo(() => {
         if (dailyReportEntries.length === 0) {
             return {
@@ -1244,7 +1335,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         return aggregatedEvents.filter((ev) => ev.origin !== 'google');
     }, [aggregatedEvents, sourceFilter]);
 
-const eventsByDate = useMemo(() => {
+    const eventsByDate = useMemo(() => {
         const map: Record<string, CalendarEvent[]> = {};
         filteredEvents.forEach((event) => {
             if (!map[event.date]) {
@@ -1257,6 +1348,28 @@ const eventsByDate = useMemo(() => {
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const monthCalendar = useMemo(() => buildMonthCalendar(selectedDate), [selectedDate]);
+    const dailyReportDefaultEndTime = useMemo(() => {
+        const sorted = [...dailyReportAppsForViewingUser].sort((a, b) => {
+            const aDate = (a.formData?.reportDate as string | undefined) || a.createdAt || '';
+            const bDate = (b.formData?.reportDate as string | undefined) || b.createdAt || '';
+            return bDate.localeCompare(aDate);
+        });
+        const latest = sorted[0];
+        return typeof latest?.formData?.endTime === 'string' ? latest.formData.endTime : '18:00';
+    }, [dailyReportAppsForViewingUser]);
+    const dailyReportStatusByDate = useMemo(() => {
+        const now = new Date();
+        const dates = new Set<string>([
+            ...weekDates,
+            ...monthCalendar.map((day) => day.date),
+            selectedDate,
+        ]);
+        const map: Record<string, DailyReportCalendarStatus> = {};
+        dates.forEach((date) => {
+            map[date] = resolveDailyReportStatus(date, dailyReportByDate, dailyReportDefaultEndTime, now);
+        });
+        return map;
+    }, [weekDates, monthCalendar, selectedDate, dailyReportByDate, dailyReportDefaultEndTime]);
 
     const selectedEvents = useMemo(
         () => aggregatedEvents.filter((event) => event.date === selectedDate),
@@ -1654,6 +1767,7 @@ const eventsByDate = useMemo(() => {
                         onUpdateActualItems={setActualItems}
                         onDeleteEvent={handleDeleteEvent}
                         canEdit={canEditCurrentCalendar}
+                        dailyReportStatus={dailyReportStatusByDate[selectedDate]}
                     />
                 )}
                 {viewMode === 'week' && (
@@ -1662,6 +1776,7 @@ const eventsByDate = useMemo(() => {
                         eventsByDate={eventsByDate}
                         selectedDate={selectedDate}
                         onSelectDate={handleSelectDateFromCalendar}
+                        dailyReportStatusByDate={dailyReportStatusByDate}
                     />
                 )}
                 {viewMode === 'month' && (
@@ -1670,6 +1785,7 @@ const eventsByDate = useMemo(() => {
                         eventsByDate={eventsByDate}
                         selectedDate={selectedDate}
                         onSelectDate={handleSelectDateFromCalendar}
+                        dailyReportStatusByDate={dailyReportStatusByDate}
                     />
                 )}
 
