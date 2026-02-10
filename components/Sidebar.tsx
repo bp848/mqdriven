@@ -171,12 +171,14 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  const sidebarWidth = isCollapsed ? 'w-20' : 'w-64';
+  const sidebarWidth = isCollapsed ? 'sm:w-20 w-full' : 'sm:w-64 w-full';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   return (
-    <aside className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-full min-h-0 relative`}>
-      <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''}`}>
+    <aside
+      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 sm:h-full h-[64px] sm:h-screen min-h-0 sm:relative fixed top-0 left-0 z-40`}
+    >
+      <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
         <div className="flex items-center gap-2">
           <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
           <button
@@ -195,14 +197,14 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
           <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
         </div>
       </div>
-      <nav className={`flex-1 mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
+      <nav className={`flex-1 mt-2 sm:mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
         <ul>
           {visibleCategories.map(category => {
             const isCategoryExpanded = !isCollapsed && (expandedCategories[category.id] ?? true);
 
             return (
               <React.Fragment key={category.id}>
-                <li className={`mt-4 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
+                <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
                   {!isCollapsed && (
                     <button
                       type="button"
@@ -235,7 +237,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                           }
                         }}
                         className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                          } ${isCollapsed ? 'justify-center' : 'gap-3'}`}
+                          } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
                       >
                         {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
                         <span className={`font-medium ${isCollapsed ? 'sr-only' : ''}`}>{item.name}</span>
