@@ -576,11 +576,11 @@ const DayView: React.FC<{
                 <div className="flex items-start justify-between gap-2">
                     <div>
                         <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">予定</h3>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">左の実績やカレンダーから自動挿入されます</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">日報の計画/実績から自動挿入されます</p>
                     </div>
                 </div>
                 <div className="mt-4 space-y-3">
-                    {planEvents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">この日の予定はありません。</p>}
+                    {planEvents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">日報の計画/実績が未入力です。</p>}
                     {planEvents.map((event) => (
                         <div key={event.id} className="rounded-xl bg-white dark:bg-slate-800/50 p-3 shadow-sm border border-slate-200 dark:border-slate-700">
                             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1470,6 +1470,11 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         [aggregatedEvents, selectedDate],
     );
 
+    const selectedPlanEvents = useMemo(
+        () => selectedEvents.filter((event) => event.origin === 'daily_report_plan'),
+        [selectedEvents],
+    );
+
     const upcomingEvents = useMemo(
         () => aggregatedEvents.filter((event) => event.date >= todayIso).slice(0, 5),
         [aggregatedEvents, todayIso],
@@ -1849,7 +1854,7 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                 {viewMode === 'day' && (
                     <DayView
                         selectedDate={selectedDate}
-                        planEvents={selectedEvents}
+                        planEvents={selectedPlanEvents}
                         actualItems={actualItems}
                         onUpdateActualItems={setActualItems}
                         onDeleteEvent={handleDeleteEvent}
