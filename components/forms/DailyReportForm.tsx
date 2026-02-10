@@ -1,9 +1,20 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { submitApplication } from '../../services/dataService';
 import { generateDailyReportSummary, extractDailyReportFromImage } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
-import { User, Toast, ApplicationWithDetails, DailyReportData, ScheduleItem, DailyReportPrefill, Customer } from '../../types';
+import {
+    User,
+    Toast,
+    ApplicationWithDetails,
+    DailyReportData,
+    DailyReportPlanItem,
+    DailyReportActualItem,
+    DailyRoutine,
+    DailyRoutineSelection,
+    DailyReportPrefill,
+    Customer,
+} from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
 import { attachResubmissionMeta, buildResubmissionMeta } from '../../utils/applicationResubmission';
@@ -35,29 +46,66 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     onPrefillApplied,
     customers = [],
 }) => {
-    const createScheduleItem = (item?: Partial<ScheduleItem>): ScheduleItem => ({
-        id: item?.id || `schedule_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    const createId = (prefix: string) =>
+        `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+    const createPlanItem = (item?: Partial<DailyReportPlanItem>): DailyReportPlanItem => ({
+        id: item?.id || createId('plan'),
         start: item?.start || '',
         end: item?.end || '',
-        description: item?.description || '',
+        customerName: item?.customerName || '',
+        action: item?.action || '',
+        purpose: item?.purpose || '',
     });
 
+    const createActualFromPlan = (
+        plan: DailyReportPlanItem,
+        existing?: Partial<DailyReportActualItem>
+    ): DailyReportActualItem => ({
+        id: plan.id,
+        start: plan.start,
+        end: plan.end,
+        customerName: plan.customerName,
+        action: plan.action,
+        purpose: plan.purpose,
+        result: existing?.result || '',
+        variance: (existing?.variance as DailyReportActualItem['variance']) || 'as_planned',
+        achievement: (existing?.achievement as DailyReportActualItem['achievement']) || 'achieved',
+    });
+
+    const syncActualItems = (
+        planItems: DailyReportPlanItem[],
+        existingActuals: DailyReportActualItem[]
+    ): DailyReportActualItem[] => {
+        const actualMap = new Map(existingActuals.map(item => [item.id, item]));
+        return planItems.map(plan => createActualFromPlan(plan, actualMap.get(plan.id)));
+    };
+
+    const DEFAULT_GOALS = { pqGoal: '22.5', mqGoal: '13.5' };
+
+    const [goalSettings, setGoalSettings] = useState<{ pqGoal: string; mqGoal: string }>(DEFAULT_GOALS);
+    const [routines, setRoutines] = useState<DailyRoutine[]>([]);
+    const [isGoalEditorOpen, setIsGoalEditorOpen] = useState(false);
+    const [goalDraft, setGoalDraft] = useState<{ pqGoal: string; mqGoal: string }>(DEFAULT_GOALS);
+    const [routineEditOpen, setRoutineEditOpen] = useState(false);
+
+    const initialPlanItems = [createPlanItem()];
     const [formData, setFormData] = useState<DailyReportData>({
         reportDate: new Date().toISOString().split('T')[0],
         startTime: '09:00',
         endTime: '18:00',
-        customerName: '',
         activityContent: '',
-        nextDayPlan: '',
-        pqGoal: '22.5',
+        pqGoal: DEFAULT_GOALS.pqGoal,
         pqCurrent: '',
         pqLastYear: '',
-        mqGoal: '13.5',
+        mqGoal: DEFAULT_GOALS.mqGoal,
         mqCurrent: '',
         mqLastYear: '',
-        planItems: [createScheduleItem()],
-        actualItems: [createScheduleItem()],
-        comments: [''],
+        planItems: initialPlanItems,
+        actualItems: syncActualItems(initialPlanItems, []),
+        routineSelections: [],
+        nextDayAdhoc: '',
+        nextDayPlan: '',
     });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,6 +120,8 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
+    const goalStorageKey = useMemo(() => `mqdriven_daily_report_goals_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
+    const routineStorageKey = useMemo(() => `mqdriven_daily_report_routines_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
     const templateText = useMemo(() => buildReportTemplate(formData), [formData]);
     const resubmissionMeta = useMemo(() => buildResubmissionMeta(draftApplication), [draftApplication]);
     const customerOptions = useMemo(() => {
@@ -87,11 +137,67 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
             .sort((a, b) => a.localeCompare(b, 'ja'));
     }, [customers]);
 
+    const coercePlanItems = (items?: any[]): DailyReportPlanItem[] => {
+        if (!Array.isArray(items) || items.length === 0) return [createPlanItem()];
+        return items.map((item) =>
+            createPlanItem({
+                id: item?.id,
+                start: item?.start,
+                end: item?.end,
+                customerName: item?.customerName ?? item?.customer ?? item?.clientName ?? '',
+                action: item?.action ?? item?.description ?? '',
+                purpose: item?.purpose ?? '',
+            })
+        );
+    };
+
+    const coerceActualItems = (
+        items: any[] | undefined,
+        planItems: DailyReportPlanItem[]
+    ): DailyReportActualItem[] => {
+        if (!Array.isArray(items) || items.length === 0) {
+            return syncActualItems(planItems, []);
+        }
+        const normalized = items.map((item: any) => ({
+            id: item?.id || createId('actual'),
+            start: item?.start || '',
+            end: item?.end || '',
+            customerName: item?.customerName ?? '',
+            action: item?.action ?? item?.description ?? '',
+            purpose: item?.purpose ?? '',
+            result: item?.result ?? item?.actualContent ?? '',
+            variance: item?.variance ?? 'as_planned',
+            achievement: item?.achievement ?? 'achieved',
+        })) as DailyReportActualItem[];
+        return syncActualItems(planItems, normalized);
+    };
+
     const persistSavedReports = (next: Record<string, DailyReportData>) => {
         setSavedReports(next);
         if (typeof window !== 'undefined') {
             window.localStorage.setItem(reportsStorageKey, JSON.stringify(next));
         }
+    };
+
+    const persistRoutines = (next: DailyRoutine[]) => {
+        setRoutines(next);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(routineStorageKey, JSON.stringify(next));
+        }
+    };
+
+    const applyNextDayPlan = (
+        selections: DailyRoutineSelection[],
+        adhoc: string,
+        routineSource: DailyRoutine[]
+    ) => {
+        const nextDayPlan = buildNextDayPlanText(selections, routineSource, adhoc);
+        setFormData(prev => ({
+            ...prev,
+            routineSelections: selections,
+            nextDayAdhoc: adhoc,
+            nextDayPlan,
+        }));
     };
 
     useEffect(() => {
@@ -109,50 +215,99 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     }, [reportsStorageKey]);
 
     useEffect(() => {
+        if (typeof window === 'undefined') return;
+        try {
+            const raw = window.localStorage.getItem(goalStorageKey);
+            if (raw) {
+                const parsed = JSON.parse(raw) as { pqGoal?: string; mqGoal?: string };
+                const nextGoals = {
+                    pqGoal: parsed?.pqGoal || DEFAULT_GOALS.pqGoal,
+                    mqGoal: parsed?.mqGoal || DEFAULT_GOALS.mqGoal,
+                };
+                setGoalSettings(nextGoals);
+                setGoalDraft(nextGoals);
+                setFormData(prev => ({
+                    ...prev,
+                    pqGoal: nextGoals.pqGoal,
+                    mqGoal: nextGoals.mqGoal,
+                }));
+            }
+        } catch {
+            setGoalSettings(DEFAULT_GOALS);
+            setGoalDraft(DEFAULT_GOALS);
+        }
+    }, [goalStorageKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        try {
+            const raw = window.localStorage.getItem(routineStorageKey);
+            if (!raw) return;
+            const parsed = JSON.parse(raw) as DailyRoutine[];
+            if (Array.isArray(parsed)) {
+                setRoutines(parsed);
+            }
+        } catch {
+            setRoutines([]);
+        }
+    }, [routineStorageKey]);
+
+    useEffect(() => {
         if (!draftApplication || draftApplication.applicationCodeId !== applicationCodeId) return;
         const data = draftApplication.formData || {};
+        const planItems = coercePlanItems(data.planItems);
+        const actualItems = coerceActualItems(data.actualItems, planItems);
+        const routineSelections = Array.isArray(data.routineSelections) ? data.routineSelections : [];
+        const nextDayAdhoc = data.nextDayAdhoc || '';
+        const nextDayPlan = data.nextDayPlan || buildNextDayPlanText(routineSelections, routines, nextDayAdhoc);
         setFormData({
             reportDate: data.reportDate || new Date().toISOString().split('T')[0],
             startTime: data.startTime || '09:00',
             endTime: data.endTime || '18:00',
-            customerName: data.customerName || '',
             activityContent: data.activityContent || '',
-            nextDayPlan: data.nextDayPlan || '',
-            pqGoal: data.pqGoal || '22.5',
+            pqGoal: goalSettings.pqGoal,
             pqCurrent: data.pqCurrent || '',
             pqLastYear: data.pqLastYear || '',
-            mqGoal: data.mqGoal || '13.5',
+            mqGoal: goalSettings.mqGoal,
             mqCurrent: data.mqCurrent || '',
             mqLastYear: data.mqLastYear || '',
-            planItems: Array.isArray(data.planItems) && data.planItems.length
-                ? data.planItems.map((item: ScheduleItem) => createScheduleItem(item))
-                : [createScheduleItem()],
-            actualItems: Array.isArray(data.actualItems) && data.actualItems.length
-                ? data.actualItems.map((item: ScheduleItem) => createScheduleItem(item))
-                : [createScheduleItem()],
-            comments: Array.isArray(data.comments) && data.comments.length ? data.comments : [''],
+            planItems,
+            actualItems,
+            routineSelections,
+            nextDayAdhoc,
+            nextDayPlan,
         });
         setApprovalRouteId(draftApplication.approvalRouteId || '');
-    }, [draftApplication, applicationCodeId]);
+    }, [draftApplication, applicationCodeId, goalSettings, routines]);
     
     useEffect(() => {
         if (!prefill || appliedPrefillId === prefill.id) return;
         const { id, ...prefillContent } = prefill;
         setFormData(prev => {
-            const planItems = prefill.planItems ? prefill.planItems.map(item => ({ ...item })) : prev.planItems;
-            const actualItems = prefill.actualItems ? prefill.actualItems.map(item => ({ ...item })) : prev.actualItems;
-            const comments = prefill.comments ? [...prefill.comments] : prev.comments;
+            const planItems = prefill.planItems ? coercePlanItems(prefill.planItems) : prev.planItems || [createPlanItem()];
+            const actualItems = prefill.actualItems
+                ? coerceActualItems(prefill.actualItems, planItems)
+                : syncActualItems(planItems, (prev.actualItems || []) as DailyReportActualItem[]);
+            const routineSelections = Array.isArray(prefill.routineSelections)
+                ? prefill.routineSelections
+                : prev.routineSelections || [];
+            const nextDayAdhoc = prefill.nextDayAdhoc ?? prev.nextDayAdhoc ?? '';
+            const nextDayPlan = prefill.nextDayPlan || buildNextDayPlanText(routineSelections, routines, nextDayAdhoc);
             return {
                 ...prev,
                 ...prefillContent,
+                pqGoal: goalSettings.pqGoal,
+                mqGoal: goalSettings.mqGoal,
                 planItems,
                 actualItems,
-                comments,
+                routineSelections,
+                nextDayAdhoc,
+                nextDayPlan,
             };
         });
         setAppliedPrefillId(prefill.id);
         onPrefillApplied?.();
-    }, [prefill, appliedPrefillId, onPrefillApplied]);
+    }, [prefill, appliedPrefillId, onPrefillApplied, goalSettings, routines]);
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -164,13 +319,17 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
             addToast('AI機能は現在無効です。', 'error');
             return;
         }
-        if (!formData.customerName && !formData.activityContent) {
-            addToast('AIが下書きを作成するために、顧客名または活動内容のキーワードを入力してください。', 'info');
+        const planItems = (formData.planItems || []) as DailyReportPlanItem[];
+        const actualItems = (formData.actualItems || []) as DailyReportActualItem[];
+        const seedText = buildDailyReportSeed(planItems, actualItems);
+        const customerSummary = buildCustomerSummary(planItems);
+        if (!seedText && !formData.activityContent) {
+            addToast('AIが下書きを作成するために、計画/実績または考察のキーワードを入力してください。', 'info');
             return;
         }
         setIsSummaryLoading(true);
         try {
-            const summary = await generateDailyReportSummary(formData.customerName, formData.activityContent);
+            const summary = await generateDailyReportSummary(customerSummary, seedText || formData.activityContent || '');
             setFormData(prev => ({ ...prev, activityContent: summary }));
             addToast('AIが活動内容の下書きを作成しました。', 'success');
         } catch (e: any) {
@@ -291,23 +450,26 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
         const yesterday = addDays(formData.reportDate, -1);
         const previous = savedReports[yesterday];
         if (!previous) {
-            addToast('前日の日報が見つかりません。', 'error');
+            addToast('昨日の日報が見つかりません。', 'error');
             return;
         }
+        const planItems = coercePlanItems(previous.planItems);
+        const actualItems = coerceActualItems(previous.actualItems, planItems);
+        const routineSelections = Array.isArray(previous.routineSelections) ? previous.routineSelections : [];
+        const nextDayAdhoc = previous.nextDayAdhoc || '';
+        const nextDayPlan = previous.nextDayPlan || buildNextDayPlanText(routineSelections, routines, nextDayAdhoc);
         setFormData({
             ...previous,
             reportDate: formData.reportDate,
-            planItems:
-                Array.isArray(previous.planItems) && previous.planItems.length
-                    ? previous.planItems.map((item) => createScheduleItem(item))
-                    : [createScheduleItem()],
-            actualItems:
-                Array.isArray(previous.actualItems) && previous.actualItems.length
-                    ? previous.actualItems.map((item) => createScheduleItem(item))
-                    : [createScheduleItem()],
-            comments: Array.isArray(previous.comments) && previous.comments.length ? [...previous.comments] : [''],
+            pqGoal: goalSettings.pqGoal,
+            mqGoal: goalSettings.mqGoal,
+            planItems,
+            actualItems,
+            routineSelections,
+            nextDayAdhoc,
+            nextDayPlan,
         });
-        addToast('前日の日報を複製しました。', 'info');
+        addToast('昨日の日報を複製しました。', 'info');
     };
 
     const handleCopyTemplate = async () => {
@@ -319,52 +481,131 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
         }
     };
 
-    const handleScheduleChange = (type: 'planItems' | 'actualItems', id: string, field: keyof ScheduleItem, value: string) => {
-        setFormData(prev => ({
-            ...prev,
-            [type]: prev[type].map(item => (item.id === id ? { ...item, [field]: value } : item)),
-        }));
-    };
-
-    const handleAddScheduleRow = (type: 'planItems' | 'actualItems') => {
-        setFormData(prev => ({
-            ...prev,
-            [type]: [...prev[type], createScheduleItem()],
-        }));
-    };
-
-    const handleRemoveScheduleRow = (type: 'planItems' | 'actualItems', id: string) => {
+    const updatePlanItems = (updater: (items: DailyReportPlanItem[]) => DailyReportPlanItem[]) => {
         setFormData(prev => {
-            if (prev[type].length === 1) return prev;
-            return {
-                ...prev,
-                [type]: prev[type].filter(item => item.id !== id),
-            };
+            const currentPlan = Array.isArray(prev.planItems) ? prev.planItems : [];
+            const nextPlan = updater(currentPlan);
+            const nextActual = syncActualItems(
+                nextPlan,
+                (prev.actualItems || []) as DailyReportActualItem[]
+            );
+            return { ...prev, planItems: nextPlan, actualItems: nextActual };
         });
     };
 
-    const handleCommentChange = (index: number, value: string) => {
-        setFormData(prev => {
-            const nextComments = [...prev.comments];
-            nextComments[index] = value;
-            return { ...prev, comments: nextComments };
+    const handlePlanFieldChange = (id: string, field: keyof DailyReportPlanItem, value: string) => {
+        updatePlanItems(items =>
+            items.map(item => (item.id === id ? { ...item, [field]: value } : item))
+        );
+    };
+
+    const handleAddPlanRow = () => {
+        updatePlanItems(items => [...items, createPlanItem()]);
+    };
+
+    const handleRemovePlanRow = (id: string) => {
+        updatePlanItems(items => {
+            if (items.length === 1) return items;
+            return items.filter(item => item.id !== id);
         });
     };
 
-    const handleAddComment = () => {
-        setFormData(prev => ({ ...prev, comments: [...prev.comments, ''] }));
+    const handleActualFieldChange = (
+        id: string,
+        field: keyof Pick<DailyReportActualItem, 'result' | 'variance' | 'achievement'>,
+        value: string
+    ) => {
+        setFormData(prev => ({
+            ...prev,
+            actualItems: (prev.actualItems || []).map(item =>
+                item.id === id ? { ...item, [field]: value } : item
+            ),
+        }));
+    };
+
+    const handleGoalSave = () => {
+        const nextGoals = {
+            pqGoal: goalDraft.pqGoal.trim() || DEFAULT_GOALS.pqGoal,
+            mqGoal: goalDraft.mqGoal.trim() || DEFAULT_GOALS.mqGoal,
+        };
+        setGoalSettings(nextGoals);
+        setFormData(prev => ({ ...prev, pqGoal: nextGoals.pqGoal, mqGoal: nextGoals.mqGoal }));
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(goalStorageKey, JSON.stringify(nextGoals));
+        }
+        setIsGoalEditorOpen(false);
+    };
+
+    const handleAddRoutine = () => {
+        const next = [
+            ...routines,
+            { id: createId('routine'), name: '', timeRange: '', purpose: '' },
+        ];
+        persistRoutines(next);
+        setRoutineEditOpen(true);
+    };
+
+    const handleRoutineChange = (
+        id: string,
+        field: keyof DailyRoutine,
+        value: string
+    ) => {
+        const next = routines.map(item => (item.id === id ? { ...item, [field]: value } : item));
+        persistRoutines(next);
+    };
+
+    const handleRoutineDelete = (id: string) => {
+        const next = routines.filter(item => item.id !== id);
+        persistRoutines(next);
+        const nextSelections = (formData.routineSelections || []).filter(sel => sel.routineId !== id);
+        applyNextDayPlan(nextSelections, formData.nextDayAdhoc || '', next);
+    };
+
+    const handleRoutineToggle = (routine: DailyRoutine) => {
+        const selections = formData.routineSelections || [];
+        const existing = selections.find(sel => sel.routineId === routine.id);
+        const nextSelections = existing
+            ? selections.filter(sel => sel.routineId !== routine.id)
+            : [
+                ...selections,
+                {
+                    id: createId('routine_sel'),
+                    routineId: routine.id,
+                    timeRange: routine.timeRange || '',
+                    purpose: routine.purpose || '',
+                },
+            ];
+        applyNextDayPlan(nextSelections, formData.nextDayAdhoc || '', routines);
+    };
+
+    const handleRoutineSelectionChange = (
+        id: string,
+        field: keyof DailyRoutineSelection,
+        value: string
+    ) => {
+        const selections = (formData.routineSelections || []).map(sel =>
+            sel.id === id ? { ...sel, [field]: value } : sel
+        );
+        applyNextDayPlan(selections, formData.nextDayAdhoc || '', routines);
+    };
+
+    const handleNextDayAdhocChange = (value: string) => {
+        applyNextDayPlan(formData.routineSelections || [], value, routines);
     };
 
     const handleTemplateInsert = () => {
         const template = [
+            '【数字の進捗】',
             `PQ目標${formData.pqGoal}　今期現在${formData.pqCurrent || '__'}　前年${formData.pqLastYear || '__'}`,
             `MQ目標${formData.mqGoal}　今期現在${formData.mqCurrent || '__'}　前年${formData.mqLastYear || '__'}`,
             '',
-            '【本日の計画】',
-            formData.planItems.map(item => formatScheduleLine(item)).join('\n'),
+            '【お客様の声】',
             '',
-            '【本日の実績】',
-            formData.actualItems.map(item => formatScheduleLine(item)).join('\n'),
+            '【ライバル・市場情報】',
+            '',
+            '【同行・社内共有事項】',
+            '',
+            '【自分の考え・気づき・課題】',
         ].join('\n');
         setFormData(prev => ({ ...prev, activityContent: template }));
     };
@@ -426,58 +667,47 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                         </div>
                     </div>
                     
-                    <div>
-                        <label htmlFor="customerName" className={labelClass}>訪問先・顧客名</label>
-                        <input
-                            type="text"
-                            id="customerName"
-                            name="customerName"
-                            value={formData.customerName}
-                            onChange={handleChange}
-                            className={inputClass}
-                            disabled={isDisabled}
-                            placeholder="例: 株式会社〇〇"
-                            autoComplete="organization"
-                            list="daily-report-customer-options"
-                        />
-                        {customerOptions.length > 0 && (
-                            <>
-                                <datalist id="daily-report-customer-options">
-                                    {customerOptions.map(name => (
-                                        <option key={name} value={name} />
-                                    ))}
-                                </datalist>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">顧客マスタから補完できます（自由入力も可）。</p>
-                            </>
-                        )}
-                    </div>
-
                     <MetricsSection
                         formData={formData}
+                        goalSettings={goalSettings}
                         onChange={handleChange}
                         inputClass={inputClass}
                         labelClass={labelClass}
                         isDisabled={isDisabled}
                         onTemplateInsert={handleTemplateInsert}
+                        onOpenGoalEditor={() => {
+                            setGoalDraft(goalSettings);
+                            setIsGoalEditorOpen(true);
+                        }}
                     />
 
-                    <ScheduleSection
+                    {isGoalEditorOpen && (
+                        <GoalEditor
+                            goalDraft={goalDraft}
+                            onChange={(field, value) => setGoalDraft(prev => ({ ...prev, [field]: value }))}
+                            onSave={handleGoalSave}
+                            onCancel={() => setIsGoalEditorOpen(false)}
+                            inputClass={inputClass}
+                            labelClass={labelClass}
+                        />
+                    )}
+
+                    <PlanSection
                         title="本日の計画"
-                        items={formData.planItems}
-                        onChange={(id, field, value) => handleScheduleChange('planItems', id, field, value)}
-                        onAddRow={() => handleAddScheduleRow('planItems')}
-                        onRemoveRow={(id) => handleRemoveScheduleRow('planItems', id)}
+                        items={(formData.planItems || []) as DailyReportPlanItem[]}
+                        customerOptions={customerOptions}
+                        onChange={handlePlanFieldChange}
+                        onAddRow={handleAddPlanRow}
+                        onRemoveRow={handleRemovePlanRow}
                         labelClass={labelClass}
                         inputClass={inputClass}
                         isDisabled={isDisabled}
                     />
 
-                    <ScheduleSection
-                        title="本日の実績"
-                        items={formData.actualItems}
-                        onChange={(id, field, value) => handleScheduleChange('actualItems', id, field, value)}
-                        onAddRow={() => handleAddScheduleRow('actualItems')}
-                        onRemoveRow={(id) => handleRemoveScheduleRow('actualItems', id)}
+                    <ActualSection
+                        title="本日の実績（計画連動）"
+                        items={(formData.actualItems || []) as DailyReportActualItem[]}
+                        onChange={handleActualFieldChange}
                         labelClass={labelClass}
                         inputClass={inputClass}
                         isDisabled={isDisabled}
@@ -485,7 +715,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
                     <div>
                         <div className="flex justify-between items-center mb-1">
-                            <label htmlFor="activityContent" className={labelClass}>活動内容 *</label>
+                            <label htmlFor="activityContent" className={labelClass}>実績サマリー・考察 *</label>
                             <div className="flex items-center gap-3">
                                 <label className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                                     <input
@@ -512,43 +742,27 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                                 </button>
                             </div>
                         </div>
-                        <textarea id="activityContent" name="activityContent" rows={8} value={formData.activityContent} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="本日の業務内容、進捗、課題などを具体的に記述してください。または、キーワードを入力してAIに下書き作成を依頼してください。" autoComplete="on" />
+                        <textarea id="activityContent" name="activityContent" rows={8} value={formData.activityContent} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="本日の実績を踏まえ、PQ/MQ進捗、顧客の声、競合・市場情報、社内共有事項、考察・気づき・課題を記載してください。" autoComplete="on" />
                         {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 mt-1">AI機能無効のため、AI下書き作成は利用できません。</p>}
                     </div>
                     
-                    <div>
-                        <label htmlFor="nextDayPlan" className={labelClass}>翌日予定</label>
-                        <textarea id="nextDayPlan" name="nextDayPlan" rows={3} value={formData.nextDayPlan} onChange={handleChange} className={inputClass} disabled={isDisabled} placeholder="明日のタスクやアポイントなどを記述してください。" autoComplete="on" />
-                    </div>
-
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className={labelClass}>コメント・共有事項</label>
-                            <button
-                                type="button"
-                                onClick={handleAddComment}
-                                className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                disabled={isDisabled}
-                            >
-                                <PlusCircle className="w-4 h-4" />
-                                コメントを追加
-                            </button>
-                        </div>
-                        <div className="space-y-3">
-                            {formData.comments.map((comment, index) => (
-                                <textarea
-                                    key={`comment-${index}`}
-                                    value={comment}
-                                    onChange={(e) => handleCommentChange(index, e.target.value)}
-                                    className={inputClass}
-                                    rows={2}
-                                    placeholder="例: 金融財政事情研究会 大島様『カレンダーを75部お願いします』"
-                                    disabled={isDisabled}
-                                />
-                            ))}
-                        </div>
-                    </div>
-
+                    <RoutineSection
+                        routines={routines}
+                        selections={formData.routineSelections || []}
+                        adhoc={formData.nextDayAdhoc || ''}
+                        nextDayPlan={formData.nextDayPlan || ''}
+                        onToggleRoutine={handleRoutineToggle}
+                        onSelectionChange={handleRoutineSelectionChange}
+                        onAdhocChange={handleNextDayAdhocChange}
+                        onAddRoutine={handleAddRoutine}
+                        onRoutineChange={handleRoutineChange}
+                        onRoutineDelete={handleRoutineDelete}
+                        labelClass={labelClass}
+                        inputClass={inputClass}
+                        isDisabled={isDisabled}
+                        isEditing={routineEditOpen}
+                        onToggleEdit={() => setRoutineEditOpen(prev => !prev)}
+                    />
                     <ReportPreview templateText={templateText} onCopy={handleCopyTemplate} />
 
                     <ApprovalRouteSelector onChange={setApprovalRouteId} isSubmitting={isDisabled} />
@@ -590,65 +804,162 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
 export default DailyReportForm;
 
-const formatScheduleLine = (item: ScheduleItem) => {
+const buildCustomerSummary = (planItems: DailyReportPlanItem[]) => {
+    const names = Array.from(
+        new Set(
+            planItems
+                .map(item => (item.customerName || '').trim())
+                .filter(Boolean)
+        )
+    );
+    return names.length ? names.join(' / ') : '（未入力）';
+};
+
+const formatPlanLine = (item: DailyReportPlanItem) => {
     const start = item.start || '--:--';
     const end = item.end || '--:--';
-    return `${start}～${end}　${item.description || ''}`.trim();
+    const customer = item.customerName ? ` / ${item.customerName}` : '';
+    const purpose = item.purpose ? `（目的: ${item.purpose}）` : '';
+    const action = item.action || '（未入力）';
+    return `${start}～${end}${customer}　${action}${purpose}`.trim();
+};
+
+const formatActualLine = (item: DailyReportActualItem) => {
+    const start = item.start || '--:--';
+    const end = item.end || '--:--';
+    const customer = item.customerName ? ` / ${item.customerName}` : '';
+    const result = item.result || '（未入力）';
+    const varianceLabel = item.variance === 'changed' ? '変更あり' : '予定通り';
+    const achievementLabel =
+        item.achievement === 'missed'
+            ? '未達'
+            : item.achievement === 'partial'
+                ? '一部未達'
+                : '達成';
+    return `${start}～${end}${customer}　実績: ${result} / 差異: ${varianceLabel} / 達成: ${achievementLabel}`;
+};
+
+const buildDailyReportSeed = (
+    planItems: DailyReportPlanItem[],
+    actualItems: DailyReportActualItem[]
+) => {
+    const planLines = planItems.map(formatPlanLine).filter(Boolean).join('\n');
+    const actualLines = actualItems.map(formatActualLine).filter(Boolean).join('\n');
+    const parts = [];
+    if (planLines) parts.push(`計画:\n${planLines}`);
+    if (actualLines) parts.push(`実績:\n${actualLines}`);
+    return parts.join('\n');
+};
+
+const buildPlanActualLines = (
+    planItems: DailyReportPlanItem[],
+    actualItems: DailyReportActualItem[]
+) => {
+    const actualMap = new Map(actualItems.map(item => [item.id, item]));
+    return planItems
+        .map(plan => {
+            const actual = actualMap.get(plan.id);
+            const varianceLabel = actual?.variance === 'changed' ? '変更あり' : '予定通り';
+            const achievementLabel =
+                actual?.achievement === 'missed'
+                    ? '未達'
+                    : actual?.achievement === 'partial'
+                        ? '一部未達'
+                        : '達成';
+            const result = actual?.result || '（未入力）';
+            return `${formatPlanLine(plan)}\n  実績: ${result} / 差異: ${varianceLabel} / 達成: ${achievementLabel}`;
+        })
+        .join('\n');
+};
+
+const buildNextDayPlanText = (
+    selections: DailyRoutineSelection[],
+    routines: DailyRoutine[],
+    adhoc: string
+) => {
+    const routineMap = new Map(routines.map(routine => [routine.id, routine]));
+    const routineLines = selections.map(selection => {
+        const routine = routineMap.get(selection.routineId);
+        const name = routine?.name || 'ルーティーン';
+        const time = selection.timeRange || routine?.timeRange || '';
+        const purpose = selection.purpose || routine?.purpose || '';
+        const note = selection.note || '';
+        const details = [time && `時間:${time}`, purpose && `目的:${purpose}`].filter(Boolean).join(' / ');
+        const suffix = [details, note].filter(Boolean).join(' / ');
+        return suffix ? `${name}（${suffix}）` : name;
+    });
+    const adhocText = adhoc.trim();
+    const lines = [...routineLines];
+    if (adhocText) {
+        lines.push(adhocText);
+    }
+    return lines.join('\n');
 };
 
 const buildReportTemplate = (data: DailyReportData) => {
-    const date = new Date(data.reportDate);
+    const date = data.reportDate ? new Date(data.reportDate) : new Date();
     const dateLabel = new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' }).format(date);
-    const planLines = data.planItems.map(formatScheduleLine).join('\n');
-    const actualLines = data.actualItems.map(formatScheduleLine).join('\n');
-    const comments = data.comments.filter((comment) => comment.trim().length > 0).map((comment) => `・${comment}`).join('\n') || '・';
+    const planItems = (data.planItems || []) as DailyReportPlanItem[];
+    const actualItems = (data.actualItems || []) as DailyReportActualItem[];
+    const planActualLines = buildPlanActualLines(planItems, actualItems);
+    const summary = (data.activityContent || '').trim() || '（未入力）';
+    const nextDay = (data.nextDayPlan || '').trim() || '（未入力）';
+    const start = data.startTime || '--:--';
+    const end = data.endTime || '--:--';
 
     return [
-        `${dateLabel} の業務報告`,
-        `PQ目標${data.pqGoal}　今期現在${data.pqCurrent || '－'}　前年${data.pqLastYear || '－'}`,
-        `MQ目標${data.mqGoal}　今期現在${data.mqCurrent || '－'}　前年${data.mqLastYear || '－'}`,
+        `${dateLabel} の日報`,
+        `業務時間: ${start}～${end}`,
+        `PQ目標${data.pqGoal || '－'}　今期現在${data.pqCurrent || '－'}　前年${data.pqLastYear || '－'}`,
+        `MQ目標${data.mqGoal || '－'}　今期現在${data.mqCurrent || '－'}　前年${data.mqLastYear || '－'}`,
         '',
-        '【本日の計画】',
-        planLines || '（未入力）',
+        '【本日の計画 vs 実績】',
+        planActualLines || '（未入力）',
         '',
-        '【本日の実績】',
-        actualLines || '（未入力）',
+        '【実績サマリー・考察】',
+        summary,
         '',
-        '【訪問先・対応】',
-        data.customerName || '（未入力）',
-        '',
-        '【明日の予定】',
-        data.nextDayPlan || '（未入力）',
-        '',
-        '【共有事項】',
-        comments,
+        '【翌日予定】',
+        nextDay,
     ].join('\n');
 };
 
 const MetricsSection: React.FC<{
     formData: DailyReportData;
+    goalSettings: { pqGoal: string; mqGoal: string };
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
     inputClass: string;
     labelClass: string;
     isDisabled: boolean;
     onTemplateInsert: () => void;
-}> = ({ formData, onChange, inputClass, labelClass, isDisabled, onTemplateInsert }) => (
+    onOpenGoalEditor: () => void;
+}> = ({ formData, goalSettings, onChange, inputClass, labelClass, isDisabled, onTemplateInsert, onOpenGoalEditor }) => (
     <div className="space-y-4">
         <div className="flex justify-between items-center">
             <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">PQ / MQ 目標進捗</p>
-            <button
-                type="button"
-                onClick={onTemplateInsert}
-                className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                disabled={isDisabled}
-            >
-                テンプレートを貼り付け
-            </button>
+            <div className="flex items-center gap-3">
+                <button
+                    type="button"
+                    onClick={onOpenGoalEditor}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-slate-800 disabled:opacity-50"
+                    disabled={isDisabled}
+                >
+                    目標設定
+                </button>
+                <button
+                    type="button"
+                    onClick={onTemplateInsert}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    disabled={isDisabled}
+                >
+                    テンプレートを貼り付け
+                </button>
+            </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label className={labelClass}>PQ目標</label>
-                <input name="pqGoal" value={formData.pqGoal} onChange={onChange} className={inputClass} disabled={isDisabled} />
+                <input name="pqGoal" value={goalSettings.pqGoal} readOnly className={inputClass} disabled />
             </div>
             <div>
                 <label className={labelClass}>PQ 今期</label>
@@ -660,7 +971,7 @@ const MetricsSection: React.FC<{
             </div>
             <div>
                 <label className={labelClass}>MQ目標</label>
-                <input name="mqGoal" value={formData.mqGoal} onChange={onChange} className={inputClass} disabled={isDisabled} />
+                <input name="mqGoal" value={goalSettings.mqGoal} readOnly className={inputClass} disabled />
             </div>
             <div>
                 <label className={labelClass}>MQ 今期</label>
@@ -674,16 +985,50 @@ const MetricsSection: React.FC<{
     </div>
 );
 
-const ScheduleSection: React.FC<{
+const GoalEditor: React.FC<{
+    goalDraft: { pqGoal: string; mqGoal: string };
+    onChange: (field: 'pqGoal' | 'mqGoal', value: string) => void;
+    onSave: () => void;
+    onCancel: () => void;
+    inputClass: string;
+    labelClass: string;
+}> = ({ goalDraft, onChange, onSave, onCancel, inputClass, labelClass }) => (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">PQ / MQ 目標（個人設定）</p>
+            <button type="button" onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700">
+                閉じる
+            </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label className={labelClass}>PQ目標</label>
+                <input value={goalDraft.pqGoal} onChange={(e) => onChange('pqGoal', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+                <label className={labelClass}>MQ目標</label>
+                <input value={goalDraft.mqGoal} onChange={(e) => onChange('mqGoal', e.target.value)} className={inputClass} />
+            </div>
+        </div>
+        <div className="flex justify-end">
+            <button type="button" onClick={onSave} className="bg-blue-600 text-white px-4 py-2 rounded-lg">
+                保存
+            </button>
+        </div>
+    </div>
+);
+
+const PlanSection: React.FC<{
     title: string;
-    items: ScheduleItem[];
-    onChange: (id: string, field: keyof ScheduleItem, value: string) => void;
+    items: DailyReportPlanItem[];
+    customerOptions: string[];
+    onChange: (id: string, field: keyof DailyReportPlanItem, value: string) => void;
     onAddRow: () => void;
     onRemoveRow: (id: string) => void;
     labelClass: string;
     inputClass: string;
     isDisabled: boolean;
-}> = ({ title, items, onChange, onAddRow, onRemoveRow, labelClass, inputClass, isDisabled }) => (
+}> = ({ title, items, customerOptions, onChange, onAddRow, onRemoveRow, labelClass, inputClass, isDisabled }) => (
     <div className="space-y-3">
         <div className="flex items-center justify-between">
             <label className={labelClass}>{title}</label>
@@ -697,6 +1042,13 @@ const ScheduleSection: React.FC<{
                 行を追加
             </button>
         </div>
+        {customerOptions.length > 0 && (
+            <datalist id="daily-report-plan-customers">
+                {customerOptions.map(name => (
+                    <option key={name} value={name} />
+                ))}
+            </datalist>
+        )}
         <div className="space-y-3">
             {items.map((item) => (
                 <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2">
@@ -716,13 +1068,30 @@ const ScheduleSection: React.FC<{
                     />
                     <input
                         type="text"
-                        value={item.description}
-                        onChange={(e) => onChange(item.id, 'description', e.target.value)}
-                        className={`md:col-span-7 ${inputClass}`}
-                        placeholder="業務内容、訪問先、移動など"
+                        value={item.customerName}
+                        onChange={(e) => onChange(item.id, 'customerName', e.target.value)}
+                        className={`md:col-span-3 ${inputClass}`}
+                        placeholder="訪問先・顧客名"
+                        disabled={isDisabled}
+                        list={customerOptions.length ? 'daily-report-plan-customers' : undefined}
+                    />
+                    <input
+                        type="text"
+                        value={item.action}
+                        onChange={(e) => onChange(item.id, 'action', e.target.value)}
+                        className={`md:col-span-3 ${inputClass}`}
+                        placeholder="行動内容"
                         disabled={isDisabled}
                     />
-                    <div className="md:col-span-1 flex justify-end">
+                    <input
+                        type="text"
+                        value={item.purpose}
+                        onChange={(e) => onChange(item.id, 'purpose', e.target.value)}
+                        className={`md:col-span-2 ${inputClass}`}
+                        placeholder="目的・狙い"
+                        disabled={isDisabled}
+                    />
+                    <div className="md:col-span-12 flex justify-end">
                         <button
                             type="button"
                             onClick={() => onRemoveRow(item.id)}
@@ -734,6 +1103,255 @@ const ScheduleSection: React.FC<{
                     </div>
                 </div>
             ))}
+        </div>
+    </div>
+);
+
+const ActualSection: React.FC<{
+    title: string;
+    items: DailyReportActualItem[];
+    onChange: (
+        id: string,
+        field: keyof Pick<DailyReportActualItem, 'result' | 'variance' | 'achievement'>,
+        value: string
+    ) => void;
+    labelClass: string;
+    inputClass: string;
+    isDisabled: boolean;
+}> = ({ title, items, onChange, labelClass, inputClass, isDisabled }) => (
+    <div className="space-y-3">
+        <label className={labelClass}>{title}</label>
+        <div className="space-y-3">
+            {items.map((item) => (
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                    <input
+                        type="time"
+                        value={item.start}
+                        readOnly
+                        className={`md:col-span-2 ${inputClass}`}
+                        disabled
+                    />
+                    <input
+                        type="time"
+                        value={item.end}
+                        readOnly
+                        className={`md:col-span-2 ${inputClass}`}
+                        disabled
+                    />
+                    <input
+                        type="text"
+                        value={item.customerName}
+                        readOnly
+                        className={`md:col-span-3 ${inputClass}`}
+                        disabled
+                    />
+                    <input
+                        type="text"
+                        value={item.action}
+                        readOnly
+                        className={`md:col-span-3 ${inputClass}`}
+                        disabled
+                    />
+                    <input
+                        type="text"
+                        value={item.purpose}
+                        readOnly
+                        className={`md:col-span-2 ${inputClass}`}
+                        disabled
+                    />
+                    <input
+                        type="text"
+                        value={item.result}
+                        onChange={(e) => onChange(item.id, 'result', e.target.value)}
+                        className={`md:col-span-8 ${inputClass}`}
+                        placeholder="実績内容（簡易）"
+                        disabled={isDisabled}
+                    />
+                    <select
+                        value={item.variance}
+                        onChange={(e) => onChange(item.id, 'variance', e.target.value)}
+                        className={`md:col-span-2 ${inputClass}`}
+                        disabled={isDisabled}
+                    >
+                        <option value="as_planned">予定通り</option>
+                        <option value="changed">変更あり</option>
+                    </select>
+                    <select
+                        value={item.achievement}
+                        onChange={(e) => onChange(item.id, 'achievement', e.target.value)}
+                        className={`md:col-span-2 ${inputClass}`}
+                        disabled={isDisabled}
+                    >
+                        <option value="achieved">達成</option>
+                        <option value="partial">一部未達</option>
+                        <option value="missed">未達</option>
+                    </select>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+const RoutineSection: React.FC<{
+    routines: DailyRoutine[];
+    selections: DailyRoutineSelection[];
+    adhoc: string;
+    nextDayPlan: string;
+    onToggleRoutine: (routine: DailyRoutine) => void;
+    onSelectionChange: (id: string, field: keyof DailyRoutineSelection, value: string) => void;
+    onAdhocChange: (value: string) => void;
+    onAddRoutine: () => void;
+    onRoutineChange: (id: string, field: keyof DailyRoutine, value: string) => void;
+    onRoutineDelete: (id: string) => void;
+    labelClass: string;
+    inputClass: string;
+    isDisabled: boolean;
+    isEditing: boolean;
+    onToggleEdit: () => void;
+}> = ({
+    routines,
+    selections,
+    adhoc,
+    nextDayPlan,
+    onToggleRoutine,
+    onSelectionChange,
+    onAdhocChange,
+    onAddRoutine,
+    onRoutineChange,
+    onRoutineDelete,
+    labelClass,
+    inputClass,
+    isDisabled,
+    isEditing,
+    onToggleEdit,
+}) => (
+    <div className="space-y-4">
+        <div className="flex items-center justify-between">
+            <label className={labelClass}>翌日予定（ルーティーン連動）</label>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={onToggleEdit}
+                    className="text-sm font-semibold text-slate-600 hover:text-slate-800"
+                >
+                    {isEditing ? '管理を閉じる' : 'ルーティーン管理'}
+                </button>
+                <button
+                    type="button"
+                    onClick={onAddRoutine}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                    disabled={isDisabled}
+                >
+                    <PlusCircle className="w-4 h-4" />
+                    ルーティーン追加
+                </button>
+            </div>
+        </div>
+
+        {routines.length === 0 && (
+            <p className="text-sm text-slate-500">ルーティーンを登録すると、翌日予定が選択式になります。</p>
+        )}
+
+        <div className="space-y-3">
+            {routines.map((routine) => {
+                const selection = selections.find(sel => sel.routineId === routine.id);
+                return (
+                    <div key={routine.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            <input
+                                type="checkbox"
+                                checked={!!selection}
+                                onChange={() => onToggleRoutine(routine)}
+                                disabled={isDisabled}
+                            />
+                            {routine.name || '未設定ルーティーン'}
+                        </label>
+                        {selection && (
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                                <input
+                                    type="text"
+                                    value={selection.timeRange || ''}
+                                    onChange={(e) => onSelectionChange(selection.id, 'timeRange', e.target.value)}
+                                    className={`md:col-span-3 ${inputClass}`}
+                                    placeholder="時間帯"
+                                    disabled={isDisabled}
+                                />
+                                <input
+                                    type="text"
+                                    value={selection.purpose || ''}
+                                    onChange={(e) => onSelectionChange(selection.id, 'purpose', e.target.value)}
+                                    className={`md:col-span-6 ${inputClass}`}
+                                    placeholder="目的"
+                                    disabled={isDisabled}
+                                />
+                                <input
+                                    type="text"
+                                    value={selection.note || ''}
+                                    onChange={(e) => onSelectionChange(selection.id, 'note', e.target.value)}
+                                    className={`md:col-span-3 ${inputClass}`}
+                                    placeholder="微調整メモ"
+                                    disabled={isDisabled}
+                                />
+                            </div>
+                        )}
+                        {isEditing && (
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                                <input
+                                    type="text"
+                                    value={routine.name || ''}
+                                    onChange={(e) => onRoutineChange(routine.id, 'name', e.target.value)}
+                                    className={`md:col-span-4 ${inputClass}`}
+                                    placeholder="業務名"
+                                    disabled={isDisabled}
+                                />
+                                <input
+                                    type="text"
+                                    value={routine.timeRange || ''}
+                                    onChange={(e) => onRoutineChange(routine.id, 'timeRange', e.target.value)}
+                                    className={`md:col-span-3 ${inputClass}`}
+                                    placeholder="想定時間帯"
+                                    disabled={isDisabled}
+                                />
+                                <input
+                                    type="text"
+                                    value={routine.purpose || ''}
+                                    onChange={(e) => onRoutineChange(routine.id, 'purpose', e.target.value)}
+                                    className={`md:col-span-4 ${inputClass}`}
+                                    placeholder="目的"
+                                    disabled={isDisabled}
+                                />
+                                <div className="md:col-span-1 flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => onRoutineDelete(routine.id)}
+                                        className="px-3 py-2 text-sm text-rose-600 hover:text-rose-700"
+                                        disabled={isDisabled}
+                                    >
+                                        削除
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+
+        <div>
+            <label className={labelClass}>単発予定</label>
+            <textarea
+                rows={3}
+                value={adhoc}
+                onChange={(e) => onAdhocChange(e.target.value)}
+                className={inputClass}
+                disabled={isDisabled}
+                placeholder="単発の予定のみ自由記述してください。"
+            />
+        </div>
+
+        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-3 bg-slate-50 dark:bg-slate-800/50">
+            <p className="text-xs font-semibold text-slate-500 mb-2">自動生成プレビュー</p>
+            <pre className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{nextDayPlan || '（未入力）'}</pre>
         </div>
     </div>
 );
@@ -764,3 +1382,7 @@ const addDays = (isoDate: string, offset: number) => {
     base.setDate(base.getDate() + offset);
     return base.toISOString().split('T')[0];
 };
+
+
+
+

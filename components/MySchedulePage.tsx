@@ -54,8 +54,9 @@ const viewModeOptions: { id: ViewMode; label: string }[] = [
 
 const dateWithYearRegex = /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/;
 const dateWithoutYearRegex = /(\d{1,2})[\/\-](\d{1,2})/g;
-const planSectionRegex = /(月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日).*予定/;
-const timeLineRegex = /(\d{1,2}[:：]\d{2})\s*[～〜~\-]\s*(\d{1,2}[:：]\d{2})\s+(.+)/;
+const planSectionRegex = /(翌日予定|明日予定|明日の予定|次の予定|翌日プラン|翌日計画|月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日).*予定/;
+const actualSectionRegex = /(本日の実績|本日の計画|本日の計画\s*vs\s*実績|計画\s*vs\s*実績)/;
+const timeLineRegex = /(\d{1,2}[:：]\d{2})\s*[～〜~\-]\s*(\d{1,2}[:：]\d{2})\s*(.+)/;
 
 const normalizeTimeString = (value: string) => value.replace('：', ':').trim();
 const APPLICATION_STATUS_STYLES: Record<ApplicationStatus, { label: string; className: string }> = {
@@ -77,7 +78,7 @@ interface DailyReportEntrySummary {
     reportDate: string;
     status: ApplicationStatus;
     totalMinutes: number;
-    customerName: string;
+    customerNames: string[];
     nextDayPlan: string;
 }
 
@@ -126,6 +127,10 @@ const parseDailyReportText = (rawText: string, fallbackDate: string): ParsedDail
     lines.forEach((line) => {
         if (planSectionRegex.test(line)) {
             currentSection = 'plan';
+            return;
+        }
+        if (actualSectionRegex.test(line)) {
+            currentSection = 'actual';
             return;
         }
         const match = line.match(timeLineRegex);
@@ -184,7 +189,15 @@ const coerceScheduleItems = (items: any): ScheduleItem[] => {
             id: typeof item.id === 'string' ? item.id : `coerced-${index}`,
             start: typeof item.start === 'string' ? item.start : '',
             end: typeof item.end === 'string' ? item.end : '',
-            description: typeof item.description === 'string' ? item.description : '',
+            description: (() => {
+                if (typeof item.description === 'string' && item.description.trim()) return item.description;
+                const action = typeof item.action === 'string' ? item.action.trim() : '';
+                const result = typeof item.result === 'string' ? item.result.trim() : '';
+                const customer = typeof item.customerName === 'string' ? item.customerName.trim() : '';
+                const core = action || result;
+                if (customer && core) return `${customer} / ${core}`;
+                return core || customer;
+            })(),
         }));
 };
 
@@ -709,18 +722,37 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
                     (typeof formData.reportDate === 'string' && formData.reportDate) ||
                     extractDatePart(application.submittedAt ?? application.createdAt) ||
                     '';
+                const planItems = Array.isArray(formData.planItems) ? formData.planItems : [];
                 const actualItems = coerceScheduleItems(formData.actualItems);
-                const totalMinutes = actualItems.reduce(
+                const fallbackItems = actualItems.length > 0 ? actualItems : coerceScheduleItems(planItems);
+                const totalMinutes = fallbackItems.reduce(
                     (sum, item) => sum + calculateScheduleItemMinutes(item),
                     0,
+                );
+                const customerNames = Array.from(
+                    new Set(
+                        [
+                            ...(Array.isArray(planItems)
+                                ? planItems.map((item: any) => item?.customerName)
+                                : []),
+                            typeof formData.customerName === 'string' ? formData.customerName : '',
+                        ]
+                            .map((name) => (typeof name === 'string' ? name.trim() : ''))
+                            .filter(Boolean),
+                    ),
                 );
                 return {
                     id: application.id,
                     reportDate,
                     status: application.status,
                     totalMinutes,
-                    customerName: typeof formData.customerName === 'string' ? formData.customerName : '',
-                    nextDayPlan: typeof formData.nextDayPlan === 'string' ? formData.nextDayPlan : '',
+                    customerNames,
+                    nextDayPlan:
+                        typeof formData.nextDayPlan === 'string'
+                            ? formData.nextDayPlan
+                            : typeof formData.nextDayAdhoc === 'string'
+                                ? formData.nextDayAdhoc
+                                : '',
                 };
             })
             .filter((entry) => !!entry.reportDate)
@@ -757,9 +789,11 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
         ).length;
         const customerCounter: Record<string, number> = {};
         dailyReportEntries.forEach((entry) => {
-            const name = entry.customerName?.trim();
-            if (!name) return;
-            customerCounter[name] = (customerCounter[name] || 0) + 1;
+            entry.customerNames.forEach((name) => {
+                const trimmed = name.trim();
+                if (!trimmed) return;
+                customerCounter[trimmed] = (customerCounter[trimmed] || 0) + 1;
+            });
         });
         const topCustomers = Object.entries(customerCounter)
             .sort((a, b) => b[1] - a[1])
@@ -1256,28 +1290,28 @@ const eventsByDate = useMemo(() => {
             id: `${event.id}-plan`,
             start: event.time || '',
             end: '',
-            description: event.description ? `${event.title} - ${event.description}` : event.title,
+            customerName: event.description || '',
+            action: event.title,
+            purpose: '',
         }));
+        const planTimes = planItems.map(item => item.start).filter(Boolean).sort();
         const activityContent =
-            selectedEvents.map((event) => event.description ?? event.title).join('\n') ||
-            '本日の活動内容を記入してください。';
-        const nextDayPlan =
+            planItems.map((item) => item.action).filter(Boolean).join('\n') ||
+            '本日の実績を踏まえ、考察を記入してください。';
+        const nextDayAdhoc =
             upcomingEvents
                 .slice(0, 3)
                 .map((event) => event.title)
-                .join(' / ') || '次回の予定を整理してください。';
+                .join('\n') || '';
 
         onCreateDailyReport({
             id: `${viewingUserId}-schedule-${selectedDate}`,
             reportDate: selectedDate,
-            startTime: planItems[0]?.start || '09:00',
-            endTime: planItems[planItems.length - 1]?.start || '18:00',
-            customerName: selectedEvents[0]?.title || '',
+            startTime: planTimes[0] || '09:00',
+            endTime: planTimes[planTimes.length - 1] || '18:00',
             activityContent,
-            nextDayPlan,
             planItems,
-            actualItems,
-            comments: [],
+            nextDayAdhoc,
         });
     };
 
@@ -1887,6 +1921,13 @@ const eventsByDate = useMemo(() => {
                                         {latestReports.map((report) => {
                                             const statusStyle = APPLICATION_STATUS_STYLES[report.status];
                                             const workingHours = report.totalMinutes ? minutesToHours(report.totalMinutes).toFixed(1) : '-';
+                                            const customerLabel =
+                                                report.customerNames.length > 0
+                                                    ? report.customerNames.join(' / ')
+                                                    : '顧客未入力';
+                                            const nextDayPreview = report.nextDayPlan
+                                                ? report.nextDayPlan.replace(/\s+/g, ' ').slice(0, 28)
+                                                : '計画未入力';
                                             return (
                                                 <div key={report.id} className="flex items-center justify-between gap-3">
                                                     <div>
@@ -1897,11 +1938,11 @@ const eventsByDate = useMemo(() => {
                                                                 weekday: 'short',
                                                             }).format(new Date(report.reportDate))}
                                                             <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                                                                {report.customerName || '顧客未入力'}
+                                                                {customerLabel}
                                                             </span>
                                                         </p>
                                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                            稼働 {workingHours}h / 翌日 {report.nextDayPlan ? report.nextDayPlan.slice(0, 28) : '計画未入力'}
+                                                            稼働 {workingHours}h / 翌日 {nextDayPreview}
                                                         </p>
                                                     </div>
                                                     <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${statusStyle.className}`}>

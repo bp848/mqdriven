@@ -10,6 +10,7 @@ export type Page =
   | 'hr_attendance' | 'hr_man_hours' | 'hr_labor_cost'
   | 'approval_list' | 'approval_form_expense' | 'approval_form_transport' | 'approval_form_leave'
   | 'approval_form_approval' | 'approval_form_daily' | 'approval_form_weekly'
+  | 'daily_report_progress'
   | 'accounting_journal' | 'accounting_general_ledger' | 'accounting_trial_balance'
   | 'accounting_tax_summary' | 'accounting_period_closing' | 'accounting_business_plan'
   | 'ai_business_consultant'
@@ -561,12 +562,22 @@ export interface ProjectBudgetSummary extends LooseRecord {
 }
 
 export interface DailyReportPrefill {
+  id?: string;
   project_id?: string;
   work_description?: string;
   hours_worked?: number;
   tasks_completed?: string[];
   challenges?: string;
   next_day_plan?: string;
+  reportDate?: string;
+  startTime?: string;
+  endTime?: string;
+  activityContent?: string;
+  planItems?: DailyReportPlanItem[];
+  actualItems?: DailyReportActualItem[];
+  routineSelections?: DailyRoutineSelection[];
+  nextDayAdhoc?: string;
+  nextDayPlan?: string;
 }
 
 export interface Invoice extends LooseRecord {
@@ -1036,8 +1047,19 @@ export interface DailyReportData extends LooseRecord {
   startTime?: string;
   endTime?: string;
   customerName?: string;
+  pqGoal?: string;
+  pqCurrent?: string;
+  pqLastYear?: string;
+  mqGoal?: string;
+  mqCurrent?: string;
+  mqLastYear?: string;
+  planItems?: DailyReportPlanItem[];
+  actualItems?: DailyReportActualItem[];
   activityContent?: string;
+  routineSelections?: DailyRoutineSelection[];
+  nextDayAdhoc?: string;
   nextDayPlan?: string;
+  comments?: string[];
 }
 
 export interface ScheduleItem extends LooseRecord {
@@ -1045,6 +1067,45 @@ export interface ScheduleItem extends LooseRecord {
   start: string;
   end: string;
   description: string;
+}
+
+export type DailyReportVariance = 'as_planned' | 'changed';
+export type DailyReportAchievement = 'achieved' | 'partial' | 'missed';
+
+export interface DailyReportPlanItem extends LooseRecord {
+  id: string;
+  start: string;
+  end: string;
+  customerName: string;
+  action: string;
+  purpose: string;
+}
+
+export interface DailyReportActualItem extends LooseRecord {
+  id: string;
+  start: string;
+  end: string;
+  customerName: string;
+  action: string;
+  purpose: string;
+  result: string;
+  variance: DailyReportVariance;
+  achievement: DailyReportAchievement;
+}
+
+export interface DailyRoutine extends LooseRecord {
+  id: string;
+  name: string;
+  timeRange?: string;
+  purpose?: string;
+}
+
+export interface DailyRoutineSelection extends LooseRecord {
+  id: string;
+  routineId: string;
+  timeRange: string;
+  purpose?: string;
+  note?: string;
 }
 
 export interface InvoiceItem extends LooseRecord {

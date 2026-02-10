@@ -272,14 +272,70 @@ const buildFormSummary = (code?: string, rawData?: any): FormSummary => {
         }
         case 'DLY': {
             pushHighlight('報告日', formatDateValue(data.reportDate) || data.reportDate);
-            pushHighlight('訪問先 / 顧客', data.customerName);
+            const planItems = Array.isArray(data.planItems) ? data.planItems : [];
+            const actualItems = Array.isArray(data.actualItems) ? data.actualItems : [];
+            const customerSummary = Array.from(
+                new Set(
+                    planItems
+                        .map((item: any) => (typeof item?.customerName === 'string' ? item.customerName.trim() : ''))
+                        .filter(Boolean),
+                ),
+            ).join(' / ');
+            if (customerSummary) {
+                pushHighlight('訪問先 / 顧客', customerSummary);
+            } else if (data.customerName) {
+                pushHighlight('訪問先 / 顧客', data.customerName);
+            }
             if (data.startTime || data.endTime) {
                 pushHighlight('稼働時間', `${data.startTime || '--'} 〜 ${data.endTime || '--'}`);
             }
-            pushListSection('活動概要', [
-                { label: '活動内容', value: data.activityContent },
-                { label: '翌日の予定', value: data.nextDayPlan },
+            pushListSection('PQ / MQ 進捗', [
+                { label: 'PQ目標', value: data.pqGoal },
+                { label: 'PQ 今期', value: data.pqCurrent },
+                { label: 'PQ 前年', value: data.pqLastYear },
+                { label: 'MQ目標', value: data.mqGoal },
+                { label: 'MQ 今期', value: data.mqCurrent },
+                { label: 'MQ 前年', value: data.mqLastYear },
             ]);
+            pushListSection('実績サマリー・考察', [
+                { label: '内容', value: data.activityContent },
+            ]);
+            pushListSection('翌日予定', [
+                { label: '予定', value: data.nextDayPlan ?? data.nextDayAdhoc },
+            ]);
+
+            if (planItems.length > 0) {
+                const actualMap = new Map(actualItems.map((item: any) => [item.id, item]));
+                const rows = planItems.map((plan: any, idx: number) => {
+                    const actual = actualMap.get(plan.id);
+                    const varianceLabel = actual
+                        ? actual.variance === 'changed'
+                            ? '変更あり'
+                            : '予定通り'
+                        : '-';
+                    const achievementLabel = actual
+                        ? actual.achievement === 'missed'
+                            ? '未達'
+                            : actual.achievement === 'partial'
+                                ? '一部未達'
+                                : '達成'
+                        : '-';
+                    return [
+                        `${plan.start || '--:--'} 〜 ${plan.end || '--:--'}`,
+                        plan.customerName || '-',
+                        plan.action || '-',
+                        plan.purpose || '-',
+                        actual?.result || '-',
+                        varianceLabel,
+                        achievementLabel,
+                    ];
+                });
+                pushTableSection(
+                    '本日の計画 vs 実績',
+                    ['時間', '訪問先', '行動', '目的', '実績', '差異', '達成度'],
+                    rows,
+                );
+            }
             break;
         }
         case 'WKR': {

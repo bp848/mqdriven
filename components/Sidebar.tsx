@@ -62,6 +62,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
       { page: 'approval_form_daily', name: '日報申請' },
+      { page: 'daily_report_progress', name: '日報提出進捗' },
       { page: 'approval_form_weekly', name: '週報申請' },
     ],
   },

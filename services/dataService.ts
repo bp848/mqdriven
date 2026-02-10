@@ -2622,6 +2622,35 @@ export const getApplications = async (currentUser: User | null): Promise<Applica
         return toTime(b.updatedAt || b.createdAt) - toTime(a.updatedAt || a.createdAt);
     });
 };
+
+export const getDailyReportApplicationsByMonth = async (month: string): Promise<ApplicationWithDetails[]> => {
+    const supabase = getSupabase();
+    const [yearPart, monthPart] = month.split('-').map((part) => Number(part));
+    const now = new Date();
+    const year = Number.isFinite(yearPart) ? yearPart : now.getFullYear();
+    const monthIndex = Number.isFinite(monthPart) ? monthPart : now.getMonth() + 1;
+    const safeMonth = String(monthIndex).padStart(2, '0');
+    const startDate = `${year}-${safeMonth}-01`;
+    const lastDay = new Date(year, monthIndex, 0).getDate();
+    const endDate = `${year}-${safeMonth}-${String(lastDay).padStart(2, '0')}`;
+
+    const { data, error } = await supabase
+        .from('applications')
+        .select(`*, applicant:applicant_id(*), application_code:application_code_id(*), approval_route:approval_route_id(*)`)
+        .eq('application_code.code', 'DLY')
+        .gte('form_data->>reportDate', startDate)
+        .lte('form_data->>reportDate', endDate)
+        .order('submitted_at', { ascending: false });
+
+    ensureSupabaseSuccess(error, 'Failed to fetch daily report applications');
+
+    return (data || []).map((app: any) => ({
+        ...dbApplicationToApplication(app),
+        applicant: app.applicant,
+        applicationCode: app.application_code ? dbApplicationCodeToApplicationCode(app.application_code) : undefined,
+        approvalRoute: app.approval_route ? dbApprovalRouteToApprovalRoute(app.approval_route) : undefined,
+    }));
+};
 export const getApplicationCodes = async (): Promise<ApplicationCode[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.from('application_codes').select('*');

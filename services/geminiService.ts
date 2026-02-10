@@ -1059,9 +1059,18 @@ export const generateDailyReportSummary = async (
 ): Promise<string> => {
   const ai = checkOnlineAndAIOff();
   return withRetry(async () => {
-    const prompt = `以下のキーワードを元に、営業日報の活動内容をビジネス文書としてまとめてください。
-訪問先: ${customerName}
-キーワード: ${activityContent}`;
+    const prompt = `以下の情報をもとに、日報の「実績サマリー・考察」を簡潔に作成してください。
+訪問先/顧客: ${customerName}
+計画・実績メモ:
+${activityContent}
+
+必ず含めたい観点:
+- 数字の進捗 (PQ / MQ)
+- お客様の声
+- 競合・市場情報
+- 同行・社内共有事項
+- 自分の考え・気づき・課題
+`;
     const response = await ai.models.generateContent({ model, contents: prompt });
     return response.text;
   });
@@ -1077,7 +1086,7 @@ export const extractDailyReportFromImage = async (
     const imagePart = { inlineData: { data: imageBase64, mimeType } };
     const textPart = {
       text:
-        "この画像は日本語の手書き業務日報です。日付、訪問先や対応先、主な活動内容、明日の予定などを読み取り、ビジネス文書としてそのまま日報フォームの『活動内容』に貼り付けられる形のテキストに整形して出力してください。箇条書きではなく、日本語の文章で簡潔にまとめてください。",
+        "この画像は日本語の手書き業務日報です。日付、訪問先や対応先、主な活動内容、翌日予定などを読み取り、ビジネス文書としてそのまま日報フォームの『実績サマリー・考察』に貼り付けられる形のテキストに整形して出力してください。箇条書きではなく、日本語の文章で簡潔にまとめてください。",
     };
     const response = await ai.models.generateContent({
       model,
@@ -2077,4 +2086,3 @@ export const calculateEstimation = async (spec: PrintSpec): Promise<EstimationRe
     }
   });
 };
-

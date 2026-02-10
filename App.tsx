@@ -70,6 +70,7 @@ import RegisterPage from './components/RegisterPage';
 import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
 import PageShell from './components/ui/PageShell';
+import DailyReportProgressPage from './components/DailyReportProgressPage';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -187,6 +188,7 @@ const PAGE_TITLES: Record<Page, string> = {
     approval_form_approval: '稟議申請',
     approval_form_daily: '日報',
     approval_form_weekly: '週報',
+    daily_report_progress: '日報提出進捗',
     accounting_journal: '仕訳',
     accounting_general_ledger: '総勘定元帳',
     accounting_trial_balance: '試算表',
@@ -1410,6 +1412,8 @@ const App: React.FC = () => {
                     />
                 );
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
+            case 'daily_report_progress':
+                return <DailyReportProgressPage currentUser={currentUser} addToast={addToast} />;
             case 'proposal_ai':
                 return <DocumentCreationHub />;
             case 'document_creation_tools':
