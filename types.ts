@@ -3,7 +3,7 @@
 
 export type Page =
   | 'analysis_dashboard'
-  | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
+  | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline' | 'customer_detail'
   | 'sales_estimates' | 'quote_center' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
   | 'inventory_management' | 'manufacturing_orders' | 'manufacturing_progress' | 'manufacturing_cost'

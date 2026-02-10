@@ -139,18 +139,78 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
                     </div>
                 </div>
 
-                {/* Status Breakdown */}
+                {/* Sales Rep Performance */}
                 <div className="p-6 rounded-2xl shadow-sm">
-                    <h3 className="text-xl font-semibold mb-4">ステータス別内訳</h3>
+                    <h3 className="text-xl font-semibold mb-4">営業担当者別売上</h3>
                     <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={metrics.statusBreakdown.map(item => ({ name: item.status, 件数: item.count }))}>
+                        <BarChart data={metrics.topSalesReps?.slice(0, 5) || []}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
-                            <XAxis dataKey="name" fontSize={12} />
-                            <YAxis fontSize={12} />
-                            <Tooltip formatter={(value: number) => [`${value}件`, '件数']} />
-                            <Bar dataKey="件数" fill="#8b5cf6" />
+                            <XAxis dataKey="sales_rep" fontSize={12} angle={-45} textAnchor="end" height={80} />
+                            <YAxis tickFormatter={(value) => `¥${value / 1000000}M`} fontSize={12} />
+                            <Tooltip formatter={(value: number) => [formatJPY(value), '売上']} />
+                            <Bar dataKey="sales_amount" fill="#3b82f6" />
                         </BarChart>
                     </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* Pipeline Analysis */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="p-6 rounded-2xl shadow-sm">
+                    <h3 className="text-xl font-semibold mb-4">パイプライン分析</h3>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">見積もり件数</span>
+                            <span className="text-2xl font-bold text-blue-600">{metrics.pipelineStats?.quotes || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">受注件数</span>
+                            <span className="text-2xl font-bold text-green-600">{metrics.pipelineStats?.orders || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">納品件数</span>
+                            <span className="text-2xl font-bold text-purple-600">{metrics.pipelineStats?.delivered || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">コンバージョン率</span>
+                            <span className="text-2xl font-bold text-orange-600">
+                                {metrics.pipelineStats ? ((metrics.pipelineStats.orders / metrics.pipelineStats.quotes) * 100).toFixed(1) : 0}%
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Monthly Performance */}
+                <div className="p-6 rounded-2xl shadow-sm">
+                    <h3 className="text-xl font-semibold mb-4">月別実績</h3>
+                    <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={metrics.monthlyPerformance || []}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
+                            <XAxis dataKey="month" fontSize={12} />
+                            <YAxis tickFormatter={(value) => `¥${value / 1000000}M`} fontSize={12} />
+                            <Tooltip formatter={(value: number) => [formatJPY(value), '売上']} />
+                            <Bar dataKey="sales" fill="#10b981" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+
+                {/* Order Summary */}
+                <div className="p-6 rounded-2xl shadow-sm">
+                    <h3 className="text-xl font-semibold mb-4">注文サマリー</h3>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">見積もり金額</span>
+                            <span className="text-lg font-bold text-blue-600">{formatJPY(metrics.orderSummary?.quoteAmount || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">受注金額</span>
+                            <span className="text-lg font-bold text-green-600">{formatJPY(metrics.orderSummary?.orderAmount || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">平均単価</span>
+                            <span className="text-lg font-bold text-purple-600">{formatJPY(metrics.orderSummary?.avgUnitPrice || 0)}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 

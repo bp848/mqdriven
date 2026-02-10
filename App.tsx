@@ -47,6 +47,7 @@ import AIChatPage from './components/AIChatPage';
 import MarketResearchPage from './components/MarketResearchPage';
 import AITranscriptionPage from './components/AITranscriptionPage';
 import MeetingMinutesIframe from './components/MeetingMinutesIframe';
+import CustomerDetailPage from './components/sales/CustomerDetailPage';
 import PDFEditingHub from './components/PDFEditingHub';
 import DTPHub from './components/DTPHub';
 import PrintEstimateApp from './components/estimate/PrintEstimateApp';
@@ -172,6 +173,7 @@ const PAGE_TITLES: Record<Page, string> = {
     purchasing_orders: '購買発注',
     purchasing_invoices: '仕入請求(AP)',
     purchasing_payments: '支払管理',
+    customer_detail: '顧客詳細',
     inventory_management: '在庫管理',
     manufacturing_orders: '製造指図',
     manufacturing_progress: '製造進捗',
@@ -1424,6 +1426,12 @@ const App: React.FC = () => {
                 return <DTPHub />;
             case 'prompt_management':
                 return <PromptManagementPage currentUser={currentUser} addToast={addToast} />;
+            case 'customer_detail':
+                return (
+                    <CustomerDetailPage
+                        onBack={() => setCurrentPage('sales_customers')}
+                    />
+                );
             case 'ai_business_consultant':
                 return <AIChatPage currentUser={currentUser} jobs={jobs} customers={customers} journalEntries={journalEntries} />;
             case 'ai_market_research':
