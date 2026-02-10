@@ -149,7 +149,8 @@ const DailyReportProgressPage: React.FC<DailyReportProgressPageProps> = ({ curre
           getDailyReportApplicationsByMonth(monthKey),
         ]);
         if (!isMounted) return;
-        setUsers(usersData || []);
+        const activeUsers = (usersData || []).filter((u: EmployeeUser) => u?.is_active !== false);
+        setUsers(activeUsers);
         setApprovalRoutes(routesData || []);
         setReports(reportData || []);
       } catch (err: any) {
@@ -231,9 +232,10 @@ const DailyReportProgressPage: React.FC<DailyReportProgressPageProps> = ({ curre
 
   const rows = useMemo(() => {
     const now = new Date();
+    const activeUsers = users.filter((user) => user?.is_active !== false);
     const baseUsers = canViewAll
-      ? users
-      : users.filter((user) => user.id && user.id === currentUser?.id);
+      ? activeUsers
+      : activeUsers.filter((user) => user.id && user.id === currentUser?.id);
 
     return baseUsers.map((user) => {
       const userReports = submissionsByUser.get(user.id) || [];
