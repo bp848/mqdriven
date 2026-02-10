@@ -20,7 +20,6 @@ import BugReportChatModal from './components/BugReportChatModal';
 import SettingsPage from './components/SettingsPage';
 import EmailNotificationSettingsPage from './components/EmailNotificationSettingsPage';
 import AccountingPage from './components/Accounting';
-import OCRTest from './components/OCRTest';
 import SalesPipelinePage from './components/sales/SalesPipelinePage';
 import ProjectManagementPage from './components/projects/ProjectManagementPage';
 import InventoryManagementPage from './components/inventory/InventoryManagementPage';
@@ -225,7 +224,6 @@ const PAGE_TITLES: Record<Page, string> = {
     admin_master_management: 'マスター管理',
     admin_action_console: 'アクションコンソール',
     admin_bug_reports: 'バグ報告',
-    ocr_test: 'OCRテスト',
     bulletin_board: '掲示板',
     knowledge_base: 'ナレッジベース',
     settings: '設定',
@@ -1414,12 +1412,14 @@ const App: React.FC = () => {
                     />
                 );
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
-            case 'admin_bug_reports': return <BugReportChatModal isOpen={true} onClose={() => { }} currentUser={currentUser} addToast={addToast} />;
-            case 'ocr_test': return <OCRTest />;
             case 'daily_report_progress':
                 return <DailyReportProgressPage currentUser={currentUser} addToast={addToast} />;
             case 'proposal_ai':
                 return <DocumentCreationHub />;
+            case 'document_creation_tools':
+                return <DocumentCreationHub />;
+            case 'pdf_editing_tools':
+                return <PDFEditingHub />;
             case 'dtp_tools':
                 return <DTPHub />;
             case 'prompt_management':

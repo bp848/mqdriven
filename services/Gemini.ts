@@ -107,6 +107,16 @@ const GEMINI_API_KEY =
   resolveEnvValue('API_KEY') ??
   '';
 
+if (!GEMINI_API_KEY && !isGeminiAIDisabled) {
+  console.error('Gemini APIキーが設定されていません。AI機能を利用するにはAPIキーが必要です。');
+  console.error('チェックした環境変数:');
+  console.error('- VITE_GEMINI_API_KEY:', resolveEnvValue('VITE_GEMINI_API_KEY') ? '***SET***' : 'NOT SET');
+  console.error('- NEXT_PUBLIC_GEMINI_API_KEY:', resolveEnvValue('NEXT_PUBLIC_GEMINI_API_KEY') ? '***SET***' : 'NOT SET');
+  console.error('- GEMINI_API_KEY:', resolveEnvValue('GEMINI_API_KEY') ? '***SET***' : 'NOT SET');
+  console.error('- API_KEY:', resolveEnvValue('API_KEY') ? '***SET***' : 'NOT SET');
+  console.error('- AI_OFF:', aiOffRaw);
+}
+
 export const GEMINI_DEFAULT_MODEL =
   resolveEnvValue('VITE_GEMINI_MODEL') ??
   resolveEnvValue('NEXT_PUBLIC_GEMINI_MODEL') ??
@@ -116,27 +126,7 @@ export const GEMINI_OCR_MODEL =
   resolveEnvValue('VITE_GEMINI_OCR_MODEL') ??
   resolveEnvValue('NEXT_PUBLIC_GEMINI_OCR_MODEL') ??
   resolveEnvValue('GEMINI_OCR_MODEL') ??
-  'gemini-2.0-flash'; // Force OCR model
-
-// AI設定状態のログ
-console.log('=== AI Configuration ===');
-console.log('API Key:', GEMINI_API_KEY ? '✓ SET (' + GEMINI_API_KEY.length + ' chars)' : '✗ NOT SET');
-console.log('AI Disabled:', isGeminiAIDisabled);
-console.log('OCR Model:', GEMINI_OCR_MODEL);
-console.log('======================');
-
-if (!GEMINI_API_KEY && !isGeminiAIDisabled) {
-  console.error('Gemini APIキーが設定されていません。AI機能を利用するにはAPIキーが必要です。');
-  console.error('チェックした環境変数:');
-  console.error('- VITE_GEMINI_API_KEY:', resolveEnvValue('VITE_GEMINI_API_KEY') ? '***SET***' : 'NOT SET');
-  console.error('- NEXT_PUBLIC_GEMINI_API_KEY:', resolveEnvValue('NEXT_PUBLIC_GEMINI_API_KEY') ? '***SET***' : 'NOT SET');
-  console.error('- GEMINI_API_KEY:', resolveEnvValue('GEMINI_API_KEY') ? '***SET***' : 'NOT SET');
-  console.error('- API_KEY:', resolveEnvValue('API_KEY') ? '***SET***' : 'NOT SET');
-  console.error('- AI_OFF:', aiOffRaw);
-  console.error('- import.meta.env.VITE_GEMINI_API_KEY:', import.meta.env?.VITE_GEMINI_API_KEY ? '***SET***' : 'NOT SET');
-} else if (GEMINI_API_KEY) {
-  console.log('✓ API Key loaded from import.meta.env.VITE_GEMINI_API_KEY');
-}
+  GEMINI_DEFAULT_MODEL;
 
 // Vertex AI endpoints reject API keys, so we default to the standard Google AI endpoint here.
 export const geminiClient = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
