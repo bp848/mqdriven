@@ -1597,7 +1597,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans flex">
+        <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans flex mq-theme">
             <Sidebar
                 currentPage={currentPage}
                 onNavigate={handleNavigate}
@@ -1610,9 +1610,9 @@ const App: React.FC = () => {
             />
             <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative min-h-0">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
-                <div className={`flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className={`flex-1 overflow-y-auto p-6 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
                     <Header {...headerConfig} />
-                    <div className="mt-8">
+                    <div className="mt-6">
                         <PageShell>
                             {renderContent()}
                         </PageShell>

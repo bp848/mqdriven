@@ -5,10 +5,29 @@
 /* Global styles for MQ会計ドリブン */
 :root {
   color-scheme: light dark;
-  font-family: 'Noto Sans JP', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: #f1f5f9;
-  color: #0f172a;
-  font-size: calc(100% + 2pt);
+  --mq-font-family: 'Noto Sans JP', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mq-font-size: 14px;
+  --mq-line-height: 1.55;
+  --mq-page-width: 1520px;
+  --mq-card-radius: 18px;
+  --mq-card-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --mq-border: #e2e8f0;
+  --mq-bg: #f1f5f9;
+  --mq-card-bg: #ffffff;
+  --mq-text: #0f172a;
+  --mq-muted: #64748b;
+  --mq-table-head: #f8fafc;
+  --mq-table-hover: #f1f5f9;
+  --mq-input-bg: #f8fafc;
+  --mq-input-border: #dbe1ea;
+  --mq-focus: #3b82f6;
+  --mq-btn-shadow: 0 1px 0 rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.08);
+  --mq-radius: 10px;
+  font-family: var(--mq-font-family);
+  background-color: var(--mq-bg);
+  color: var(--mq-text);
+  font-size: var(--mq-font-size);
+  line-height: var(--mq-line-height);
 }
 
 body {
@@ -45,4 +64,90 @@ select {
 html.dark body {
   background-color: #0d1117;
   color: #e2e8f0;
+}
+
+html.dark {
+  --mq-border: #273246;
+  --mq-bg: #0b1220;
+  --mq-card-bg: #111827;
+  --mq-text: #e2e8f0;
+  --mq-muted: #94a3b8;
+  --mq-table-head: #0f172a;
+  --mq-table-hover: #111c2e;
+  --mq-input-bg: #0f172a;
+  --mq-input-border: #1f2a3d;
+  --mq-focus: #60a5fa;
+  --mq-card-shadow: 0 10px 30px rgba(2, 6, 23, 0.4);
+}
+
+/* MQ base page styles */
+.mq-page {
+  width: min(100%, var(--mq-page-width));
+  margin: 0 auto;
+  border-radius: var(--mq-card-radius);
+  background: var(--mq-card-bg);
+  border: 1px solid var(--mq-border);
+  box-shadow: var(--mq-card-shadow);
+}
+
+.mq-page table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mq-page thead th {
+  background: var(--mq-table-head);
+  color: var(--mq-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--mq-border);
+  padding: 0.75rem 1rem;
+  text-transform: none;
+}
+
+.mq-page tbody td {
+  border-bottom: 1px solid var(--mq-border);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+}
+
+.mq-page tbody tr:hover {
+  background: var(--mq-table-hover);
+}
+
+.mq-theme button {
+  border-radius: var(--mq-radius);
+  font-weight: 600;
+  box-shadow: var(--mq-btn-shadow);
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.mq-theme button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.mq-theme button:focus-visible {
+  outline: 2px solid var(--mq-focus);
+  outline-offset: 2px;
+}
+
+.mq-theme input,
+.mq-theme select,
+.mq-theme textarea {
+  border-radius: var(--mq-radius);
+  background: var(--mq-input-bg);
+  border: 1px solid var(--mq-input-border);
+  color: inherit;
+}
+
+.mq-theme input:focus,
+.mq-theme select:focus,
+.mq-theme textarea:focus {
+  outline: none;
+  border-color: var(--mq-focus);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
