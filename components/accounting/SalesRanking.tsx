@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { JobStatus, ProjectBudgetSummary, ProjectBudgetFilter, Customer } from '../../types';
-import { Trophy, DollarSign, TrendingUp, Briefcase } from '../Icons';
+import { Trophy, DollarSign, TrendingUp, Briefcase, ChevronLeft, ChevronRight } from '../Icons';
 import StatCard from '../StatCard';
 import { formatJPY } from '../../utils';
 import * as dataService from '../../services/dataService';
@@ -41,6 +41,8 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
     const [filters, setFilters] = useState<ProjectBudgetFilter>(defaultFilters);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 50;
 
     const customerLookups = useMemo(() => {
         const byId = new Map<string, Customer>();
@@ -162,6 +164,27 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
         [groupedCustomerData],
     );
 
+    // ページネーション用のデータ
+    const paginatedData = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return customerData.slice(startIndex, endIndex);
+    }, [customerData, currentPage]);
+
+    const totalPages = Math.ceil(customerData.length / itemsPerPage);
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
+    };
+
+    const handlePrevPage = () => {
+        setCurrentPage(prev => Math.max(prev - 1, 1));
+    };
+
+    const handleNextPage = () => {
+        setCurrentPage(prev => Math.min(prev + 1, totalPages));
+    };
+
     const totals = useMemo(() => {
         return customerData.reduce(
             (acc, customer) => {
@@ -255,37 +278,93 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
                                     </td>
                                 </tr>
                             ) : (
-                                customerData.map((customer, index) => (
-                                    <tr
-                                        key={customer.key}
-                                        className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
-                                    >
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="w-8 h-8 flex items-center justify-center mx-auto">
-                                                {getRankIcon(index)}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
-                                            <div>{customer.clientName}</div>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                案件数: {customer.projectCount}
-                                            </p>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            {customer.orderCount.toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-semibold">
-                                            {formatJPY(customer.totalSales)}
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-semibold text-blue-600 dark:text-blue-400">
-                                            {formatJPY(customer.totalMargin)}
-                                        </td>
-                                    </tr>
-                                ))
+                                paginatedData.map((customer, index) => {
+                                    const globalIndex = (currentPage - 1) * itemsPerPage + index;
+                                    return (
+                                        <tr
+                                            key={customer.key}
+                                            className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
+                                        >
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="w-8 h-8 flex items-center justify-center mx-auto">
+                                                    {getRankIcon(globalIndex)}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
+                                                <div>{customer.clientName}</div>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    案件数: {customer.projectCount}
+                                                </p>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                {customer.orderCount.toLocaleString()}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-semibold">
+                                                {formatJPY(customer.totalSales)}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-semibold text-blue-600 dark:text-blue-400">
+                                                {formatJPY(customer.totalMargin)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
                 </div>
+
+                {/* ページネーション */}
+                {totalPages > 1 && (
+                    <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm text-slate-600 dark:text-slate-400">
+                                全 {customerData.length} 件中 {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, customerData.length)} 件を表示
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handlePrevPage}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                        let pageNum;
+                                        if (totalPages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (currentPage >= totalPages - 2) {
+                                            pageNum = totalPages - 4 + i;
+                                        } else {
+                                            pageNum = currentPage - 2 + i;
+                                        }
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => handlePageChange(pageNum)}
+                                                className={`w-8 h-8 rounded text-sm font-medium ${currentPage === pageNum
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                                    }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <button
+                                    onClick={handleNextPage}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
