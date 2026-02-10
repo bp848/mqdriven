@@ -1308,21 +1308,36 @@ const MySchedulePage: React.FC<MySchedulePageProps> = ({
     });
 
         applications.forEach((application) => {
-            const applicationDate = extractDatePart(application.submittedAt ?? application.createdAt);
+            const code = application.applicationCode?.code;
+            const formDate =
+                code === 'DLY'
+                    ? extractDatePart(application.formData?.reportDate)
+                    : null;
+            const applicationDate =
+                formDate || extractDatePart(application.submittedAt ?? application.createdAt);
             if (!applicationDate) return;
+            if (code === 'DLY' && application.status === 'draft') return;
+
             const label =
                 application.applicationCode?.name ||
                 application.applicationCode?.code ||
                 '社内申請';
+            const statusLabel =
+                APPLICATION_STATUS_STYLES[application.status as ApplicationStatus]?.label || '';
+            const title =
+                code === 'DLY'
+                    ? `日報${statusLabel ? `（${statusLabel}）` : ''}`
+                    : `申請：${label}`;
+
             entries.push({
-            id: `application-${application.id}`,
-            date: applicationDate,
-            title: `申請：${label}`,
-            type: 'application',
-            description: application.applicant?.name || undefined,
-            origin: 'system',
+                id: `application-${application.id}`,
+                date: applicationDate,
+                title,
+                type: 'application',
+                description: application.applicant?.name || undefined,
+                origin: 'system',
+            });
         });
-    });
 
         entries.push(...customEvents);
         return entries.sort((a, b) => a.date.localeCompare(b.date));
