@@ -155,7 +155,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   onSignOut,
   approvalsCount,
 }) => {
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(true);
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
   const [expandedItems, setExpandedItems] = React.useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({});
