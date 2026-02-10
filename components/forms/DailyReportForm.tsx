@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
-import { submitApplication } from '../../services/dataService';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { submitApplication, getCalendarEvents } from '../../services/dataService';
 import { generateDailyReportSummary, extractDailyReportFromImage } from '../../services/geminiService';
 import ApprovalRouteSelector from './ApprovalRouteSelector';
 import { Loader, Sparkles, PlusCircle, Copy } from '../Icons';
@@ -14,6 +14,7 @@ import {
     DailyRoutineSelection,
     DailyReportPrefill,
     Customer,
+    CalendarEvent,
 } from '../../types';
 import ChatApplicationModal from '../ChatApplicationModal';
 import { useSubmitWithConfirmation } from '../../hooks/useSubmitWithConfirmation';
@@ -112,11 +113,13 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isSummaryLoading, setIsSummaryLoading] = useState(false);
     const [isOcrLoading, setIsOcrLoading] = useState(false);
+    const [isNextDayLoading, setIsNextDayLoading] = useState(false);
     const [error, setError] = useState('');
     const [isChatModalOpen, setIsChatModalOpen] = useState(false);
     const [savedReports, setSavedReports] = useState<Record<string, DailyReportData>>({});
     const [appliedPrefillId, setAppliedPrefillId] = useState<string | null>(null);
     const { requestConfirmation, ConfirmationDialog } = useSubmitWithConfirmation();
+    const nextDayAutofillRef = useRef<string | null>(null);
     
     const isDisabled = isSubmitting || isSavingDraft || isLoading || !!formLoadError;
     const reportsStorageKey = useMemo(() => `mqdriven_daily_reports_${currentUser?.id ?? 'guest'}`, [currentUser?.id]);
@@ -595,23 +598,65 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
 
     const handleTemplateInsert = () => {
         const template = [
-            '【数字の進捗】',
+            '【数値】',
             `PQ目標${formData.pqGoal}　今期現在${formData.pqCurrent || '__'}　前年${formData.pqLastYear || '__'}`,
             `MQ目標${formData.mqGoal}　今期現在${formData.mqCurrent || '__'}　前年${formData.mqLastYear || '__'}`,
             '',
             '【お客様の声】',
             '',
-            '【ライバル・市場情報】',
+            '【ライバル情報】',
             '',
-            '【同行・社内共有事項】',
+            '【同業情報】',
             '',
-            '【自分の考え・気づき・課題】',
+            '【自分の考え】',
         ].join('\n');
         setFormData(prev => ({ ...prev, activityContent: template }));
     };
 
     const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1";
     const inputClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
+    const hasCustomerVisit = useMemo(
+        () => (formData.planItems || []).some(item => (item.customerName || '').trim()),
+        [formData.planItems],
+    );
+
+    useEffect(() => {
+        if (!currentUser?.id) return;
+        if (!formData.reportDate) return;
+        const nextDayKey = addDays(formData.reportDate, 1);
+        const hasInput =
+            (formData.routineSelections?.length ?? 0) > 0 ||
+            !!formData.nextDayAdhoc?.trim() ||
+            !!formData.nextDayPlan?.trim();
+        if (hasInput) return;
+        if (nextDayAutofillRef.current === nextDayKey) return;
+        let isActive = true;
+        setIsNextDayLoading(true);
+        getCalendarEvents(currentUser.id)
+            .then((events) => {
+                if (!isActive) return;
+                nextDayAutofillRef.current = nextDayKey;
+                const lines = buildNextDayPlanFromCalendar(events, nextDayKey);
+                if (lines.length === 0) return;
+                applyNextDayPlan(formData.routineSelections || [], lines.join('\n'), routines);
+            })
+            .catch(() => {
+                nextDayAutofillRef.current = nextDayKey;
+            })
+            .finally(() => {
+                if (isActive) setIsNextDayLoading(false);
+            });
+        return () => {
+            isActive = false;
+        };
+    }, [
+        currentUser?.id,
+        formData.reportDate,
+        formData.routineSelections,
+        formData.nextDayAdhoc,
+        formData.nextDayPlan,
+        routines,
+    ]);
 
     return (
         <>
@@ -742,7 +787,10 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                                 </button>
                             </div>
                         </div>
-                        <textarea id="activityContent" name="activityContent" rows={8} value={formData.activityContent} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="本日の実績を踏まえ、PQ/MQ進捗、顧客の声、競合・市場情報、社内共有事項、考察・気づき・課題を記載してください。" autoComplete="on" />
+                        {hasCustomerVisit && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">顧客訪問がある場合は「お客様の声」「ライバル情報」「同業情報」「自分の考え」を明記してください。</p>
+                        )}
+                        <textarea id="activityContent" name="activityContent" rows={8} value={formData.activityContent} onChange={handleChange} className={inputClass} required disabled={isDisabled} placeholder="数値の進捗、お客様の声、ライバル情報、同業情報、自分の考えを記載してください。" autoComplete="on" />
                         {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 mt-1">AI機能無効のため、AI下書き作成は利用できません。</p>}
                     </div>
                     
@@ -762,6 +810,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                         isDisabled={isDisabled}
                         isEditing={routineEditOpen}
                         onToggleEdit={() => setRoutineEditOpen(prev => !prev)}
+                        autoHint={isNextDayLoading ? '翌日の予定をカレンダーから取得中...' : undefined}
                     />
                     <ReportPreview templateText={templateText} onCopy={handleCopyTemplate} />
 
@@ -1208,6 +1257,7 @@ const RoutineSection: React.FC<{
     isDisabled: boolean;
     isEditing: boolean;
     onToggleEdit: () => void;
+    autoHint?: string;
 }> = ({
     routines,
     selections,
@@ -1224,10 +1274,14 @@ const RoutineSection: React.FC<{
     isDisabled,
     isEditing,
     onToggleEdit,
+    autoHint,
 }) => (
     <div className="space-y-4">
         <div className="flex items-center justify-between">
-            <label className={labelClass}>翌日予定（ルーティーン連動）</label>
+            <div>
+                <label className={labelClass}>翌日予定（ルーティーン連動）</label>
+                {autoHint && <p className="text-xs text-slate-500 mt-1">{autoHint}</p>}
+            </div>
             <div className="flex items-center gap-2">
                 <button
                     type="button"
@@ -1381,6 +1435,45 @@ const addDays = (isoDate: string, offset: number) => {
     const base = new Date(isoDate);
     base.setDate(base.getDate() + offset);
     return base.toISOString().split('T')[0];
+};
+
+const formatLocalDateKey = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const formatTimePart = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('ja-JP', { hour: '2-digit', minute: '2-digit' }).format(date);
+};
+
+const formatTimeRange = (start?: string | null, end?: string | null, allDay?: boolean) => {
+    if (allDay) return '終日';
+    const startLabel = formatTimePart(start);
+    const endLabel = formatTimePart(end);
+    if (startLabel && endLabel && startLabel !== endLabel) return `${startLabel}～${endLabel}`;
+    return startLabel || endLabel || '';
+};
+
+const buildNextDayPlanFromCalendar = (events: CalendarEvent[], targetDate: string) => {
+    return events
+        .filter(ev => formatLocalDateKey(ev.startAt) === targetDate)
+        .sort((a, b) => (a.startAt || '').localeCompare(b.startAt || ''))
+        .map(ev => {
+            const title = (ev.title || '').trim() || '予定';
+            const timeLabel = ev.allDay ? '終日' : formatTimeRange(ev.startAt, ev.endAt, ev.allDay);
+            const description = (ev.description || '').trim();
+            const suffix = description && description !== title ? ` / ${description}` : '';
+            return `${timeLabel ? `${timeLabel} ` : ''}${title}${suffix}`.trim();
+        })
+        .filter(Boolean);
 };
 
 
