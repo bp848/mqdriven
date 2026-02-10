@@ -5472,7 +5472,7 @@ export const fetchSalesDashboardMetrics = async (): Promise<SalesDashboardMetric
         monthlyPerformance: monthlySalesData.slice(0, 6),
         orderSummary: {
             quoteAmount: 0,
-            orderAmount: metrics.current_month_sales || 0,
+            orderAmount: Number(metrics.current_month_sales) || 0,
             avgUnitPrice: 0
         }
     };
