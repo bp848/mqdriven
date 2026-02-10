@@ -171,12 +171,13 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  const sidebarWidth = isCollapsed ? 'sm:w-20 w-full' : 'sm:w-64 w-full';
+  // Keep sidebar narrow on mobile so content remains visible; widen on larger screens
+  const sidebarWidth = isCollapsed ? 'sm:w-20 w-16' : 'sm:w-64 w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   return (
     <aside
-      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-screen sm:h-screen min-h-0 sm:relative fixed top-0 left-0 z-40`}
+      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-40`}
     >
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
         <div className="flex items-center gap-2">
