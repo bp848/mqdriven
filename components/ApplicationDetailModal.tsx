@@ -719,10 +719,10 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
 
     return (
         <>
-            <div className="fixed inset-0 z-50 bg-slate-950/70 p-4 md:p-8 font-sans">
+            <div className="fixed inset-0 z-50 bg-slate-950/70 p-2 sm:p-4 md:p-8 font-sans">
                 <div className="flex h-full w-full flex-col rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/80 dark:border-slate-700/60 overflow-hidden">
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-700 px-6 py-5 md:px-8 md:py-6">
-                        <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-b border-slate-200 dark:border-slate-700 px-4 py-3 sm:px-6 sm:py-4 md:px-8 md:py-6">
+                        <div className="space-y-1">
                             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">MQ会計ドリブン</p>
                             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">申請詳細</h2>
                             {resubmittedFromId && (
@@ -734,18 +734,22 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                 </span>
                             )}
                         </div>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <button
+                            onClick={onClose}
+                            className="self-start sm:self-auto text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg p-2 -m-2"
+                            aria-label="閉じる"
+                        >
                             <X className="w-6 h-6" />
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-hidden px-4 py-4 md:px-8 md:py-6">
-                        <div className="grid h-full min-h-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] 2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
-                            <div className="min-h-0 overflow-y-auto space-y-6 pr-1">
+                    <div className="flex-1 overflow-hidden px-3 py-3 sm:px-5 sm:py-5 md:px-8 md:py-6">
+                        <div className="grid h-full min-h-0 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
+                            <div className="min-h-0 overflow-y-auto space-y-4 sm:space-y-6 pr-0 sm:pr-1">
                                 {hasSummarySections && (
-                                    <section className="space-y-4 rounded-3xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 p-6 shadow-inner">
+                                    <section className="space-y-4 rounded-3xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 p-4 sm:p-6 shadow-inner">
                                         {formSummary.highlights.length > 0 && (
-                                            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3">
                                                 {formSummary.highlights.map((item, index) => (
                                                     <div key={`summary-highlight-${index}`} className="rounded-2xl border border-white/40 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/70 p-4">
                                                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
@@ -811,7 +815,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
 
                                 
                                 {hasAttachments && attachmentUrl && (
-                                    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-6 space-y-4">
+                                    <section className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4 sm:p-6 space-y-4">
                                         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">添付ファイル</h3>
                                         {isImageAttachment ? (
                                             <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex">
@@ -934,7 +938,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                         type="button"
                                         onClick={handleReject}
                                         disabled={isProcessing || !rejectionReason.trim()}
-                                        className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:bg-slate-400"
+                                        className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:bg-slate-400 w-full sm:w-auto justify-center"
                                     >
                                         {isProcessing ? <Loader className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                                         <span>差し戻し送信</span>
@@ -943,7 +947,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                         type="button"
                                         onClick={handleApprove}
                                         disabled={isProcessing}
-                                        className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:bg-slate-400"
+                                        className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:bg-slate-400 w-full sm:w-auto justify-center"
                                     >
                                         {isProcessing ? <Loader className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
                                         <span>承認</span>

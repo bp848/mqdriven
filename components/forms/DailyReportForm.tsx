@@ -666,9 +666,9 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                         {isLoading && <Loader className="w-12 h-12 animate-spin text-blue-500" />}
                     </div>
                 )}
-                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm space-y-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex flex-wrap gap-3 ml-auto">
+                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-4 sm:p-8 rounded-2xl shadow-sm space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                        <div className="flex flex-wrap gap-3 sm:ml-auto">
                             <button
                                 type="button"
                                 onClick={handleDuplicateYesterday}
@@ -697,7 +697,7 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                         <div>
                             <label htmlFor="reportDate" className={labelClass}>報告日 *</label>
                             <input type="date" id="reportDate" name="reportDate" value={formData.reportDate} onChange={handleChange} className={inputClass} required disabled={isDisabled} autoComplete="on" />
@@ -821,13 +821,13 @@ const DailyReportForm: React.FC<DailyReportFormProps> = ({
                     <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                         <button
                             type="button"
-                            className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+                            className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50 w-full sm:w-auto"
                             disabled={isDisabled}
                             onClick={handleSaveDraft}
                         >
                             下書き保存
                         </button>
-                        <button type="submit" className="w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
+                        <button type="submit" className="w-full sm:w-40 flex justify-center items-center bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-slate-400" disabled={isDisabled}>
                             {isSubmitting ? <Loader className="w-5 h-5 animate-spin"/> : '報告を提出する'}
                         </button>
                     </div>
