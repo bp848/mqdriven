@@ -171,13 +171,13 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  // Keep sidebar narrow on mobile so content remains visible; widen on larger screens
-  const sidebarWidth = isCollapsed ? 'sm:w-20 w-16' : 'sm:w-64 w-64';
+  // Icon-only on mobile; compact width so content stays visible
+  const sidebarWidth = isCollapsed ? 'w-14 sm:w-20' : 'w-16 sm:w-56';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   return (
     <aside
-      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-40`}
+      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-40`}
     >
       <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
         <div className="flex items-center gap-2">
@@ -205,7 +205,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 
             return (
               <React.Fragment key={category.id}>
-                <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''}`}>
+                <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''} hidden sm:block`}>
                   {!isCollapsed && (
                     <button
                       type="button"
@@ -237,11 +237,11 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                             onNavigate(item.page);
                           }
                         }}
-                        className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                        className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                           } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
                       >
                         {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
-                        <span className={`font-medium ${isCollapsed ? 'sr-only' : ''}`}>{item.name}</span>
+                        <span className={`font-medium hidden sm:block ${isCollapsed ? 'sm:hidden' : ''}`}>{item.name}</span>
                         {item.children && !isCollapsed && (
                           <button
                             type="button"
