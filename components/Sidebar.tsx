@@ -1,4 +1,4 @@
-import * as React from 'react';
+﻿import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
 import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, Mail } from './Icons';
 
@@ -45,7 +45,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
   },
   {
     id: 'calendar',
-    name: 'カレンダー日報タスク',
+    name: 'カレンダー',
     icon: Calendar,
     items: [
       { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
@@ -61,8 +61,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_transport', name: '交通費精算' },
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
-      { page: 'approval_form_daily', name: '日報申請' },
-      { page: 'daily_report_progress', name: '日報提出進捗' },
       { page: 'approval_form_weekly', name: '週報申請' },
     ],
   },
@@ -314,7 +312,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                 onUserChange(selectedUser || null);
               }}
             >
-              {allUsers.map(user => (
+              {allUsers.filter(user => user.is_active !== false).map(user => (
                 <option key={user.id} value={user.id}>{user.name}</option>
               ))}
             </select>
