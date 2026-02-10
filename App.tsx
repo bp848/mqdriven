@@ -158,7 +158,7 @@ type PredictiveSuggestion = {
 
 const PAGE_TITLES: Record<Page, string> = {
     analysis_dashboard: '分析ダッシュボード',
-    my_schedule: '日報タスクカレンダー',
+    schedule_management: 'スケジュール管理',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
     sales_customers: '顧客/取引先',
@@ -188,9 +188,9 @@ const PAGE_TITLES: Record<Page, string> = {
     approval_form_transport: '交通費申請',
     approval_form_leave: '休暇申請',
     approval_form_approval: '稟議申請',
-    approval_form_daily: '日報',
+    approval_form_daily: '日報作成・提出',
     approval_form_weekly: '週報',
-    daily_report_progress: '日報提出進捗',
+    daily_report_management: '日報管理',
     accounting_journal: '仕訳',
     accounting_general_ledger: '総勘定元帳',
     accounting_trial_balance: '試算表',
@@ -1414,7 +1414,24 @@ const App: React.FC = () => {
                     />
                 );
             case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
-            case 'daily_report_progress':
+            case 'schedule_management':
+                return (
+                    <MySchedulePage
+                        jobs={jobs}
+                        purchaseOrders={purchaseOrders}
+                        applications={applications}
+                        currentUser={currentUser}
+                        allUsers={allUsers}
+                        addToast={addToast}
+                        onCreateDailyReport={handleCreateDailyReport}
+                        onRefreshGoogleAuthStatus={handleRefreshGoogleAuthStatus}
+                        onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
+                        onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
+                        googleAuthConnected={googleAuthStatus.connected}
+                        googleAuthExpiresAt={googleAuthStatus.expiresAt}
+                    />
+                );
+            case 'daily_report_management':
                 return <DailyReportProgressPage currentUser={currentUser} addToast={addToast} />;
             case 'proposal_ai':
                 return <DocumentCreationHub />;
@@ -1440,25 +1457,6 @@ const App: React.FC = () => {
                 return <AITranscriptionPage addToast={addToast} isAIOff={isAIOff} />;
             case 'meeting_minutes':
                 return <MeetingMinutesIframe />;
-            case 'my_schedule':
-                return (
-                    <MySchedulePage
-                        jobs={jobs}
-                        purchaseOrders={purchaseOrders}
-                        applications={applications}
-                        currentUser={currentUser}
-                        allUsers={allUsers}
-                        addToast={addToast}
-                        onCreateDailyReport={handleCreateDailyReport}
-                        onRefreshGoogleAuthStatus={handleRefreshGoogleAuthStatus}
-                        onStartGoogleCalendarAuth={handleStartGoogleCalendarAuth}
-                        onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
-                        googleAuthConnected={googleAuthStatus.connected}
-                        googleAuthExpiresAt={googleAuthStatus.expiresAt}
-                        isGoogleAuthLoading={isGoogleAuthLoading}
-                        googleAuthStatusLoading={googleAuthStatus.loading}
-                    />
-                );
             case 'accounting_approved_expense':
                 return (
                     <ApprovedApplications
