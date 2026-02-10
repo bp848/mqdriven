@@ -5407,8 +5407,6 @@ export const fetchSalesAnalysisData = async (filters?: {
 export const fetchSalesDashboardMetrics = async (): Promise<SalesDashboardMetrics> => {
     const supabase = getSupabase();
 
-    console.log('[fetchSalesDashboardMetrics] 開始');
-
     // Get current date ranges
     const today = new Date();
     const thisMonth = today.getMonth();
@@ -5416,13 +5414,10 @@ export const fetchSalesDashboardMetrics = async (): Promise<SalesDashboardMetric
     const monthStart = new Date(thisYear, thisMonth, 1).toISOString().split('T')[0];
 
     // Fetch all sales analysis data
-    console.log('[fetchSalesDashboardMetrics] v_sales_analysisからデータ取得');
     const { data, error } = await supabase
         .from('v_sales_analysis')
         .select('*')
         .order('order_date', { ascending: false });
-
-    console.log('[fetchSalesDashboardMetrics] DBレスポンス:', { data, error });
 
     if (error) {
         console.error('[fetchSalesDashboardMetrics] DBエラー:', error);
@@ -5430,7 +5425,6 @@ export const fetchSalesDashboardMetrics = async (): Promise<SalesDashboardMetric
     }
 
     const allData = data || [];
-    console.log('[fetchSalesDashboardMetrics] 取得データ数:', allData.length);
 
     // Calculate metrics
     const thisMonthData = allData.filter(row => {

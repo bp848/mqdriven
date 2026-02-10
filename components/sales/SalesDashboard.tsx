@@ -20,13 +20,11 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
     useEffect(() => {
         const loadMetrics = async () => {
             try {
-                console.log('販売ダッシュボード: データ読み込み開始');
                 const data = await fetchSalesDashboardMetrics();
-                console.log('販売ダッシュボード: データ取得成功', data);
                 setMetrics(data);
                 setError(null);
             } catch (err) {
-                console.error('販売ダッシュボード: エラー', err);
+                console.error('Failed to load sales metrics:', err);
                 setError('販売データの読み込みに失敗しました');
             } finally {
                 setLoading(false);
