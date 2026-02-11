@@ -201,6 +201,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               <select
                 id="user-select"
                 className="w-full mt-1 bg-white text-slate-900 border border-slate-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
                 value={currentUser?.id || ''}
                 onChange={(e) => {
                   const u = allUsers.find(x => x.id === e.target.value);
