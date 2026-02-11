@@ -121,10 +121,20 @@ const Sidebar: React.FC<SidebarProps> = ({
     () =>
       NAV_ITEMS.flatMap(section =>
         section.items
-          .filter(item => isAdmin || !item.adminOnly)
+          .filter(item => {
+            // デバッグ用：権限チェックをログ出力
+            console.log('Sidebar item check:', {
+              page: item.page,
+              adminOnly: item.adminOnly,
+              isAdmin,
+              currentUserRole: currentUser?.role,
+              show: isAdmin || !item.adminOnly
+            });
+            return isAdmin || !item.adminOnly;
+          })
           .map(item => ({ ...item, section: section.title }))
       ),
-    [isAdmin]
+    [isAdmin, currentUser?.role]
   );
 
   const renderItem = (item: ReturnType<typeof itemsFlat>[number]) => {
@@ -138,9 +148,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           onNavigate(item.page);
           setOpen(false);
         }}
-        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
-          isActive ? 'bg-slate-900 text-white' : 'text-white/80 hover:bg-slate-900/80'
-        }`}
+        className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${isActive ? 'bg-slate-900 text-white' : 'text-white/80 hover:bg-slate-900/80'
+          }`}
       >
         {Icon && <Icon className="w-4 h-4" />}
         <span>{item.name}</span>
