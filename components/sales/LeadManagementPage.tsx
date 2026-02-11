@@ -3,8 +3,8 @@ import { Lead, LeadStatus, Toast, ConfirmationDialogProps, EmployeeUser, Custome
 import { Loader, Pencil, Trash2, Mail, Eye, CheckCircle, Lightbulb, List, KanbanSquare, Plus, Users, Upload } from '../Icons';
 
 type SortConfig = {
-  key: string;
-  direction: 'ascending' | 'descending';
+    key: string;
+    direction: 'ascending' | 'descending';
 } | null;
 import { LeadDetailModal } from './LeadDetailModal';
 import LeadStatusBadge from './LeadStatusBadge';
@@ -16,22 +16,23 @@ import SortableHeader from '../ui/SortableHeader';
 import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu';
 
 interface LeadManagementPageProps {
-  leads: Lead[];
-  searchTerm: string;
-  onRefresh: () => void;
-  onUpdateLead: (leadId: string, updatedData: Partial<Lead>) => Promise<void>;
-  onDeleteLead: (leadId: string) => Promise<void>;
-  addToast: (message: string, type: Toast['type']) => void;
-  requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
-  currentUser: EmployeeUser | null;
-  isAIOff: boolean;
-  onAddEstimate: (estimate: any) => Promise<void>;
-  customers: Customer[]; // 既存顧客リスト
-  onCreateExistingCustomerLead: (leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  onNavigate?: (page: string) => void; // ナビゲーション用
+    leads: Lead[];
+    searchTerm: string;
+    onRefresh: () => void;
+    onUpdateLead: (leadId: string, updatedData: Partial<Lead>) => Promise<void>;
+    onDeleteLead: (leadId: string) => Promise<void>;
+    addToast: (message: string, type: Toast['type']) => void;
+    requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
+    currentUser: EmployeeUser | null;
+    isAIOff: boolean;
+    onAddEstimate: (estimate: any) => Promise<void>;
+    customers: Customer[]; // 既存顧客リスト
+    onCreateExistingCustomerLead: (leadData: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+    onNavigate?: (page: string) => void; // ナビゲーション用
+    allUsers: EmployeeUser[]; // 全ユーザーリストを追加
 }
 
-const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff, onAddEstimate, customers, onCreateExistingCustomerLead, onNavigate }) => {
+const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTerm, onRefresh, onUpdateLead, onDeleteLead, addToast, requestConfirmation, currentUser, isAIOff, onAddEstimate, customers, onCreateExistingCustomerLead, onNavigate, allUsers }) => {
     const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'updatedAt', direction: 'descending' });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -62,7 +63,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
             setSelectedLead(prev => prev ? { ...prev, ...updatedData } as Lead : null);
         }
     };
-    
+
     const handleDeleteClick = (e: React.MouseEvent, lead: Lead) => {
         e.stopPropagation();
         requestConfirmation({
@@ -76,7 +77,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
             }
         });
     };
-    
+
     const handleGenerateReply = async (lead: Lead) => {
         if (!lead.email) {
             addToast('返信先のメールアドレスが登録されていません。', 'error');
@@ -104,14 +105,14 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
             const bodyWithSignature = `${body}\n\n${signature}`;
             const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${lead.email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyWithSignature)}`;
             window.open(gmailUrl, '_blank');
-            
+
             const timestamp = new Date().toLocaleString('ja-JP');
             const logMessage = `[${timestamp}] AI返信メールを作成しました。`;
             const updatedInfo = `${logMessage}\n${lead.infoSalesActivity || ''}`.trim();
-            
+
             const statusTimestamp = new Date().toISOString();
-            await onUpdateLead(lead.id, { 
-                infoSalesActivity: updatedInfo, 
+            await onUpdateLead(lead.id, {
+                infoSalesActivity: updatedInfo,
                 status: LeadStatus.Contacted,
                 updatedAt: statusTimestamp,
                 statusUpdatedAt: statusTimestamp,
@@ -152,7 +153,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
     // 既存顧客案件を追加するハンドラー
     const handleAddExistingCustomerLead = async (customer: Customer, projectType: 'repeat' | 'upsell' | 'retention') => {
         if (!currentUser) return;
-        
+
         setIsAddingExistingCustomerLead(true);
         try {
             const now = new Date().toISOString();
@@ -227,7 +228,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
         }
         if (!searchTerm) return filtered;
         const lower = searchTerm.toLowerCase();
-        return filtered.filter(l => 
+        return filtered.filter(l =>
             l.name.toLowerCase().includes(lower) ||
             l.company.toLowerCase().includes(lower) ||
             l.status.toLowerCase().includes(lower) ||
@@ -246,7 +247,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                     aVal = a.inquiryTypes ? a.inquiryTypes.join(', ') : (a.inquiryType || '');
                     bVal = b.inquiryTypes ? b.inquiryTypes.join(', ') : (b.inquiryType || '');
                 }
-                
+
                 if (sortConfig.key === 'updatedAt') {
                     aVal = a.updatedAt || a.createdAt;
                     bVal = b.updatedAt || b.createdAt;
@@ -254,7 +255,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
 
                 if (aVal === null || aVal === undefined) return 1;
                 if (bVal === null || bVal === undefined) return -1;
-                
+
                 if (String(aVal).toLowerCase() < String(bVal).toLowerCase()) return sortConfig.direction === 'ascending' ? -1 : 1;
                 if (String(aVal).toLowerCase() > String(bVal).toLowerCase()) return sortConfig.direction === 'ascending' ? 1 : -1;
                 return 0;
@@ -298,11 +299,10 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
 
     const renderInvestigationBadge = (lead: Lead) => (
         <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                lead.aiInvestigation?.summary
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200'
-                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-            }`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${lead.aiInvestigation?.summary
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200'
+                : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                }`}
         >
             {lead.aiInvestigation?.summary ? '調査済' : '未'}
         </span>
@@ -467,10 +467,10 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                             </thead>
                             <tbody>
                                 {sortedLeads.map((lead) => (
-                                    <tr 
-                                      key={lead.id} 
-                                      className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50"
-                                      onClick={() => handleRowClick(lead)}
+                                    <tr
+                                        key={lead.id}
+                                        className="group bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer odd:bg-slate-50 dark:odd:bg-slate-800/50"
+                                        onClick={() => handleRowClick(lead)}
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateTime(lead.updatedAt || lead.createdAt)}</td>
                                         <td className="px-6 py-4">
@@ -480,7 +480,15 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-slate-700 dark:text-slate-300">{lead.assignedTo || '-'}</span>
+                                                <span className="text-slate-700 dark:text-slate-300">
+                                                    {lead.assignedTo ?
+                                                        (() => {
+                                                            const assignee = allUsers.find(u => u.id === lead.assignedTo);
+                                                            return assignee ? assignee.name : '-';
+                                                        })()
+                                                        : '-'
+                                                    }
+                                                </span>
                                                 {lead.statusUpdatedAt && (
                                                     <span className="text-xs text-slate-400 whitespace-nowrap">({formatDateTime(lead.statusUpdatedAt)})</span>
                                                 )}
@@ -489,11 +497,10 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                         <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                                             <button
                                                 onClick={(e) => handleToggleHandled(e, lead)}
-                                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                                                    isHandled(lead)
-                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100'
-                                                        : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-100'
-                                                }`}
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition ${isHandled(lead)
+                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100'
+                                                    : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-100'
+                                                    }`}
                                                 disabled={togglingHandledId === lead.id}
                                             >
                                                 {togglingHandledId === lead.id ? (
@@ -529,8 +536,8 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                     </span>
                                                     {lead.projectType && (
                                                         <span className="text-xs text-slate-500">
-                                                            {lead.projectType === 'repeat' ? 'リピート' : 
-                                                             lead.projectType === 'upsell' ? 'アップセル' : 'リテンション'}
+                                                            {lead.projectType === 'repeat' ? 'リピート' :
+                                                                lead.projectType === 'upsell' ? 'アップセル' : 'リテンション'}
                                                         </span>
                                                     )}
                                                 </div>
@@ -606,11 +613,11 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                     <DropdownMenuItem onClick={() => handleRowClick(lead)}>
                                                         <Eye className="w-4 h-4" /> 詳細表示
                                                     </DropdownMenuItem>
-                                                     {lead.status === LeadStatus.Untouched && (
+                                                    {lead.status === LeadStatus.Untouched && (
                                                         <DropdownMenuItem onClick={(e) => handleMarkContacted(e, lead)}>
                                                             {isMarkingContacted === lead.id ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />} コンタクト済にする
                                                         </DropdownMenuItem>
-                                                     )}
+                                                    )}
                                                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleGenerateReply(lead); }} disabled={isAIOff}>
                                                         {isReplyingTo === lead.id ? <Loader className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />} AIで返信作成
                                                     </DropdownMenuItem>
@@ -622,10 +629,10 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                         </td>
                                     </tr>
                                 ))}
-                                 {sortedLeads.length === 0 && (
+                                {sortedLeads.length === 0 && (
                                     <tr>
                                         <td colSpan={10}>
-                                            <EmptyState 
+                                            <EmptyState
                                                 icon={Lightbulb}
                                                 title={searchTerm ? '検索結果がありません' : 'リードがありません'}
                                                 message={searchTerm ? '検索条件を変更してください。' : '「新規作成」から最初のリードを登録してください。'}

@@ -1277,6 +1277,7 @@ const App: React.FC = () => {
                     isAIOff={isAIOff}
                     onAddEstimate={handleAddEstimate}
                     customers={customers}
+                    allUsers={allUsers}
                     onNavigate={handleNavigate}
                     onCreateExistingCustomerLead={async (leadData) => {
                         await dataService.addLead(leadData);
