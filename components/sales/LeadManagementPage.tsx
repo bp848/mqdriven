@@ -480,7 +480,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-slate-700 dark:text-slate-300">
+                                                <span className="text-slate-900 dark:text-slate-100 font-medium">
                                                     {lead.assignedTo ?
                                                         (() => {
                                                             const assignee = allUsers.find(u => u.id === lead.assignedTo);
@@ -490,7 +490,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                                     }
                                                 </span>
                                                 {lead.statusUpdatedAt && (
-                                                    <span className="text-xs text-slate-400 whitespace-nowrap">({formatDateTime(lead.statusUpdatedAt)})</span>
+                                                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">({formatDateTime(lead.statusUpdatedAt)})</span>
                                                 )}
                                             </div>
                                         </td>
