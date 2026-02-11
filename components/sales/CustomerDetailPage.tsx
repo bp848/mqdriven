@@ -171,7 +171,7 @@ const CustomerDetailPage: React.FC<CustomerDetailPageProps> = ({ customerName, o
                 <select
                     value={selectedCustomer}
                     onChange={(e) => setSelectedCustomer(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="px-4 py-2 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                     <option value="">顧客を選択</option>
                     {customerData.map((customer) => (

@@ -67,6 +67,17 @@ select optgroup {
   color: #0f172a;
 }
 
+#user-select {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+#user-select option,
+#user-select optgroup {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
 html.dark body {
   background-color: #0d1117;
   color: #e2e8f0;
