@@ -61,6 +61,12 @@ select {
   font: inherit;
 }
 
+select option,
+select optgroup {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
 html.dark body {
   background-color: #0d1117;
   color: #e2e8f0;

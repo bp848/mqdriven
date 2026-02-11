@@ -200,7 +200,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </label>
               <select
                 id="user-select"
-                className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-sm"
+                className="w-full bg-white text-slate-900 border border-slate-300 rounded-md p-2 text-sm"
                 value={currentUser?.id || ''}
                 onChange={(e) => {
                   const u = allUsers.find(x => x.id === e.target.value);
