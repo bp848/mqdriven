@@ -480,7 +480,7 @@ const LeadManagementPage: React.FC<LeadManagementPageProps> = ({ leads, searchTe
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-slate-900 dark:text-slate-100 font-medium">
+                                                <span className="text-slate-900 dark:text-white font-medium">
                                                     {lead.assigned_to ?
                                                         (() => {
                                                             const assignee = allUsers.find(u => u.id === lead.assigned_to);
