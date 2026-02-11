@@ -208,7 +208,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                 }}
               >
                 {allUsers.filter(u => u.is_active !== false).map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+                  <option key={u.id} value={u.id} className="bg-white text-slate-900">
+                    {u.name}
+                  </option>
                 ))}
               </select>
             </div>
