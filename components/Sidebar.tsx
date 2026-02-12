@@ -237,7 +237,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                             onNavigate(item.page);
                           }
                         }}
-                        className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white'
+                        className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
                           } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
                       >
                         {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
@@ -278,7 +278,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                                 <a
                                   href="#"
                                   onClick={(e) => { e.preventDefault(); onNavigate(child.page); }}
-                                  className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white'
+                                  className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
                                     } ml-8`}
                                 >
                                   <span className="font-medium">{child.name}</span>
@@ -308,7 +308,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
             <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
             <select
               id="user-select"
-              className="w-full mt-1 bg-slate-700 border-slate-600 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              className="w-full mt-1 !bg-white dark:!bg-slate-700 !border-slate-300 dark:!border-slate-600 !text-slate-900 dark:!text-white rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
               value={currentUser?.id || ''}
               onChange={(e) => {
                 const selectedUser = allUsers.find(u => u.id === e.target.value);

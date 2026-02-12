@@ -61,6 +61,18 @@ select {
   font: inherit;
 }
 
+#user-select option,
+#user-select optgroup {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.dark #user-select option,
+html.dark #user-select optgroup {
+  background-color: #1f2937 !important;
+  color: #f3f4f6 !important;
+}
+
 html.dark body {
   background-color: #0d1117;
   color: #e2e8f0;
