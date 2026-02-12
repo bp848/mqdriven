@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Briefcase, Search, Users } from './Icons';
+import { Briefcase, Moon, Search, Sun, Users } from './Icons';
+import { applyThemePreference, setStoredThemePreference } from '../src/theme';
 
 type HeaderAction = {
   label: string;
@@ -66,6 +67,9 @@ const ActionButton: React.FC<{ action: HeaderAction; variant?: 'primary' | 'seco
 const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, search }) => {
   const [now, setNow] = useState<Date>(new Date());
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -79,6 +83,24 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
       setIsSearchFocused(false);
     }
   }, [search]);
+
+
+  useEffect(() => {
+    const syncThemeState = () => {
+      setIsDarkTheme(document.documentElement.classList.contains('dark'));
+    };
+
+    window.addEventListener('storage', syncThemeState);
+    return () => window.removeEventListener('storage', syncThemeState);
+  }, []);
+
+  const handleToggleTheme = () => {
+    const nextIsDark = !isDarkTheme;
+    const nextPreference = nextIsDark ? 'dark' : 'light';
+    setStoredThemePreference(nextPreference);
+    applyThemePreference(nextPreference);
+    setIsDarkTheme(nextIsDark);
+  };
 
   const timeString = now.toLocaleTimeString('ja-JP', {
     hour: '2-digit',
@@ -104,6 +126,15 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
         <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
           {timeString}
         </div>
+        <button
+          type="button"
+          onClick={handleToggleTheme}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80"
+          aria-label={isDarkTheme ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
+        >
+          {isDarkTheme ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {isDarkTheme ? 'ライト' : 'ダーク'}
+        </button>
         {search && (
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
