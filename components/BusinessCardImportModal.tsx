@@ -234,30 +234,30 @@ const BusinessCardImportModal: React.FC<BusinessCardImportModalProps> = ({
 
       const processBatch = async () => {
         const batch = fileArray.slice(currentIndex, currentIndex + batchSize);
-
-        // バッチ内のファイルを一括で追加
-        batch.forEach(file => {
+        const batchDrafts = batch.map(file => {
           const id = generateId();
           const previewUrl = URL.createObjectURL(file);
-          const draft: CardDraft = {
+          return {
             id,
             file,
-            fileName: file.name,
-            fileUrl: previewUrl,
-            mimeType: file.type || 'application/octet-stream',
-            status: 'processing',
-            contact: {},
-            processingStartTime: Date.now(),
-            processingProgress: 0,
+            draft: {
+              id,
+              file,
+              fileName: file.name,
+              fileUrl: previewUrl,
+              mimeType: file.type || 'application/octet-stream',
+              status: 'processing' as const,
+              contact: {},
+              processingStartTime: Date.now(),
+              processingProgress: 0,
+            },
           };
-          setDrafts(prev => [...prev, draft]);
         });
 
+        setDrafts(prev => [...prev, ...batchDrafts.map(item => item.draft)]);
+
         // バッチ内のファイルを並列処理
-        const batchPromises = batch.map((file, index) => {
-          const draftId = currentIndex + index;
-          return runOcr(draftId.toString(), file);
-        });
+        const batchPromises = batchDrafts.map(({ id, file }) => runOcr(id, file));
 
         await Promise.all(batchPromises);
 
