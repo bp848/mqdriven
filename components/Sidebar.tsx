@@ -332,7 +332,12 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
               <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
               <select
                 id="user-select"
-                className="w-full mt-1 !bg-white dark:!bg-slate-700 !border-slate-300 dark:!border-slate-600 !text-slate-900 dark:!text-white rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full mt-1 !bg-white dark:!bg-gray-700 !border-gray-300 dark:!border-gray-600 !text-gray-900 dark:!text-white rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                style={{
+                  backgroundColor: 'var(--tw-prose-body) !important',
+                  color: 'var(--tw-prose-headings) !important',
+                  borderColor: 'var(--tw-prose-links) !important'
+                }}
                 value={currentUser?.id || ''}
                 onChange={(e) => {
                   const selectedUser = allUsers.find(u => u.id === e.target.value);

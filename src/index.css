@@ -61,6 +61,19 @@ select {
   font: inherit;
 }
 
+/* Force user select dropdown colors */
+#user-select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #d1d5db !important;
+}
+
+html.dark #user-select {
+  background-color: #374151 !important;
+  color: #f3f4f6 !important;
+  border-color: #4b5563 !important;
+}
+
 #user-select option,
 #user-select optgroup {
   background-color: #ffffff !important;
