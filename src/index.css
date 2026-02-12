@@ -169,7 +169,7 @@ html.dark {
   border-radius: var(--mq-radius);
   background: var(--mq-input-bg);
   border: 1px solid var(--mq-input-border);
-  color: inherit;
+  color: var(--mq-text);
   min-height: 36px;
 }
 
