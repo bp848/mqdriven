@@ -171,167 +171,192 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  // Icon-only on mobile; compact width so content stays visible
-  const sidebarWidth = isCollapsed ? 'w-14 sm:w-20' : 'w-16 sm:w-56';
+  // Mobile: always collapsed with proper width, Desktop: toggleable
+  const sidebarWidth = 'w-14 sm:w-20 md:w-56 lg:w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   return (
-    <aside
-      className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 relative sm:relative z-40`}
-    >
-      <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
-        <div className="flex items-center gap-2">
-          <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
+    <>
+      {/* Mobile header with hamburger menu */}
+      <div className="sm:hidden fixed top-0 left-0 right-0 z-50 bg-slate-800 text-white p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={toggleSidebar}
-            className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
-            aria-label={isCollapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'}
+            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+            aria-label="メニューを開く"
           >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            <ChevronRight className="w-4 h-4" />
           </button>
-        </div>
-        <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
-          <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
-          <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
-          <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
-          <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
+          <h1 className="text-lg font-bold">業務</h1>
         </div>
       </div>
-      <nav className={`flex-1 mt-2 sm:mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
-        <ul>
-          {visibleCategories.map(category => {
-            const isCategoryExpanded = !isCollapsed && (expandedCategories[category.id] ?? true);
 
-            return (
-              <React.Fragment key={category.id}>
-                <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''} hidden sm:block`}>
-                  {!isCollapsed && (
-                    <button
-                      type="button"
-                      onClick={() => toggleCategory(category.id)}
-                      className="flex items-center w-full hover:text-slate-300 transition-colors"
-                      aria-label={isCategoryExpanded ? `${category.name}カテゴリを折りたたむ` : `${category.name}カテゴリを展開する`}
-                    >
-                      {category.icon && <category.icon className="w-4 h-4 mr-2" />}
-                      <span className="flex-1 text-left">{category.name}</span>
-                      <ChevronDown className={`w-3 h-3 transition-transform ${isCategoryExpanded ? 'rotate-180' : ''}`} />
-                    </button>
-                  )}
-                </li>
-                {isCategoryExpanded && category.items.map(item => {
-                  const ItemIcon = item.icon ?? category.icon;
-                  const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
-                  const isActive = currentPage === item.page || isChildActive;
-                  const isExpanded = !isCollapsed && ((expandedItems[item.page] ?? false) || isChildActive);
-                  return (
-                    <li key={item.page}>
-                      <a
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (item.children) {
-                            e.stopPropagation();
-                            setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
-                          } else {
-                            onNavigate(item.page);
-                          }
-                        }}
-                        className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
-                          } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
+      {/* Mobile sidebar overlay */}
+      <div className={`sm:hidden fixed inset-0 z-40 ${isCollapsed ? 'pointer-events-none' : ''}`}>
+        <div
+          className={`absolute inset-0 bg-black/50 transition-opacity ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}
+          onClick={toggleSidebar}
+        />
+      </div>
+
+      <aside
+        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${isCollapsed ? '-translate-x-full sm:translate-x-0' : 'translate-x-0'}`}
+      >
+        <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
+          <div className="flex items-center gap-2">
+            <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+              aria-label={isCollapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'}
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+          <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
+            <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
+            <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
+            <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
+            <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
+          </div>
+        </div>
+        <nav className={`flex-1 mt-2 sm:mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
+          <ul>
+            {visibleCategories.map(category => {
+              const isCategoryExpanded = !isCollapsed && (expandedCategories[category.id] ?? true);
+
+              return (
+                <React.Fragment key={category.id}>
+                  <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider ${isCollapsed ? 'sr-only' : ''} hidden sm:block`}>
+                    {!isCollapsed && (
+                      <button
+                        type="button"
+                        onClick={() => toggleCategory(category.id)}
+                        className="flex items-center w-full hover:text-slate-300 transition-colors"
+                        aria-label={isCategoryExpanded ? `${category.name}カテゴリを折りたたむ` : `${category.name}カテゴリを展開する`}
                       >
-                        {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
-                        <span className={`font-medium hidden sm:block ${isCollapsed ? 'sm:hidden' : ''}`}>{item.name}</span>
-                        {item.children && !isCollapsed && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
+                        {category.icon && <category.icon className="w-4 h-4 mr-2" />}
+                        <span className="flex-1 text-left">{category.name}</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${isCategoryExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+                  </li>
+                  {isCategoryExpanded && category.items.map(item => {
+                    const ItemIcon = item.icon ?? category.icon;
+                    const isChildActive = item.children?.some(child => child.page === currentPage) ?? false;
+                    const isActive = currentPage === item.page || isChildActive;
+                    const isExpanded = !isCollapsed && ((expandedItems[item.page] ?? false) || isChildActive);
+                    return (
+                      <li key={item.page}>
+                        <a
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (item.children) {
                               e.stopPropagation();
                               setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
-                            }}
-                            className="ml-auto p-1 rounded hover:bg-slate-600/40"
-                            aria-label={isExpanded ? '折りたたむ' : '展開する'}
-                          >
-                            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                          </button>
+                            } else {
+                              onNavigate(item.page);
+                            }
+                          }}
+                          className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
+                            } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
+                        >
+                          {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
+                          <span className={`font-medium hidden sm:block ${isCollapsed ? 'sm:hidden' : ''}`}>{item.name}</span>
+                          {item.children && !isCollapsed && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setExpandedItems(prev => ({ ...prev, [item.page]: !(prev[item.page] ?? false) }));
+                              }}
+                              className="ml-auto p-1 rounded hover:bg-slate-600/40"
+                              aria-label={isExpanded ? '折りたたむ' : '展開する'}
+                            >
+                              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          )}
+                          {item.badge !== undefined && item.badge > 0 && !item.children && (
+                            <span
+                              className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.badgeColor === 'green'
+                                ? 'bg-emerald-500 text-white'
+                                : item.badgeColor === 'red'
+                                  ? 'bg-rose-500 text-white'
+                                  : 'bg-blue-500 text-white'
+                                } ${isCollapsed ? 'ml-0' : ''}`}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </a>
+                        {item.children && isExpanded && (
+                          <ul className="mt-1 space-y-1">
+                            {item.children.map(child => {
+                              const isChildPageActive = currentPage === child.page;
+                              return (
+                                <li key={child.page}>
+                                  <a
+                                    href="#"
+                                    onClick={(e) => { e.preventDefault(); onNavigate(child.page); }}
+                                    className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
+                                      } ml-8`}
+                                  >
+                                    <span className="font-medium">{child.name}</span>
+                                  </a>
+                                </li>
+                              );
+                            })}
+                          </ul>
                         )}
-                        {item.badge !== undefined && item.badge > 0 && !item.children && (
-                          <span
-                            className={`ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.badgeColor === 'green'
-                              ? 'bg-emerald-500 text-white'
-                              : item.badgeColor === 'red'
-                                ? 'bg-rose-500 text-white'
-                                : 'bg-blue-500 text-white'
-                              } ${isCollapsed ? 'ml-0' : ''}`}
-                          >
-                            {item.badge}
-                          </span>
-                        )}
-                      </a>
-                      {item.children && isExpanded && (
-                        <ul className="mt-1 space-y-1">
-                          {item.children.map(child => {
-                            const isChildPageActive = currentPage === child.page;
-                            return (
-                              <li key={child.page}>
-                                <a
-                                  href="#"
-                                  onClick={(e) => { e.preventDefault(); onNavigate(child.page); }}
-                                  className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
-                                    } ml-8`}
-                                >
-                                  <span className="font-medium">{child.name}</span>
-                                </a>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-        </ul>
-      </nav>
-      <div className="mt-auto pt-4 border-t border-slate-700 space-y-4">
-        {supabaseUserEmail && (
-          <div className="px-3 py-2 rounded-lg bg-slate-700/60">
-            <p className="text-xs text-slate-400">ログイン中のユーザー</p>
-            <p className="text-sm font-semibold text-white break-all">{supabaseUserEmail}</p>
-          </div>
-        )}
-        {currentUser?.role === 'admin' && (
-          <div className="px-3 py-2">
-            <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
-            <select
-              id="user-select"
-              className="w-full mt-1 !bg-white dark:!bg-slate-700 !border-slate-300 dark:!border-slate-600 !text-slate-900 dark:!text-white rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-              value={currentUser?.id || ''}
-              onChange={(e) => {
-                const selectedUser = allUsers.find(u => u.id === e.target.value);
-                onUserChange(selectedUser || null);
-              }}
+                      </li>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </ul>
+        </nav>
+        <div className="mt-auto pt-4 border-t border-slate-700 space-y-4">
+          {supabaseUserEmail && (
+            <div className="px-3 py-2 rounded-lg bg-slate-700/60">
+              <p className="text-xs text-slate-400">ログイン中のユーザー</p>
+              <p className="text-sm font-semibold text-white break-all">{supabaseUserEmail}</p>
+            </div>
+          )}
+          {currentUser?.role === 'admin' && (
+            <div className="px-3 py-2">
+              <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
+              <select
+                id="user-select"
+                className="w-full mt-1 !bg-white dark:!bg-slate-700 !border-slate-300 dark:!border-slate-600 !text-slate-900 dark:!text-white rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                value={currentUser?.id || ''}
+                onChange={(e) => {
+                  const selectedUser = allUsers.find(u => u.id === e.target.value);
+                  onUserChange(selectedUser || null);
+                }}
+              >
+                {allUsers.filter(user => user.is_active !== false).map(user => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {onSignOut && (
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="w-full px-3 py-2 text-sm font-semibold text-center text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors"
             >
-              {allUsers.filter(user => user.is_active !== false).map(user => (
-                <option key={user.id} value={user.id}>{user.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {onSignOut && (
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="w-full px-3 py-2 text-sm font-semibold text-center text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors"
-          >
-            ログアウト
-          </button>
-        )}
-      </div>
-    </aside>
+              ログアウト
+            </button>
+          )}
+        </div>
+      </aside>
+    </>
   );
 };
 
