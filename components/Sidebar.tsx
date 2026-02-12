@@ -155,12 +155,18 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   onSignOut,
   approvalsCount,
 }) => {
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(true);
+  const [isMobileOpen, setIsMobileOpen] = React.useState(false);
   const [expandedItems, setExpandedItems] = React.useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({});
 
   const toggleSidebar = () => {
-    setIsCollapsed(prev => !prev);
+    // Mobile: toggle mobile menu, Desktop: toggle collapse
+    if (window.innerWidth < 640) {
+      setIsMobileOpen(prev => !prev);
+    } else {
+      setIsCollapsed(prev => !prev);
+    }
   };
 
   const toggleCategory = (categoryId: string) => {
@@ -174,6 +180,10 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   // Mobile: always collapsed with proper width, Desktop: toggleable
   const sidebarWidth = 'w-14 sm:w-20 md:w-56 lg:w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
+
+  // Mobile visibility logic
+  const shouldShowMobile = isMobileOpen;
+  const shouldShowDesktop = !isCollapsed;
 
   return (
     <>
@@ -193,15 +203,15 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       </div>
 
       {/* Mobile sidebar overlay */}
-      <div className={`sm:hidden fixed inset-0 z-40 ${isCollapsed ? 'pointer-events-none' : ''}`}>
+      <div className={`sm:hidden fixed inset-0 z-40 ${!shouldShowMobile ? 'pointer-events-none' : ''}`}>
         <div
-          className={`absolute inset-0 bg-black/50 transition-opacity ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}
-          onClick={toggleSidebar}
+          className={`absolute inset-0 bg-black/50 transition-opacity ${!shouldShowMobile ? 'opacity-0' : 'opacity-100'}`}
+          onClick={() => setIsMobileOpen(false)}
         />
       </div>
 
       <aside
-        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${isCollapsed ? '-translate-x-full sm:translate-x-0' : 'translate-x-0'}`}
+        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${shouldShowMobile ? 'translate-x-0' : '-translate-x-full'} sm:${shouldShowDesktop ? 'translate-x-0' : 'translate-x-0'}`}
       >
         <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
           <div className="flex items-center gap-2">
