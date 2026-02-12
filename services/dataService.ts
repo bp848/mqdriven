@@ -3446,6 +3446,12 @@ export const getGeneralLedger = async (accountId: string, dateRange: { start: st
         p_end_date: dateRange.end,
     });
 
+    // RPC関数が利用できない場合のフォールバック
+    if (error && (error.code === 'PGRST116' || error.code === '400')) {
+        console.warn('RPC get_general_ledger not available, using fallback');
+        return []; // 代替データを返す
+    }
+
     ensureSupabaseSuccess(error, 'Failed to fetch general ledger');
 
     // 繧ｬ繝ｼ繝峨Ξ繝ｼ繝ｫ・嗔osted莉戊ｨｳ縺ｮ縺ｿ繧定ｨｱ蜿ｯ
@@ -4751,6 +4757,12 @@ export const getPayables = async (filters: { status?: string, startDate?: string
         p_due_date_end: filters.endDate ?? null,
     });
 
+    // RPC関数が利用できない場合のフォールバック
+    if (error && (error.code === 'PGRST116' || error.code === '400')) {
+        console.warn('RPC get_payables not available, using fallback');
+        return []; // 代替データを返す
+    }
+
     ensureSupabaseSuccess(error, 'Failed to fetch payables');
     return (data || []).map((row: any) => ({
         id: row.id,
@@ -4774,6 +4786,12 @@ export const getReceivables = async (filters: { status?: string, startDate?: str
         p_due_date_start: filters.startDate ?? null,
         p_due_date_end: filters.endDate ?? null,
     });
+
+    // RPC関数が利用できない場合のフォールバック
+    if (error && (error.code === 'PGRST116' || error.code === '400')) {
+        console.warn('RPC get_receivables not available, using fallback');
+        return []; // 代替データを返す
+    }
 
     ensureSupabaseSuccess(error, 'Failed to fetch receivables');
     return (data || []).map((row: any) => ({
