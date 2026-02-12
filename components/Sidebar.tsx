@@ -117,6 +117,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [open, setOpen] = React.useState(false);
   const isAdmin = currentUser?.role === 'admin';
 
+  const selectableUsers = React.useMemo(() => {
+    const activeUsers = allUsers.filter(u => u.is_active !== false);
+    if (currentUser && !activeUsers.some(u => u.id === currentUser.id)) {
+      return [currentUser, ...activeUsers];
+    }
+    return activeUsers;
+  }, [allUsers, currentUser]);
+
   const itemsFlat = React.useMemo(
     () =>
       NAV_ITEMS.flatMap(section =>
@@ -208,7 +216,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   onUserChange(u || null);
                 }}
               >
-                {allUsers.filter(u => u.is_active !== false).map(u => (
+                {selectableUsers.map(u => (
                   <option key={u.id} value={u.id} className="bg-white text-slate-900">
                     {u.name}
                   </option>
