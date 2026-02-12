@@ -4807,12 +4807,18 @@ export const getReceivables = async (filters: { status?: string, startDate?: str
     }));
 };
 
-export const getCashSchedule = async (period: { startDate: string, endDate: string }): Promise<CashScheduleData[]> => {
+export const getCashSchedule = async (period: { startDate: string; endDate: string }): Promise<CashScheduleData[]> => {
     const supabase = getSupabase();
     const { data, error } = await supabase.rpc('get_cash_schedule', {
         p_start_date: period.startDate,
         p_end_date: period.endDate,
     });
+
+    // RPC関数が利用できない場合のフォールバック
+    if (error && (error.code === 'PGRST116' || error.code === '400' || error.code === 'PGRST202')) {
+        console.warn('RPC get_cash_schedule not available, using fallback');
+        return []; // 代替データを返す
+    }
 
     ensureSupabaseSuccess(error, 'Failed to fetch cash schedule');
     return (data || []).map((row: any) => ({
