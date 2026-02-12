@@ -1,21 +1,37 @@
 const THEME_STORAGE_KEY = 'mq_theme';
+const LEGACY_THEME_STORAGE_KEYS = ['theme', 'darkMode'] as const;
 
-type ThemePreference = 'light' | 'dark' | 'system';
+export type ThemePreference = 'light' | 'dark' | 'system';
 
 const isValidThemePreference = (value: string | null): value is ThemePreference => {
   return value === 'light' || value === 'dark' || value === 'system';
 };
 
-const getStoredThemePreference = (): ThemePreference => {
+export const getStoredThemePreference = (): ThemePreference => {
   if (typeof window === 'undefined') {
     return 'system';
   }
 
   const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return isValidThemePreference(raw) ? raw : 'system';
+  if (isValidThemePreference(raw)) return raw;
+
+  for (const legacyKey of LEGACY_THEME_STORAGE_KEYS) {
+    const legacyRaw = window.localStorage.getItem(legacyKey);
+    if (legacyRaw === 'dark' || legacyRaw === 'light') {
+      return legacyRaw;
+    }
+    if (legacyRaw === '1' || legacyRaw === 'true') {
+      return 'dark';
+    }
+    if (legacyRaw === '0' || legacyRaw === 'false') {
+      return 'light';
+    }
+  }
+
+  return 'system';
 };
 
-const resolveDarkMode = (preference: ThemePreference): boolean => {
+export const resolveDarkMode = (preference: ThemePreference): boolean => {
   if (preference === 'dark') {
     return true;
   }
@@ -25,11 +41,23 @@ const resolveDarkMode = (preference: ThemePreference): boolean => {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
 };
 
-const applyDarkClass = (isDark: boolean) => {
+export const applyDarkClass = (isDark: boolean) => {
   if (typeof document === 'undefined') {
     return;
   }
   document.documentElement.classList.toggle('dark', isDark);
+};
+
+
+export const setStoredThemePreference = (preference: ThemePreference) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+};
+
+export const applyThemePreference = (preference: ThemePreference) => {
+  applyDarkClass(resolveDarkMode(preference));
 };
 
 export const initializeTheme = (): (() => void) => {
@@ -39,7 +67,7 @@ export const initializeTheme = (): (() => void) => {
 
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const applyCurrentTheme = () => {
-    applyDarkClass(resolveDarkMode(getStoredThemePreference()));
+    applyThemePreference(getStoredThemePreference());
   };
 
   applyCurrentTheme();

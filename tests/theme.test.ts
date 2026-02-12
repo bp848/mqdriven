@@ -57,4 +57,22 @@ describe('initializeTheme', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
+
+  it('supports legacy theme key values', () => {
+    setupMatchMedia(false);
+    window.localStorage.setItem('theme', 'dark');
+
+    initializeTheme();
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  it('supports legacy darkMode boolean-like values', () => {
+    setupMatchMedia(false);
+    window.localStorage.setItem('darkMode', 'true');
+
+    initializeTheme();
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
 });
