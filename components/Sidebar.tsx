@@ -119,9 +119,18 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const selectableUsers = React.useMemo(() => {
     const activeUsers = allUsers.filter(u => u.is_active !== false);
+    console.log('Sidebar selectableUsers debug:', {
+      currentUser,
+      allUsersCount: allUsers.length,
+      activeUsersCount: activeUsers.length,
+      currentUserInActive: currentUser ? activeUsers.some(u => u.id === currentUser.id) : false
+    });
     if (currentUser && !activeUsers.some(u => u.id === currentUser.id)) {
-      return [currentUser, ...activeUsers];
+      const result = [currentUser, ...activeUsers];
+      console.log('Sidebar: adding current user to selectableUsers', result.map(u => ({ id: u.id, name: u.name })));
+      return result;
     }
+    console.log('Sidebar: using active users only', activeUsers.map(u => ({ id: u.id, name: u.name })));
     return activeUsers;
   }, [allUsers, currentUser]);
 
