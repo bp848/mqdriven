@@ -226,13 +226,70 @@ const readFileAsBase64 = (file: File): Promise<string> => {
     });
 };
 
+const toNumberValue = (value: any): number => {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const isCloseTo = (value: number, target: number): boolean => {
+    const tolerance = Math.max(1, Math.round(Math.abs(target) * 0.01));
+    return Math.abs(value - target) <= tolerance;
+};
+
 const computeLineTotals = (invoice: ExpenseInvoiceDraft): ComputedTotals => {
-    const net = invoice.lines.reduce((sum, line) => sum + (Number(line.amountExclTax) || 0), 0);
-    const tax = invoice.lines.reduce(
-        (sum, line) => sum + (Number(line.amountExclTax) || 0) * ((Number(line.taxRate) || 0) / 100),
+    const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
+    const lineSum = lines.reduce((sum, line) => sum + toNumberValue(line.amountExclTax), 0);
+
+    const totalGross = toNumberValue(invoice.totalGross);
+    const totalNet = toNumberValue(invoice.totalNet);
+    const totalTax = toNumberValue(invoice.taxAmount);
+    const hasHeaderTotals = totalGross > 0 || totalNet > 0 || totalTax > 0;
+
+    if (lineSum === 0 && hasHeaderTotals) {
+        const net = totalNet > 0 ? totalNet : Math.max(0, totalGross - totalTax);
+        const tax = totalTax > 0 ? totalTax : Math.max(0, totalGross - net);
+        const gross = totalGross > 0 ? totalGross : net + tax;
+        return { net, tax, gross };
+    }
+
+    const closeToGross = totalGross > 0 && isCloseTo(lineSum, totalGross);
+    const closeToNet = totalNet > 0 && isCloseTo(lineSum, totalNet);
+    const assumeInclusive = hasHeaderTotals && closeToGross && !closeToNet;
+
+    if (assumeInclusive) {
+        const totals = lines.reduce(
+            (acc, line) => {
+                const grossLine = toNumberValue(line.amountExclTax);
+                const rate = toNumberValue(line.taxRate);
+                const divisor = 1 + rate / 100;
+                const netLine = divisor === 0 ? grossLine : grossLine / divisor;
+                const taxLine = grossLine - netLine;
+                acc.net += netLine;
+                acc.tax += taxLine;
+                acc.gross += grossLine;
+                return acc;
+            },
+            { net: 0, tax: 0, gross: 0 }
+        );
+        return totals;
+    }
+
+    const net = lineSum;
+    const tax = lines.reduce(
+        (sum, line) => sum + toNumberValue(line.amountExclTax) * (toNumberValue(line.taxRate) / 100),
         0
     );
     return { net, tax, gross: net + tax };
+};
+
+const syncInvoiceTotals = (draft: ExpenseInvoiceDraft): ExpenseInvoiceDraft => {
+    const totals = computeLineTotals(draft);
+    return {
+        ...draft,
+        totalNet: totals.net,
+        taxAmount: totals.tax,
+        totalGross: totals.gross,
+    };
 };
 
 
@@ -394,10 +451,13 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     } else {
                         setDocumentAttachment(null);
                     }
-                    setInvoice({
+                    const normalizedLines = data.isInternalExpense
+                        ? normalizeLinesForInternalExpense(restoredInvoice.lines)
+                        : restoredInvoice.lines;
+                    setInvoice(syncInvoiceTotals({
                         ...restoredInvoice,
-                        lines: data.isInternalExpense ? normalizeLinesForInternalExpense(restoredInvoice.lines) : restoredInvoice.lines,
-                    });
+                        lines: normalizedLines,
+                    }));
                     setDepartmentId(data.departmentId || '');
                     setApprovalRouteId(data.approvalRouteId || '');
                     setNotes(data.notes || '');
@@ -431,14 +491,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
     const handleFieldChange = (field: keyof ExpenseInvoiceDraft, value: any) => {
         setInvoice(prev => {
-            const updated = { ...prev, [field]: value };
-
-            // 税抜合計または消費税が変更された場合は税込合計を再計算
-            if (field === 'totalNet' || field === 'taxAmount') {
-                const net = Number(updated.totalNet) || 0;
-                const tax = Number(updated.taxAmount) || 0;
-                updated.totalGross = net + tax;
+            if (field === 'totalNet' || field === 'taxAmount' || field === 'totalGross') {
+                // Totals are auto-calculated from line items to prevent double-taxing.
+                return prev;
             }
+            const updated = { ...prev, [field]: value };
 
             return updated;
         });
@@ -461,33 +518,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 return updatedLine;
             });
 
-            // 再計算した合計金額をinvoice状態に反映（手動入力された場合は維持）
-            const totals = computeLineTotals({ ...prev, lines: newLines });
-            const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
-
-            return {
+            return syncInvoiceTotals({
                 ...prev,
                 lines: newLines,
-                totalNet: hasManualNetInput ? prev.totalNet : totals.net,
-                taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
-                totalGross: hasManualNetInput ? prev.totalGross : totals.gross
-            };
+            });
         });
     };
 
     const addLine = () => {
         setInvoice(prev => {
             const newLines = normalizeLinesForInternalExpense([...prev.lines, createEmptyLine()]);
-            const totals = computeLineTotals({ ...prev, lines: newLines });
-            const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
-
-            return {
+            return syncInvoiceTotals({
                 ...prev,
                 lines: newLines,
-                totalNet: hasManualNetInput ? prev.totalNet : totals.net,
-                taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
-                totalGross: hasManualNetInput ? prev.totalGross : totals.gross
-            };
+            });
         });
     };
 
@@ -497,22 +541,16 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
             if (newLines.length === 0) {
                 newLines.push(...normalizeLinesForInternalExpense([createEmptyLine()]));
             }
-            const totals = computeLineTotals({ ...prev, lines: newLines });
-            const hasManualNetInput = prev.totalNet > 0 || prev.taxAmount > 0 || prev.totalGross > 0;
-
-            return {
+            return syncInvoiceTotals({
                 ...prev,
                 lines: newLines,
-                totalNet: hasManualNetInput ? prev.totalNet : totals.net,
-                taxAmount: hasManualNetInput ? prev.taxAmount : totals.tax,
-                totalGross: hasManualNetInput ? prev.totalGross : totals.gross
-            };
+            });
         });
     };
 
     useEffect(() => {
         if (isInternalExpense) {
-            setInvoice(prev => ({
+            setInvoice(prev => syncInvoiceTotals({
                 ...prev,
                 lines: normalizeLinesForInternalExpense(prev.lines),
             }));
@@ -652,12 +690,49 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                         businessCategory = '物流';
                     }
 
+                    const inferredTaxRate = newDraft.totalNet > 0 && newDraft.taxAmount
+                        ? Math.round((newDraft.taxAmount / newDraft.totalNet) * 100)
+                        : 10;
+
                     newDraft.lines = [{
                         ...createEmptyLine(true),
                         description: itemDescription,
                         customerName: candidateCustomer || '',
                         customCustomerName: candidateCustomer || '',
                         amountExclTax: newDraft.totalNet,
+                        taxRate: inferredTaxRate,
+                        purposeType,
+                        businessCategory,
+                    }];
+                    ocrFields.add('lines');
+                } else if (newDraft.totalGross) {
+                    const candidateCustomer = ocrData.relatedCustomer || ocrData.project || '';
+                    const itemDescription = ocrData.description || '品名不明';
+                    let purposeType: '自社' | '顧客' | '他社' | 'その他' = '自社';
+                    let businessCategory: '印刷' | '製造' | '物流' | '業務' | 'その他' = '業務';
+
+                    if (itemDescription.includes('印刷') || itemDescription.includes('プリント')) {
+                        businessCategory = '印刷';
+                    } else if (itemDescription.includes('製造') || itemDescription.includes('生産')) {
+                        businessCategory = '製造';
+                    } else if (itemDescription.includes('配送') || itemDescription.includes('運送')) {
+                        businessCategory = '物流';
+                    }
+
+                    const inferredNet = newDraft.taxAmount
+                        ? Math.max(0, newDraft.totalGross - newDraft.taxAmount)
+                        : Math.round(newDraft.totalGross / 1.1);
+                    const inferredTaxRate = inferredNet > 0 && newDraft.taxAmount
+                        ? Math.round((newDraft.taxAmount / inferredNet) * 100)
+                        : 10;
+
+                    newDraft.lines = [{
+                        ...createEmptyLine(true),
+                        description: itemDescription,
+                        customerName: candidateCustomer || '',
+                        customCustomerName: candidateCustomer || '',
+                        amountExclTax: inferredNet,
+                        taxRate: inferredTaxRate,
                         purposeType,
                         businessCategory,
                     }];
@@ -713,7 +788,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
 
             nextInvoiceState.sourceFile = { name: file.name, type: file.type, url: attachment.publicUrl };
 
-            setInvoice(nextInvoiceState);
+            setInvoice(syncInvoiceTotals(nextInvoiceState));
             addToast?.(
                 isAIOff ? '請求書ファイルを保存しました。AI-OCRはスキップされました。' : 'OCRが完了しました。内容を確認してください。',
                 'success'
@@ -976,14 +1051,38 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 </FormField>
                                 <div className="md:col-span-2 lg:col-span-3 border-t dark:border-slate-700 pt-6 mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <FormField label="税抜合計" htmlFor="totalNet" isOcr={invoice.ocrExtractedFields.has('totalNet')}>
-                                        <input id="totalNet" type="number" value={invoice.totalNet} onChange={e => handleFieldChange('totalNet', numberFromInput(e.target.value))} className="w-full text-right rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
+                                        <input
+                                            id="totalNet"
+                                            type="number"
+                                            value={Math.round(computedTotals.net)}
+                                            readOnly
+                                            className="w-full text-right rounded-md border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 cursor-not-allowed"
+                                            disabled={isDisabled}
+                                        />
                                     </FormField>
                                     <FormField label="消費税" htmlFor="taxAmount" isOcr={invoice.ocrExtractedFields.has('taxAmount')}>
-                                        <input id="taxAmount" type="number" value={invoice.taxAmount} onChange={e => handleFieldChange('taxAmount', numberFromInput(e.target.value))} className="w-full text-right rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
+                                        <input
+                                            id="taxAmount"
+                                            type="number"
+                                            value={Math.round(computedTotals.tax)}
+                                            readOnly
+                                            className="w-full text-right rounded-md border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 cursor-not-allowed"
+                                            disabled={isDisabled}
+                                        />
                                     </FormField>
                                     <FormField label="税込合計" htmlFor="totalGross" isOcr={invoice.ocrExtractedFields.has('totalGross')}>
-                                        <input id="totalGross" type="number" value={invoice.totalGross} onChange={e => handleFieldChange('totalGross', numberFromInput(e.target.value))} className="w-full text-right rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
+                                        <input
+                                            id="totalGross"
+                                            type="number"
+                                            value={Math.round(computedTotals.gross)}
+                                            readOnly
+                                            className="w-full text-right rounded-md border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 cursor-not-allowed"
+                                            disabled={isDisabled}
+                                        />
                                     </FormField>
+                                    <p className="sm:col-span-3 text-xs text-slate-500 dark:text-slate-400">
+                                        税抜合計・消費税・税込合計は明細から自動計算されます（編集不可）。
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>
