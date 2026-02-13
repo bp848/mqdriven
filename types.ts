@@ -768,7 +768,7 @@ export type TabId = 'approvals' | 'drafts' | 'submitted' | 'completed';
 // Legacy/extended types used across the UI.
 export interface SortConfig extends LooseRecord {
   key: string;
-  direction: 'asc' | 'desc';
+  direction: 'ascending' | 'descending';
 }
 
 export interface JobCreationPayload extends LooseRecord {

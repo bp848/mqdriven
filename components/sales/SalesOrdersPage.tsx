@@ -35,7 +35,7 @@ const StatusBadge: React.FC<{ status: PurchaseOrderStatus }> = ({ status }) => (
 );
 
 const OrdersSection: React.FC<{ orders: PurchaseOrder[]; projects: ProjectBudgetSummary[] }> = ({ orders, projects }) => {
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'orderDate', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'orderDate', direction: 'ascending' });
 
   const jobLookup = useMemo(() => {
     const lookup = new Map<string, ProjectBudgetSummary>();

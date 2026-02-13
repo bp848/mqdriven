@@ -1,16 +1,12 @@
 
 import React from 'react';
 import { ArrowUpDown, ChevronDown } from '../Icons';
-
-type SortableHeaderSortConfig = {
-  key: string;
-  direction: 'ascending' | 'descending';
-} | null;
+import { SortConfig } from '../../types';
 
 interface SortableHeaderProps {
   sortKey: string;
   label: string;
-  sortConfig: SortableHeaderSortConfig | null;
+  sortConfig: SortConfig | null;
   requestSort: (key: string) => void;
   className?: string;
 }
