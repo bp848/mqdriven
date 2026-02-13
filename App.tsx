@@ -126,6 +126,16 @@ const isGoogleOAuthAllowedOrigin = () => {
     return false;
 };
 
+const THEME_STORAGE_KEY = 'mq-theme';
+
+const getInitialDarkMode = (): boolean => {
+    if (typeof window === 'undefined') return true;
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedTheme === 'light') return false;
+    if (storedTheme === 'dark') return true;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+};
+
 class TimeoutError extends Error {
     constructor(message = 'Request timed out') {
         super(message);
@@ -292,6 +302,7 @@ const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSe
 
 
 const App: React.FC = () => {
+    const [isDarkMode, setIsDarkMode] = useState<boolean>(getInitialDarkMode);
     const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
     const isAuthBypassEnabled = useMemo(() => getEnvValue('VITE_BYPASS_SUPABASE_AUTH') === '1', []);
     const shouldRequireAuth = isSupabaseConfigured && !isAuthBypassEnabled;
@@ -300,6 +311,11 @@ const App: React.FC = () => {
     const [supabaseUser, setSupabaseUser] = useState<SupabaseAuthUser | null>(null);
     const [isAuthChecking, setIsAuthChecking] = useState<boolean>(shouldRequireAuth);
     const [authError, setAuthError] = useState<string | null>(null);
+
+    useEffect(() => {
+        document.documentElement.classList.toggle('dark', isDarkMode);
+        window.localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
+    }, [isDarkMode]);
     // Global State
     const [currentPage, setCurrentPage] = useState<Page>('sales_dashboard');
     const [searchTerm, setSearchTerm] = useState('');
@@ -1591,6 +1607,8 @@ const App: React.FC = () => {
 
     const headerConfig = {
         title: PAGE_TITLES[currentPage],
+        isDarkMode,
+        onToggleTheme: () => setIsDarkMode(prev => !prev),
         primaryAction: PRIMARY_ACTION_ENABLED_PAGES.includes(currentPage)
             ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
             : undefined,
