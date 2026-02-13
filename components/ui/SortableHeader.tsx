@@ -2,7 +2,7 @@
 import React from 'react';
 import { ArrowUpDown, ChevronDown } from '../Icons';
 
-type SortConfig = {
+type SortableHeaderSortConfig = {
   key: string;
   direction: 'ascending' | 'descending';
 } | null;
@@ -10,7 +10,7 @@ type SortConfig = {
 interface SortableHeaderProps {
   sortKey: string;
   label: string;
-  sortConfig: SortConfig | null;
+  sortConfig: SortableHeaderSortConfig | null;
   requestSort: (key: string) => void;
   className?: string;
 }

@@ -49,7 +49,7 @@ export default function AssistantPage() {
 
     const userText = msg.trim();
     const now = Date.now();
-    setChat((c) => [...c, ...(userText ? [{ role: "user", text: userText, ts: now }] : [])]);
+    setChat((c) => [...c, ...(userText ? [{ role: "user" as const, text: userText, ts: now }] : [])]);
     setMsg("");
 
     try {
@@ -62,7 +62,7 @@ export default function AssistantPage() {
       const j = await r.json();
 
       if (j.assistantText) {
-        setChat((c) => [...c, { role: "assistant", text: j.assistantText, ts: Date.now() }]);
+        setChat((c) => [...c, { role: "assistant" as const, text: j.assistantText, ts: Date.now() }]);
       }
       setActions(j.actions ?? []);
 
