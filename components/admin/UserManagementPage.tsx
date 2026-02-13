@@ -79,9 +79,10 @@ interface UserManagementPageProps {
     addToast: (message: string, type: Toast['type']) => void;
     requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
     currentUser: EmployeeUser | null;
+    onImpersonateUser: (user: EmployeeUser | null) => void;
 }
 
-const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, requestConfirmation, currentUser }) => {
+const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, requestConfirmation, currentUser, onImpersonateUser }) => {
     const [users, setUsers] = useState<EmployeeUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -168,6 +169,19 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                 }
             }
         });
+    };
+
+    const handleImpersonateUser = (targetUser: EmployeeUser) => {
+        if (!canManageUsers) {
+            addToast('代理ログインは管理者のみ実行できます。', 'error');
+            return;
+        }
+        if (targetUser.isActive === false) {
+            addToast('無効ユーザーには代理ログインできません。', 'error');
+            return;
+        }
+        onImpersonateUser(targetUser);
+        addToast(`「${targetUser.name}」として代理ログインしました。`, 'success');
     };
 
     const filteredUsers = useMemo(() => {
@@ -275,6 +289,13 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                             {canManageUsers ? (
                                                 <>
                                                     <button onClick={() => handleOpenModal(user)} className="p-2 text-slate-500 hover:text-blue-600"><Pencil className="w-5 h-5" /></button>
+                                                    <button
+                                                        onClick={() => handleImpersonateUser(user)}
+                                                        disabled={user.isActive === false || currentUser?.id === user.id}
+                                                        className="rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                                                    >
+                                                        {currentUser?.id === user.id ? 'ログイン中' : '代理ログイン'}
+                                                    </button>
                                                     <button
                                                         onClick={async () => {
                                                             try {
