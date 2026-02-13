@@ -6,8 +6,6 @@ interface SidebarProps {
   currentPage: Page;
   onNavigate: (page: Page) => void;
   currentUser: EmployeeUser | null;
-  allUsers: EmployeeUser[];
-  onUserChange: (user: EmployeeUser | null) => void;
   supabaseUserEmail?: string | null;
   onSignOut?: () => void;
 }
@@ -149,8 +147,6 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   currentPage,
   onNavigate,
   currentUser,
-  allUsers,
-  onUserChange,
   supabaseUserEmail,
   onSignOut,
   approvalsCount,
@@ -346,31 +342,6 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
             <div className="px-3 py-2 rounded-lg bg-slate-700/60">
               <p className="text-xs text-slate-400">ログイン中のユーザー</p>
               <p className="text-sm font-semibold text-white break-all">{supabaseUserEmail}</p>
-            </div>
-          )}
-          {currentUser?.role === 'admin' && (
-            <div className="px-3 py-2">
-              <label htmlFor="user-select" className="text-xs font-medium text-slate-400">ユーザー切替 (管理者のみ)</label>
-              <select
-                id="user-select"
-                className="w-full mt-1 !bg-white dark:!bg-gray-700 !border-gray-300 dark:!border-gray-600 !text-gray-900 dark:!text-white rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
-                ref={(el) => {
-                  if (el) {
-                    el.style.setProperty('background-color', '#ffffff', 'important');
-                    el.style.setProperty('color', '#0f172a', 'important');
-                    el.style.setProperty('border-color', '#d1d5db', 'important');
-                  }
-                }}
-                value={currentUser?.id || ''}
-                onChange={(e) => {
-                  const selectedUser = allUsers.find(u => u.id === e.target.value);
-                  onUserChange(selectedUser || null);
-                }}
-              >
-                {allUsers.filter(user => user.is_active !== false).map(user => (
-                  <option key={user.id} value={user.id}>{user.name}</option>
-                ))}
-              </select>
             </div>
           )}
           {onSignOut && (
