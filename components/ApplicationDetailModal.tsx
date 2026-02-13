@@ -686,7 +686,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
     const compactFormRows = visibleFormRows.filter(row => typeof row.value !== 'object').slice(0, 12);
     const extraFormRowCount = Math.max(0, visibleFormRows.length - compactFormRows.length);
 
-    const renderInfoSection = (title: string, rows: { label: string; value: React.ReactNode }[], footer?: React.ReactNode) => {
+    const renderInfoSection = (title: string, rows: { label: string; value: unknown }[], footer?: React.ReactNode) => {
         const visibleRows = rows.filter(row => isFilled(row.value));
         if (!visibleRows.length) return null;
         return (

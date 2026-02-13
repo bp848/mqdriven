@@ -59,7 +59,13 @@ const useProposalGenerator = () => {
 
     try {
       const result = await generateProposal(formData, onAction);
-      dispatch({ type: 'SUCCESS', payload: result });
+      dispatch({
+        type: 'SUCCESS',
+        payload: {
+          presentation: result.presentation,
+          sources: result.sources ?? null,
+        },
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '不明なエラーが発生しました。';
       dispatch({ type: 'ERROR', payload: errorMessage });

@@ -31,7 +31,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
 
     try {
       // 謇ｿ隱肴ｸ医∩逕ｳ隲九ｒ蜿門ｾ・
-      const allApplications = await dataService.getApplications(currentUser.id);
+      const allApplications = await dataService.getApplications(currentUser);
       const targetApplications = allApplications.filter(app =>
         app.status === ApplicationStatus.APPROVED &&
         (!app.accounting_status || app.accounting_status === AccountingStatus.NONE) &&

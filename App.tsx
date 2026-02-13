@@ -77,7 +77,7 @@ import * as geminiService from './services/geminiService';
 import { getSupabase, getSupabaseFunctionHeaders, hasSupabaseCredentials } from './services/supabaseClient';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill, Project } from './types';
+import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill, Project, CompanyAnalysis } from './types';
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
 import { IS_AI_DISABLED as ENV_SHIM_AI_OFF } from './src/envShim';
 
@@ -342,6 +342,13 @@ const App: React.FC = () => {
     // UI State
     const [isLoading, setIsLoading] = useState(true);
     const [dbError, setDbError] = useState<string | null>(null);
+    const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return false;
+        const storedTheme = window.localStorage.getItem('mq_theme');
+        if (storedTheme === 'dark') return true;
+        if (storedTheme === 'light') return false;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    });
     const [toastsEnabled, setToastsEnabled] = useState<boolean>(() => {
         if (typeof window === 'undefined') return true;
         const stored = window.localStorage.getItem('toasts_enabled');
@@ -365,7 +372,7 @@ const App: React.FC = () => {
     const [customerInitialValues, setCustomerInitialValues] = useState<Partial<Customer> | null>(null);
     const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItem | null>(null);
     const [isAnalysisModalOpen, setAnalysisModalOpen] = useState(false);
-    const [companyAnalysis, setCompanyAnalysis] = useState<{ swot: string; painPointsAndNeeds: string; suggestedActions: string; proposalEmail: { subject: string; body: string; }; sources?: { uri: string; title: string; }[] } | null>(null);
+    const [companyAnalysis, setCompanyAnalysis] = useState<CompanyAnalysis | null>(null);
     const [isAnalysisLoading, setAnalysisLoading] = useState(false);
     const [analysisError, setAnalysisError] = useState('');
     const [isBugReportModalOpen, setIsBugReportModalOpen] = useState(false);
@@ -386,6 +393,14 @@ const App: React.FC = () => {
     const estimatePageRef = useRef<number>(1);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
     const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
+
+    useEffect(() => {
+        if (typeof document === 'undefined' || typeof window === 'undefined') return;
+        const root = document.documentElement;
+        root.classList.toggle('dark', isDarkMode);
+        root.style.colorScheme = isDarkMode ? 'dark' : 'light';
+        window.localStorage.setItem('mq_theme', isDarkMode ? 'dark' : 'light');
+    }, [isDarkMode]);
 
     const refreshEstimatesPage = useCallback(async (page: number, signal?: AbortSignal) => {
         console.log('🔄 Loading estimates page...', page);
@@ -1229,7 +1244,7 @@ const App: React.FC = () => {
                 if (showBulkOCR) {
                     return <BusinessCardOCR
                         addToast={addToast}
-                        requestConfirmation={setConfirmationDialog}
+                        requestConfirmation={requestConfirmation}
                         isAIOff={isAIOff}
                         onCustomerAdded={(customer) => {
                             loadAllData();
@@ -1595,6 +1610,10 @@ const App: React.FC = () => {
             ? { label: `新規${PAGE_TITLES[currentPage].replace('管理', '')}作成`, onClick: onPrimaryAction, icon: PlusCircle, disabled: !!dbError, tooltip: dbError ? 'データベース接続エラーのため利用できません。' : undefined }
             : undefined,
         secondaryActions: undefined,
+        darkMode: {
+            isDark: isDarkMode,
+            onToggle: () => setIsDarkMode(prev => !prev),
+        },
         search: SEARCH_ENABLED_PAGES.includes(currentPage)
             ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...`, suggestions: predictiveSuggestions }
             : undefined,

@@ -17,7 +17,7 @@ const AccountingPage: React.FC<any> = (props) => {
 
     switch(page as Page) {
         case 'accounting_journal':
-            return <JournalLedger entries={journalEntries} onAddEntry={onAddEntry} isAIOff={props.isAIOff} />;
+            return <JournalLedger onAddEntry={onAddEntry} isAIOff={props.isAIOff} currentUser={props.currentUser} />;
 
         case 'sales_billing':
             return <BillingManagement jobs={jobs} onRefreshData={onRefreshData} onMarkPaid={() => {}} />;

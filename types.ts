@@ -345,7 +345,7 @@ export interface Project extends LooseRecord {
 }
 
 export interface Job extends LooseRecord {
-  id: string;
+  id?: string;
   jobNumber?: number;
   projectCode?: string | number | null;
   clientName?: string;
@@ -656,9 +656,13 @@ export interface CompanyAnalysis {
   swot?: string;
   painPointsAndNeeds?: string;
   suggestedActions?: string;
+  proposalEmail?: {
+    subject: string;
+    body: string;
+  };
   sources?: Array<{
     uri: string;
-    title?: string;
+    title: string;
   }>;
 }
 

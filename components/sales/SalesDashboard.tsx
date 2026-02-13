@@ -6,6 +6,7 @@ import { DollarSign, TrendingUp, Package, AlertTriangle, Activity } from '../Ico
 import { fetchSalesDashboardMetrics, SalesDashboardMetrics } from '../../services/dataService';
 
 interface SalesDashboardProps {
+    jobs?: any[];
     leads?: any[];
 }
 

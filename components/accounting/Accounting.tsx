@@ -15,7 +15,7 @@ interface AccountingPageProps {
     page: Page;
     journalEntries: JournalEntry[];
     accountItems: any[];
-    onAddEntry: (entry: JournalEntry) => void;
+    onAddEntry: (entry: Omit<JournalEntry, 'id'> | JournalEntry) => void | Promise<void>;
     addToast: (message: string, type: 'success' | 'error' | 'warning') => void;
     requestConfirmation: (dialog: any) => void;
     jobs: any[];

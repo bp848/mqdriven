@@ -154,7 +154,8 @@ class SMTPEmailService {
 
   async sendApprovalNotification(
     applicantEmail: string,
-    applicationDetails: any
+    applicationDetails: any,
+    _message?: string
   ): Promise<{ success: boolean; error?: string }> {
     if (!this.settings || !this.settings.enabled || !this.settings.notificationTypes.onApprove) {
       return { success: true };

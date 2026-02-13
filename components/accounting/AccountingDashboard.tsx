@@ -34,7 +34,7 @@ const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ currentUser }
     
     setIsLoading(true);
     try {
-      const applications = await dataService.getApplications(currentUser.id);
+      const applications = await dataService.getApplications(currentUser);
       
       // 承認済×未レビュー件数
       const pendingReview = applications.filter(app => 

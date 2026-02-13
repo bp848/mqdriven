@@ -26,6 +26,10 @@ interface HeaderProps {
   title: string;
   primaryAction?: HeaderAction;
   secondaryActions?: HeaderAction[];
+  darkMode?: {
+    isDark: boolean;
+    onToggle: () => void;
+  };
   search?: {
     value: string;
     onChange: (value: string) => void;
@@ -63,7 +67,7 @@ const ActionButton: React.FC<{ action: HeaderAction; variant?: 'primary' | 'seco
   );
 };
 
-const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, search }) => {
+const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, darkMode, search }) => {
   const [now, setNow] = useState<Date>(new Date());
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -104,6 +108,28 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
         <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
           {timeString}
         </div>
+        {darkMode && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={darkMode.isDark}
+            aria-label="ダークモード切り替え"
+            onClick={darkMode.onToggle}
+            className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
+              darkMode.isDark
+                ? 'bg-slate-700 border-slate-500'
+                : 'bg-slate-200 border-slate-300'
+            }`}
+            title={darkMode.isDark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
+          >
+            <span className="sr-only">テーマ切り替え</span>
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                darkMode.isDark ? 'translate-x-8' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        )}
         {search && (
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

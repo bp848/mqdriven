@@ -23,7 +23,7 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
     setError(null);
     
     try {
-      const allApplications = await dataService.getApplications(currentUser.id);
+      const allApplications = await dataService.getApplications(currentUser);
       // 豁｣縺励＞豬√ｌ・壽･ｭ蜍呎価隱肴ｸ医∩ 竊・莨夊ｨ亥・逅・ｾ・■
       const targetApplications = allApplications.filter(app => 
         app.status === ApplicationStatus.APPROVED && 
@@ -244,4 +244,3 @@ const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ currentUser }) =>
 };
 
 export default JournalReviewPage;
-
