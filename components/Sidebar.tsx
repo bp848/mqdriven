@@ -173,8 +173,8 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  // Mobile: always collapsed with proper width, Desktop: toggleable
-  const sidebarWidth = isCollapsed ? 'w-14' : 'w-14 sm:w-20 md:w-56 lg:w-64';
+  // Mobile: full width when open, Desktop: toggleable
+  const sidebarWidth = isCollapsed ? 'w-14' : 'w-full sm:w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   // Mobile visibility logic
