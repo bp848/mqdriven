@@ -210,23 +210,35 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
         className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${shouldShowMobile ? 'translate-x-0' : '-translate-x-full'} sm:translate-x-0`}
       >
         <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'}`}>
             <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
+            {!isCollapsed && (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                aria-label="サイドバーを折りたたむ"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
+          {isCollapsed && (
             <button
               type="button"
               onClick={toggleSidebar}
-              className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
-              aria-label={isCollapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'}
+              className="block w-6 h-6 text-center leading-6 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors"
+              aria-label="サイドバーを展開"
             >
-              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              <ChevronRight className="w-3 h-3" />
             </button>
-          </div>
-          <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
-            <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
-            <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
-            <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
-            <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
-          </div>
+          )}
+          <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
+          <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
+          <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
+          <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
         </div>
         <nav className={`flex-1 mt-2 sm:mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
           <ul>
