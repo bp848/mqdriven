@@ -128,7 +128,92 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
           {isAdmin ? '管理者編集可能' : '参照専用'}
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {/* Mobile Card View */}
+      <div className="lg:hidden">
+        <div className="space-y-3">
+          {sortedEntries.map((entry, index) => (
+            <div key={entry.id || index} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Card Header - Date and Status */}
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-sm text-gray-500">📅</div>
+                    <div>
+                      <p className="text-xs text-gray-500">取引日</p>
+                      <p className="font-semibold text-sm">{entry.date}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${entry.status === 'posted'
+                      ? 'bg-green-100 text-green-800 border border-green-200'
+                      : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                    }`}>
+                    {entry.status === 'posted' ? '✓ 確定' : '草案'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card Body */}
+              <div className="p-4 space-y-4">
+                {/* Account Information */}
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-sm text-gray-500">📋</div>
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-500">科目</p>
+                      <p className="font-medium text-sm">{entry.code} - {entry.name}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amounts - Side by Side */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-red-50 rounded-lg p-3">
+                    <p className="text-xs text-red-600 font-medium mb-1">借方</p>
+                    <p className="font-bold text-red-700">
+                      {entry.debit_amount > 0 ? `¥${entry.debit_amount.toLocaleString()}` : '-'}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <p className="text-xs text-blue-600 font-medium mb-1">貸方</p>
+                    <p className="font-bold text-blue-700">
+                      {entry.credit_amount > 0 ? `¥${entry.credit_amount.toLocaleString()}` : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Category */}
+                {entry.category && (
+                  <div className="flex items-center space-x-3">
+                    <div className="text-sm text-gray-500">🏷️</div>
+                    <div>
+                      <p className="text-xs text-gray-500">仕分け区分</p>
+                      <span className="inline-block px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                        {entry.category}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin Actions */}
+                {isAdmin && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <button
+                      onClick={() => handleEdit(entry)}
+                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>編集する</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden lg:block overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead>
             <tr>

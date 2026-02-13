@@ -18,6 +18,7 @@ import UserManagementPage from './components/admin/UserManagementPage';
 import ApprovalRouteManagementPage from './components/admin/ApprovalRouteManagementPage';
 import BugReportChatModal from './components/BugReportChatModal';
 import SettingsPage from './components/SettingsPage';
+import UpdateModal from './components/UpdateModal';
 import EmailNotificationSettingsPage from './components/EmailNotificationSettingsPage';
 import AccountingPage from './components/Accounting';
 import SalesPipelinePage from './components/sales/SalesPipelinePage';
@@ -300,6 +301,8 @@ const App: React.FC = () => {
     const [supabaseUser, setSupabaseUser] = useState<SupabaseAuthUser | null>(null);
     const [isAuthChecking, setIsAuthChecking] = useState<boolean>(shouldRequireAuth);
     const [authError, setAuthError] = useState<string | null>(null);
+    // Update Modal State
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
     // Global State
     const [currentPage, setCurrentPage] = useState<Page>('sales_dashboard');
     const [searchTerm, setSearchTerm] = useState('');
@@ -401,6 +404,15 @@ const App: React.FC = () => {
         root.style.colorScheme = isDarkMode ? 'dark' : 'light';
         window.localStorage.setItem('mq_theme', isDarkMode ? 'dark' : 'light');
     }, [isDarkMode]);
+
+    // Show update modal on first visit
+    useEffect(() => {
+        const hasSeenUpdateModal = window.localStorage.getItem('mq_update_modal_seen');
+        if (!hasSeenUpdateModal) {
+            setShowUpdateModal(true);
+            window.localStorage.setItem('mq_update_modal_seen', 'true');
+        }
+    }, []);
 
     const refreshEstimatesPage = useCallback(async (page: number, signal?: AbortSignal) => {
         console.log('🔄 Loading estimates page...', page);
@@ -1720,6 +1732,7 @@ const App: React.FC = () => {
             {/* Global UI */}
             <ToastContainer toasts={toasts} onDismiss={dismissToast} />
             <ConfirmationDialog {...confirmationDialog} />
+            <UpdateModal isOpen={showUpdateModal} onClose={() => setShowUpdateModal(false)} />
         </div>
     );
 };
