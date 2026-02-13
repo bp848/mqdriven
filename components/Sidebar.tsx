@@ -181,6 +181,24 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   const shouldShowMobile = isMobileOpen;
   const shouldShowDesktop = !isCollapsed;
 
+  // カスタムイベントリスナー
+  React.useEffect(() => {
+    const handleOpenMobileSidebar = () => {
+      setIsMobileOpen(true);
+    };
+
+    const sidebarElement = document.querySelector('[data-sidebar-mobile-toggle]');
+    if (sidebarElement) {
+      sidebarElement.addEventListener('open-mobile-sidebar', handleOpenMobileSidebar);
+    }
+
+    return () => {
+      if (sidebarElement) {
+        sidebarElement.removeEventListener('open-mobile-sidebar', handleOpenMobileSidebar);
+      }
+    };
+  }, []);
+
   return (
     <>
       {/* Mobile sidebar overlay */}
@@ -200,7 +218,9 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
           <h1 className="text-lg font-bold">業務</h1>
           <button
             type="button"
-            onClick={() => setIsMobileOpen(false)}
+            onClick={() => {
+              setIsMobileOpen(false);
+            }}
             className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
             aria-label="閉じる"
           >

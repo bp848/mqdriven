@@ -1647,10 +1647,12 @@ const App: React.FC = () => {
                     <div className="sm:hidden mb-4 flex items-center justify-between">
                         <button
                             onClick={() => {
-                                const sidebar = document.querySelector('[data-sidebar-mobile-toggle]');
-                                if (sidebar) {
-                                    const event = new MouseEvent('click', { bubbles: true });
-                                    sidebar.dispatchEvent(event);
+                                // 直接サイドバーの状態を変更
+                                const sidebarElement = document.querySelector('[data-sidebar-mobile-toggle]') as HTMLElement;
+                                if (sidebarElement) {
+                                    // サイドバーを開くためにモバイル状態を変更
+                                    const event = new CustomEvent('open-mobile-sidebar', { bubbles: true });
+                                    sidebarElement.dispatchEvent(event);
                                 }
                             }}
                             className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
