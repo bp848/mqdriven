@@ -136,7 +136,7 @@ const BusinessSupportPage: React.FC<BusinessSupportPageProps> = ({
       blocks.push(
         [
           `見積: ${selectedEstimate.title}`,
-          `合計金額: ${formatJPY(selectedEstimate.total)}`,
+          `合計金額: ${formatJPY(Number(selectedEstimate.total))}`,
           selectedEstimate.deliveryDate ? `希望納期: ${selectedEstimate.deliveryDate}` : null,
           selectedEstimate.notes ? `備考: ${selectedEstimate.notes}` : null,
           topItems.length > 0 ? `主要構成:\n${topItems.join('\n')}` : null,
@@ -281,7 +281,7 @@ const BusinessSupportPage: React.FC<BusinessSupportPageProps> = ({
                 <option value="">{selectedCustomer ? '関連見積を選択...' : '先に顧客を選択してください'}</option>
                 {relatedEstimates.map(estimate => (
                   <option key={estimate.id} value={estimate.id}>
-                    {estimate.title} / {formatJPY(estimate.total)}
+                    {estimate.title} / {formatJPY(Number(estimate.total))}
                   </option>
                 ))}
               </select>
@@ -306,7 +306,7 @@ const BusinessSupportPage: React.FC<BusinessSupportPageProps> = ({
               formData={formData}
               onChange={handleFormChange}
               onSubmit={handleGenerate}
-              isSubmitting={status === 'loading'}
+              isSubmitting={status === 'loading' as any}
               isAIOff={isAIOff}
             />
           ) : (

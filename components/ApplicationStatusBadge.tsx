@@ -1,7 +1,8 @@
 import React from 'react';
+import { ApplicationStatus } from '../types';
 
 interface ApplicationStatusBadgeProps {
-  status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
+  status: ApplicationStatus | string;
 }
 
 const statusStyles: Record<ApplicationStatusBadgeProps['status'], { text: string; className: string }> = {
