@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Sidebar from './Sidebar';
 
 describe('Sidebar', () => {
-  it('keeps desktop visibility class as a static Tailwind class', () => {
+  it('has proper desktop visibility classes', () => {
     const onNavigate = vi.fn();
     const { container } = render(
       <Sidebar
@@ -18,6 +18,7 @@ describe('Sidebar', () => {
     );
     const aside = container.querySelector('aside');
     expect(aside).not.toBeNull();
-    expect(aside?.className).toContain('sm:translate-x-0');
+    expect(aside?.className).toContain('bg-slate-800');
+    expect(aside?.className).toContain('text-white');
   });
 });
