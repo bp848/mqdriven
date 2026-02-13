@@ -173,8 +173,8 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
     [currentUser, approvalsCount]
   );
 
-  // Simple responsive sidebar
-  const sidebarWidth = 'w-64 sm:w-56 md:w-64';
+  // Mobile: always collapsed with proper width, Desktop: toggleable
+  const sidebarWidth = 'w-14 sm:w-20 md:w-56 lg:w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   // Mobile visibility logic
@@ -235,7 +235,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 
               return (
                 <React.Fragment key={category.id}>
-                  <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider ${shouldShowDesktop ? '' : 'sr-only'} ${!shouldShowMobile ? 'hidden sm:block' : ''}`}>
+                  <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-white uppercase tracking-wider ${shouldShowDesktop ? '' : 'sr-only'} ${!shouldShowMobile ? 'hidden sm:block' : ''}`}>
                     {!isCollapsed && (
                       <button
                         type="button"
@@ -271,7 +271,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                               }
                             }
                           }}
-                          className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
+                          className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : '!text-white hover:!bg-slate-700 hover:!text-slate-300'
                             } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
                         >
                           {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
@@ -319,7 +319,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                                         setIsMobileOpen(false);
                                       }
                                     }}
-                                    className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : '!text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 hover:!text-slate-900 dark:hover:!text-white'
+                                    className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : '!text-white hover:!bg-slate-700 hover:!text-slate-300'
                                       } ml-8`}
                                   >
                                     <span className={`font-medium ${shouldShowMobile ? 'block' : 'hidden sm:block'}`}>{child.name}</span>
