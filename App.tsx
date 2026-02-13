@@ -1298,7 +1298,7 @@ const App: React.FC = () => {
                     }}
                 />;
             case 'admin_user_management':
-                return <UserManagementPage addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} />;
+                return <UserManagementPage addToast={addToast} requestConfirmation={requestConfirmation} currentUser={currentUser} onUserChange={onUserChange} />;
             case 'admin_route_management':
                 return <ApprovalRouteManagementPage addToast={addToast} requestConfirmation={requestConfirmation} />;
             case 'admin_master_management':
@@ -1625,8 +1625,6 @@ const App: React.FC = () => {
                 currentPage={currentPage}
                 onNavigate={handleNavigate}
                 currentUser={currentUser}
-                allUsers={allUsers}
-                onUserChange={onUserChange}
                 supabaseUserEmail={user?.email}
                 onSignOut={handleSignOut}
                 approvalsCount={pendingApprovalCount}

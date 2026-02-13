@@ -76,12 +76,13 @@ const UserModal: React.FC<{
 };
 
 interface UserManagementPageProps {
-    addToast: (message: string, type: Toast['type']) => void;
-    requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
     currentUser: EmployeeUser | null;
+    addToast: (message: string, type: Toast['type']) => void;
+    onUserChange?: (user: EmployeeUser | null) => void;
+    requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
 }
 
-const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, requestConfirmation, currentUser }) => {
+const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, requestConfirmation, currentUser, onUserChange }) => {
     const [users, setUsers] = useState<EmployeeUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -275,6 +276,18 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                             {canManageUsers ? (
                                                 <>
                                                     <button onClick={() => handleOpenModal(user)} className="p-2 text-slate-500 hover:text-blue-600"><Pencil className="w-5 h-5" /></button>
+                                                    {user.isActive !== false && user.id !== currentUser?.id && onUserChange && (
+                                                        <button
+                                                            onClick={() => {
+                                                                onUserChange(user);
+                                                                addToast(`${user.name}として代理ログインしました`, 'success');
+                                                            }}
+                                                            className="p-2 text-slate-500 hover:text-green-600"
+                                                            title="代理ログイン"
+                                                        >
+                                                            <AlertTriangle className="w-5 h-5" />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={async () => {
                                                             try {
