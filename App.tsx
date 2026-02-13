@@ -79,7 +79,7 @@ import { getSupabase, getSupabaseFunctionHeaders, hasSupabaseCredentials } from 
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountItem, Lead, ApprovalRoute, PurchaseOrder, InventoryItem, Employee, Toast, ConfirmationDialogProps, BugReport, Estimate, ApplicationWithDetails, Invoice, EmployeeUser, Department, PaymentRecipient, MasterAccountItem, AllocationDivision, Title, ProjectBudgetSummary, DailyReportPrefill, Project, CompanyAnalysis } from './types';
-import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings } from './components/Icons';
+import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings, Menu } from './components/Icons';
 import { IS_AI_DISABLED as ENV_SHIM_AI_OFF } from './src/envShim';
 
 const getEnvValue = (key: string): string | undefined => {
@@ -1644,6 +1644,22 @@ const App: React.FC = () => {
             <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative min-h-0">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
                 <div className={`flex-1 overflow-y-auto p-6 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className="sm:hidden mb-4 flex items-center justify-between">
+                        <button
+                            onClick={() => {
+                                const sidebar = document.querySelector('[data-sidebar-mobile-toggle]');
+                                if (sidebar) {
+                                    const event = new MouseEvent('click', { bubbles: true });
+                                    sidebar.dispatchEvent(event);
+                                }
+                            }}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                        >
+                            <Menu className="w-5 h-5 text-white" />
+                        </button>
+                        <h1 className="text-lg font-bold text-slate-800 dark:text-white">業務</h1>
+                        <div className="w-8"></div>
+                    </div>
                     <Header {...headerConfig} />
                     <div className="mt-6">
                         <PageShell>

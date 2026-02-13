@@ -1,6 +1,6 @@
 ﻿import * as React from 'react';
 import { Page, EmployeeUser } from '../types';
-import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, Mail } from './Icons';
+import { Calendar, ClipboardList, Settings, Briefcase, DollarSign, Inbox, PieChart, BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, Mail, X } from './Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -183,21 +183,6 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 
   return (
     <>
-      {/* Mobile header with hamburger menu */}
-      <div className="sm:hidden fixed top-0 left-0 right-0 z-50 bg-slate-800 text-white p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
-            aria-label="メニューを開く"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <h1 className="text-lg font-bold">業務</h1>
-        </div>
-      </div>
-
       {/* Mobile sidebar overlay */}
       <div className={`sm:hidden fixed inset-0 z-40 ${!shouldShowMobile ? 'pointer-events-none' : ''}`}>
         <div
@@ -207,8 +192,22 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       </div>
 
       <aside
+        data-sidebar-mobile-toggle
         className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${shouldShowMobile ? 'translate-x-0' : '-translate-x-full'} sm:translate-x-0`}
       >
+        {/* Mobile header */}
+        <div className="sm:hidden flex items-center justify-between px-3 py-4 border-b border-slate-700">
+          <h1 className="text-lg font-bold">業務</h1>
+          <button
+            type="button"
+            onClick={() => setIsMobileOpen(false)}
+            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+            aria-label="閉じる"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
         <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'}`}>
             <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
