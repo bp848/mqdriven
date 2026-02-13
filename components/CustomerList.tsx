@@ -258,7 +258,7 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
   const InlineEditInput: React.FC<{ name: keyof Customer, value: any, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ name, value, onChange }) => (
     <input
       type="text"
-      name={name}
+      name={String(name)}
       value={value || ''}
       onChange={onChange}
       onClick={e => e.stopPropagation()}
@@ -434,8 +434,8 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, searchTerm, onSe
                       key={pageNum}
                       onClick={() => setCurrentPage(pageNum)}
                       className={`px-3 py-1 text-sm border rounded-md ${currentPage === pageNum
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                         }`}
                     >
                       {pageNum}

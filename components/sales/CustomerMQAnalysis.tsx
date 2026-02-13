@@ -65,8 +65,8 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
       }
 
       const analysis = customerMap.get(customerId)!;
-      const salesAmount = estimate.total || estimate.subtotal || 0;
-      const costAmount = estimate.variableCostAmount || 0;
+      const salesAmount = Number(estimate.total) || Number(estimate.subtotal) || 0;
+      const costAmount = Number(estimate.variableCostAmount) || 0;
       const mqAmount = salesAmount - costAmount;
       const mqRate = salesAmount > 0 ? (mqAmount / salesAmount) * 100 : 0;
 
@@ -89,7 +89,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
         const cost = Number(e.variableCostAmount || 0);
         return sales > 0;
       });
-      
+
       if (validEstimates.length > 0) {
         const totalMq = validEstimates.reduce((sum, e) => {
           const sales = Number(e.total || e.subtotal || 0);
@@ -182,7 +182,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
           </div>
           <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalStats.totalCustomers}</p>
         </div>
-        
+
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-sm border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
             <Target className="w-4 h-4" />
@@ -242,7 +242,7 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
                 <option value={50}>上位50件</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ソート順</label>
               <select
@@ -334,20 +334,18 @@ const CustomerMQAnalysis: React.FC<CustomerMQAnalysisProps> = ({ estimates, cust
                       {formatJPY(customer.totalMq)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-semibold ${
-                        customer.avgMqRate >= 40 ? 'text-green-600' :
-                        customer.avgMqRate >= 20 ? 'text-yellow-600' :
-                        customer.avgMqRate >= 0 ? 'text-orange-600' : 'text-red-600'
-                      }`}>
+                      <span className={`font-semibold ${customer.avgMqRate >= 40 ? 'text-green-600' :
+                          customer.avgMqRate >= 20 ? 'text-yellow-600' :
+                            customer.avgMqRate >= 0 ? 'text-orange-600' : 'text-red-600'
+                        }`}>
                         {customer.avgMqRate.toFixed(1)}%
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">{customer.orderedCount}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-semibold ${
-                        customer.orderedRate >= 50 ? 'text-green-600' :
-                        customer.orderedRate >= 30 ? 'text-yellow-600' : 'text-orange-600'
-                      }`}>
+                      <span className={`font-semibold ${customer.orderedRate >= 50 ? 'text-green-600' :
+                          customer.orderedRate >= 30 ? 'text-yellow-600' : 'text-orange-600'
+                        }`}>
                         {customer.orderedRate.toFixed(1)}%
                       </span>
                     </td>

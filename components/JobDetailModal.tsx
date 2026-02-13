@@ -42,20 +42,20 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
   }, [job]);
 
   const handleGeneratePdf = async () => {
-      if (!job) return;
-      setIsPdfLoading(true);
-      try {
-        await new Promise(resolve => setTimeout(resolve, 100)); // allow content to render
-        await generateMultipagePdf(
-          'manufacturing-order-pdf-content',
-          `製造指示書_${job.jobNumber}_${job.title}.pdf`
-        );
-        addToast('製造指示書PDFが正常に生成されました。', 'success');
-      } catch(e) {
-          addToast(e instanceof Error ? e.message : 'PDFの生成に失敗しました。', 'error');
-      } finally {
-          setIsPdfLoading(false);
-      }
+    if (!job) return;
+    setIsPdfLoading(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100)); // allow content to render
+      await generateMultipagePdf(
+        'manufacturing-order-pdf-content',
+        `製造指示書_${job.jobNumber}_${job.title}.pdf`
+      );
+      addToast('製造指示書PDFが正常に生成されました。', 'success');
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'PDFの生成に失敗しました。', 'error');
+    } finally {
+      setIsPdfLoading(false);
+    }
   };
 
   if (!isOpen || !job) return null;
@@ -69,8 +69,8 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
     setIsSaving(true);
     const updatedData = { ...formData };
     if (job.status !== JobStatus.Completed && updatedData.status === JobStatus.Completed) {
-        updatedData.readyToInvoice = true;
-        addToast('案件が完了しました。請求管理ページから請求書を作成できます。', 'info');
+      updatedData.readyToInvoice = true;
+      addToast('案件が完了しました。請求管理ページから請求書を作成できます。', 'info');
     }
     await onUpdateJob(job.id, updatedData);
     setIsSaving(false);
@@ -79,9 +79,9 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
 
   const handleDelete = () => {
     requestConfirmation({
-        title: '案件を削除',
-        message: `本当に案件「${job.title}」を削除しますか？この操作は元に戻せません。`,
-        onConfirm: () => onDeleteJob(job.id),
+      title: '案件を削除',
+      message: `本当に案件「${job.title}」を削除しますか？この操作は元に戻せません。`,
+      onConfirm: () => onDeleteJob(job.id),
     });
   };
 
@@ -92,12 +92,12 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
         {isEditing ? (
           <>
             {type === 'select' && (
-              <select name={key} value={formData[key] as string || ''} onChange={handleChange} className={inputClass}>
+              <select name={String(key)} value={formData[key] as string || ''} onChange={handleChange} className={inputClass}>
                 {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             )}
-            {type === 'textarea' && <textarea name={key} value={formData[key] as string || ''} onChange={handleChange} className={inputClass} rows={4} />}
-            {['text', 'number', 'date'].includes(type) && <input type={type} name={key} value={formData[key] as string || ''} onChange={handleChange} className={inputClass} />}
+            {type === 'textarea' && <textarea name={String(key)} value={formData[key] as string || ''} onChange={handleChange} className={inputClass} rows={4} />}
+            {['text', 'number', 'date'].includes(type) && <input type={type} name={String(key)} value={formData[key] as string || ''} onChange={handleChange} className={inputClass} />}
           </>
         ) : (
           <p className="text-base text-slate-900 dark:text-white min-h-[44px] flex items-center">{value}</p>
@@ -132,29 +132,29 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="md:col-span-2">{renderField('クライアント名', job.clientName, 'clientName', 'text')}</div>
               <div>
-                  <label className="text-sm font-medium text-slate-500 dark:text-slate-400">ステータス</label>
-                  <div className="mt-1">
-                      {isEditing ? (
-                          <select name="status" value={formData.status} onChange={handleChange} className={inputClass}>
-                              {Object.values(JobStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      ) : <div className="min-h-[44px] flex items-center"><JobStatusBadge status={job.status} /></div>}
-                  </div>
+                <label className="text-sm font-medium text-slate-500 dark:text-slate-400">ステータス</label>
+                <div className="mt-1">
+                  {isEditing ? (
+                    <select name="status" value={formData.status} onChange={handleChange} className={inputClass}>
+                      {Object.values(JobStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  ) : <div className="min-h-[44px] flex items-center"><JobStatusBadge status={job.status} /></div>}
+                </div>
               </div>
               <div>
-                  <label className="text-sm font-medium text-slate-500 dark:text-slate-400">製造ステータス</label>
-                  <div className="mt-1">
-                      {isEditing ? (
-                          <select name="manufacturingStatus" value={formData.manufacturingStatus} onChange={handleChange} className={inputClass}>
-                              {Object.values(ManufacturingStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      ) : <div className="min-h-[44px] flex items-center">
-                              <span className={`px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300`}>
-                                  {job.manufacturingStatus || '未設定'}
-                              </span>
-                          </div>
-                      }
+                <label className="text-sm font-medium text-slate-500 dark:text-slate-400">製造ステータス</label>
+                <div className="mt-1">
+                  {isEditing ? (
+                    <select name="manufacturingStatus" value={formData.manufacturingStatus} onChange={handleChange} className={inputClass}>
+                      {Object.values(ManufacturingStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  ) : <div className="min-h-[44px] flex items-center">
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300`}>
+                      {job.manufacturingStatus || '未設定'}
+                    </span>
                   </div>
+                  }
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -165,8 +165,8 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
               {renderField('売上高 (P)', job.price, 'price', 'number')}
               {renderField('変動費 (V)', job.variableCost, 'variableCost', 'number')}
               <div>
-                  <label className="text-sm font-medium text-slate-500 dark:text-slate-400">限界利益 (M)</label>
-                  <p className="text-xl font-bold p-2.5 text-blue-600 dark:text-blue-400 min-h-[44px] flex items-center">¥{margin.toLocaleString()}</p>
+                <label className="text-sm font-medium text-slate-500 dark:text-slate-400">限界利益 (M)</label>
+                <p className="text-xl font-bold p-2.5 text-blue-600 dark:text-blue-400 min-h-[44px] flex items-center">¥{margin.toLocaleString()}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -249,14 +249,14 @@ const JobDetailModal: React.FC<JobDetailModalProps> = ({ job, isOpen, onUpdateJo
           <div className="flex justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-slate-700">
             <div>
               {isEditing ? (
-                  <button onClick={handleDelete} className="flex items-center gap-2 text-red-600 font-semibold py-2 px-4 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/50">
-                      <Trash2 className="w-4 h-4" /> 削除
-                  </button>
+                <button onClick={handleDelete} className="flex items-center gap-2 text-red-600 font-semibold py-2 px-4 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/50">
+                  <Trash2 className="w-4 h-4" /> 削除
+                </button>
               ) : (
-                  <button onClick={handleGeneratePdf} disabled={isPdfLoading} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
-                      {isPdfLoading ? <Loader className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-                      製造指示書作成
-                  </button>
+                <button onClick={handleGeneratePdf} disabled={isPdfLoading} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
+                  {isPdfLoading ? <Loader className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+                  製造指示書作成
+                </button>
               )}
             </div>
             <div className="flex gap-4">
