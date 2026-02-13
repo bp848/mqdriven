@@ -115,7 +115,7 @@ export interface User extends LooseRecord {
   department_id?: string;
   position_id?: string;
   created_at?: string;
-  role?: string;
+  role?: 'admin' | 'user' | 'super_admin' | (() => 'admin' | 'user');
   can_use_anything_analysis?: boolean;
   auth_user_id?: string;
   start_date?: string;
@@ -621,17 +621,18 @@ export interface InboxItem {
 
 // UI-specific types
 export interface Toast {
-  id?: string | number;
+  id: number;
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
   duration?: number;
 }
 
 export interface ConfirmationDialogProps {
+  isOpen: boolean;
   title: string;
   message: string;
   onConfirm: () => void;
-  onCancel: () => void;
+  onClose: () => void;
   confirmText?: string;
   cancelText?: string;
 }

@@ -9,6 +9,10 @@ interface LeadDetailModalProps {
     lead: Lead | null;
     onSave: (leadId: string, updatedData: Partial<Lead>) => Promise<void>;
     onDelete: (leadId: string) => Promise<void>;
+    onAddEstimate?: (leadId: string) => Promise<void>;
+    onEstimateCreated?: () => void;
+    onShowAiEstimate?: (lead: Lead) => void;
+    initialAiTab?: "email" | "investigation" | "proposal";
     addToast: (message: string, type: Toast['type']) => void;
     requestConfirmation: (dialog: Omit<ConfirmationDialogProps, 'isOpen' | 'onClose'>) => void;
     currentUser: EmployeeUser | null;

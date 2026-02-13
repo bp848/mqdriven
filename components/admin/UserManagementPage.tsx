@@ -10,7 +10,13 @@ const UserModal: React.FC<{
 }> = ({ user, onClose, onSave }) => {
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
-    const [role, setRole] = useState<'admin' | 'user'>(user?.role || 'user');
+    const [role, setRole] = useState<'admin' | 'user'>(() => {
+        const userRole = user?.role;
+        if (typeof userRole === 'function') {
+            return userRole();
+        }
+        return userRole === 'admin' ? 'admin' : 'user';
+    });
     const [isActive, setIsActive] = useState<boolean>(user?.isActive ?? true);
     const [isSaving, setIsSaving] = useState(false);
 
