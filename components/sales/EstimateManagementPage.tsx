@@ -50,19 +50,19 @@ interface EstimateModalProps {
 }
 
 interface EstimateManagementPageProps {
-  estimates: Estimate[];
-  estimateTotalCount: number;
-  estimatePage: number;
-  estimatePageSize: number;
-  onEstimatePageChange: (page: number) => void | Promise<void>;
-  customers: Customer[];
-  allUsers: EmployeeUser[];
-  onAddEstimate: (estimate: Partial<Estimate>) => Promise<void>;
-  onShowAiEstimate?: () => void;
-  addToast: (message: string, type: Toast['type']) => void;
-  currentUser: EmployeeUser | null;
-  searchTerm: string;
-  isAIOff: boolean;
+    estimates: Estimate[];
+    estimateTotalCount: number;
+    estimatePage: number;
+    estimatePageSize: number;
+    onEstimatePageChange: (page: number) => void | Promise<void>;
+    customers: Customer[];
+    allUsers: EmployeeUser[];
+    onAddEstimate: (estimate: Partial<Estimate>) => Promise<void>;
+    onShowAiEstimate?: () => void;
+    addToast: (message: string, type: Toast['type']) => void;
+    currentUser: EmployeeUser | null;
+    searchTerm: string;
+    isAIOff: boolean;
 }
 
 const buildDefaultForm = (): EstimateFormState => ({
@@ -141,7 +141,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ isOpen, onClose, onSave, 
                 deliveryDate: estimateToEdit.delivery_date ?? '',
                 expirationDate: estimateToEdit.expiration_date ?? '',
                 note: estimateToEdit.notes ?? '',
-                status: estimateToEdit.status ?? EstimateStatus.Draft,
+                status: (estimateToEdit.status as EstimateStatus) ?? EstimateStatus.Draft,
             });
         } else {
             setForm(buildDefaultForm());
@@ -1147,8 +1147,8 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                             <div className="text-center py-8">
                                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                                 <p className="text-slate-500 mb-4">見積データがありません</p>
-                                <button 
-                                    onClick={() => { setSelectedEstimate(null); setIsModalOpen(true); }} 
+                                <button
+                                    onClick={() => { setSelectedEstimate(null); setIsModalOpen(true); }}
                                     className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg"
                                 >
                                     最初の見積を作成
@@ -1161,38 +1161,39 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                         <tr className="border-b border-slate-200 dark:border-slate-700">
                                             <SortableHeader
                                                 sortConfig={sortConfig}
-                                                onSort={setSortConfig}
-                                                field="estimateNumber"
+                                                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
+                                                sortKey="estimateNumber"
                                                 label="No."
                                             />
                                             <SortableHeader
                                                 sortConfig={sortConfig}
-                                                onSort={setSortConfig}
-                                                field="customerName"
+                                                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
+                                                sortKey="customerName"
                                                 label="顧客名"
                                             />
                                             <SortableHeader
                                                 sortConfig={sortConfig}
-                                                onSort={setSortConfig}
-                                                field="title"
+                                                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
+                                                sortKey="title"
                                                 label="件名"
                                             />
                                             <SortableHeader
                                                 sortConfig={sortConfig}
-                                                onSort={setSortConfig}
-                                                field="total"
+                                                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
+                                                sortKey="totalAmount"
                                                 label="金額"
+                                                className="text-right"
                                             />
                                             <SortableHeader
                                                 sortConfig={sortConfig}
-                                                onSort={setSortConfig}
-                                                field="status"
+                                                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
+                                                sortKey="status"
                                                 label="ステータス"
                                             />
                                             <SortableHeader
                                                 sortConfig={sortConfig}
-                                                onSort={setSortConfig}
-                                                field="created_at"
+                                                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
+                                                sortKey="createdAt"
                                                 label="作成日"
                                             />
                                             <th className="text-left py-3 px-4 font-semibold text-slate-900 dark:text-white">操作</th>
@@ -1210,16 +1211,15 @@ const EstimateManagementPage: React.FC<EstimateManagementPageProps> = ({
                                                 </td>
                                                 <td className="py-3 px-4 text-right">{formatJPY(Number(estimate.total) || 0)}</td>
                                                 <td className="py-3 px-4">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                        estimate.status === 'draft' ? 'bg-gray-100 text-gray-700' :
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${estimate.status === 'draft' ? 'bg-gray-100 text-gray-700' :
                                                         estimate.status === 'sent' ? 'bg-blue-100 text-blue-700' :
-                                                        estimate.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                                        'bg-slate-100 text-slate-700'
-                                                    }`}>
+                                                            estimate.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                                                'bg-slate-100 text-slate-700'
+                                                        }`}>
                                                         {estimate.status === 'draft' ? '見積中' :
-                                                         estimate.status === 'sent' ? '送付済' :
-                                                         estimate.status === 'approved' ? '承認済' :
-                                                         estimate.status}
+                                                            estimate.status === 'sent' ? '送付済' :
+                                                                estimate.status === 'approved' ? '承認済' :
+                                                                    estimate.status}
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4">{formatDate(estimate.created_at)}</td>

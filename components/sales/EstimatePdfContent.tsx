@@ -29,8 +29,8 @@ export const EstimatePdfContent: React.FC<Props> = ({ estimate, footerLeft, foot
   }, [estimate.items]);
 
   const totals = useMemo(() => {
-    const subtotal = estimate.subtotal ?? normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const taxTotal = estimate.taxTotal ?? Math.round(subtotal * DEFAULT_TAX_RATE);
+    const subtotal = Number(estimate.subtotal) ?? normalizedItems.reduce((sum, item) => sum + Number(item.subtotal), 0);
+    const taxTotal = Number(estimate.taxTotal) ?? Math.round(subtotal * DEFAULT_TAX_RATE);
     const grandTotal = estimate.grandTotal ?? subtotal + taxTotal;
     return { subtotal, taxTotal, grandTotal };
   }, [estimate.subtotal, estimate.taxTotal, estimate.grandTotal, normalizedItems]);
@@ -87,7 +87,7 @@ export const EstimatePdfContent: React.FC<Props> = ({ estimate, footerLeft, foot
         <div />
         <div className="border border-[#444] p-3">
           <div className="flex justify-between">
-            <span>小計</span><span>{formatCurrency(totals.subtotal)}</span>
+            <span>小計</span><span>{formatCurrency(Number(totals.subtotal))}</span>
           </div>
           <div className="flex justify-between">
             <span>消費税</span><span>{formatCurrency(totals.taxTotal)}</span>

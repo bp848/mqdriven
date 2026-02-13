@@ -163,7 +163,7 @@ export default function AssistantPage() {
                     padding: "8px 10px",
                     borderRadius: 10,
                     border: "1px solid #e5e7eb",
-                    background: a.danger ? "#fee2e2" : "white",
+                    background: (a as any).danger ? "#fee2e2" : "white",
                     cursor: "pointer",
                     fontSize: 12,
                   }}

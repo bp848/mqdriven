@@ -45,7 +45,7 @@ const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({ isOpen, onClo
             setIsPdfLoading(false);
         }
     };
-    
+
     if (!isOpen || !estimate) return null;
 
     return (
@@ -77,7 +77,7 @@ const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({ isOpen, onClo
                         <main className="mt-6">
                             <p><span className="font-bold">件名:</span> {estimate.title}</p>
                             <div className="text-right mt-2 mb-4">
-                                <p className="text-2xl font-bold">合計金額: <span className="border-b-4 border-double border-black px-2">{formatJPY(estimate.total * 1.1)}</span></p>
+                                <p className="text-2xl font-bold">合計金額: <span className="border-b-4 border-double border-black px-2">{formatJPY(Number(estimate.total) * 1.1)}</span></p>
                             </div>
                             <table className="w-full border-collapse border border-black text-sm">
                                 <thead>
@@ -109,15 +109,15 @@ const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({ isOpen, onClo
                                 <tfoot>
                                     <tr>
                                         <td colSpan={4} className="border border-black p-2 text-right font-bold">小計</td>
-                                        <td colSpan={2} className="border border-black p-2 text-right font-bold">{formatJPY(estimate.total)}</td>
+                                        <td colSpan={2} className="border border-black p-2 text-right font-bold">{formatJPY(Number(estimate.total))}</td>
                                     </tr>
-                                     <tr>
+                                    <tr>
                                         <td colSpan={4} className="border border-black p-2 text-right font-bold">消費税 (10%)</td>
-                                        <td colSpan={2} className="border border-black p-2 text-right font-bold">{formatJPY(estimate.total * 0.1)}</td>
+                                        <td colSpan={2} className="border border-black p-2 text-right font-bold">{formatJPY(Number(estimate.total) * 0.1)}</td>
                                     </tr>
-                                     <tr>
+                                    <tr>
                                         <td colSpan={4} className="border border-black p-2 text-right font-bold bg-slate-100">合計</td>
-                                        <td colSpan={2} className="border border-black p-2 text-right font-bold bg-slate-100">{formatJPY(estimate.total * 1.1)}</td>
+                                        <td colSpan={2} className="border border-black p-2 text-right font-bold bg-slate-100">{formatJPY(Number(estimate.total) * 1.1)}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -138,7 +138,7 @@ const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({ isOpen, onClo
                     <div className="flex gap-4">
                         <button onClick={onClose} className="font-semibold py-2 px-4 rounded-lg">キャンセル</button>
                         <button onClick={handleGeneratePdf} disabled={isPdfLoading} className="flex items-center gap-2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 disabled:bg-slate-400">
-                            {isPdfLoading ? <Loader className="w-5 h-5 animate-spin"/> : <FileText className="w-5 h-5" />}
+                            {isPdfLoading ? <Loader className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
                             PDF出力
                         </button>
                     </div>
