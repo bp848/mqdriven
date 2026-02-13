@@ -1643,8 +1643,9 @@ const App: React.FC = () => {
             />
             <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 relative min-h-0">
                 {dbError && <GlobalErrorBanner error={dbError} onRetry={loadAllData} onShowSetup={() => setIsSetupModalOpen(true)} />}
-                <div className={`flex-1 overflow-y-auto pt-20 sm:pt-6 p-6 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <div className="sm:hidden mb-4 flex items-center justify-between fixed top-0 left-0 right-0 z-30 bg-slate-100 dark:bg-slate-900 p-4 border-b border-slate-200 dark:border-slate-700">
+                {/* Mobile header */}
+                <div className="sm:hidden fixed top-0 left-0 right-0 z-30 bg-slate-100 dark:bg-slate-900 p-4 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
                         <button
                             onClick={() => {
                                 // 直接サイドバーの状態を変更
@@ -1662,6 +1663,8 @@ const App: React.FC = () => {
                         <h1 className="text-lg font-bold text-slate-800 dark:text-white">業務</h1>
                         <div className="w-8"></div>
                     </div>
+                </div>
+                <div className={`flex-1 overflow-y-auto pt-20 sm:pt-6 p-6 bg-slate-100 dark:bg-slate-900 transition-opacity duration-150 ${isLoading && !dbError ? 'opacity-50 pointer-events-none' : ''}`}>
                     <Header {...headerConfig} />
                     <div className="mt-6">
                         <PageShell>
