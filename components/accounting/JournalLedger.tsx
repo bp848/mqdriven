@@ -133,46 +133,46 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
           <thead>
             <tr>
               <SortableHeader
-                title="日付"
+                label="日付"
                 sortKey="date"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                title="科目コード"
+                label="科目コード"
                 sortKey="code"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                title="科目名"
+                label="科目名"
                 sortKey="name"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                title="借方"
+                label="借方"
                 sortKey="debit_amount"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                title="貸方"
+                label="貸方"
                 sortKey="credit_amount"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                title="仕分け"
+                label="仕分け"
                 sortKey="category"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                title="ステータス"
+                label="ステータス"
                 sortKey="status"
                 sortConfig={sortConfig}
-                onSort={setSortConfig}
+                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               {isAdmin && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 操作
