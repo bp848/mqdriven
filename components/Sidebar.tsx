@@ -174,7 +174,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
   );
 
   // Mobile: always collapsed with proper width, Desktop: toggleable
-  const sidebarWidth = 'w-14 sm:w-20 md:w-56 lg:w-64';
+  const sidebarWidth = isCollapsed ? 'w-14' : 'w-14 sm:w-20 md:w-56 lg:w-64';
   const sidebarTransition = 'transition-all duration-300 ease-in-out';
 
   // Mobile visibility logic
