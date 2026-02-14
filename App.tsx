@@ -72,6 +72,7 @@ import AuthCallbackPage from './components/AuthCallbackPage';
 import PromptManagementPage from './components/PromptManagementPage';
 import PageShell from './components/ui/PageShell';
 import DailyReportProgressPage from './components/DailyReportProgressPage';
+import AIEstimateCreation from './components/estimate/AIEstimateCreation';
 
 import * as dataService from './services/dataService';
 import * as geminiService from './services/geminiService';
@@ -232,6 +233,7 @@ const PAGE_TITLES: Record<Page, string> = {
     newsletter: 'ニュースレター',
     email_auto_reply: 'メール自動返信',
     strac_analysis: 'STRAC分析',
+    new_ai_estimate: '新規AI見積もり',
 };
 
 const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
@@ -1351,7 +1353,7 @@ const App: React.FC = () => {
             case 'purchasing_orders':
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders || []} jobs={jobs || []} />;
             case 'simple_estimates':
-                return <PlaceholderPage title="AI見積もり" />;
+                return <AIEstimateCreation />;
             case 'quote_center':
                 return <QuoteCenter />;
             case 'print_estimate_app':
@@ -1660,7 +1662,7 @@ const App: React.FC = () => {
                         >
                             <Menu className="w-5 h-5 text-white" />
                         </button>
-                        <h1 className="text-lg font-bold text-slate-800 dark:text-white">業務</h1>
+                        <h1 className="text-lg font-bold text-slate-800 dark:text-white">文唱堂印刷 業務管理</h1>
                         <div className="w-8"></div>
                     </div>
                 </div>

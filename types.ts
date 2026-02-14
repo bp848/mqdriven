@@ -35,11 +35,12 @@ export type Page =
   | 'pdf_editing_tools'
   | 'dtp_tools'
   | 'prompt_management'
-  | 'newsletter'
+  | 'newsletter'    
   | 'email_auto_reply'
   | 'simple_estimates'
   | 'print_estimate_app'
-  | 'strac_analysis';
+  | 'strac_analysis'
+  | 'new_ai_estimate'; // Adding new page type
 
 // Allow loose typing for legacy camelCase usage across the app.
 export interface LooseRecord {
@@ -1325,3 +1326,83 @@ export const BINDING_OPTIONS = ['無線綴じ', '中綴じ', '上製本', '平�
 export const PAPER_TYPES = ['上質 70kg', '上質 90kg', 'コート 110kg', 'マットコート 110kg', 'アートポスト 180kg', '書籍用紙 72.5kg'];
 export const COLOR_OPTIONS = ['本文モノクロ / 表紙カラー', '全ページフルカラー', '全ページモノクロ'];
 export const SPECIAL_PROCESSING_OPTIONS = ['なし', 'PP加工（グロス）', 'PP加工（マット）', '箔押し', 'エンボス加工', '穴あけ', '折り加工'];
+
+// New AI Estimate related types
+export interface PrintSpecs {
+  title: string;
+  quantity: number;
+  size: string;
+  paperType: string;
+  colors: string;
+  finishing: string;
+  deadline: string;
+  destination: string;
+  managerName: string;
+  analysisEvidence?: {
+    sizeReasoning: string;
+    paperReasoning: string;
+    colorReasoning: string;
+    pageReasoning: string;
+  };
+}
+
+export interface EngineParameters {
+  paperBaseMargin: number;
+  pressHourlyRate: number;
+  bindingBaseFee: number;
+  ctpPlateCost: number;
+  inkBaseRate: number;
+  setupFee: number;
+  minimumProfitRate: number;
+}
+
+export interface GroundingSource {
+  title: string;
+  uri: string;
+}
+
+export interface CostItem {
+  id: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  formula: string;
+  category: 'direct' | 'processing' | 'outsource' | 'overhead';
+  pdfReference?: string;
+  isAlert?: boolean;
+  aiRecommendation?: number;
+}
+
+export interface QuoteItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  description: string;
+}
+
+export interface Scenario {
+  id: string;
+  label: string;
+  description: string;
+  specs: Partial<PrintSpecs>;
+  impact: string;
+  profitChange: number;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  content: string;
+  thinking?: string;
+}
+
+export interface EstimateState {
+  specs: PrintSpecs;
+  costs: CostItem[];
+  quoteItems: QuoteItem[];
+  taxRate: number;
+  profitMarginTarget: number;
+  scenarios: Scenario[];
+  engineParams: EngineParameters;
+  groundingSources: GroundingSource[];
+}

@@ -38,6 +38,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'sales_customers', name: '取引先/顧客カルテ' },
       { page: 'sales_estimates', name: '見積管理' },
       { page: 'sales_orders', name: '受注・予算管理' },
+      { page: 'simple_estimates', name: 'AI積算・見積作成' },
       { page: 'newsletter', name: 'メールマガジン', icon: Mail },
     ],
   },
@@ -215,7 +216,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
       >
         {/* Mobile header */}
         <div className="sm:hidden flex items-center justify-between px-3 py-4 border-b border-slate-700">
-          <h1 className="text-lg font-bold">業務</h1>
+          <h1 className="text-lg font-bold">文唱堂印刷 業務管理</h1>
           <button
             type="button"
             onClick={() => {
@@ -230,7 +231,7 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 
         <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'}`}>
-            <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>業務</h1>
+            <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>文唱堂印刷 業務管理</h1>
             {!isCollapsed && (
               <button
                 type="button"
