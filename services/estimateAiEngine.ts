@@ -3,10 +3,21 @@ import { requireGeminiClient } from "./Gemini";
 import { PrintSpecs, CostItem, GroundingSource } from "../types";
 
 /**
+ * ⚠️ DEPRECATED: このファイルは非推奨です
+ * 
+ * 代わりに estimateAIService.ts を使用してください。
+ * - estimateAIService.ts: Gemini 2.0 Pro Exp API使用（推奨）
+ * - estimateAiEngine.ts: Gemini 1.5 API使用（このファイル - 旧バージョン）
+ * 
+ * このファイルは後方互換性のために残されていますが、
+ * 新規実装では estimateAIService.ts を使用してください。
+ */
+
+/**
  * PDF/画像から仕様を極めて精密に抽出する
  */
 export const extractSpecsFromContent = async (text: string, imageData?: { data: string, mimeType: string }): Promise<{ specs: PrintSpecs, sources: GroundingSource[] }> => {
-    const ai = requireGeminiClient() as any;
+    const ai = requireGeminiClient();
     const parts: any[] = [{
         text: `
     あなたは文唱堂印刷の「DTP検版・積算部長」です。
@@ -80,7 +91,7 @@ export const extractSpecsFromContent = async (text: string, imageData?: { data: 
  * 印刷実務に基づいた「省略なし」の原価積算
  */
 export const suggestCostBreakdown = async (specs: PrintSpecs): Promise<{ costs: CostItem[], sources: GroundingSource[] }> => {
-    const ai = requireGeminiClient() as any;
+    const ai = requireGeminiClient();
 
     const result = await ai.models.generateContent({
         model: "gemini-1.5-flash",
@@ -136,7 +147,7 @@ export const suggestCostBreakdown = async (specs: PrintSpecs): Promise<{ costs: 
  * 物流コスト根拠
  */
 export const calculateDeliveryImpact = async (destination: string): Promise<GroundingSource[]> => {
-    const ai = requireGeminiClient() as any;
+    const ai = requireGeminiClient();
 
     const result = await ai.models.generateContent({
         model: "gemini-1.5-flash",
@@ -158,7 +169,7 @@ export const calculateDeliveryImpact = async (destination: string): Promise<Grou
  * チャット
  */
 export const getChatResponse = async (message: string, history: any[]) => {
-    const ai = requireGeminiClient() as any;
+    const ai = requireGeminiClient();
 
     const result = await ai.models.generateContent({
         model: "gemini-1.5-flash",

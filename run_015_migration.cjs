@@ -9,14 +9,12 @@ try {
   console.log('------------------------------------------------------------------');
   console.log('V Execute the following SQL in your Supabase SQL Editor V');
   console.log('------------------------------------------------------------------');
-  console.log(`-- Migration file: ${path.basename(migrationFile)}
-`);
+  console.log(`-- Migration file: ${path.basename(migrationFile)}`);
   console.log(sql);
   console.log('------------------------------------------------------------------');
   console.log('^ Execute the above SQL in your Supabase SQL Editor ^');
   console.log('------------------------------------------------------------------');
-  console.log('
-This script creates the `customer_feedback` table and sets up necessary policies and indexes.');
+  console.log('This script creates the `customer_feedback` table and sets up necessary policies and indexes.');
   console.log('After running the SQL, the database will be ready for the new feedback feature.');
 
 } catch (err) {

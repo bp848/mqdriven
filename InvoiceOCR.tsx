@@ -57,10 +57,11 @@ const InboxItemCard: React.FC<{
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         if (!localData) return;
-        const { name, value } = e.target;
+        const { name, value, type } = e.target;
+        const target = e.target as HTMLInputElement;
         setLocalData({
             ...localData,
-            [name]: name === 'totalAmount' ? parseFloat(value) || 0 : value
+            [name]: type === 'checkbox' ? target.checked : (name === 'totalAmount' ? parseFloat(value) || 0 : value)
         });
     };
 
@@ -70,7 +71,7 @@ const InboxItemCard: React.FC<{
         await onUpdate(item.id, { extractedData: localData });
         setIsSaving(false);
     };
-    
+
     const handleDelete = async () => {
         requestConfirmation({
             title: 'ファイルを削除',
@@ -81,7 +82,7 @@ const InboxItemCard: React.FC<{
             }
         });
     };
-    
+
     const handleApprove = async () => {
         if (!localData) return;
         setIsApproving(true);
@@ -130,7 +131,7 @@ const InboxItemCard: React.FC<{
                     {item.status === 'error' && <div className="flex-1 flex flex-col items-center justify-center bg-red-50 dark:bg-red-900/30 rounded-lg p-4"><AlertTriangle className="w-8 h-8 text-red-500" /><p className="mt-2 text-red-700 dark:text-red-300 font-semibold">解析エラー</p><p className="text-sm text-red-600 dark:text-red-400 mt-1 text-center">{item.errorMessage}</p></div>}
                     {localData && (
                         <div className="space-y-3">
-                             <div>
+                            <div>
                                 <label htmlFor={`vendorName-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">発行元</label>
                                 <input id={`vendorName-${item.id}`} name="vendorName" type="text" value={localData.vendorName} onChange={handleChange} placeholder="発行元" className={inputClass} readOnly={item.status === 'approved'} />
                             </div>
@@ -140,10 +141,17 @@ const InboxItemCard: React.FC<{
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label htmlFor={`totalAmount-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">合計金額</label>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label htmlFor={`totalAmount-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">合計金額</label>
+                                        <div className="flex items-center">
+                                            <input id={`taxInclusive-${item.id}`} data-testid={`tax-inclusive-checkbox-${item.id}`} name="taxInclusive" type="checkbox" checked={localData.taxInclusive || false} onChange={handleChange} className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600" disabled={item.status === 'approved'} />
+                                            <label htmlFor={`taxInclusive-${item.id}`} className="ml-2 text-sm font-medium text-gray-900 dark:text-gray-300">税込</label>
+                                        </div>
+                                    </div>
                                     <input id={`totalAmount-${item.id}`} name="totalAmount" type="number" value={localData.totalAmount} onChange={handleChange} placeholder="合計金額" className={inputClass} readOnly={item.status === 'approved'} />
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">※請求書が税込表示の場合はチェック、税抜表示の場合はチェックを外してください</p>
                                 </div>
-                                 <div>
+                                <div>
                                     <label htmlFor={`costType-${item.id}`} className="text-sm font-medium text-slate-600 dark:text-slate-300">費用の種類 (AI提案)</label>
                                     <select id={`costType-${item.id}`} name="costType" value={localData.costType} onChange={handleChange} className={selectClass} disabled={item.status === 'approved'}>
                                         <option value="V">変動費 (V)</option>
@@ -165,7 +173,7 @@ const InboxItemCard: React.FC<{
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 
@@ -182,7 +190,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
             mounted.current = false;
         };
     }, []);
-    
+
     const loadItems = useCallback(async () => {
         try {
             if (mounted.current) setIsLoading(true);
@@ -209,7 +217,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
             extractedData: null,
             errorMessage: null,
         };
-        
+
         const tempId = `temp_${Date.now()}`;
         if (mounted.current) {
             setItems(prev => [{ ...tempItem, id: tempId, createdAt: new Date().toISOString(), fileUrl: URL.createObjectURL(file) }, ...prev]);
@@ -221,7 +229,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
 
             const base64String = await readFileAsBase64(file);
             const data = await extractInvoiceDetails(base64String, file.type);
-            
+
             if (mounted.current) {
                 tempItem.extractedData = data;
                 tempItem.status = InboxItemStatus.PendingReview;
@@ -233,9 +241,9 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
                 tempItem.errorMessage = err.message || '不明なエラーが発生しました。';
             }
         } finally {
-             if (mounted.current) {
+            if (mounted.current) {
                 setItems(prev => prev.filter(i => i.id !== tempId)); // Remove temp item
-             }
+            }
             if (tempItem.filePath) {
                 await addInboxItem(tempItem); // Add final item if path exists
             }
@@ -279,7 +287,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
             if (mounted.current) addToast(`更新に失敗しました: ${err.message}`, 'error');
         }
     };
-    
+
     const handleDeleteItem = async (itemToDelete: InboxItem) => {
         try {
             await deleteInboxItem(itemToDelete);
@@ -291,7 +299,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
             if (mounted.current) addToast(`削除に失敗しました: ${err.message}`, 'error');
         }
     };
-    
+
     const handleApproveItem = async (itemToApprove: InboxItem) => {
         if (!itemToApprove.extractedData) return;
         try {
@@ -314,7 +322,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
                     </label>
                     {isAIOff && <p className="text-sm text-red-500 dark:text-red-400 ml-4">AI機能無効のため、OCR機能は利用できません。</p>}
                 </div>
-                 {isUploading && !isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">アップロードと解析を実行中です...</p>}
+                {isUploading && !isAIOff && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">アップロードと解析を実行中です...</p>}
             </div>
 
             {error && (
@@ -322,7 +330,7 @@ const InvoiceOCR: React.FC<InvoiceOCRProps> = ({ onSaveExpenses, addToast, reque
                     <strong>エラー:</strong> {error}
                 </div>
             )}
-            
+
             {isLoading ? (
                 <div className="text-center py-10">
                     <Loader className="w-8 h-8 mx-auto animate-spin text-blue-500" />

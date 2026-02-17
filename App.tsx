@@ -1354,6 +1354,8 @@ const App: React.FC = () => {
                 return <PurchasingManagementPage purchaseOrders={purchaseOrders || []} jobs={jobs || []} />;
             case 'simple_estimates':
                 return <AIEstimateCreation />;
+            case 'new_ai_estimate':
+                return <AIEstimateCreation />;
             case 'quote_center':
                 return <QuoteCenter />;
             case 'print_estimate_app':

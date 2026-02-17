@@ -83,6 +83,14 @@ class MCPService {
       endpoint: getEnvValue('MCP_GDRIVE_ENDPOINT') || 'http://localhost:3003/mcp',
       apiKey: getEnvValue('GOOGLE_API_KEY')
     });
+
+    // Supabase MCP Server (HTTP API for browser)
+    this.serverConfigs.set('supabase', {
+      name: 'Supabase MCP',
+      transportType: 'http',
+      endpoint: getEnvValue('MCP_SUPABASE_ENDPOINT') || 'http://localhost:3004/mcp',
+      apiKey: getEnvValue('SUPABASE_SERVICE_ROLE_KEY') // Optional: if auth is needed
+    });
   }
 
   /**

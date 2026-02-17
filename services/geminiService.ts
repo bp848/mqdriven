@@ -479,6 +479,10 @@ const extractInvoiceSchema = {
     totalAmount: { type: Type.NUMBER, description: "請求書の合計金額（税込）。" },
     subtotalAmount: { type: Type.NUMBER, description: "税抜金額。" },
     taxAmount: { type: Type.NUMBER, description: "消費税額。" },
+    taxInclusive: {
+      type: Type.BOOLEAN,
+      description: "請求書に記載されている金額が税込かどうか。請求書に『税込』『税込価格』『内税』などの表記があればtrue、『税抜』『別途消費税』『外税』などの表記があればfalse。表記がない場合、合計金額と税抜金額の関係から判定してください。"
+    },
     description: { type: Type.STRING, description: "請求内容の簡潔な説明。" },
     costType: {
       type: Type.STRING,
@@ -560,16 +564,30 @@ export const extractInvoiceDetails = async (
       };
 
       // AI出力を期待する形式にマッピング
+      const totalAmount = removeCurrency(parsed.amount_due || parsed.total_billed_amount || parsed.total_amount_due || parsed.total_amount_at_headline);
+      const subtotalAmount = removeCurrency(parsed.subtotals?.subtotal_before_tax || parsed.breakdown?.subtotal || parsed.summary?.subtotal || parsed.subtotal);
+      const taxAmount = removeCurrency(parsed.subtotals?.tax || parsed.breakdown?.tax_amount || parsed.summary?.tax_amount || parsed.tax?.amount);
+
+      // taxInclusiveの判定: AIからの値を優先し、なければ金額から推測
+      let taxInclusive = parsed.taxInclusive ?? parsed.tax_inclusive;
+      if (taxInclusive === undefined && totalAmount && subtotalAmount && taxAmount) {
+        // 合計金額が税抜+税額と一致すれば税込、税抜と一致すれば税抜
+        taxInclusive = Math.abs(totalAmount - (subtotalAmount + taxAmount)) < 1;
+      }
+
       const mapped = {
         vendorName: parsed.sender_info?.name || parsed.issuer?.company_name || parsed.vendor_info?.name || parsed.billing_party?.company_name || parsed.invoice_title || '',
         invoiceDate: convertJapaneseDate(parsed.invoice_date || parsed.issue_date || ''),
         dueDate: convertJapaneseDate(parsed.due_date || parsed.payment_due_date || ''),
-        totalAmount: removeCurrency(parsed.amount_due || parsed.total_billed_amount || parsed.total_amount_due || parsed.total_amount_at_headline),
-        subtotalAmount: removeCurrency(parsed.subtotals?.subtotal_before_tax || parsed.breakdown?.subtotal || parsed.summary?.subtotal || parsed.subtotal),
-        taxAmount: removeCurrency(parsed.subtotals?.tax || parsed.breakdown?.tax_amount || parsed.summary?.tax_amount || parsed.tax?.amount),
+        totalAmount,
+        subtotalAmount,
+        taxAmount,
+        taxInclusive: taxInclusive ?? true, // デフォルトは税込とする（日本の一般的な請求書は税込表示が多い）
         registrationNumber: parsed.issuer?.registration_number || parsed.registration_number || parsed.sender_info?.registration_number || parsed.vendor_info?.registration_number || '',
         description: parsed.invoice_title || '',
         relatedCustomer: parsed.recipient_info?.name || parsed.customer?.company_name || parsed.customer_info?.name || parsed.billed_party?.company_name || '',
+        costType: parsed.costType || parsed.cost_type || 'V',
+        account: parsed.account || '仕入高',
         lineItems: parsed.items?.map((item: any) => ({
           description: item.description || item.item_name || '',
           quantity: removeCurrency(item.quantity || 1),

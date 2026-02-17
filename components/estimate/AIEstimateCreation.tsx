@@ -10,7 +10,8 @@ import {
     suggestCostBreakdown,
     calculateDeliveryImpact,
     getChatResponse
-} from '../../services/estimateAiEngine';
+} from '../../services/estimateAIService';
+import supabaseMCPService from '../../services/supabaseMCPService';
 
 const AIEstimateCreation: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'specs' | 'costs' | 'params'>('specs');
@@ -108,14 +109,35 @@ const AIEstimateCreation: React.FC = () => {
 
     const handleSendChat = async () => {
         if (!chatInput.trim()) return;
-        const userMsg: ChatMessage = { role: 'user', content: chatInput };
+
+        const originalInput = chatInput;
+        const userMsg: ChatMessage = { role: 'user', content: originalInput };
+        // Optimistically update UI
         setMessages(prev => [...prev, userMsg]);
         setChatInput('');
+
+        let mcpContext = "";
         try {
-            const response = await getChatResponse(chatInput, messages);
+            // Check availability first to avoid waiting on timeout if server is down
+            const isAvailable = await supabaseMCPService.checkAvailability();
+            if (isAvailable) {
+                const searchResult = await supabaseMCPService.searchDocs(originalInput);
+                if (searchResult) {
+                    mcpContext = `\n\n【Supabase参考情報】\n${searchResult.slice(0, 1000)}...`;
+                }
+            }
+        } catch (e) {
+            console.warn("Supabase MCP unavailable, proceeding without context.", e);
+        }
+
+        try {
+            // Append context to message sent to AI (invisible to user in UI if we don't update userMsg content)
+            const queryWithContext = originalInput + mcpContext;
+            const response = await getChatResponse(queryWithContext, messages);
             setMessages(prev => [...prev, { role: 'model', content: response }]);
         } catch (err) {
-            setMessages(prev => [...prev, { role: 'model', content: "エラーが発生しました。" }]);
+            console.error(err);
+            setMessages(prev => [...prev, { role: 'model', content: "申し訳ありません。エラーが発生しました。" }]);
         }
     };
 

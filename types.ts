@@ -35,7 +35,7 @@ export type Page =
   | 'pdf_editing_tools'
   | 'dtp_tools'
   | 'prompt_management'
-  | 'newsletter'    
+  | 'newsletter'
   | 'email_auto_reply'
   | 'simple_estimates'
   | 'print_estimate_app'
@@ -411,6 +411,7 @@ export interface Application extends LooseRecord {
   createdAt?: string;
   updatedAt?: string | null;
   documentUrl?: string | null;
+  lastRemindedAt?: string | null;
 }
 
 // 豁｣縺励＞豬√ｌ縺ｮ蝙句ｮ夂ｾｩ
@@ -601,6 +602,7 @@ export interface InvoiceData extends LooseRecord {
   vendorName?: string;
   invoiceDate?: string;
   totalAmount?: number;
+  taxInclusive?: boolean;
   description?: string;
   costType?: 'V' | 'F';
   account?: string;

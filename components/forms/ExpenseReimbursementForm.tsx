@@ -77,6 +77,7 @@ interface ExpenseInvoiceDraft {
     lines: ExpenseLine[];
     ocrExtractedFields: Set<string>;
     sourceFile?: { name: string; type: string; url: string };
+    isTaxInclusive?: boolean; // New field to track tax selection
 }
 
 interface ExpenseAttachment {
@@ -187,6 +188,7 @@ const createEmptyInvoiceDraft = (): ExpenseInvoiceDraft => ({
     bankAccount: { bankName: '', branchName: '', accountType: '', accountNumber: '' },
     lines: [createEmptyLine()],
     ocrExtractedFields: new Set(),
+    isTaxInclusive: false, // Default to tax-exclusive
 });
 
 const STEPS = [
@@ -244,6 +246,7 @@ const computeLineTotals = (invoice: ExpenseInvoiceDraft): ComputedTotals => {
     const totalNet = toNumberValue(invoice.totalNet);
     const totalTax = toNumberValue(invoice.taxAmount);
     const hasHeaderTotals = totalGross > 0 || totalNet > 0 || totalTax > 0;
+    const isTaxInclusive = invoice.isTaxInclusive ?? false;
 
     if (lineSum === 0 && hasHeaderTotals) {
         const net = totalNet > 0 ? totalNet : Math.max(0, totalGross - totalTax);
@@ -252,11 +255,10 @@ const computeLineTotals = (invoice: ExpenseInvoiceDraft): ComputedTotals => {
         return { net, tax, gross };
     }
 
-    const closeToGross = totalGross > 0 && isCloseTo(lineSum, totalGross);
-    const closeToNet = totalNet > 0 && isCloseTo(lineSum, totalNet);
-    const assumeInclusive = hasHeaderTotals && closeToGross && !closeToNet;
+    // Use user's tax selection if explicitly set, otherwise fall back to auto-detection
+    const shouldTreatAsInclusive = isTaxInclusive || (hasHeaderTotals && totalGross > 0 && isCloseTo(lineSum, totalGross) && !isCloseTo(lineSum, totalNet));
 
-    if (assumeInclusive) {
+    if (shouldTreatAsInclusive) {
         const totals = lines.reduce(
             (acc, line) => {
                 const grossLine = toNumberValue(line.amountExclTax);
@@ -431,6 +433,7 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                     const restoredInvoice: ExpenseInvoiceDraft = {
                         ...baseInvoice,
                         ...data.invoice,
+                        isTaxInclusive: Boolean(data.invoice?.isTaxInclusive ?? false),
                         lines: rawLines && rawLines.length > 0 ? rawLines.map((line: any) => ensureExpenseLineShape(line)) : baseInvoice.lines,
                         ocrExtractedFields: new Set(data.invoice?.ocrExtractedFields || []),
                     };
@@ -637,6 +640,20 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                 updateField('totalNet', ocrData.subtotalAmount);
                 updateField('taxAmount', ocrData.taxAmount);
 
+                // Detect if this is likely a tax-inclusive invoice
+                const totalAmount = Number(ocrData.totalAmount) || 0;
+                const subtotalAmount = Number(ocrData.subtotalAmount) || 0;
+                const taxAmount = Number(ocrData.taxAmount) || 0;
+
+                // If we have both total and tax, and subtotal is missing or close to total-tax, 
+                // it's likely a tax-inclusive invoice
+                const isInclusiveLikely = totalAmount > 0 && taxAmount > 0 && (
+                    subtotalAmount === 0 ||
+                    Math.abs(subtotalAmount - (totalAmount - taxAmount)) < 100
+                );
+
+                updateField('isTaxInclusive', isInclusiveLikely);
+
                 if (ocrData.lineItems && ocrData.lineItems.length > 0) {
                     newDraft.lines = ocrData.lineItems.map(item => {
                         const candidateCustomer = (item as any).customerName || ocrData.relatedCustomer || '';
@@ -666,7 +683,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                             description: item.description || '',
                             customerName: candidateCustomer || '',
                             customCustomerName: candidateCustomer || '',
-                            amountExclTax: item.amountExclTax || 0,
+                            amountExclTax: isInclusiveLikely && item.amountExclTax ?
+                                // If tax-inclusive, convert to net amount
+                                Math.round((item.amountExclTax || 0) / (1 + (item.taxRate || 10) / 100)) :
+                                (item.amountExclTax || 0),
                             quantity: item.quantity || 1,
                             unitPrice: item.unitPrice || 0,
                             taxRate: item.taxRate || 10,
@@ -699,7 +719,10 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                         description: itemDescription,
                         customerName: candidateCustomer || '',
                         customCustomerName: candidateCustomer || '',
-                        amountExclTax: newDraft.totalNet,
+                        amountExclTax: isInclusiveLikely && newDraft.totalGross ?
+                            // If tax-inclusive, use the net amount instead of gross
+                            (newDraft.totalNet || Math.max(0, newDraft.totalGross - newDraft.taxAmount)) :
+                            newDraft.totalNet,
                         taxRate: inferredTaxRate,
                         purposeType,
                         businessCategory,
@@ -719,9 +742,11 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                         businessCategory = '物流';
                     }
 
-                    const inferredNet = newDraft.taxAmount
+                    const inferredNet = isInclusiveLikely && newDraft.taxAmount
                         ? Math.max(0, newDraft.totalGross - newDraft.taxAmount)
-                        : Math.round(newDraft.totalGross / 1.1);
+                        : newDraft.taxAmount
+                            ? Math.max(0, newDraft.totalGross - newDraft.taxAmount)
+                            : Math.round(newDraft.totalGross / 1.1);
                     const inferredTaxRate = inferredNet > 0 && newDraft.taxAmount
                         ? Math.round((newDraft.taxAmount / inferredNet) * 100)
                         : 10;
@@ -1049,6 +1074,46 @@ const ExpenseReimbursementForm: React.FC<ExpenseReimbursementFormProps> = (props
                                 <FormField label="支払期限" htmlFor="dueDate" isOcr={invoice.ocrExtractedFields.has('dueDate')}>
                                     <input id="dueDate" type="date" value={invoice.dueDate} onChange={e => handleFieldChange('dueDate', e.target.value)} className="w-full rounded-md border-slate-300 dark:border-slate-600" disabled={isDisabled} />
                                 </FormField>
+                                <div className="md:col-span-2 lg:col-span-3">
+                                    <FormField label="請求書の税区分" className="md:col-span-2 lg:col-span-3">
+                                        <div className="flex items-center gap-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="radio"
+                                                    id="tax-exclusive"
+                                                    name="tax-type"
+                                                    checked={!invoice.isTaxInclusive}
+                                                    onChange={() => handleFieldChange('isTaxInclusive', false)}
+                                                    disabled={isDisabled}
+                                                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                                                />
+                                                <label htmlFor="tax-exclusive" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                                    税抜請求書
+                                                </label>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="radio"
+                                                    id="tax-inclusive"
+                                                    name="tax-type"
+                                                    checked={invoice.isTaxInclusive}
+                                                    onChange={() => handleFieldChange('isTaxInclusive', true)}
+                                                    disabled={isDisabled}
+                                                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                                                />
+                                                <label htmlFor="tax-inclusive" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                                    税込請求書
+                                                </label>
+                                            </div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 ml-auto">
+                                                {invoice.isTaxInclusive ?
+                                                    '明細金額を税込として扱い、消費税を除いて計算します' :
+                                                    '明細金額を税抜として扱い、消費税を加算して計算します'
+                                                }
+                                            </div>
+                                        </div>
+                                    </FormField>
+                                </div>
                                 <div className="md:col-span-2 lg:col-span-3 border-t dark:border-slate-700 pt-6 mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <FormField label="税抜合計" htmlFor="totalNet" isOcr={invoice.ocrExtractedFields.has('totalNet')}>
                                         <input
@@ -1463,9 +1528,8 @@ const LineItemTable: React.FC<{
                 return (
                     <div
                         key={line.id}
-                        className={`rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4 ${
-                            line.ocrExtracted ? 'ring-2 ring-amber-200/80 bg-amber-50/60 dark:bg-amber-500/10' : ''
-                        }`}
+                        className={`rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4 ${line.ocrExtracted ? 'ring-2 ring-amber-200/80 bg-amber-50/60 dark:bg-amber-500/10' : ''
+                            }`}
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2">

@@ -3,6 +3,7 @@ import { startBusinessConsultantChat, injectProactiveContext } from '../services
 import { Chat } from '@google/genai';
 import { Loader, Send, Sparkles } from './Icons';
 import { Job, Customer, JournalEntry, EmployeeUser } from '../types';
+import supabaseMCPService from '../services/supabaseMCPService';
 
 interface AIChatPageProps {
     currentUser: EmployeeUser | null;
@@ -74,20 +75,38 @@ const AIChatPage: React.FC<AIChatPageProps> = ({ currentUser, jobs, customers, j
         e.preventDefault();
         if (!input.trim() || isLoading || !chatRef.current) return;
 
+        const originalInput = input;
         const newUserMessage: Message = { id: `user-${Date.now()}`, role: 'user', content: input };
         setMessages(prev => [...prev, newUserMessage]);
+        setInput('');
+        setIsLoading(true);
+
+        // Try to fetch context from Supabase MCP (failure is safe)
+        let mcpContext = "";
+        try {
+            // Only search if the query seems relevant to technical/db topics or explicit requests
+            // For general queries, we skip to save time, but here we enable it broadly for "integration"
+            const isMcpAvailable = await supabaseMCPService.checkAvailability();
+            if (isMcpAvailable) {
+                const searchResult = await supabaseMCPService.searchDocs(originalInput);
+                if (searchResult) {
+                    mcpContext = `\n\n【Supabase MCP 検索結果 (参考情報)】:\n${searchResult.slice(0, 1000)}...`; // Limit length
+                }
+            }
+        } catch (error) {
+            console.warn("Supabase MCP integration checked but skipped:", error);
+            // safe to ignore
+        }
 
         const contextSummary = `
 --- データコンテキスト ---
 - 直近の案件数: ${jobs.length}
 - 総顧客数: ${customers.length}
 - 最近の売上上位3件: ${jobs.slice(0, 3).map(j => `${j.title} (${j.price}円)`).join(', ')}
+${mcpContext}
 --- 質問 ---
-${input}
+${originalInput}
 `;
-
-        setInput('');
-        setIsLoading(true);
 
         try {
             const stream = await chatRef.current.sendMessageStream({ message: contextSummary });

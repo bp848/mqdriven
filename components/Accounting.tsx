@@ -24,21 +24,52 @@ const AccountingPage: React.FC<any> = (props) => {
 
         case 'purchasing_invoices':
             const handleSaveExpenses = (data: InvoiceData) => {
+                const totalAmount = data.totalAmount || 0;
+                let subtotal: number;
+                let taxAmount: number;
+                const taxRate = 0.1; // 10% tax rate
+
+                if (data.taxInclusive) {
+                    // The total amount includes tax.
+                    subtotal = totalAmount / (1 + taxRate);
+                    taxAmount = totalAmount - subtotal;
+                } else {
+                    // The total amount is the subtotal (pre-tax).
+                    subtotal = totalAmount;
+                    taxAmount = subtotal * taxRate;
+                }
+
+                const payableAmount = subtotal + taxAmount;
+
+                // Credit Accounts Payable
                 const creditEntry = {
                     account: '買掛金',
                     description: `仕入 ${data.vendorName} (${data.description})`,
-                    credit: data.totalAmount,
+                    credit: payableAmount,
                     debit: 0,
                 };
                 onAddEntry(creditEntry);
                 
-                const debitEntry = {
+                // Debit Purchases
+                const debitPurchaseEntry = {
                     account: data.account || '仕入高',
                     description: `仕入 ${data.vendorName}`,
-                    debit: data.totalAmount,
+                    debit: subtotal,
                     credit: 0
                 }
-                onAddEntry(debitEntry);
+                onAddEntry(debitPurchaseEntry);
+
+                // Debit Provisional Tax
+                if (taxAmount > 0) {
+                    const debitTaxEntry = {
+                        account: '仮払消費税',
+                        description: `消費税 ${data.vendorName}`,
+                        debit: taxAmount,
+                        credit: 0
+                    };
+                    onAddEntry(debitTaxEntry);
+                }
+
                 addToast('買掛金と経費が計上されました。', 'success');
             };
             return <InvoiceOCR onSaveExpenses={handleSaveExpenses} addToast={addToast} requestConfirmation={requestConfirmation} isAIOff={props.isAIOff} />;
