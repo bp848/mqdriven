@@ -16,8 +16,6 @@ const { URLSearchParams, URL } = require('url');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const { randomUUID } = require('crypto');
-const cron = require('node-cron');
-const { checkAndSendReminders } = require('./approvalReminder');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -115,15 +113,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.set('trust proxy', 1 /* number of proxies between user and server */)
 registerAiRoutes(app, supabase);
-registerAiRoutes(app, supabase);
 app.use('/api/assistant', assistantRouter);
-
-// --- Scheduled Tasks ---
-// Run every 2 hours
-cron.schedule('0 */2 * * *', () => {
-    console.log('[Cron] Running approval reminder check...');
-    checkAndSendReminders();
-});
 
 
 // --- Google OAuth Setup ---
