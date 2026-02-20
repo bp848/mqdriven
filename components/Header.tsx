@@ -33,6 +33,10 @@ interface HeaderProps {
     suggestions?: SearchSuggestion[];
     onSuggestionSelect?: (suggestion: SearchSuggestion) => void;
   };
+  themeToggle?: {
+    isDark: boolean;
+    onToggle: () => void;
+  };
 }
 
 const ActionButton: React.FC<{ action: HeaderAction; variant?: 'primary' | 'secondary' }> = ({
@@ -63,7 +67,7 @@ const ActionButton: React.FC<{ action: HeaderAction; variant?: 'primary' | 'seco
   );
 };
 
-const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, search }) => {
+const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions, search, themeToggle }) => {
   const [now, setNow] = useState<Date>(new Date());
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -104,6 +108,17 @@ const Header: React.FC<HeaderProps> = ({ title, primaryAction, secondaryActions,
         <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
           {timeString}
         </div>
+        {themeToggle && (
+          <button
+            type="button"
+            onClick={themeToggle.onToggle}
+            className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm font-semibold"
+            aria-label={themeToggle.isDark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}
+            title={themeToggle.isDark ? 'ライトモード' : 'ダークモード'}
+          >
+            {themeToggle.isDark ? '☀️' : '🌙'}
+          </button>
+        )}
         {search && (
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

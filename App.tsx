@@ -291,6 +291,9 @@ const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSe
 );
 
 
+const THEME_STORAGE_KEY = 'mqdriven-theme';
+type ThemeMode = 'light' | 'dark';
+
 const App: React.FC = () => {
     const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
     const isAuthBypassEnabled = useMemo(() => getEnvValue('VITE_BYPASS_SUPABASE_AUTH') === '1', []);
@@ -386,6 +389,12 @@ const App: React.FC = () => {
     const estimatePageRef = useRef<number>(1);
     const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
     const [showFeatureUpdateModal, setShowFeatureUpdateModal] = useState(false);
+    const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+        if (typeof window === 'undefined') return 'dark';
+        const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+        if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    });
 
     const refreshEstimatesPage = useCallback(async (page: number, signal?: AbortSignal) => {
         console.log('🔄 Loading estimates page...', page);
@@ -1589,6 +1598,16 @@ const App: React.FC = () => {
         );
     }
 
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        const root = document.documentElement;
+        root.classList.toggle('dark', themeMode === 'dark');
+        root.style.colorScheme = themeMode;
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+        }
+    }, [themeMode]);
+
     const headerConfig = {
         title: PAGE_TITLES[currentPage],
         primaryAction: PRIMARY_ACTION_ENABLED_PAGES.includes(currentPage)
@@ -1598,6 +1617,10 @@ const App: React.FC = () => {
         search: SEARCH_ENABLED_PAGES.includes(currentPage)
             ? { value: searchTerm, onChange: setSearchTerm, placeholder: `${PAGE_TITLES[currentPage]}を検索...`, suggestions: predictiveSuggestions }
             : undefined,
+        themeToggle: {
+            isDark: themeMode === 'dark',
+            onToggle: () => setThemeMode(prev => (prev === 'dark' ? 'light' : 'dark')),
+        },
     };
 
     return (
