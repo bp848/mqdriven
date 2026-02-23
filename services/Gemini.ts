@@ -370,11 +370,23 @@ export const processPrintQuote = async (formData: any): Promise<any> => {
   let parts: any[] = [];
   if (formData.imageInput) {
     parts.push({ inlineData: { data: formData.imageInput.split(',')[1], mimeType: "image/jpeg" } });
-    parts.push({ text: `この画像から仕様を解析し、請求性質「${formData.mainCategory}」として積算してください。目標利益率は${formData.markup}%。` });
+    let prompt = `この画像から仕様を解析し、請求性質「${formData.mainCategory}」として積算してください。目標利益率は${formData.markup}%。`;
+    if (formData.fixedPrice) {
+      prompt += `\n\n**重要**: この案件には顧客/ランク契約に基づく固定単価 ${formData.fixedPrice}円 が設定されています。PQ単価はこの値を絶対とし、それに合わせて原価(VQ)や粗利(MQ)を逆算・調整して整合性を取ってください。`;
+    }
+    parts.push({ text: prompt });
   } else if (formData.rawInput) {
-    parts.push({ text: `以下の依頼テキストから積算してください。性質:${formData.mainCategory}, 目標利益率:${formData.markup}%\n\n${formData.rawInput}` });
+    let prompt = `以下の依頼テキストから積算してください。性質:${formData.mainCategory}, 目標利益率:${formData.markup}%\n\n${formData.rawInput}`;
+    if (formData.fixedPrice) {
+      prompt += `\n\n**重要**: この案件には顧客/ランク契約に基づく固定単価 ${formData.fixedPrice}円 が設定されています。PQ単価はこの値を絶対とし、それに合わせて原価(VQ)や粗利(MQ)を逆算・調整して整合性を取ってください。`;
+    }
+    parts.push({ text: prompt });
   } else {
-    parts.push({ text: `以下の詳細仕様で積算してください。性質:${formData.mainCategory}, 目標利益率:${formData.markup}%\n\n${JSON.stringify(formData)}` });
+    let prompt = `以下の詳細仕様で積算してください。性質:${formData.mainCategory}, 目標利益率:${formData.markup}%\n\n${JSON.stringify(formData)}`;
+    if (formData.fixedPrice) {
+      prompt += `\n\n**重要**: この案件には顧客/ランク契約に基づく固定単価 ${formData.fixedPrice}円 が設定されています。PQ単価はこの値を絶対とし、それに合わせて原価(VQ)や粗利(MQ)を逆算・調整して整合性を取ってください。`;
+    }
+    parts.push({ text: prompt });
   }
 
   const response = await ai.models.generateContent({

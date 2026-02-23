@@ -35,7 +35,8 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     icon: Briefcase,
     items: [
       { page: 'sales_leads', name: 'リード管理' },
-      { page: 'sales_customers', name: '取引先/顧客カルテ' },
+      { page: 'sales_customers', name: '取引先' },
+      { page: 'sales_customers_chart', name: '顧客/お客様カルテ' },
       { page: 'sales_estimates', name: '見積管理' },
       { page: 'sales_orders', name: '受注・予算管理' },
       { page: 'simple_estimates', name: 'AI見積もり作成' },

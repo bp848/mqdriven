@@ -4,6 +4,7 @@
 import { requireGeminiClient, GEMINI_DEFAULT_MODEL, isGeminiAIDisabled } from './Gemini';
 import { getSupabase } from './supabaseClient';
 import { PrintSpec, EstimationResult, StrategyOption } from '../types';
+import dynamicPricingService from './dynamicPricingService';
 
 // 過去の見積もりデータを取得
 export const fetchPastEstimates = async (params: {
@@ -179,67 +180,76 @@ ${pastDataSummary}
 }`;
 };
 
-// デフォルトの見積もり結果を生成（AI無効時またはエラー時）
-const generateDefaultEstimate = (spec: PrintSpec): EstimationResult => {
-  const basePrice = spec.quantity * 50; // 基本単価50円/部
-  const paperCost = spec.pages * spec.quantity * 2; // 用紙コスト
-  const printCost = spec.pages * spec.quantity * (spec.colors === '4/4' ? 8 : spec.colors === '4/0' ? 5 : 3);
-  const finishingCost = spec.finishing.length * spec.quantity * 10;
+// デフォルトの見積もり結果を生成（動的価格計算を使用）
+const generateDefaultEstimate = async (spec: PrintSpec): Promise<EstimationResult> => {
+  try {
+    // 動的価格計算サービスを使用
+    const dynamicResult = await dynamicPricingService.calculateDynamicPricing(spec);
+    return dynamicResult;
+  } catch (error) {
+    console.warn('動的価格計算失敗、フォールバック使用:', error);
+    
+    // フォールバック: 従来の計算式
+    const basePrice = spec.quantity * 50; // 基本単価50円/部
+    const paperCost = spec.pages * spec.quantity * 2; // 用紙コスト
+    const printCost = spec.pages * spec.quantity * (spec.colors === '4/4' ? 8 : spec.colors === '4/0' ? 5 : 3);
+    const finishingCost = spec.finishing.length * spec.quantity * 10;
 
-  const totalVQ = paperCost + printCost + finishingCost;
-  const fixedCost = 5000; // 固定費
+    const totalVQ = paperCost + printCost + finishingCost;
+    const fixedCost = 5000; // 固定費
 
-  const options: StrategyOption[] = [
-    {
-      id: 'must_win',
-      label: '必勝価格',
-      pq: Math.round(totalVQ * 1.15),
-      vq: totalVQ,
-      mq: Math.round(totalVQ * 0.15),
-      f: fixedCost,
-      g: Math.round(totalVQ * 0.15 - fixedCost),
-      mRatio: 0.13,
-      estimatedLeadTime: '7営業日',
-      probability: 85,
-      description: '競合に勝つための最低限の利益を確保した価格'
-    },
-    {
-      id: 'average',
-      label: '標準価格',
-      pq: Math.round(totalVQ * 1.35),
-      vq: totalVQ,
-      mq: Math.round(totalVQ * 0.35),
-      f: fixedCost,
-      g: Math.round(totalVQ * 0.35 - fixedCost),
-      mRatio: 0.26,
-      estimatedLeadTime: '5営業日',
-      probability: 65,
-      description: '業界標準の利益率を確保した価格'
-    },
-    {
-      id: 'profit_max',
-      label: '利益最大化',
-      pq: Math.round(totalVQ * 1.55),
-      vq: totalVQ,
-      mq: Math.round(totalVQ * 0.55),
-      f: fixedCost,
-      g: Math.round(totalVQ * 0.55 - fixedCost),
-      mRatio: 0.35,
-      estimatedLeadTime: '3営業日',
-      probability: 40,
-      description: '高付加価値サービスを含む最大利益価格'
-    }
-  ];
+    const options: StrategyOption[] = [
+      {
+        id: 'must_win',
+        label: '必勝価格',
+        pq: Math.round(totalVQ * 1.15),
+        vq: totalVQ,
+        mq: Math.round(totalVQ * 0.15),
+        f: fixedCost,
+        g: Math.round(totalVQ * 0.15 - fixedCost),
+        mRatio: 0.13,
+        estimatedLeadTime: '7営業日',
+        probability: 85,
+        description: '競合に勝つための最低限の利益を確保した価格'
+      },
+      {
+        id: 'average',
+        label: '標準価格',
+        pq: Math.round(totalVQ * 1.35),
+        vq: totalVQ,
+        mq: Math.round(totalVQ * 0.35),
+        f: fixedCost,
+        g: Math.round(totalVQ * 0.35 - fixedCost),
+        mRatio: 0.26,
+        estimatedLeadTime: '5営業日',
+        probability: 65,
+        description: '業界標準の利益率を確保した価格'
+      },
+      {
+        id: 'profit_max',
+        label: '利益最大化',
+        pq: Math.round(totalVQ * 1.55),
+        vq: totalVQ,
+        mq: Math.round(totalVQ * 0.55),
+        f: fixedCost,
+        g: Math.round(totalVQ * 0.55 - fixedCost),
+        mRatio: 0.35,
+        estimatedLeadTime: '3営業日',
+        probability: 40,
+        description: '高付加価値サービスを含む最大利益価格'
+      }
+    ];
 
-  return {
-    options,
-    aiReasoning: `${spec.category}の${spec.quantity}部印刷について、用紙(${spec.paperType})、色数(${spec.colors})、ページ数(${spec.pages}P)を考慮して算出しました。`,
-    co2Reduction: Math.round(spec.quantity * spec.pages * 0.5),
-    comparisonWithPast: {
-      averagePrice: Math.round(totalVQ * 1.3 / spec.quantity),
-      differencePercentage: 0
-    }
-  };
+    return {
+      options,
+      aiReasoning: `${spec.category}の${spec.quantity}部印刷について、用紙(${spec.paperType})、色数(${spec.colors})、ページ数(${spec.pages}P)を考慮して算出しました。`,
+      co2Reduction: Math.round(spec.quantity * spec.pages * 0.5),
+      comparisonWithPast: {
+        averagePrice: Math.round(totalVQ * 1.3 / spec.quantity),
+        differencePercentage: 0
+      }
+    };
+  }
 };
 
 // AI見積もりを生成
@@ -253,10 +263,10 @@ export const generateAiEstimate = async (params: {
   // 過去の類似案件を取得
   const similarEstimates = await findSimilarEstimates(spec);
 
-  // AIが無効の場合はデフォルト値を返す
+  // AIが無効の場合は動的価格計算を使用
   if (isGeminiAIDisabled) {
-    console.log('[AI Estimate] AI is disabled, using default calculation');
-    return generateDefaultEstimate(spec);
+    console.log('[AI Estimate] AI is disabled, using dynamic pricing calculation');
+    return await generateDefaultEstimate(spec);
   }
 
   try {
@@ -274,22 +284,22 @@ export const generateAiEstimate = async (params: {
     // JSONを抽出
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.warn('[AI Estimate] Failed to extract JSON from response, using default');
-      return generateDefaultEstimate(spec);
+      console.warn('[AI Estimate] Failed to extract JSON from response, using dynamic pricing');
+      return await generateDefaultEstimate(spec);
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as EstimationResult;
 
     // バリデーション
     if (!parsed.options || parsed.options.length < 3) {
-      console.warn('[AI Estimate] Invalid response structure, using default');
-      return generateDefaultEstimate(spec);
+      console.warn('[AI Estimate] Invalid response structure, using dynamic pricing');
+      return await generateDefaultEstimate(spec);
     }
 
     return parsed;
   } catch (error) {
     console.error('[AI Estimate] Generation failed:', error);
-    return generateDefaultEstimate(spec);
+    return await generateDefaultEstimate(spec);
   }
 };
 

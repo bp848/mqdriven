@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     Building2, Leaf, Info, ShieldCheck, AlertTriangle, Plus, RefreshCw, Upload,
     Printer, Zap, MessageSquare, Send, X, ExternalLink, MapPin,
-    Eye, Trash2, FileCheck
+    Eye, Trash2, FileCheck, Users
 } from 'lucide-react';
 import { EstimateState, ChatMessage, QuoteItem } from '../../types';
 import {
@@ -12,11 +12,15 @@ import {
     getChatResponse
 } from '../../services/estimateAIService';
 import supabaseMCPService from '../../services/supabaseMCPService';
+import { getSupabase } from '../../services/supabaseClient';
 
 const AIEstimateCreation: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'specs' | 'costs' | 'params'>('specs');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [clientName, setClientName] = useState('株式会社 ○○○○ 様');
+    const [clientName, setClientName] = useState('');
+    const [representativeName, setRepresentativeName] = useState('');
+    const [customers, setCustomers] = useState<any[]>([]);
+    const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
     const [chatOpen, setChatOpen] = useState(false);
     const [chatInput, setChatInput] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -78,6 +82,43 @@ const AIEstimateCreation: React.FC = () => {
     const quoteTax = useMemo(() => Math.floor(quoteSubtotal * state.taxRate), [quoteSubtotal, state.taxRate]);
     const quoteTotal = useMemo(() => quoteSubtotal + quoteTax, [quoteSubtotal, quoteTax]);
     const profit = useMemo(() => quoteSubtotal - totalCost, [quoteSubtotal, totalCost]);
+
+    // 顧客情報を取得
+    useEffect(() => {
+        const fetchCustomers = async () => {
+            try {
+                const supabase = getSupabase();
+                const { data, error } = await supabase
+                    .from('customers')
+                    .select('id, customer_name, representative, phone_number, address_1')
+                    .order('customer_name', { ascending: true })
+                    .limit(100);
+                
+                if (error) throw error;
+                setCustomers(data || []);
+                if (data && data.length > 0) {
+                    setSelectedCustomerId(data[0].id);
+                    setClientName(data[0].customer_name || '');
+                    setRepresentativeName(data[0].representative || '');
+                }
+            } catch (error) {
+                console.error('顧客情報取得エラー:', error);
+            }
+        };
+        
+        fetchCustomers();
+    }, []);
+
+    // 顧客選択時の処理
+    useEffect(() => {
+        if (selectedCustomerId) {
+            const customer = customers.find(c => c.id === selectedCustomerId);
+            if (customer) {
+                setClientName(customer.customer_name || '');
+                setRepresentativeName(customer.representative || '');
+            }
+        }
+    }, [selectedCustomerId, customers]);
 
     const handleFileUpload = async (file: File) => {
         if (!file) return;
@@ -273,21 +314,58 @@ const AIEstimateCreation: React.FC = () => {
                                 <ShieldCheck size={14} className="mb-1" />
                                 <span>他社員の見積妥当性を判定するための標準定数設定です。</span>
                             </div>
-                            <div className="space-y-3">
-                                {[
-                                    { label: '用紙粗利 (%)', key: 'paperBaseMargin' },
-                                    { label: '印刷機単価 (円/h)', key: 'pressHourlyRate' },
-                                    { label: '製本基本料 (円)', key: 'bindingBaseFee' },
-                                    { label: 'CTP出力代 (円/版)', key: 'ctpPlateCost' },
-                                    { label: '最低粗利率 (%)', key: 'minimumProfitRate' }
-                                ].map(p => (
-                                    <div key={p.key} className="flex flex-col gap-1">
-                                        <label className="text-[8px] text-slate-400 uppercase font-medium">{p.label}</label>
-                                        <input type="number" className="p-2 border border-slate-200 rounded text-[10px] font-medium outline-none focus:border-slate-400"
-                                            value={(state.engineParams as any)[p.key]}
-                                            onChange={(e) => setState(prev => ({ ...prev, engineParams: { ...prev.engineParams, [p.key]: parseFloat(e.target.value) } }))} />
-                                    </div>
-                                ))}
+                            <div className="space-y-4">
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-[10px] text-slate-400 uppercase font-medium">顧客選択</label>
+                                    <select 
+                                        value={selectedCustomerId || ''}
+                                        onChange={(e) => setSelectedCustomerId(e.target.value)}
+                                        className="w-full p-2 border border-slate-200 rounded text-[10px] font-medium outline-none focus:border-slate-400"
+                                    >
+                                        <option value="">顧客を選択してください</option>
+                                        {customers.map(customer => (
+                                            <option key={customer.id} value={customer.id}>
+                                                {customer.customer_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[8px] text-slate-400 uppercase font-medium">顧客名</label>
+                                    <input 
+                                        type="text" 
+                                        value={clientName}
+                                        onChange={(e) => setClientName(e.target.value)}
+                                        className="p-2 border border-slate-200 rounded text-[10px] font-medium outline-none focus:border-slate-400"
+                                        placeholder="顧客名を入力"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[8px] text-slate-400 uppercase font-medium">担当者名</label>
+                                    <input 
+                                        type="text" 
+                                        value={representativeName}
+                                        onChange={(e) => setRepresentativeName(e.target.value)}
+                                        className="p-2 border border-slate-200 rounded text-[10px] font-medium outline-none focus:border-slate-400"
+                                        placeholder="担当者名を入力"
+                                    />
+                                </div>
+                                <div className="space-y-3">
+                                    {[
+                                        { label: '用紙粗利 (%)', key: 'paperBaseMargin' },
+                                        { label: '印刷機単価 (円/h)', key: 'pressHourlyRate' },
+                                        { label: '製本基本料 (円)', key: 'bindingBaseFee' },
+                                        { label: 'CTP出力代 (円/版)', key: 'ctpPlateCost' },
+                                        { label: '最低粗利率 (%)', key: 'minimumProfitRate' }
+                                    ].map(p => (
+                                        <div key={p.key} className="flex flex-col gap-1">
+                                            <label className="text-[8px] text-slate-400 uppercase font-medium">{p.label}</label>
+                                            <input type="number" className="p-2 border border-slate-200 rounded text-[10px] font-medium outline-none focus:border-slate-400"
+                                                value={(state.engineParams as any)[p.key]}
+                                                onChange={(e) => setState(prev => ({ ...prev, engineParams: { ...prev.engineParams, [p.key]: parseFloat(e.target.value) }}))} />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     )}

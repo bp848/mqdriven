@@ -566,6 +566,7 @@ const dbCustomerToCustomer = (dbCustomer: any): Customer => ({
     aiAnalysis: dbCustomer.ai_analysis,
     businessEvent: dbCustomer.business_event ?? null,
     receivedByEmployeeCode: dbCustomer.received_by_employee_code ?? null,
+    is_customer_chart: dbCustomer.is_customer_chart ?? false,
 });
 
 const CUSTOMER_FIELD_OVERRIDES: Partial<Record<keyof Customer, string>> = {
@@ -1969,7 +1970,7 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
     try {
         // First fetch users
         console.log('[dataService] Fetching users...');
-        const userSelectColumns = 'id, name, name_kana, email, role, created_at, department_id, position_id, is_active';
+        const userSelectColumns = 'id, name, name_kana, email, role, created_at, department_id, position_id, is_active, notification_enabled';
         const result = await supabase
             .from('users')
             .select(userSelectColumns)
@@ -1979,7 +1980,7 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
         if (userError && isMissingColumnError(userError)) {
             const fallbackResult = await supabase
                 .from('users')
-                .select('id, name, email, role, created_at, department_id, position_id, is_active')
+                .select('id, name, email, role, created_at, department_id, position_id, is_active, notification_enabled')
                 .order('name', { ascending: true });
             userRows = fallbackResult.data;
             userError = fallbackResult.error;
@@ -2049,6 +2050,7 @@ const fetchUsersDirectly = async (supabase: SupabaseClient): Promise<EmployeeUse
             role,
             createdAt: user.created_at,
             isActive: user.is_active === null || user.is_active === undefined ? true : Boolean(user.is_active),
+            notificationEnabled: user.notification_enabled === null || user.notification_enabled === undefined ? true : Boolean(user.notification_enabled),
         };
     });
 };
@@ -2087,7 +2089,7 @@ export async function getUsers(): Promise<EmployeeUser[]> {
     throw new Error('Failed to fetch users: maximum retries exceeded');
 }
 
-export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean, nameKana?: string | null }): Promise<void> => {
+export const addUser = async (userData: { name: string, email: string | null, role: 'admin' | 'user', isActive?: boolean, nameKana?: string | null, notificationEnabled?: boolean }): Promise<void> => {
     // カタカナバリデーション
     if (userData.nameKana) {
         const validation = validateKatakana(userData.nameKana, {
@@ -2115,6 +2117,7 @@ export const addUser = async (userData: { name: string, email: string | null, ro
     const payload: Record<string, any> = {
         ...basePayload,
         is_active: userData.isActive ?? true,
+        notification_enabled: userData.notificationEnabled ?? true,
     };
 
     let error: PostgrestError | null | undefined;
@@ -2161,6 +2164,9 @@ export const updateUser = async (id: string, updates: Partial<EmployeeUser>): Pr
     }
     if (updates.isActive !== undefined) {
         (basePayload as any).is_active = updates.isActive;
+    }
+    if (updates.notificationEnabled !== undefined) {
+        (basePayload as any).notification_enabled = updates.notificationEnabled;
     }
 
     let userError: PostgrestError | null | undefined;

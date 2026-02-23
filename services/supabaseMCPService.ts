@@ -6,6 +6,7 @@
  */
 
 import mcpService, { MCPToolResult } from './mcpService';
+import mcpServerManager from './mcpServerManager';
 
 export interface SupabaseMCPTools {
     // Search documentation
@@ -33,6 +34,13 @@ class SupabaseMCPService implements SupabaseMCPTools {
      */
     async checkAvailability(): Promise<boolean> {
         try {
+            // MCPサーバーマネージャー経由で状態をチェック
+            const isAvailable = await mcpServerManager.isServerAvailable(this.serverId);
+            if (isAvailable) {
+                return true;
+            }
+
+            // フォールバック: 直接ツールリストを取得
             const tools = await mcpService.listTools(this.serverId);
             return tools[this.serverId] && tools[this.serverId].length > 0;
         } catch (error) {

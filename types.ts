@@ -3,7 +3,7 @@
 
 export type Page =
   | 'analysis_dashboard'
-  | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_pipeline'
+  | 'sales_dashboard' | 'sales_leads' | 'sales_customers' | 'sales_customers_chart' | 'sales_pipeline'
   | 'sales_estimates' | 'quote_center' | 'sales_orders' | 'project_management' | 'sales_billing' | 'analysis_ranking'
   | 'purchasing_orders' | 'purchasing_invoices' | 'purchasing_payments'
   | 'inventory_management' | 'manufacturing_orders' | 'manufacturing_progress' | 'manufacturing_cost'
@@ -123,6 +123,8 @@ export interface User extends LooseRecord {
   end_date?: string;
   user_code?: string;
   is_active?: boolean;
+  notification_enabled?: boolean;
+  notificationEnabled?: boolean;
 }
 
 export interface Customer extends LooseRecord {
@@ -177,6 +179,34 @@ export interface Customer extends LooseRecord {
   received_by_employee_code?: string;
   business_event?: string;
   ai_analysis?: string;
+  rank_id?: string; // Linked to CustomerRank
+  is_customer_chart?: boolean;
+}
+
+export interface CustomerRank extends LooseRecord {
+  id: string; // 'S', 'A', 'B', etc.
+  name: string;
+  default_markup?: number;
+  description?: string;
+}
+
+export interface Product extends LooseRecord {
+  id: string;
+  code: string;
+  name: string;
+  category?: string;
+  standard_price?: number;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface PriceList extends LooseRecord {
+  id: string;
+  product_id: string;
+  rank_id?: string;
+  customer_id?: string;
+  price: number;
+  currency?: string;
 }
 
 export interface Lead extends LooseRecord {

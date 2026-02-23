@@ -162,7 +162,8 @@ const PAGE_TITLES: Record<Page, string> = {
     my_schedule: '日報タスクカレンダー',
     sales_dashboard: '販売ダッシュボード',
     sales_leads: 'リード管理',
-    sales_customers: '顧客/取引先',
+    sales_customers: '取引先',
+    sales_customers_chart: '顧客/お客様カルテ',
     sales_pipeline: 'パイプライン',
     sales_estimates: '見積管理',
     quote_center: '見積作成センター',
@@ -249,6 +250,7 @@ const PRIMARY_ACTION_ENABLED_PAGES: Page[] = [
     'sales_orders',
     'sales_leads',
     'sales_customers',
+    'sales_customers_chart',
     'purchasing_orders',
     'inventory_management',
     'sales_estimates',
@@ -258,6 +260,7 @@ const PRIMARY_ACTION_ENABLED_PAGES: Page[] = [
 const SEARCH_ENABLED_PAGES: Page[] = [
     'sales_orders',
     'sales_customers',
+    'sales_customers_chart',
     'sales_leads',
     'sales_estimates',
     'simple_estimates',
@@ -267,6 +270,7 @@ const SEARCH_ENABLED_PAGES: Page[] = [
 const PREDICTIVE_SUGGESTION_PAGES: Page[] = [
     'sales_orders',
     'sales_customers',
+    'sales_customers_chart',
 ];
 
 const ESTIMATE_PAGE_SIZE = 50;
@@ -1195,9 +1199,10 @@ const App: React.FC = () => {
             case 'sales_orders': setCreateJobModalOpen(true); break;
             case 'sales_leads': setCreateLeadModalOpen(true); break;
             case 'sales_customers':
+            case 'sales_customers_chart':
                 setSelectedCustomer(null);
                 setCustomerModalMode('new');
-                setCustomerInitialValues(null);
+                setCustomerInitialValues(currentPage === 'sales_customers_chart' ? { is_customer_chart: true } : { is_customer_chart: false });
                 setCustomerDetailModalOpen(true);
                 break;
             case 'purchasing_orders': setCreatePOModalOpen(true); break;
@@ -1255,6 +1260,7 @@ const App: React.FC = () => {
                     />
                 );
             case 'sales_customers':
+            case 'sales_customers_chart':
                 if (showBulkOCR) {
                     return <BusinessCardOCR
                         addToast={addToast}
@@ -1265,8 +1271,11 @@ const App: React.FC = () => {
                         }}
                     />;
                 }
+                const isChartMode = currentPage === 'sales_customers_chart';
+                const filteredCustomersList = (customers || []).filter(c => isChartMode ? c.is_customer_chart === true : !c.is_customer_chart);
+
                 return <CustomerList
-                    customers={customers || []}
+                    customers={filteredCustomersList}
                     searchTerm={searchTerm}
                     onSelectCustomer={(customer) => {
                         setCustomerInitialValues(null);
@@ -1279,7 +1288,7 @@ const App: React.FC = () => {
                     addToast={addToast}
                     currentUser={currentUser}
                     onNewCustomer={() => {
-                        setCustomerInitialValues(null);
+                        setCustomerInitialValues(isChartMode ? { is_customer_chart: true } : { is_customer_chart: false });
                         setSelectedCustomer(null);
                         setCustomerModalMode('new');
                         setCustomerDetailModalOpen(true);

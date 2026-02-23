@@ -21,6 +21,10 @@ export interface QuoteFormData {
   specialProcessing?: string; // Added to support special processing selections in forms
   rawInput?: string;
   imageInput?: string;
+  customerId?: string;
+  productId?: string;
+  rankId?: string;
+  fixedPrice?: number;
 }
 
 export interface QuoteResultData {
@@ -55,8 +59,8 @@ export const MAIN_CATEGORIES = [
 ];
 
 export const SUB_CATEGORIES = [
-  '冊子/雑誌/機関誌/社内報', 'チラシ', 'カタログ', 'ポスター', 
-  'はがき/年賀状', '表彰状', 'カード', '組織図/資料', 
+  '冊子/雑誌/機関誌/社内報', 'チラシ', 'カタログ', 'ポスター',
+  'はがき/年賀状', '表彰状', 'カード', '組織図/資料',
   '名札', 'ネームプレート', '写真/額装'
 ];
 

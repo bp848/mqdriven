@@ -18,13 +18,14 @@ const UserModal: React.FC<{
         return userRole === 'admin' ? 'admin' : 'user';
     });
     const [isActive, setIsActive] = useState<boolean>(user?.isActive ?? true);
+    const [notificationEnabled, setNotificationEnabled] = useState<boolean>(user?.notificationEnabled ?? true);
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !email) return;
         setIsSaving(true);
-        await onSave({ ...user, name, email, role, isActive });
+        await onSave({ ...user, name, email, role, isActive, notificationEnabled });
         setIsSaving(false);
     };
 
@@ -60,6 +61,17 @@ const UserModal: React.FC<{
                                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                             />
                             <span>有効ユーザー</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label className="inline-flex items-center space-x-2 text-sm font-medium">
+                            <input
+                                type="checkbox"
+                                checked={notificationEnabled}
+                                onChange={e => setNotificationEnabled(e.target.checked)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>メール通知を有効にする</span>
                         </label>
                     </div>
                 </div>
@@ -136,6 +148,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                     email: userData.email || null,
                     role: userData.role === 'admin' ? 'admin' : 'user',
                     isActive: userData.isActive ?? true,
+                    notificationEnabled: userData.notificationEnabled ?? true,
                 });
                 addToast('新規ユーザーが追加されました。', 'success');
             }
@@ -237,6 +250,7 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                             <th className="px-6 py-3">メールアドレス</th>
                             <th className="px-6 py-3">役割</th>
                             <th className="px-6 py-3">状態</th>
+                            <th className="px-6 py-3">通知</th>
                             <th className="px-6 py-3">登録日</th>
                             <th className="px-6 py-3 text-center">操作</th>
                         </tr>
@@ -269,6 +283,32 @@ const UserManagementPage: React.FC<UserManagementPageProps> = ({ addToast, reque
                                         >
                                             {user.isActive === false ? '無効' : '有効'}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <button
+                                            onClick={async () => {
+                                                if (!canManageUsers) return;
+                                                try {
+                                                    await updateUser(user.id, { notificationEnabled: !user.notificationEnabled });
+                                                    addToast(
+                                                        !user.notificationEnabled
+                                                            ? '通知を有効にしました。'
+                                                            : '通知を無効にしました。',
+                                                        'success'
+                                                    );
+                                                    await loadUsers();
+                                                } catch (err: any) {
+                                                    addToast(`更新に失敗しました: ${err.message}`, 'error');
+                                                }
+                                            }}
+                                            className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${user.notificationEnabled !== false
+                                                ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                                : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                                } ${!canManageUsers ? 'cursor-not-allowed opacity-50' : ''}`}
+                                            disabled={!canManageUsers}
+                                        >
+                                            {user.notificationEnabled !== false ? 'ON' : 'OFF'}
+                                        </button>
                                     </td>
                                     <td className="px-6 py-4">{new Date(user.createdAt).toLocaleDateString()}</td>
                                     <td className="px-6 py-4">

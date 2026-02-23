@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { processPrintQuote, updatePrintQuoteWithFeedback } from '../../services/Gemini';
+import { priceService } from '../../services/priceService';
 import type { ViewState, QuoteFormData, QuoteResultData } from '../../types/quote';
 import { MAIN_CATEGORIES, SUB_CATEGORIES, BOOK_SIZES, BINDING_OPTIONS, PAPER_TYPES, COLOR_OPTIONS, KEYWORD_MAP, SPECIAL_PROCESSING_OPTIONS } from '../../types/quote';
+import { CustomerSelect } from '../ui/CustomerSelect';
+import { ProductSelect } from '../ui/ProductSelect';
 
 /**
  * Shared UI Components (Internal to PrintEstimatorService)
@@ -62,8 +65,57 @@ export default function PrintEstimatorService() {
     coverPaper: 'アートポスト 180kg', innerPaper: '上質 70kg',
     color: COLOR_OPTIONS[0], binding: BINDING_OPTIONS[0], quantity: 1000, markup: 30,
     specialProcessing: SPECIAL_PROCESSING_OPTIONS[0],
-    rawInput: '', imageInput: ''
+    rawInput: '', imageInput: '',
+    customerId: '', productId: '', rankId: '', fixedPrice: undefined
   });
+
+  const handleCustomerChange = (customerId: string, customer: any) => {
+    setFormData(prev => ({
+      ...prev,
+      customerId,
+      customerName: customer ? customer.customer_name : '',
+      rankId: customer ? customer.rank_id : '',
+      // Reset fixed price when customer changes as rank might change
+      fixedPrice: undefined
+    }));
+  };
+
+  const handleProductChange = async (productId: string, product: any) => {
+    setFormData(prev => ({
+      ...prev,
+      productId,
+      title: product ? product.name : prev.title,
+      // Attempt to map category if possible, otherwise keep current
+      // fixedPrice will be updated below
+    }));
+
+    if (productId && formData.customerId) {
+      const priceInfo = await priceService.getPrice(productId, formData.customerId);
+      if (priceInfo.source !== 'none') {
+        setFormData(prev => ({ ...prev, fixedPrice: priceInfo.price }));
+      } else {
+        setFormData(prev => ({ ...prev, fixedPrice: undefined }));
+      }
+    } else if (productId && product && product.standard_price) {
+      // Fallback to standard price if no customer selected yet
+      setFormData(prev => ({ ...prev, fixedPrice: product.standard_price }));
+    } else {
+      setFormData(prev => ({ ...prev, fixedPrice: undefined }));
+    }
+  };
+
+  // Update price when customer or product changes (if both are selected)
+  useEffect(() => {
+    const fetchPrice = async () => {
+      if (formData.customerId && formData.productId) {
+        const priceInfo = await priceService.getPrice(formData.productId, formData.customerId);
+        if (priceInfo.source !== 'none') {
+          setFormData(prev => ({ ...prev, fixedPrice: priceInfo.price }));
+        }
+      }
+    };
+    fetchPrice();
+  }, [formData.customerId, formData.productId]);
 
   // 自動推定機能
   useEffect(() => {
@@ -202,15 +254,30 @@ export default function PrintEstimatorService() {
                 <section className="bg-white border border-slate-200 rounded-[2.5rem] p-10 shadow-sm">
                   <h2 className="text-2xl font-black tracking-tight mb-8 border-b border-slate-100 pb-4">案件情報</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <FormInput label="顧客名" name="customerName" value={formData.customerName} onChange={handleInputChange} placeholder="株式会社 〇〇" required />
+
+                    <CustomerSelect
+                      label="顧客名"
+                      value={formData.customerId || ''}
+                      onChange={handleCustomerChange}
+                    />
+                    {/* Fallback hidden input for name if needed or just rely on state */}
                     <FormInput label="営業担当" name="salesStaff" value={formData.salesStaff} onChange={handleInputChange} placeholder="担当者名" required />
+
                     <div className="col-span-1 md:col-span-2 space-y-2">
+                      <ProductSelect
+                        label="規定商品から選択 (任意)"
+                        value={formData.productId || ''}
+                        onChange={handleProductChange}
+                        className="mb-4"
+                      />
                       <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
                         品名 / 案件名
                         {isSuggested && <span className="ml-4 text-blue-500 bg-blue-50 px-3 py-1 rounded-full text-[9px]">推定完了</span>}
+                        {formData.fixedPrice !== undefined && <span className="ml-4 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-[9px] font-bold">固定単価適用: ¥{formData.fixedPrice.toLocaleString()}</span>}
                       </label>
                       <input name="title" value={formData.title} onChange={handleInputChange} className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl text-blue-600 focus:bg-white focus:border-blue-500 transition-all outline-none" placeholder="品名（例：名刺 12月分）" required />
                     </div>
+
                   </div>
                 </section>
 
