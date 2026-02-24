@@ -97,6 +97,10 @@ class MCPServerManager {
       clearInterval(this.healthCheckInterval);
     }
 
+    // MCPサーバーが未実装の場合はチェックをスキップ
+    console.log('MCP Server Manager: Health checks disabled (servers not implemented)');
+    return;
+
     this.healthCheckInterval = setInterval(async () => {
       await this.checkAllServers();
     }, this.HEALTH_CHECK_INTERVAL);

@@ -1758,7 +1758,7 @@ export const getJournalEntries = async (status?: string): Promise<JournalEntry[]
     const targetStatus = status || 'posted';
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .select('id, status')
         .eq('status', targetStatus);
 
@@ -1778,7 +1778,7 @@ export const getJournalEntries = async (status?: string): Promise<JournalEntry[]
 
     // 明示的にカラムを指定し、リレーションを推測させない
     const { data: entries, error: entriesError } = await supabase
-        .from('v_journal_entries')
+        .from('journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds)
         .order('entry_date', { ascending: false });
@@ -1805,7 +1805,7 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
     const supabase = getSupabase();
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .select('id, status')
         .eq('status', status);
 
@@ -1820,7 +1820,7 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
 
     const batchIds = batches.map(b => b.id).filter(Boolean);
     const { data: entries, error: entriesError } = await supabase
-        .from('v_journal_entries')
+        .from('journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds)
         .order('created_at', { ascending: false });
@@ -1873,7 +1873,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     const supabase = getSupabase();
     // まずjournal_entryを取得
     const { data: entry, error: entryError } = await supabase
-        .from('v_journal_entries')
+        .from('journal_entries')
         .select('id, batch_id')
         .eq('id', journalEntryId)
         .single();
@@ -1881,7 +1881,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
 
     // batch_idからsource_application_idを取得
     const { data: batch, error: batchFetchError } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .select('id, source_application_id')
         .eq('id', entry.batch_id)
         .single();
@@ -1907,7 +1907,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     } else {
         // NOTE: 未確定へ戻す（unpost）は監査/権限設計が絡むため、ここでは行わない。
         const { error: batchError } = await supabase
-            .from('v_journal_batches')
+            .from('journal_batches')
             .update({
                 status,
                 posted_at: null,
@@ -1931,7 +1931,7 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id' | 'date
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     // まずjournal_batchを作成
     const { data: batch, error: batchError } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .insert({
             status: 'draft',
             created_by: entryData.created_by || null,
@@ -1943,7 +1943,7 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id' | 'date
     // journal_entryを作成
     const entryDate = entryData.date || new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
-        .from('v_journal_entries')
+        .from('journal_entries')
         .insert({
             batch_id: batch.id,
             entry_date: entryDate,
@@ -2302,11 +2302,33 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         return mapAppsWithoutJournal();
     }
 
+    // UUID配列の形式を検証
+    const validUuids = appIds.filter(id => 
+        typeof id === 'string' && 
+        id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    );
+    
+    if (validUuids.length === 0) {
+        console.warn('No valid UUIDs found in application IDs:', appIds);
+        return mapAppsWithoutJournal();
+    }
+
+    console.log('Fetching journal batches for valid UUIDs:', validUuids);
+
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .select('id, source_application_id, status')
-        .in('source_application_id', appIds);
+        .in('source_application_id', validUuids);
+    
+    if (batchesError) {
+        console.error('Journal batches query error:', {
+            error: batchesError,
+            uuids: validUuids,
+            query: 'source_application_id=in.(...)'
+        });
+    }
+    
     ensureSupabaseSuccess(batchesError, 'Failed to fetch journal batches for approved applications');
 
     const batchIdToAppId = new Map<string, string>();
@@ -2324,7 +2346,7 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
 
     // accountingスキーマのjournal_entriesテーブルを使用
     const { data: journalEntries, error: journalError } = await supabase
-        .from('v_journal_entries')
+        .from('journal_entries')
         .select('id, batch_id, entry_date, description, created_at')
         .in('batch_id', batchIds);
     ensureSupabaseSuccess(journalError, 'Failed to fetch journal entries for approved applications');
@@ -3974,9 +3996,9 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const to = from + pageSize - 1;
 
     // 顧客情報をJOINして取得
-    console.log('Fetching from estimates_working_view with customer join...');
+    console.log('Fetching from estimates_list_view with customer join...');
     const { data, error, count } = await supabase
-        .from('estimates_working_view')
+        .from('estimates_list_view')
         .select(`
             *,
             customers!inner (
@@ -4373,7 +4395,7 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
     const supabase = getSupabase();
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .select('id, status')
         .eq('status', 'draft');
 
@@ -4388,7 +4410,7 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
 
     const batchIds = batches.map(b => b.id).filter(Boolean);
     const { data: entries, error: entriesError } = await supabase
-        .from('v_journal_entries')
+        .from('journal_entries')
         .select('id, batch_id, entry_date, description')
         .in('batch_id', batchIds)
         .order('entry_date', { ascending: false });
@@ -5109,7 +5131,7 @@ export const getJournalBatches = async (options?: PaginationOptions): Promise<an
     const ascending = options?.ascending ?? false;
 
     const { data, error } = await supabase
-        .from('v_journal_batches')
+        .from('journal_batches')
         .select('*')
         .order(orderBy, { ascending })
         .range(offset, offset + limit - 1);
@@ -5124,7 +5146,7 @@ export const getJournalEntriesPaginated = async (batchId?: string, options?: Pag
     const orderBy = options?.orderBy ?? 'entry_date';
     const ascending = options?.ascending ?? false;
 
-    let query = supabase.from('v_journal_entries').select('*');
+    let query = supabase.from('journal_entries').select('*');
     if (batchId) {
         query = query.eq('batch_id', batchId);
     }
