@@ -188,7 +188,33 @@ const normalizeLookupKey = (value: unknown): string | null => {
     return key.length > 0 ? key : null;
 };
 
-const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const safeIds = (ids: string[]) => 
+  ids.filter(id => typeof id === 'string' && UUID_REGEX.test(id));
+
+const chunk = <T>(arr: T[], size: number): T[][] => 
+  arr.reduce((a, _, i) => (i % size ? a : [...a, arr.slice(i, i + size)]), [] as T[][]);
+
+async function fetchJournalBatches(supabase: any, ids: string[]) {
+  const valid = safeIds(ids);
+  if (valid.length === 0) return [];
+  
+  const parts = chunk(valid, 200);
+  const res = await Promise.all(parts.map(p =>
+    supabase
+      .from('journal_batches')
+      .select('id,source_application_id,status')
+      .in('source_application_id', p)
+  ));
+  
+  const data = res.flatMap(r => r.data ?? []);
+  const error = res.find(r => r.error)?.error;
+  
+  if (error) console.warn('partial error in journal batches:', error);
+  return data;
+}
+
 const filterUuidValues = (values: string[]): string[] => values.filter(v => UUID_REGEX.test(v));
 
 const collectUniqueIds = (values: Array<string | null | undefined>): string[] => {
@@ -2302,34 +2328,13 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         return mapAppsWithoutJournal();
     }
 
-    // UUID配列の形式を検証
-    const validUuids = appIds.filter(id => 
-        typeof id === 'string' && 
-        id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    );
+    // UUID検証とチャンク分割で安全にクエリ
+    const batches = await fetchJournalBatches(supabase, appIds);
     
-    if (validUuids.length === 0) {
-        console.warn('No valid UUIDs found in application IDs:', appIds);
+    if (batches.length === 0) {
+        console.warn('No journal batches found for approved applications');
         return mapAppsWithoutJournal();
     }
-
-    console.log('Fetching journal batches for valid UUIDs:', validUuids);
-
-    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
-    const { data: batches, error: batchesError } = await supabase
-        .from('journal_batches')
-        .select('id, source_application_id, status')
-        .in('source_application_id', validUuids);
-    
-    if (batchesError) {
-        console.error('Journal batches query error:', {
-            error: batchesError,
-            uuids: validUuids,
-            query: 'source_application_id=in.(...)'
-        });
-    }
-    
-    ensureSupabaseSuccess(batchesError, 'Failed to fetch journal batches for approved applications');
 
     const batchIdToAppId = new Map<string, string>();
     const batchIdToStatus = new Map<string, string>();
@@ -3995,28 +4000,55 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const from = Math.max(0, (page - 1) * pageSize);
     const to = from + pageSize - 1;
 
-    // 顧客情報をJOINして取得
-    console.log('Fetching from estimates_list_view with customer join...');
+    // 埋め込みJOINなしの単純クエリ
+    console.log('Fetching from estimates_list_view (simplified)...');
     const { data, error, count } = await supabase
         .from('estimates_list_view')
-        .select(`
-            *,
-            customers!inner (
-                customer_name,
-                customer_code
-            )
-        `, { count: 'exact' })
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
-    console.log('Estimates query result:', { error, dataLength: data?.length, count });
-
-    if (!error && data && data.length > 0) {
-        return {
-            rows: (data || []).map(mapEstimateRow),
-            totalCount: count ?? 0,
-        };
+    if (error) {
+        console.error('Failed to fetch estimates:', error);
+        ensureSupabaseSuccess(error, 'Failed to fetch estimates');
+        return { rows: [], totalCount: 0 };
     }
+
+    if (!data || data.length === 0) {
+        return { rows: [], totalCount: 0 };
+    }
+
+    // 顧客情報を別クエリで取得
+    const customerIds = data
+        .map(row => row.customer_id)
+        .filter(id => id && UUID_REGEX.test(id));
+
+    let customerMap: Record<string, any> = {};
+    
+    if (customerIds.length > 0) {
+        const { data: customers, error: customerError } = await supabase
+            .from('customers')
+            .select('id, customer_name, customer_code')
+            .in('id', customerIds.slice(0, 100));
+
+        if (!customerError && customers) {
+            customerMap = customers.reduce((acc, customer) => {
+                acc[customer.id] = customer;
+                return acc;
+            }, {} as Record<string, any>);
+        }
+    }
+
+    // データをマッピング
+    const estimates = data.map(estimate => ({
+        ...estimate,
+        customer_name: estimate.customer_name || customerMap[estimate.customer_id]?.customer_name || '未設定',
+    }));
+
+    return {
+        rows: estimates,
+        totalCount: count || 0,
+    };
 
     console.warn('estimates_list_view not available - please create the database view. Using fallback query. Error:', error);
 

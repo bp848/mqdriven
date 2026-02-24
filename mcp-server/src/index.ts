@@ -146,7 +146,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server
 async function runServer() {
-    consttransport = new StdioServerTransport();
+    const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("MQDriven MCP Server running on stdio");
 }
