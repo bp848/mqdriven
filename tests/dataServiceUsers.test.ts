@@ -33,6 +33,7 @@ describe('dataService user mutations', () => {
       name_kana: 'ヤマダタロウ',
       role: 'user',
       is_active: true,
+      notification_enabled: true,
     });
   });
 

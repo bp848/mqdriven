@@ -2302,10 +2302,9 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         return mapAppsWithoutJournal();
     }
 
-    // UUID配列の形式を検証
-    const validUuids = appIds.filter(id => 
-        typeof id === 'string' && 
-        id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const validUuids = appIds.filter(
+        id => typeof id === 'string' && UUID_REGEX.test(id),
     );
     
     if (validUuids.length === 0) {
@@ -2313,23 +2312,28 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         return mapAppsWithoutJournal();
     }
 
-    console.log('Fetching journal batches for valid UUIDs:', validUuids);
+    console.log('Fetching journal batches for valid UUIDs:', validUuids.length);
 
-    // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
-    const { data: batches, error: batchesError } = await supabase
-        .from('journal_batches')
-        .select('id, source_application_id, status')
-        .in('source_application_id', validUuids);
-    
-    if (batchesError) {
-        console.error('Journal batches query error:', {
-            error: batchesError,
-            uuids: validUuids,
-            query: 'source_application_id=in.(...)'
-        });
+    const chunkSize = 200;
+    const idChunks = validUuids.reduce((acc, _, index) => {
+        if (index % chunkSize === 0) {
+            acc.push(validUuids.slice(index, index + chunkSize));
+        }
+        return acc;
+    }, [] as string[][]);
+
+    const batchResponses = await Promise.all(
+        idChunks.map(ids => supabase
+            .from('journal_batches')
+            .select('id, source_application_id, status')
+            .in('source_application_id', ids)),
+    );
+
+    const batches = batchResponses.flatMap(response => response.data || []);
+    const firstBatchError = batchResponses.find(response => response.error)?.error;
+    if (firstBatchError) {
+        console.warn('Failed to fetch part of journal batches for approved applications:', firstBatchError);
     }
-    
-    ensureSupabaseSuccess(batchesError, 'Failed to fetch journal batches for approved applications');
 
     const batchIdToAppId = new Map<string, string>();
     const batchIdToStatus = new Map<string, string>();
@@ -3996,16 +4000,10 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     const to = from + pageSize - 1;
 
     // 顧客情報をJOINして取得
-    console.log('Fetching from estimates_list_view with customer join...');
+    console.log('Fetching from estimates_list_view...');
     const { data, error, count } = await supabase
         .from('estimates_list_view')
-        .select(`
-            *,
-            customers!inner (
-                customer_name,
-                customer_code
-            )
-        `, { count: 'exact' })
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
