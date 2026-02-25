@@ -1,7 +1,0 @@
-{
-  "name": "mqdriven",
-  "description": "AIを活用したMQ会計管理システム。案件管理、見積作成、生産ワークフローの可視化を一つの場所で実現します。",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}
