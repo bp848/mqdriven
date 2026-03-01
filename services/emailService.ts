@@ -1,6 +1,17 @@
 import { v4 as uuidv4 } from 'uuid';
-import { SUPABASE_KEY as CREDENTIAL_SUPABASE_KEY, SUPABASE_URL as CREDENTIAL_SUPABASE_URL } from '../supabaseCredentials';
 import { getEnvValue } from '../utils.ts';
+
+const CREDENTIAL_SUPABASE_URL = 
+    getEnvValue('VITE_SUPABASE_URL') || 
+    getEnvValue('NEXT_PUBLIC_SUPABASE_URL') || 
+    getEnvValue('SUPABASE_URL') || 
+    '';
+
+const CREDENTIAL_SUPABASE_KEY = 
+    getEnvValue('VITE_SUPABASE_ANON_KEY') || 
+    getEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY') || 
+    getEnvValue('SUPABASE_KEY') || 
+    '';
 import { GEMINI_DEFAULT_MODEL, isGeminiAIDisabled, requireGeminiClient } from './Gemini';
 import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 

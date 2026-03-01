@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"CREATE TABLE\\\\|CREATE VIEW\\\\|CREATE SCHEMA\" /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/migrations/*.sql)",
+      "Bash(xargs grep -l \"accounting\\\\|journal\\\\|ledger\\\\|payable\\\\|receivable\")",
+      "Bash(ls -la /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/rpc_*.sql)",
+      "Bash(grep -i \"trial_balance\\\\|tax\\\\|consumption\\\\|period_closing\\\\|締処理\" /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/*.sql)"
+    ]
+  }
+}

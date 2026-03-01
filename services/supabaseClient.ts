@@ -1,5 +1,17 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../supabaseCredentials';
+import { getEnvValue } from '../utils';
+
+export const SUPABASE_URL = 
+    getEnvValue('VITE_SUPABASE_URL') || 
+    getEnvValue('NEXT_PUBLIC_SUPABASE_URL') || 
+    getEnvValue('SUPABASE_URL') || 
+    '';
+
+export const SUPABASE_KEY = 
+    getEnvValue('VITE_SUPABASE_ANON_KEY') || 
+    getEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY') || 
+    getEnvValue('SUPABASE_KEY') || 
+    '';
 
 let supabase: SupabaseClient | null = null;
 

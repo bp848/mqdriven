@@ -9,7 +9,7 @@ describe('sendEmail auth headers', () => {
   });
 
   it('invokes Supabase function with Supabase Authorization even when EMAIL_API_KEY is set', async () => {
-    const { SUPABASE_KEY, SUPABASE_URL } = await import('../supabaseCredentials');
+    const { SUPABASE_KEY, SUPABASE_URL } = await import('../services/supabaseClient');
 
     const baseUrl = SUPABASE_URL.endsWith('/') ? SUPABASE_URL.slice(0, -1) : SUPABASE_URL;
     process.env.APPLICATION_EMAIL_ENDPOINT = `${baseUrl}/functions/v1/resend`;

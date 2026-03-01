@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { getSupabase } from '../../services/supabaseClient';
-import { SUPABASE_KEY, SUPABASE_URL } from '../../supabaseCredentials';
+import { getSupabase, SUPABASE_URL, SUPABASE_KEY } from '../../services/supabaseClient';
 
 interface TestResult {
   test: string;

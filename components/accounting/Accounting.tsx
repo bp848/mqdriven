@@ -1,5 +1,5 @@
 import React from 'react';
-import JournalLedger from '../JournalLedger';
+import JournalLedger from './JournalLedger';
 import GeneralLedger from './GeneralLedger';
 import TrialBalancePage from './TrialBalancePage';
 import InvoiceOCR from '../InvoiceOCR';
@@ -9,7 +9,7 @@ import PeriodClosingPage from './PeriodClosingPage';
 import PlaceholderPage from '../PlaceholderPage';
 import BillingManagement from './BillingManagement';
 
-import { JournalEntry, InvoiceData, Page } from '../../types';
+import { JournalEntry, InvoiceData, Page, EmployeeUser } from '../../types';
 
 interface AccountingPageProps {
     page: Page;
@@ -26,6 +26,7 @@ interface AccountingPageProps {
     onRefreshData: () => void;
     allocationDivisions?: any[];
     isAIOff?: boolean;
+    currentUser?: EmployeeUser | null;
 }
 
 const AccountingPage: React.FC<AccountingPageProps> = (props) => {
@@ -33,7 +34,7 @@ const AccountingPage: React.FC<AccountingPageProps> = (props) => {
 
     switch (page as Page) {
         case 'accounting_journal':
-            return <JournalLedger entries={journalEntries} onAddEntry={onAddEntry} isAIOff={props.isAIOff} />;
+            return <JournalLedger onAddEntry={onAddEntry} isAIOff={props.isAIOff ?? false} currentUser={props.currentUser} />;
 
         case 'sales_billing':
             return <BillingManagement jobs={jobs} onRefreshData={onRefreshData} onMarkPaid={() => { }} />;
