@@ -1,8 +1,69 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Viteは静的な import.meta.env.VITE_* のみビルド時に置換する（taskプロジェクトと同じ方式）
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+type SupabaseEnv = {
+    VITE_SUPABASE_URL?: string;
+    VITE_SUPABASE_ANON_KEY?: string;
+    NEXT_PUBLIC_SUPABASE_URL?: string;
+    NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
+    SUPABASE_URL?: string;
+    SUPABASE_KEY?: string;
+};
+
+const readRuntimeEnvValue = (key: string): string | undefined => {
+    if (typeof window !== 'undefined') {
+        const win = window as any;
+        if (win.__ENV && win.__ENV[key] !== undefined) return win.__ENV[key];
+        if (win[key] !== undefined) return win[key];
+        if (win.process?.env && win.process.env[key] !== undefined) return win.process.env[key];
+    }
+
+    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+        return process.env[key];
+    }
+
+    return undefined;
+};
+
+const pickValue = (
+    env: SupabaseEnv,
+    keys: Array<keyof SupabaseEnv>,
+    runtimeReader?: (key: string) => string | undefined,
+): string => {
+    for (const key of keys) {
+        const envValue = env[key];
+        if (envValue) return envValue;
+    }
+
+    if (runtimeReader) {
+        for (const key of keys) {
+            const runtimeValue = runtimeReader(String(key));
+            if (runtimeValue) return runtimeValue;
+        }
+    }
+
+    return '';
+};
+
+export const resolveSupabaseCredentials = (
+    env: SupabaseEnv,
+    runtimeReader?: (key: string) => string | undefined,
+): { url: string; key: string } => {
+    const url = pickValue(
+        env,
+        ['VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'],
+        runtimeReader,
+    );
+    const key = pickValue(
+        env,
+        ['VITE_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_KEY'],
+        runtimeReader,
+    );
+    return { url, key };
+};
+
+const resolvedCredentials = resolveSupabaseCredentials(import.meta.env as SupabaseEnv, readRuntimeEnvValue);
+export const SUPABASE_URL = resolvedCredentials.url;
+export const SUPABASE_KEY = resolvedCredentials.key;
 
 let supabase: SupabaseClient | null = null;
 
