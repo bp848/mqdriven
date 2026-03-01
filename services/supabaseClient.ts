@@ -1,8 +1,21 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Viteは静的な import.meta.env.VITE_* のみビルド時に置換する（taskプロジェクトと同じ方式）
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+type SupabaseEnv = {
+    VITE_SUPABASE_URL?: string;
+    VITE_SUPABASE_ANON_KEY?: string;
+    SUPABASE_URL?: string;
+    SUPABASE_KEY?: string;
+};
+
+export const resolveSupabaseCredentials = (env: SupabaseEnv): { url: string; key: string } => {
+    const url = env.VITE_SUPABASE_URL || env.SUPABASE_URL || '';
+    const key = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_KEY || '';
+    return { url, key };
+};
+
+const resolvedCredentials = resolveSupabaseCredentials(import.meta.env as SupabaseEnv);
+export const SUPABASE_URL = resolvedCredentials.url;
+export const SUPABASE_KEY = resolvedCredentials.key;
 
 let supabase: SupabaseClient | null = null;
 
