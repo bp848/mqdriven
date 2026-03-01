@@ -4084,16 +4084,16 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     }
 
     // Build project lookup by project_id / project_code / id.
-    let projectMap: Record<string, any> = {};
+    let fallbackProjectMap: Record<string, any> = {};
     {
         const { data: projects, error: projectError } = await supabase
             .from('projects')
             .select('id, project_id, project_name, customer_id, customer_code, project_code');
 
         if (projectError) {
-            console.error('繝励Ο繧ｸ繧ｧ繧ｯ繝域､懃ｴ｢繧ｨ繝ｩ繝ｼ:', projectError);
+            console.error('プロジェクト検索エラー:', projectError);
         } else {
-            projectMap = (projects || []).reduce((acc, project) => {
+            fallbackProjectMap = (projects || []).reduce((acc, project) => {
                 const keys = [
                     normalizeLookupKey(project.project_id),
                     normalizeLookupKey(project.id),
@@ -4105,16 +4105,16 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
         }
     }
 
-    let customerMap: Record<string, any> = {};
+    let fallbackCustomerMap: Record<string, any> = {};
     {
         const { data: customers, error: customerError } = await supabase
             .from('customers')
             .select('id, customer_name, customer_code');
 
         if (customerError) {
-            console.error('鬘ｧ螳｢讀懃ｴ｢繧ｨ繝ｩ繝ｼ:', customerError);
+            console.error('顧客検索エラー:', customerError);
         } else {
-            customerMap = (customers || []).reduce((acc, customer) => {
+            fallbackCustomerMap = (customers || []).reduce((acc, customer) => {
                 const keys = [
                     normalizeLookupKey(customer.id),
                     normalizeLookupKey(customer.customer_code),
@@ -4126,8 +4126,8 @@ export const getEstimatesPage = async (page: number, pageSize: number): Promise<
     }
 
     const enrichedRows = (fallbackRows || []).map(row => {
-        const project = projectMap[normalizeLookupKey(row.project_id) ?? ''];
-        const customer = project ? customerMap[normalizeLookupKey(project?.customer_id) ?? ''] : undefined;
+        const project = fallbackProjectMap[normalizeLookupKey(row.project_id) ?? ''];
+        const customer = project ? fallbackCustomerMap[normalizeLookupKey(project?.customer_id) ?? ''] : undefined;
         return {
             ...row,
             project_name: project?.project_name ?? null,
