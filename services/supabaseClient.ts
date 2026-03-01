@@ -1,17 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getEnvValue } from '../utils';
 
-export const SUPABASE_URL = 
-    getEnvValue('VITE_SUPABASE_URL') || 
-    getEnvValue('NEXT_PUBLIC_SUPABASE_URL') || 
-    getEnvValue('SUPABASE_URL') || 
-    '';
-
-export const SUPABASE_KEY = 
-    getEnvValue('VITE_SUPABASE_ANON_KEY') || 
-    getEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY') || 
-    getEnvValue('SUPABASE_KEY') || 
-    '';
+// Viteは静的な import.meta.env.VITE_* のみビルド時に置換する（動的アクセス不可）
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 let supabase: SupabaseClient | null = null;
 

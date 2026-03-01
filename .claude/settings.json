@@ -4,7 +4,12 @@
       "Bash(grep -n \"CREATE TABLE\\\\|CREATE VIEW\\\\|CREATE SCHEMA\" /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/migrations/*.sql)",
       "Bash(xargs grep -l \"accounting\\\\|journal\\\\|ledger\\\\|payable\\\\|receivable\")",
       "Bash(ls -la /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/rpc_*.sql)",
-      "Bash(grep -i \"trial_balance\\\\|tax\\\\|consumption\\\\|period_closing\\\\|締処理\" /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/*.sql)"
+      "Bash(grep -i \"trial_balance\\\\|tax\\\\|consumption\\\\|period_closing\\\\|締処理\" /c/Users/ishij/OneDrive/Documents/GitHub/mqdriven/supabase/*.sql)",
+      "Bash(./node_modules/.bin/vite build)",
+      "Bash(node node_modules/.bin/vite build)",
+      "Bash(node node_modules/vite/bin/vite.js build)",
+      "Bash(git add App.tsx components/Sidebar.tsx components/accounting/Accounting.tsx components/accounting/CashSchedule.tsx components/accounting/GeneralLedger.tsx components/accounting/JournalLedger.tsx components/accounting/ManufacturingCostManagement.tsx components/accounting/Payables.tsx components/accounting/Receivables.tsx components/accounting/TrialBalancePage.tsx components/accounting/ProfitLossPage.tsx components/accounting/BalanceSheetPage.tsx services/dataService.ts types.ts)",
+      "Bash(xargs grep -l \"v_journal_book\\\\|v_general_ledger\\\\|v_trial_balance\")"
     ]
   }
 }

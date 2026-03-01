@@ -81,20 +81,8 @@ interface SettingsPageProps {
     onRefreshGoogleAuthStatus?: () => void;
 }
 
-const getEnvValue = (key: string): string | undefined => {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key] !== undefined) {
-        return import.meta.env[key];
-    }
-    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
-        return process.env[key];
-    }
-    return undefined;
-};
-
 const getAllowedGoogleOrigins = (): string[] => {
-    const raw =
-        getEnvValue('VITE_GOOGLE_OAUTH_ALLOWED_ORIGINS')
-        || getEnvValue('GOOGLE_OAUTH_ALLOWED_ORIGINS');
+    const raw = import.meta.env.VITE_GOOGLE_OAUTH_ALLOWED_ORIGINS || '';
     if (raw) {
         const parsed = raw
             .split(',')

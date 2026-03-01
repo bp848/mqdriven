@@ -85,23 +85,9 @@ import { Page, Job, JobCreationPayload, Customer, JournalEntry, User, AccountIte
 import { PlusCircle, Loader, AlertTriangle, RefreshCw, Settings, Menu } from './components/Icons';
 import { IS_AI_DISABLED as ENV_SHIM_AI_OFF } from './src/envShim';
 
-const getEnvValue = (key: string): string | undefined => {
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-        const envMap = import.meta.env as Record<string, string | undefined>;
-        if (envMap[key] !== undefined) {
-            return envMap[key];
-        }
-    }
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env[key];
-    }
-    return undefined;
-};
 
 const getAllowedGoogleOrigins = (): string[] => {
-    const envValue =
-        getEnvValue('VITE_GOOGLE_OAUTH_ALLOWED_ORIGINS')
-        || getEnvValue('GOOGLE_OAUTH_ALLOWED_ORIGINS');
+    const envValue = import.meta.env.VITE_GOOGLE_OAUTH_ALLOWED_ORIGINS || '';
     if (envValue) {
         const parsed = envValue
             .split(',')
@@ -301,7 +287,7 @@ const GlobalErrorBanner: React.FC<{ error: string; onRetry: () => void; onShowSe
 
 const App: React.FC = () => {
     const isSupabaseConfigured = useMemo(() => hasSupabaseCredentials(), []);
-    const isAuthBypassEnabled = useMemo(() => getEnvValue('VITE_BYPASS_SUPABASE_AUTH') === '1', []);
+    const isAuthBypassEnabled = useMemo(() => import.meta.env.VITE_BYPASS_SUPABASE_AUTH === '1', []);
     const shouldRequireAuth = isSupabaseConfigured && !isAuthBypassEnabled;
     const [authView, setAuthView] = useState<'login' | 'register'>('login');
     const [supabaseSession, setSupabaseSession] = useState<Session | null>(null);

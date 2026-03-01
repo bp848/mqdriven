@@ -1,17 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getEnvValue } from '../utils.ts';
 
-const CREDENTIAL_SUPABASE_URL = 
-    getEnvValue('VITE_SUPABASE_URL') || 
-    getEnvValue('NEXT_PUBLIC_SUPABASE_URL') || 
-    getEnvValue('SUPABASE_URL') || 
-    '';
-
-const CREDENTIAL_SUPABASE_KEY = 
-    getEnvValue('VITE_SUPABASE_ANON_KEY') || 
-    getEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY') || 
-    getEnvValue('SUPABASE_KEY') || 
-    '';
+// Viteは静的な import.meta.env.VITE_* のみビルド時に置換する
+const CREDENTIAL_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const CREDENTIAL_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 import { GEMINI_DEFAULT_MODEL, isGeminiAIDisabled, requireGeminiClient } from './Gemini';
 import { getSupabase, getSupabaseFunctionHeaders } from './supabaseClient';
 
@@ -45,39 +37,16 @@ export type EmailAIDraft = {
 };
 
 const resolveEndpoint = (): string | undefined => {
-  const directKeys = [
-    'APPLICATION_EMAIL_ENDPOINT',
-    'EMAIL_DISPATCH_ENDPOINT',
-    'VITE_APPLICATION_EMAIL_ENDPOINT',
-    'VITE_EMAIL_DISPATCH_ENDPOINT',
-    'NEXT_PUBLIC_EMAIL_DISPATCH_ENDPOINT',
-  ];
-  for (const key of directKeys) {
-    const value = getEnvValue(key);
-    if (value && value.trim()) return value.trim();
-  }
+  // 静的アクセスで取得（Viteビルド時に置換される）
+  const directEndpoint =
+    import.meta.env.VITE_APPLICATION_EMAIL_ENDPOINT ||
+    import.meta.env.VITE_EMAIL_DISPATCH_ENDPOINT;
+  if (directEndpoint && directEndpoint.trim()) return directEndpoint.trim();
 
-  const supabaseUrlCandidates = [
-    getEnvValue('SUPABASE_URL'),
-    getEnvValue('SUPABASE_PROJECT_URL'),
-    getEnvValue('VITE_SUPABASE_URL'),
-    getEnvValue('VITE_SUPABASE_PROJECT_URL'),
-    getEnvValue('NEXT_PUBLIC_SUPABASE_URL'),
-    CREDENTIAL_SUPABASE_URL,
-  ];
-  for (const url of supabaseUrlCandidates) {
-    if (url && url.trim()) {
-      const normalized = url.replace(/\/$/, '');
-      return `${normalized}/functions/v1/send-application-email`;
-    }
-  }
-
-  const supabaseRef =
-    getEnvValue('SUPABASE_PROJECT_REFERENCE') ||
-    getEnvValue('SUPABASE_REF') ||
-    getEnvValue('VITE_SUPABASE_PROJECT_REFERENCE');
-  if (supabaseRef && supabaseRef.trim()) {
-    return `https://${supabaseRef.trim()}.supabase.co/functions/v1/send-application-email`;
+  // Supabase URLからエンドポイントを構築
+  if (CREDENTIAL_SUPABASE_URL && CREDENTIAL_SUPABASE_URL.trim()) {
+    const normalized = CREDENTIAL_SUPABASE_URL.replace(/\/$/, '');
+    return `${normalized}/functions/v1/send-application-email`;
   }
 
   return undefined;
@@ -85,18 +54,13 @@ const resolveEndpoint = (): string | undefined => {
 
 const EMAIL_ENDPOINT = resolveEndpoint();
 const EMAIL_TEST_ENDPOINT =
-  getEnvValue('APPLICATION_EMAIL_TEST_ENDPOINT') ??
-  getEnvValue('EMAIL_DISPATCH_TEST_ENDPOINT') ??
-  getEnvValue('VITE_APPLICATION_EMAIL_TEST_ENDPOINT') ??
-  getEnvValue('VITE_EMAIL_DISPATCH_TEST_ENDPOINT');
+  import.meta.env.VITE_APPLICATION_EMAIL_TEST_ENDPOINT ||
+  import.meta.env.VITE_EMAIL_DISPATCH_TEST_ENDPOINT || undefined;
 const EMAIL_API_KEY =
-  getEnvValue('APPLICATION_EMAIL_API_KEY') ??
-  getEnvValue('EMAIL_DISPATCH_API_KEY') ??
-  getEnvValue('VITE_APPLICATION_EMAIL_API_KEY') ??
-  getEnvValue('VITE_EMAIL_DISPATCH_API_KEY');
+  import.meta.env.VITE_APPLICATION_EMAIL_API_KEY ||
+  import.meta.env.VITE_EMAIL_DISPATCH_API_KEY || undefined;
 const EMAIL_TEST_MODE =
-  getEnvValue('EMAIL_TEST_MODE') ??
-  getEnvValue('VITE_EMAIL_TEST_MODE');
+  import.meta.env.VITE_EMAIL_TEST_MODE || undefined;
 
 const isSupabaseFunctionsEndpoint = (value: string): boolean => {
   try {
@@ -285,7 +249,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailDispatchRes
 
   // 本番送信時の確認（開発環境のみ）
   if (isProductionMode && !PRODUCTION_SAFE_MODE) {
-    const isDevelopment = getEnvValue('NODE_ENV') === 'development' || getEnvValue('VITE_NODE_ENV') === 'development';
+    const isDevelopment = import.meta.env.DEV;
     if (isDevelopment) {
       console.warn('[email][PRODUCTION WARNING] 本番送信を実行します。送信先:', { to, cc, bcc, subject: payload.subject });
     }

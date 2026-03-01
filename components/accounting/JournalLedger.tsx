@@ -45,7 +45,7 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
       const endDate = new Date(year, month, 0);
       const endDateStr = `${endDate.getFullYear()}-${(endDate.getMonth() + 1).toString().padStart(2, '0')}-${endDate.getDate().toString().padStart(2, '0')}`;
       const data = await getJournalBookData({ startDate, endDate: endDateStr });
-      // 確定済み仕訳のみ表示
+      // 確定済み仕訳のみ表示（ビューが全ステータス返すためクライアントフィルタ）
       setEntries(data.filter((e: any) => e.status === 'posted'));
     } catch (err) {
       console.error('Failed to fetch journal book data:', err);

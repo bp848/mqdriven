@@ -62,3 +62,5 @@ supabase/supabase/
 # ===== Project specific ignores =====
 aisanbo-*.json
 metadata.json
+
+.vercel

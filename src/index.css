@@ -5,24 +5,26 @@
 /* Global styles for MQ会計ドリブン */
 :root {
   color-scheme: light dark;
-  --mq-font-family: 'Noto Sans JP', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --mq-font-size: 14px;
-  --mq-line-height: 1.55;
+  --mq-font-family:
+    "Inter", "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --mq-font-size: 13px; /* Slightly smaller base font for clean look */
+  --mq-line-height: 1.6;
   --mq-page-width: 1480px;
-  --mq-card-radius: 16px;
-  --mq-card-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-  --mq-border: #e3eaf2;
-  --mq-bg: #f3f6fb;
+  --mq-card-radius: 8px; /* Less rounded corners, more sleek */
+  --mq-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Very subtle flat shadow */
+  --mq-border: #edf2f7; /* Very light border */
+  --mq-bg: #f8fafc; /* Minimal bright background */
   --mq-card-bg: #ffffff;
-  --mq-text: #0f172a;
+  --mq-text: #334155; /* Slightly softer dark for elegance */
   --mq-muted: #64748b;
-  --mq-table-head: #f7f9fc;
-  --mq-table-hover: #f4f7fb;
-  --mq-input-bg: #f7f9fc;
-  --mq-input-border: #d8e0ea;
-  --mq-focus: #2563eb;
-  --mq-btn-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.08);
-  --mq-radius: 10px;
+  --mq-table-head: #ffffff;
+  --mq-table-hover: #f8fafc;
+  --mq-input-bg: #ffffff;
+  --mq-input-border: #cbd5e1;
+  --mq-focus: #0f766e; /* FXGT matching teal */
+  --mq-btn-shadow: none; /* Flat design */
+  --mq-radius: 6px;
   font-family: var(--mq-font-family);
   background-color: var(--mq-bg);
   color: var(--mq-text);
@@ -134,20 +136,22 @@ html.dark {
 }
 
 .mq-page thead th {
-  background: var(--mq-table-head);
-  color: var(--mq-muted);
-  font-weight: 600;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--mq-border);
-  padding: 0.75rem 1rem;
+  background: var(--mq-card-bg);
+  color: #1e293b;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid var(--mq-border);
+  padding: 1rem 1.5rem;
   text-transform: none;
+  text-align: left;
 }
 
 .mq-page tbody td {
   border-bottom: 1px solid var(--mq-border);
-  padding: 0.75rem 1rem;
-  font-size: 0.9rem;
+  padding: 1.15rem 1.5rem;
+  font-size: 0.85rem;
+  color: #334155;
 }
 
 .mq-page tbody tr:hover {
@@ -157,9 +161,9 @@ html.dark {
 .mq-theme button {
   border-radius: var(--mq-radius);
   font-weight: 600;
-  box-shadow: var(--mq-btn-shadow);
-  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, border-color 120ms ease;
-  min-height: 34px;
+  box-shadow: none; /* Removed heavy shadow */
+  transition: all 150ms ease;
+  min-height: 36px;
 }
 
 .mq-theme button:not(:disabled) {

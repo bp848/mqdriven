@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
   console.log('Vite loaded env vars:', {
     VITE_GEMINI_API_KEY: env.VITE_GEMINI_API_KEY ? '***SET***' : 'NOT SET',
     GEMINI_API_KEY: env.GEMINI_API_KEY ? '***SET***' : 'NOT SET',
+    VITE_SUPABASE_URL: env.VITE_SUPABASE_URL ? '***SET***' : 'NOT SET',
+    VITE_SUPABASE_ANON_KEY: env.VITE_SUPABASE_ANON_KEY ? '***SET***' : 'NOT SET',
     VITE_AI_OFF: env.VITE_AI_OFF
   });
 

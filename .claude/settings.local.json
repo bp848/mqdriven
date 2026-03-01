@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -sL \"https://mqdriven.vercel.app/assets/main-BE_YJ1Mc.js\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s \"https://rwjhpfghhgstvplmggks.supabase.co/auth/v1/authorize?provider=google\" -D -)",
+      "Bash(curl -s \"https://erp.b-p.co.jp/\")",
+      "Bash(curl -s \"https://mqdriven.vercel.app/\")",
+      "Bash(npx vercel domains ls)"
+    ]
+  }
+}

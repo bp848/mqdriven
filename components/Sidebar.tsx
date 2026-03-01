@@ -223,31 +223,31 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 
       <aside
         data-sidebar-mobile-toggle
-        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-slate-800 text-white flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${shouldShowMobile ? 'translate-x-0' : '-translate-x-full'} sm:translate-x-0`}
+        className={`${sidebarWidth} ${sidebarTransition} flex-shrink-0 bg-white text-slate-700 border-r border-slate-200 flex flex-col p-3 sm:p-4 h-screen sm:h-screen min-h-0 fixed sm:relative z-50 sm:z-40 ${shouldShowMobile ? 'translate-x-0' : '-translate-x-full'} sm:translate-x-0`}
       >
         {/* Mobile header */}
-        <div className="sm:hidden flex items-center justify-between px-3 py-4 border-b border-slate-700">
-          <h1 className="text-lg font-bold">文唱堂印刷 業務管理</h1>
+        <div className="sm:hidden flex items-center justify-between px-3 py-4 border-b border-slate-200">
+          <h1 className="text-lg font-bold text-slate-800">文唱堂印刷 業務管理</h1>
           <button
             type="button"
             onClick={() => {
               setIsMobileOpen(false);
             }}
-            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
             aria-label="閉じる"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className={`px-3 py-4 border-b border-slate-700 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
+        <div className={`px-3 py-4 border-b border-slate-200 overflow-hidden ${isCollapsed ? 'text-center' : ''} hidden sm:block`}>
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'}`}>
-            <h1 className={`text-xl font-bold tracking-tight whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>文唱堂印刷 業務管理</h1>
+            <h1 className={`text-xl font-bold tracking-tight text-slate-800 whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>文唱堂印刷 業務管理</h1>
             {!isCollapsed && (
               <button
                 type="button"
                 onClick={toggleSidebar}
-                className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"
+                className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100/80 text-slate-500 hover:bg-slate-200 transition-colors"
                 aria-label="サイドバーを折りたたむ"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -255,21 +255,21 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
             )}
           </div>
         </div>
-        <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-300/80 ${isCollapsed ? 'justify-center' : ''}`}>
+        <div className={`mt-2 flex flex-wrap gap-1 text-[10px] text-slate-500 ${isCollapsed ? 'justify-center' : ''}`}>
           {isCollapsed && (
             <button
               type="button"
               onClick={toggleSidebar}
-              className="block w-6 h-6 text-center leading-6 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors"
+              className="block w-6 h-6 text-center leading-6 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors"
               aria-label="サイドバーを展開"
             >
-              <ChevronRight className="w-3 h-3" />
+              <ChevronRight className="w-3 h-3 text-slate-600 mx-auto" />
             </button>
           )}
-          <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
-          <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
-          <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
-          <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-700/70 hover:bg-slate-600 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
+          <a href="https://erp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="業務">業</a>
+          <a href="https://mq.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="MQ">MQ</a>
+          <a href="https://dtp.b-p.co.jp" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="DTP">D</a>
+          <a href="https://co2.b-p.co.jp/" target="_blank" rel="noopener noreferrer" className={`px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors ${isCollapsed ? 'block w-6 h-6 text-center leading-6' : ''}`} title="エコ">E</a>
         </div>
         <nav className={`flex-1 mt-2 sm:mt-6 space-y-2 overflow-y-auto min-h-0 ${isCollapsed ? 'px-1' : 'px-2'}`}>
           <ul>
@@ -278,12 +278,12 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
 
               return (
                 <React.Fragment key={category.id}>
-                  <li className={`mt-4 px-3 text-xs sm:text-[11px] font-semibold text-white uppercase tracking-wider ${shouldShowDesktop ? '' : 'sr-only'} ${!shouldShowMobile ? 'hidden sm:block' : ''}`}>
+                  <li className={`mt-6 px-3 text-[11px] font-bold text-slate-400 tracking-wider mb-1 ${shouldShowDesktop ? '' : 'sr-only'} ${!shouldShowMobile ? 'hidden sm:block' : ''}`}>
                     {!isCollapsed && (
                       <button
                         type="button"
                         onClick={() => toggleCategory(category.id)}
-                        className="flex items-center w-full hover:text-slate-300 transition-colors"
+                        className="flex items-center w-full hover:text-slate-600 transition-colors"
                         aria-label={isCategoryExpanded ? `${category.name}カテゴリを折りたたむ` : `${category.name}カテゴリを展開する`}
                       >
                         {category.icon && <category.icon className="w-4 h-4 mr-2" />}
@@ -314,10 +314,10 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                               }
                             }
                           }}
-                          className={`flex items-center p-2.5 sm:p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-slate-700 text-white' : '!text-white hover:!bg-slate-700 hover:!text-slate-300'
-                            } ${isCollapsed ? 'justify-center' : 'gap-3'} text-sm sm:text-base min-h-[44px]`}
+                          className={`flex items-center p-2.5 sm:px-3 sm:py-2.5 rounded-md transition-colors duration-200 ${isActive ? 'bg-primary-50 text-primary-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            } ${isCollapsed ? 'justify-center' : 'gap-3'} text-[13px] min-h-[40px] mb-0.5`}
                         >
-                          {ItemIcon && <ItemIcon className="w-5 h-5 flex-shrink-0" />}
+                          {ItemIcon && <ItemIcon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-slate-500'}`} />}
                           <span className={`font-medium ${shouldShowMobile ? 'block' : 'hidden sm:block'} ${isCollapsed ? 'sm:hidden' : ''}`}>{item.name}</span>
                           {item.children && !isCollapsed && (
                             <button
@@ -362,8 +362,8 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                                         setIsMobileOpen(false);
                                       }
                                     }}
-                                    className={`flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${isChildPageActive ? 'bg-slate-700 text-white' : '!text-white hover:!bg-slate-700 hover:!text-slate-300'
-                                      } ml-8`}
+                                    className={`flex items-center rounded-md px-3 py-2 text-[12.5px] transition-colors duration-200 ${isChildPageActive ? 'text-primary-700 font-semibold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                                      } ml-8 my-0.5`}
                                   >
                                     <span className={`font-medium ${shouldShowMobile ? 'block' : 'hidden sm:block'}`}>{child.name}</span>
                                   </a>
@@ -380,18 +380,18 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
             })}
           </ul>
         </nav>
-        <div className="mt-auto pt-4 border-t border-slate-700 space-y-4">
+        <div className="mt-auto pt-4 border-t border-slate-200 space-y-4">
           {supabaseUserEmail && (
-            <div className="px-3 py-2 rounded-lg bg-slate-700/60">
-              <p className="text-xs text-slate-400">ログイン中のユーザー</p>
-              <p className="text-sm font-semibold text-white break-all">{supabaseUserEmail}</p>
+            <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-100">
+              <p className="text-[11px] text-slate-500 mb-1">ログイン中のユーザー</p>
+              <p className="text-[13px] font-semibold text-slate-700 break-all">{supabaseUserEmail}</p>
             </div>
           )}
           {onSignOut && (
             <button
               type="button"
               onClick={onSignOut}
-              className="w-full px-3 py-2 text-sm font-semibold text-center text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors"
+              className="w-full px-3 py-2 text-[13px] font-semibold text-center text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-800 rounded-md transition-colors"
             >
               ログアウト
             </button>
