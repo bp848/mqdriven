@@ -17,6 +17,7 @@ interface CustomerSalesData {
     orderCount: number;
     totalSales: number;
     totalMargin: number;
+    customerRank: string;
 }
 
 const normalizeKey = (value?: string | number | null): string | null => {
@@ -137,8 +138,22 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
         const data = summaries.reduce<Record<string, CustomerSalesData>>((acc, summary) => {
             if (summary.status === JobStatus.Cancelled) return acc;
             const { key, name } = resolveCustomerIdentity(summary);
+            const customerId = normalizeKey(summary.customerId);
+            const customerCode = normalizeKey(summary.customerCode);
+            const customerRecord = (customerId && customerLookups.byId.get(customerId)) || 
+                             (customerCode && customerLookups.byCode.get(customerCode));
+            const customerRank = customerRecord?.customerRank || customerRecord?.customer_rank || '-';
+
             if (!acc[key]) {
-                acc[key] = { key, clientName: name, projectCount: 0, orderCount: 0, totalSales: 0, totalMargin: 0 };
+                acc[key] = { 
+                    key, 
+                    clientName: name, 
+                    projectCount: 0, 
+                    orderCount: 0, 
+                    totalSales: 0, 
+                    totalMargin: 0,
+                    customerRank: String(customerRank)
+                };
             }
             const sales = summary.orderTotalAmount ?? summary.totalAmount ?? summary.price ?? 0;
             const cost = summary.orderTotalCost ?? summary.totalCost ?? summary.variableCost ?? 0;
@@ -265,6 +280,7 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
                             <tr>
                                 <th scope="col" className="px-6 py-3 w-16 text-center">順位</th>
                                 <th scope="col" className="px-6 py-3">クライアント名</th>
+                                <th scope="col" className="px-6 py-3 text-center w-20">ランク</th>
                                 <th scope="col" className="px-6 py-3 text-right">受注件数</th>
                                 <th scope="col" className="px-6 py-3 text-right">売上高 (P)</th>
                                 <th scope="col" className="px-6 py-3 text-right">限界利益 (M)</th>
@@ -295,6 +311,16 @@ const SalesRanking: React.FC<SalesRankingProps> = ({ initialSummaries, customers
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">
                                                     案件数: {customer.projectCount}
                                                 </p>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold ${
+                                                    customer.customerRank === 'A' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                                    customer.customerRank === 'B' ? 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' :
+                                                    customer.customerRank === 'C' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                                    'bg-slate-50 text-slate-400 dark:bg-slate-800'
+                                                }`}>
+                                                    {customer.customerRank}
+                                                </span>
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 {customer.orderCount.toLocaleString()}

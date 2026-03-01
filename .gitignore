@@ -1,4 +1,4 @@
-# Logs
+# ===== Node / Build =====
 logs
 *.log
 npm-debug.log*
@@ -6,13 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# ===== Editor =====
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -22,15 +21,44 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+desktop.ini
 
-backup/
-aisanbo-*.json
-
+# ===== Secrets / Credentials =====
 .env
 .env.*
+.env*.local
+*.env.bak
+supabaseCredentials.ts
+client_secret_*.json
 src/config.generated.ts
 
+# ===== Backup =====
+backup/
+*.bak
+
+# ===== Test results / Playwright =====
+test-results/
+playwright-report/
+test-output/
+
+# ===== Temporary / Debug files =====
+temp_fix.txt
+tatus
+*.patch
+
+# ===== Misc junk =====
+transcribeflow-ai.zip
+*.zip
+windsurf-demo.html
+ai-estimate-generator.html
+
+# ===== Supabase temp =====
+supabase/.temp/
+supabase/supabase/
+
+# ===== Vercel =====
 .vercel
 
-.vercel
-.env*.local
+# ===== Project specific ignores =====
+aisanbo-*.json
+metadata.json

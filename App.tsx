@@ -190,7 +190,6 @@ const PAGE_TITLES: Record<Page, string> = {
     approval_form_leave: '休暇申請',
     approval_form_approval: '稟議申請',
     approval_form_daily: '日報',
-    approval_form_weekly: '週報',
     daily_report_progress: '日報提出進捗',
     accounting_journal: '仕訳',
     accounting_general_ledger: '総勘定元帳',
@@ -211,7 +210,6 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_approved_leave: '休暇',
     accounting_approved_apl: '稟議',
     accounting_approved_dly: '日報',
-    accounting_approved_wkr: '週報',
     document_creation_tools: 'ドキュメント作成',
     proposal_ai: '提案書AI',
     pdf_editing_tools: 'PDF編集AI',
@@ -243,7 +241,6 @@ const APPLICATION_FORM_PAGE_MAP: Partial<Record<string, Page>> = {
     LEV: 'approval_form_leave',
     APL: 'approval_form_approval',
     DLY: 'approval_form_daily',
-    WKR: 'approval_form_weekly',
 };
 
 const PRIMARY_ACTION_ENABLED_PAGES: Page[] = [
@@ -1451,7 +1448,6 @@ const App: React.FC = () => {
                         onDailyReportPrefillApplied={handleDailyReportPrefillApplied}
                     />
                 );
-            case 'approval_form_weekly': return <ApprovalWorkflowPage currentUser={currentUser} view="form" formCode="WKR" addToast={addToast} isAIOff={isAIOff} resumedApplication={resumedApplication} onResumeDraftClear={clearResumedApplication} />;
             case 'daily_report_progress':
                 return <DailyReportProgressPage currentUser={currentUser} addToast={addToast} />;
             case 'proposal_ai':
@@ -1546,18 +1542,6 @@ const App: React.FC = () => {
                         codes={['DLY']}
                         title="承認済み（日報）"
                         description="日報（DLY）の承認済みデータです。"
-                        showLeaveSync={false}
-                        currentUserId={currentUser?.id}
-                        onNavigate={handleNavigate}
-                    />
-                );
-            case 'accounting_approved_wkr':
-                return (
-                    <ApprovedApplications
-                        notify={addToast}
-                        codes={['WKR']}
-                        title="承認済み（週報）"
-                        description="週報（WKR）の承認済みデータです。"
                         showLeaveSync={false}
                         currentUserId={currentUser?.id}
                         onNavigate={handleNavigate}

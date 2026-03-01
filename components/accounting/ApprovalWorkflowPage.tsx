@@ -14,7 +14,6 @@ import TransportExpenseForm from '../forms/TransportExpenseForm';
 import LeaveApplicationForm from '../forms/LeaveApplicationForm';
 import ApprovalForm from '../forms/ApprovalForm';
 import DailyReportForm from '../forms/DailyReportForm';
-import WeeklyReportForm from '../forms/WeeklyReportForm';
 import EmailNotificationSettings from '../forms/EmailNotificationSettings';
 
 interface ApprovalWorkflowPageProps {
@@ -456,7 +455,6 @@ const ApprovalWorkflowPage: React.FC<ApprovalWorkflowPageProps> = ({
                     customers={customers || []}
                 />
             );
-            case 'WKR': return <WeeklyReportForm {...formProps} draftApplication={activeResumedApplication} />;
             default: return (
                 <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm text-center">
                     <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />

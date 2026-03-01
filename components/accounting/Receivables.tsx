@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DollarSign, User, AlertCircle, CheckCircle, PieChart, Download, Calendar, Filter, ListFilter, Loader } from 'lucide-react';
+import { DollarSign, User, AlertCircle, CheckCircle, PieChart, Download, Calendar, Filter, ListFilter, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ReceivableItem } from '../../types';
 import * as dataService from '../../services/dataService';
 
@@ -15,13 +15,29 @@ const ReceivablesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [filterStatus, setFilterStatus] = useState<string>('outstanding');
+  const [period, setPeriod] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`;
+  });
+
+  const shiftMonth = (delta: number) => {
+    const [y, m] = period.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setPeriod(`${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`);
+  };
 
   const loadReceivables = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
+      const [year, month] = period.split('-').map(Number);
+      const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+      const endOfMonth = new Date(year, month, 0);
+      const endDate = `${endOfMonth.getFullYear()}-${(endOfMonth.getMonth() + 1).toString().padStart(2, '0')}-${endOfMonth.getDate().toString().padStart(2, '0')}`;
       const filters = {
         status: filterStatus === 'all' ? undefined : filterStatus,
+        startDate,
+        endDate,
       };
       const data = await dataService.getReceivables(filters);
       setReceivables(data);
@@ -31,7 +47,7 @@ const ReceivablesPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [filterStatus]);
+  }, [filterStatus, period]);
 
   useEffect(() => {
     loadReceivables();
@@ -64,6 +80,14 @@ const ReceivablesPage: React.FC = () => {
               <option value="partially_paid">一部入金</option>
               <option value="paid">回収済</option>
             </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronLeft className="w-4 h-4 text-slate-500" /></button>
+            <div className="relative">
+              <input type="month" value={period} onChange={e => setPeriod(e.target.value)} className="pl-8 pr-3 py-1 bg-white border border-slate-300 rounded text-sm text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-40" />
+              <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            </div>
+            <button onClick={() => shiftMonth(1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronRight className="w-4 h-4 text-slate-500" /></button>
           </div>
         </div>
       </div>

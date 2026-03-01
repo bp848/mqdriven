@@ -4944,9 +4944,13 @@ export const createJournalFromApplication = async (
 };
 
 // VIEW-based data fetching functions for accounting pages
-export const getJournalBookData = async (): Promise<any[]> => {
+export const getJournalBookData = async (filters?: { startDate?: string; endDate?: string }): Promise<any[]> => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from('v_journal_book').select('*');
+    let query = supabase.from('v_journal_book').select('*');
+    if (filters?.startDate) query = query.gte('date', filters.startDate);
+    if (filters?.endDate) query = query.lte('date', filters.endDate);
+    query = query.order('date', { ascending: false });
+    const { data, error } = await query;
     ensureSupabaseSuccess(error, 'Failed to fetch journal book data');
     return data || [];
 };

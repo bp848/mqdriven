@@ -61,7 +61,6 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'approval_form_transport', name: '交通費精算' },
       { page: 'approval_form_leave', name: '休暇申請' },
       { page: 'approval_form_approval', name: '稟議申請' },
-      { page: 'approval_form_weekly', name: '週報申請' },
     ],
   },
   {
@@ -80,6 +79,15 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
       { page: 'accounting_tax_summary', name: '消費税集計' },
       { page: 'accounting_expense_analysis', name: '経費分析' },
       { page: 'accounting_period_closing', name: '締処理' },
+    ],
+  },
+  {
+    id: 'analysis',
+    name: '分析',
+    icon: PieChart,
+    items: [
+      { page: 'analysis_dashboard', name: '分析ダッシュボード' },
+      { page: 'analysis_ranking', name: '売上ランキング' },
     ],
   },
   {

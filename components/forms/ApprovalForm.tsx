@@ -29,7 +29,7 @@ interface ApprovalFormProps {
 }
 
 const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeId, currentUser, isAIOff, isLoading, error: formLoadError, draftApplication }) => {
-    const [formData, setFormData] = useState({ title: '', details: '', amount: '' });
+    const [formData, setFormData] = useState({ title: '', details: '', amount: '', paymentDate: '' });
     const [approvalRouteId, setApprovalRouteId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -49,6 +49,7 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
             title: data.title || '',
             details: data.details || '',
             amount: data.amount || '',
+            paymentDate: data.paymentDate || '',
         });
         setApprovalRouteId(draftApplication.approvalRouteId || '');
         // Load attachments from draft
@@ -297,6 +298,21 @@ const ApprovalForm: React.FC<ApprovalFormProps> = ({ onSuccess, applicationCodeI
                             autoComplete="on" 
                         />
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">0円での申請も可能です</p>
+                    </div>
+
+                    <div>
+                        <label htmlFor="paymentDate" className={labelClass}>支払日</label>
+                        <input 
+                            type="date" 
+                            id="paymentDate" 
+                            name="paymentDate" 
+                            value={formData.paymentDate} 
+                            onChange={handleChange} 
+                            className={inputClass} 
+                            disabled={isDisabled} 
+                            autoComplete="on" 
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">支払が決まっている場合に指定してください</p>
                     </div>
 
                     <div>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { getJournalBookData, updateJournalEntryStatus } from '../../services/dataService';
-import { Loader, BookOpen, Edit, Save, X, CheckCircle } from '../Icons';
+import { Loader, BookOpen, Edit, Save, X, CheckCircle, Calendar, ChevronLeft, ChevronRight } from '../Icons';
 import EmptyState from '../ui/EmptyState';
 import SortableHeader from '../ui/SortableHeader';
 import { EmployeeUser } from '../../types';
@@ -23,25 +23,40 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [period, setPeriod] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`;
+  });
 
   // 管理者権限チェック
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const data = await getJournalBookData();
-        setEntries(data);
-      } catch (err) {
-        console.error('Failed to fetch journal book data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const shiftMonth = (delta: number) => {
+    const [y, m] = period.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setPeriod(`${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`);
+  };
 
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [year, month] = period.split('-').map(Number);
+      const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+      const endDate = new Date(year, month, 0);
+      const endDateStr = `${endDate.getFullYear()}-${(endDate.getMonth() + 1).toString().padStart(2, '0')}-${endDate.getDate().toString().padStart(2, '0')}`;
+      const data = await getJournalBookData({ startDate, endDate: endDateStr });
+      // 確定済み仕訳のみ表示
+      setEntries(data.filter((e: any) => e.status === 'posted'));
+    } catch (err) {
+      console.error('Failed to fetch journal book data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [period]);
+
+  useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const sortedEntries = useMemo(() => {
     let sortableItems = [...entries];
@@ -123,9 +138,19 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">仕分け済み一覧（修正用）</h2>
-        <div className="text-sm text-gray-500">
-          {isAdmin ? '管理者編集可能' : '参照専用'}
+        <h2 className="text-xl font-semibold">仕訳一覧（修正用）</h2>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronLeft className="w-4 h-4" /></button>
+            <div className="relative">
+              <input type="month" value={period} onChange={e => setPeriod(e.target.value)} className="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-40" />
+              <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            </div>
+            <button onClick={() => shiftMonth(1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+          <div className="text-sm text-gray-500">
+            {isAdmin ? '管理者編集可能' : '参照専用'}
+          </div>
         </div>
       </div>
       {/* Mobile Card View */}
@@ -133,22 +158,14 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
         <div className="space-y-3">
           {sortedEntries.map((entry, index) => (
             <div key={entry.id || index} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              {/* Card Header - Date and Status */}
+              {/* Card Header - Date */}
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center space-x-3">
-                    <div className="text-sm text-gray-500">📅</div>
-                    <div>
-                      <p className="text-xs text-gray-500">取引日</p>
-                      <p className="font-semibold text-sm">{entry.date}</p>
-                    </div>
+                <div className="flex items-center space-x-3">
+                  <div className="text-sm text-gray-500">📅</div>
+                  <div>
+                    <p className="text-xs text-gray-500">取引日</p>
+                    <p className="font-semibold text-sm">{entry.date}</p>
                   </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${entry.status === 'posted'
-                      ? 'bg-green-100 text-green-800 border border-green-200'
-                      : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-                    }`}>
-                    {entry.status === 'posted' ? '✓ 確定' : '草案'}
-                  </span>
                 </div>
               </div>
 
@@ -186,7 +203,7 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
                   <div className="flex items-center space-x-3">
                     <div className="text-sm text-gray-500">🏷️</div>
                     <div>
-                      <p className="text-xs text-gray-500">仕分け区分</p>
+                      <p className="text-xs text-gray-500">勘定区分</p>
                       <span className="inline-block px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
                         {entry.category}
                       </span>

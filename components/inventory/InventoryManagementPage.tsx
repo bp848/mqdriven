@@ -32,7 +32,6 @@ const InventoryManagementPage: React.FC<InventoryManagementPageProps> = ({ inven
         <table className="w-full text-base text-left text-slate-500 dark:text-slate-400">
           <thead className="text-sm text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
             <tr>
-              <th scope="col" className="px-6 py-3">品目コード</th>
               <th scope="col" className="px-6 py-3">品目名</th>
               <th scope="col" className="px-6 py-3">カテゴリ</th>
               <th scope="col" className="px-6 py-3 text-right">在庫数量</th>
@@ -44,7 +43,6 @@ const InventoryManagementPage: React.FC<InventoryManagementPageProps> = ({ inven
           <tbody>
             {inventoryItems.map((item) => (
               <tr key={item.id} onClick={() => onSelectItem(item)} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer">
-                <td className="px-6 py-4 font-mono text-sm">{item.id.substring(0, 8)}...</td>
                 <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">{item.name}</td>
                 <td className="px-6 py-4">{item.category}</td>
                 <td className="px-6 py-4 text-right">{item.quantity.toLocaleString()}</td>
