@@ -65,41 +65,41 @@ class SMTPEmailService {
 
     try {
       const { to, cc, bcc, subject, body, html } = payload;
-      
+
       if (!to || to.length === 0) {
         return { success: false, error: '少なくとも1つの送信先が必要です' };
       }
 
-      // Create nodemailer transporter
-      const nodemailer = require('nodemailer');
-      const transporter = nodemailer.createTransporter({
-        host: this.settings.smtpHost,
-        port: this.settings.smtpPort,
-        secure: this.settings.useSSL,
-        auth: {
-          user: this.settings.smtpUsername,
-          pass: this.settings.smtpPassword,
-        },
+      // ブラウザからはサーバーサイドAPI経由でSMTP送信する
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: this.settings!.smtpHost,
+          port: this.settings!.smtpPort,
+          secure: this.settings!.useSSL,
+          auth: { user: this.settings!.smtpUsername, pass: this.settings!.smtpPassword },
+          from: `"${this.settings!.fromName}" <${this.settings!.fromEmail}>`,
+          to: to.join(', '),
+          cc: cc && cc.length > 0 ? cc.join(', ') : undefined,
+          bcc: bcc && bcc.length > 0 ? bcc.join(', ') : undefined,
+          subject: subject || '通知メール',
+          text: body,
+          html: html || body,
+        }),
       });
 
-      const mailOptions = {
-        from: `"${this.settings.fromName}" <${this.settings.fromEmail}>`,
-        to: to.join(', '),
-        cc: cc && cc.length > 0 ? cc.join(', ') : undefined,
-        bcc: bcc && bcc.length > 0 ? bcc.join(', ') : undefined,
-        subject: subject || '通知メール',
-        text: body,
-        html: html || body,
-      };
-
-      await transporter.sendMail(mailOptions);
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, error: errorText || 'SMTP送信に失敗しました' };
+      }
       return { success: true };
 
     } catch (error: any) {
       console.error('SMTP Email send error:', error);
-      return { 
-        success: false, 
-        error: error.message || 'メール送信に失敗しました' 
+      return {
+        success: false,
+        error: error.message || 'メール送信に失敗しました'
       };
     }
   }

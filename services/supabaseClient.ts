@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Viteは静的な import.meta.env.VITE_* のみビルド時に置換する（動的アクセス不可）
+// Viteは静的な import.meta.env.VITE_* のみビルド時に置換する（taskプロジェクトと同じ方式）
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
