@@ -12,6 +12,7 @@ export type Page =
   | 'approval_form_approval' | 'approval_form_daily'
   | 'daily_report_progress'
   | 'accounting_journal' | 'accounting_general_ledger' | 'accounting_trial_balance'
+  | 'accounting_profit_loss' | 'accounting_balance_sheet'
   | 'accounting_tax_summary' | 'accounting_period_closing' | 'accounting_business_plan'
   | 'ai_business_consultant'
   | 'ai_market_research'

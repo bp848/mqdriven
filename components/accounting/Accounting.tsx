@@ -125,7 +125,7 @@ const AccountingPage: React.FC<AccountingPageProps> = (props) => {
             return <GeneralLedger entries={journalEntries} accountItems={accountItems} />;
 
         case 'accounting_trial_balance':
-            return <TrialBalancePage journalEntries={journalEntries} />;
+            return <TrialBalancePage />;
 
         case 'accounting_period_closing':
             return <PeriodClosingPage addToast={addToast} jobs={jobs} applications={applications} journalEntries={journalEntries} onNavigate={onNavigate} />;

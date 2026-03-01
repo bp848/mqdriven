@@ -4962,11 +4962,73 @@ export const getGeneralLedgerData = async (): Promise<any[]> => {
     return data || [];
 };
 
-export const getTrialBalanceData = async (): Promise<any[]> => {
+export const getTrialBalanceData = async (filters?: { startDate?: string; endDate?: string }): Promise<any[]> => {
     const supabase = getSupabase();
+    // Try RPC first for period-filtered data
+    if (filters?.startDate && filters?.endDate) {
+        try {
+            const { data, error } = await supabase.rpc('get_financial_statements', {
+                p_start_date: filters.startDate,
+                p_end_date: filters.endDate,
+            });
+            if (!error && data) return data;
+        } catch (_) { /* fallback to view */ }
+    }
     const { data, error } = await supabase.from('v_trial_balance').select('*');
     ensureSupabaseSuccess(error, 'Failed to fetch trial balance data');
     return data || [];
+};
+
+// BS/PLデータ取得（get_financial_statementsの薄いラッパー）
+export const getFinancialStatements = async (filters: { startDate: string; endDate: string }): Promise<any[]> => {
+    const supabase = getSupabase();
+    try {
+        const { data, error } = await supabase.rpc('get_financial_statements', {
+            p_start_date: filters.startDate,
+            p_end_date: filters.endDate,
+        });
+        if (!error && data) return data;
+    } catch (_) { /* fallback */ }
+    // fallback: v_trial_balance
+    const { data, error } = await supabase.from('v_trial_balance').select('*');
+    ensureSupabaseSuccess(error, 'Failed to fetch financial statements');
+    return data || [];
+};
+
+// 仕訳行の更新（修正用）
+export const updateJournalLine = async (
+    lineId: string,
+    updates: { debit?: number; credit?: number; description?: string }
+): Promise<void> => {
+    const supabase = getSupabase();
+    const updatePayload: Record<string, any> = {};
+    if (updates.debit !== undefined) updatePayload.debit = updates.debit;
+    if (updates.credit !== undefined) updatePayload.credit = updates.credit;
+    if (updates.description !== undefined) updatePayload.description = updates.description;
+    if (Object.keys(updatePayload).length === 0) return;
+    const { error } = await supabase
+        .from('journal_lines')
+        .update(updatePayload)
+        .eq('id', lineId);
+    ensureSupabaseSuccess(error, 'Failed to update journal line');
+};
+
+// 費目別原価内訳（journal_linesからEXPENSE勘定を集計）
+export const getExpenseBreakdown = async (filters?: { startDate?: string; endDate?: string }): Promise<{ accountName: string; amount: number }[]> => {
+    const supabase = getSupabase();
+    try {
+        const { data, error } = await supabase.rpc('get_financial_statements', {
+            p_start_date: filters?.startDate || '2000-01-01',
+            p_end_date: filters?.endDate || '2099-12-31',
+        });
+        if (!error && data) {
+            return data
+                .filter((r: any) => r.section === 'income_statement_expense')
+                .map((r: any) => ({ accountName: r.account_name, amount: Number(r.amount) }))
+                .sort((a: any, b: any) => b.amount - a.amount);
+        }
+    } catch (_) { /* fallback */ }
+    return [];
 };
 
 export const getTaxSummaryData = async (): Promise<any[]> => {

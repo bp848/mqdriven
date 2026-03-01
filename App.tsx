@@ -42,6 +42,8 @@ import PayablesPage from './components/accounting/Payables';
 import ReceivablesPage from './components/accounting/Receivables';
 import CashSchedulePage from './components/accounting/CashSchedule';
 import ExpenseAnalysisPage from './components/accounting/ExpenseAnalysisPage';
+import ProfitLossPage from './components/accounting/ProfitLossPage';
+import BalanceSheetPage from './components/accounting/BalanceSheetPage';
 import DocumentCreationHub from './components/DocumentCreationHub';
 import BulletinBoardPage from './components/BulletinBoardPage';
 import AIChatPage from './components/AIChatPage';
@@ -194,6 +196,8 @@ const PAGE_TITLES: Record<Page, string> = {
     accounting_journal: '仕訳',
     accounting_general_ledger: '総勘定元帳',
     accounting_trial_balance: '試算表',
+    accounting_profit_loss: '損益計算書',
+    accounting_balance_sheet: '貸借対照表',
     accounting_tax_summary: '消費税集計',
     accounting_period_closing: '月次締め',
     accounting_business_plan: '経営計画',
@@ -1347,7 +1351,7 @@ const App: React.FC = () => {
                     currentUser={currentUser}
                 />;
             case 'accounting_journal':
-                return <AccountingPage page={currentPage} journalEntries={journalEntries || []} accountItems={accountItems || []} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs || []} applications={applications || []} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers || []} employees={employees || []} onRefreshData={loadAllData} />;
+                return <AccountingPage page={currentPage} journalEntries={journalEntries || []} accountItems={accountItems || []} onAddEntry={async (entry: any) => { await dataService.addJournalEntry(entry); loadAllData(); }} addToast={addToast} requestConfirmation={requestConfirmation} jobs={jobs || []} applications={applications || []} onNavigate={handleNavigate} isAIOff={isAIOff} customers={customers || []} employees={employees || []} onRefreshData={loadAllData} currentUser={currentUser} />;
             case 'inventory_management':
                 return <InventoryManagementPage inventoryItems={inventoryItems || []} onSelectItem={(item) => { setSelectedInventoryItem(item); setIsCreateInventoryItemModalOpen(true); }} />;
             case 'manufacturing_progress':
@@ -1412,6 +1416,10 @@ const App: React.FC = () => {
                 return <CashSchedulePage />;
             case 'accounting_expense_analysis':
                 return <ExpenseAnalysisPage />;
+            case 'accounting_profit_loss':
+                return <ProfitLossPage />;
+            case 'accounting_balance_sheet':
+                return <BalanceSheetPage />;
             case 'accounting_approved_applications':
                 return <ApprovedApplications notify={addToast} currentUserId={currentUser?.id} onNavigate={handleNavigate} />;
             case 'accounting_approved_unhandled':

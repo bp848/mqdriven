@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { getJournalBookData, updateJournalEntryStatus } from '../../services/dataService';
+import { getJournalBookData, updateJournalLine } from '../../services/dataService';
 import { Loader, BookOpen, Edit, Save, X, CheckCircle, Calendar, ChevronLeft, ChevronRight } from '../Icons';
 import EmptyState from '../ui/EmptyState';
 import SortableHeader from '../ui/SortableHeader';
@@ -77,6 +77,12 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
     return sortableItems;
   }, [entries, sortConfig]);
 
+  const totals = useMemo(() => {
+    const debit = entries.reduce((sum: number, e: any) => sum + (e.debit_amount || 0), 0);
+    const credit = entries.reduce((sum: number, e: any) => sum + (e.credit_amount || 0), 0);
+    return { debit, credit, diff: debit - credit };
+  }, [entries]);
+
   const handleEdit = (entry: any) => {
     if (!isAdmin) return;
     setEditingId(entry.id);
@@ -88,15 +94,17 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
 
     setIsSaving(true);
     try {
-      // 仕分け更新用のAPIを呼び出し（仮実装）
-      await updateJournalEntryStatus(editingId, 'updated');
+      await updateJournalLine(editingId, {
+        debit: Number(editingEntry.debit_amount) || 0,
+        credit: Number(editingEntry.credit_amount) || 0,
+      });
       setEntries(prev => prev.map(entry =>
         entry.id === editingId ? { ...entry, ...editingEntry } : entry
       ));
       setEditingId(null);
       setEditingEntry({});
     } catch (error) {
-      console.error('Failed to update journal entry:', error);
+      console.error('Failed to update journal line:', error);
     } finally {
       setIsSaving(false);
     }
@@ -120,14 +128,36 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
     );
   }
 
+  const monthPicker = (
+    <div className="flex justify-between items-center">
+      <h2 className="text-xl font-semibold">仕訳一覧（修正用）</h2>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronLeft className="w-4 h-4" /></button>
+          <div className="relative">
+            <input type="month" value={period} onChange={e => setPeriod(e.target.value)} className="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-40" />
+            <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          </div>
+          <button onClick={() => shiftMonth(1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+        <div className="text-sm text-gray-500">
+          {isAdmin ? '管理者編集可能' : '参照専用'}
+        </div>
+      </div>
+    </div>
+  );
+
   if (entries.length === 0) {
     return (
-      <div className="text-center py-8">
-        <EmptyState
-          icon={BookOpen}
-          title="データ未集計"
-          description="仕訳データがまだ集計されていません"
-        />
+      <div className="space-y-4">
+        {monthPicker}
+        <div className="text-center py-8">
+          <EmptyState
+            icon={BookOpen}
+            title="データなし"
+            description="この期間の確定済み仕訳はありません"
+          />
+        </div>
       </div>
     );
   }
@@ -137,22 +167,7 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">仕訳一覧（修正用）</h2>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronLeft className="w-4 h-4" /></button>
-            <div className="relative">
-              <input type="month" value={period} onChange={e => setPeriod(e.target.value)} className="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-40" />
-              <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            </div>
-            <button onClick={() => shiftMonth(1)} className="p-1.5 rounded hover:bg-slate-200 transition"><ChevronRight className="w-4 h-4" /></button>
-          </div>
-          <div className="text-sm text-gray-500">
-            {isAdmin ? '管理者編集可能' : '参照専用'}
-          </div>
-        </div>
-      </div>
+      {monthPicker}
       {/* Mobile Card View */}
       <div className="lg:hidden">
         <div className="space-y-3">
@@ -265,14 +280,8 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
                 requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
               <SortableHeader
-                label="仕分け"
+                label="勘定区分"
                 sortKey="category"
-                sortConfig={sortConfig}
-                requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
-              />
-              <SortableHeader
-                label="ステータス"
-                sortKey="status"
                 sortConfig={sortConfig}
                 requestSort={(key) => setSortConfig({ key, direction: sortConfig?.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending' })}
               />
@@ -362,12 +371,6 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
                     entry.category || '-'
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'posted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                    {entry.status === 'posted' ? '確定' : '草案'}
-                  </span>
-                </td>
                 {isAdmin && (
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {editingId === entry.id ? (
@@ -399,6 +402,20 @@ const JournalLedger: React.FC<JournalLedgerProps> = ({ onAddEntry, isAIOff, curr
               </tr>
             ))}
           </tbody>
+          <tfoot className="bg-slate-100 font-bold text-sm">
+            <tr>
+              <td className="px-6 py-3" colSpan={3}>合計</td>
+              <td className="px-6 py-3 text-right">¥{totals.debit.toLocaleString()}</td>
+              <td className="px-6 py-3 text-right">¥{totals.credit.toLocaleString()}</td>
+              <td className="px-6 py-3 text-center">
+                {totals.diff === 0
+                  ? <span className="text-green-600 text-xs">貸借一致</span>
+                  : <span className="text-red-600 text-xs">差額 ¥{Math.abs(totals.diff).toLocaleString()}</span>
+                }
+              </td>
+              {isAdmin && <td></td>}
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

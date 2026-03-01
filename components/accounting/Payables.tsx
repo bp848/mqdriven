@@ -53,9 +53,15 @@ const PayablesPage: React.FC = () => {
     loadPayables();
   }, [loadPayables]);
 
-  const totalPayable = payables
-    .filter(p => p.status === 'outstanding' || p.status === 'partially_paid')
-    .reduce((sum, p) => sum + (p.amount - p.paidAmount), 0);
+  const today = new Date().toISOString().split('T')[0];
+
+  const summary = payables.reduce((acc, p) => {
+    acc.totalAmount += p.amount;
+    acc.totalPaid += p.paidAmount;
+    acc.totalUnpaid += (p.amount - p.paidAmount);
+    if (p.status !== 'paid' && p.due && p.due < today) acc.overdueCount++;
+    return acc;
+  }, { totalAmount: 0, totalPaid: 0, totalUnpaid: 0, overdueCount: 0 });
 
   return (
     <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -95,9 +101,23 @@ const PayablesPage: React.FC = () => {
       </div>
 
       {/* Summary */}
-      <div className="p-4 border-b border-slate-200">
-        <p className="text-sm text-slate-600">現在の買掛金残高</p>
-        <p className="text-3xl font-bold text-slate-800">¥{totalPayable.toLocaleString()}</p>
+      <div className="grid grid-cols-4 border-b border-slate-200 divide-x divide-slate-200">
+        <div className="p-3 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">発生額合計</p>
+          <p className="font-mono font-medium text-slate-700">¥{summary.totalAmount.toLocaleString()}</p>
+        </div>
+        <div className="p-3 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">支払済額</p>
+          <p className="font-mono font-medium text-emerald-600">¥{summary.totalPaid.toLocaleString()}</p>
+        </div>
+        <div className="p-3 text-center bg-indigo-50/30">
+          <p className="text-[10px] text-indigo-600 uppercase tracking-wide font-bold">未払残高</p>
+          <p className="font-mono font-bold text-indigo-700">¥{summary.totalUnpaid.toLocaleString()}</p>
+        </div>
+        <div className="p-3 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">期日超過</p>
+          <p className={`font-mono font-bold ${summary.overdueCount > 0 ? 'text-red-600' : 'text-slate-400'}`}>{summary.overdueCount}件</p>
+        </div>
       </div>
 
       {/* Table */}
@@ -113,27 +133,35 @@ const PayablesPage: React.FC = () => {
                   <th className="px-4 py-2">支払先</th>
                   <th className="px-4 py-2">カテゴリ</th>
                   <th className="px-4 py-2 text-right">金額</th>
+                  <th className="px-4 py-2 text-right">支払済</th>
+                  <th className="px-4 py-2 text-right">未払残高</th>
                   <th className="px-4 py-2">発生日</th>
                   <th className="px-4 py-2">支払期日</th>
                   <th className="px-4 py-2">ステータス</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-slate-700 divide-y divide-slate-100">
-                {payables.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium">{item.supplier}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{item.category}</td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold">¥{item.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{item.date}</td>
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-red-600">{item.due}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_MAP[item.status]?.color || ''}`}>
-                        {STATUS_MAP[item.status]?.icon}
-                        {STATUS_MAP[item.status]?.text || item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {payables.map((item) => {
+                  const isOverdue = item.status !== 'paid' && item.due && item.due < today;
+                  const unpaid = item.amount - item.paidAmount;
+                  return (
+                    <tr key={item.id} className={`hover:bg-slate-50 ${isOverdue ? 'bg-red-50/50' : ''}`}>
+                      <td className="px-4 py-3 font-medium">{item.supplier}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs">{item.category}</td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold">¥{item.amount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-emerald-600">{item.paidAmount > 0 ? `¥${item.paidAmount.toLocaleString()}` : '-'}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">{unpaid > 0 ? `¥${unpaid.toLocaleString()}` : '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{item.date}</td>
+                      <td className={`px-4 py-3 font-mono text-xs font-bold ${isOverdue ? 'text-red-600' : 'text-slate-600'}`}>{item.due}{isOverdue ? ' !' : ''}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_MAP[item.status]?.color || ''}`}>
+                          {STATUS_MAP[item.status]?.icon}
+                          {STATUS_MAP[item.status]?.text || item.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
         )}

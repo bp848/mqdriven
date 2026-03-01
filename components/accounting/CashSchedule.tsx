@@ -55,6 +55,15 @@ export const CashSchedulePage: React.FC = () => {
       balance: d.closing_balance / 1000, // in thousands
   }));
 
+  const monthlySummary = scheduleData.reduce((acc, d) => {
+    acc.totalInflows += d.inflows;
+    acc.totalOutflows += d.outflows;
+    return acc;
+  }, { totalInflows: 0, totalOutflows: 0 });
+  const monthOpenBalance = scheduleData.length > 0 ? scheduleData[0].opening_balance : 0;
+  const monthCloseBalance = scheduleData.length > 0 ? scheduleData[scheduleData.length - 1].closing_balance : 0;
+  const netChange = monthlySummary.totalInflows - monthlySummary.totalOutflows;
+
   const formatCurrency = (val: number) => val.toLocaleString();
 
   return (
@@ -113,6 +122,30 @@ export const CashSchedulePage: React.FC = () => {
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
+            </div>
+
+            {/* Monthly Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 flex-shrink-0">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide">月初残高</p>
+                <p className="font-mono font-medium text-slate-700">¥{formatCurrency(monthOpenBalance)}</p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                <p className="text-[10px] text-green-600 uppercase tracking-wide">入金合計</p>
+                <p className="font-mono font-medium text-green-600">¥{formatCurrency(monthlySummary.totalInflows)}</p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                <p className="text-[10px] text-red-600 uppercase tracking-wide">出金合計</p>
+                <p className="font-mono font-medium text-red-600">¥{formatCurrency(monthlySummary.totalOutflows)}</p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide">純増減</p>
+                <p className={`font-mono font-bold ${netChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>{netChange >= 0 ? '+' : ''}¥{formatCurrency(netChange)}</p>
+              </div>
+              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200 shadow-sm text-center">
+                <p className="text-[10px] text-indigo-600 uppercase tracking-wide font-bold">月末残高</p>
+                <p className="font-mono font-bold text-indigo-700">¥{formatCurrency(monthCloseBalance)}</p>
+              </div>
             </div>
 
             {/* Table Section */}

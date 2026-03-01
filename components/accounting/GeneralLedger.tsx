@@ -74,8 +74,9 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = () => {
       acc.credit += entry.credit ?? 0;
       return acc;
   }, { debit: 0, credit: 0 });
-  
-  const currentBalance = (ledgerData[0]?.balance ?? 0) - totals.debit + totals.credit;
+
+  const openingBalance = ledgerData.length > 0 ? (ledgerData[0]?.balance ?? 0) : 0;
+  const currentBalance = ledgerData.length > 0 ? (ledgerData[ledgerData.length - 1]?.balance ?? 0) : 0;
 
 
   return (
@@ -136,7 +137,7 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = () => {
       <div className="grid grid-cols-4 bg-slate-50 border-b border-slate-200 divide-x divide-slate-200">
           <div className="p-3 text-center">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide">前月繰越</p>
-              <p className="font-mono font-medium text-slate-700">{formatCurrency(ledgerData[0]?.balance ?? 0)}</p>
+              <p className="font-mono font-medium text-slate-700">{formatCurrency(openingBalance)}</p>
           </div>
           <div className="p-3 text-center">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide">借方合計</p>
@@ -160,6 +161,8 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = () => {
             </div>
         ) : error ? (
             <div className="flex items-center justify-center h-full text-red-500">{error}</div>
+        ) : ledgerData.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-slate-400 text-sm">この期間の取引データはありません</div>
         ) : (
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-100 sticky top-0 z-10 text-xs font-semibold text-slate-500 shadow-sm">
