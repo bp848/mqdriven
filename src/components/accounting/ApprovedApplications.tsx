@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FileCheck, Search, Eye, Loader, X, RefreshCw } from 'lucide-react';
+import { FileCheck, Search, Eye, Loader, X, RefreshCw, Check, Pencil, Sparkles } from 'lucide-react';
 import { ApplicationWithDetails, AIJournalSuggestion, Page } from '../../../types';
 import * as dataService from '../../../services/dataService';
 import { suggestJournalEntry } from '../../../services/geminiService';
@@ -38,6 +38,8 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   const [selectedCreditAccountId, setSelectedCreditAccountId] = useState<string>('');
   const [bulkAiRunning, setBulkAiRunning] = useState(false);
   const [bulkAiProgress, setBulkAiProgress] = useState({ done: 0, total: 0, errors: 0 });
+  const [confirmingAppId, setConfirmingAppId] = useState<string | null>(null);
+  const [inlineWorkingId, setInlineWorkingId] = useState<string | null>(null);
 
   const normalizeHandlingStatus = (value: unknown): 'unhandled' | 'in_progress' | 'done' | 'blocked' => {
     const raw = typeof value === 'string' ? value.trim() : '';
@@ -386,6 +388,26 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     }
   }, [loadApprovedApplications, notify, selectedApplication]);
 
+  const handleInlineConfirm = useCallback(async (app: ApplicationWithDetails) => {
+    const entryId = app.journalEntry?.id;
+    if (!entryId) {
+      notify?.('仕訳が未生成のため確定できません。', 'error');
+      return;
+    }
+    setInlineWorkingId(app.id);
+    try {
+      await dataService.updateJournalEntryStatus(entryId, 'posted');
+      notify?.('仕訳を確定しました。', 'success');
+      setConfirmingAppId(null);
+      await loadApprovedApplications();
+    } catch (err: any) {
+      console.error('Failed to post journal entry:', err);
+      notify?.(err?.message || '仕訳の確定に失敗しました。', 'error');
+    } finally {
+      setInlineWorkingId(null);
+    }
+  }, [loadApprovedApplications, notify]);
+
   const getAccountingSummary = (app: ApplicationWithDetails) => {
     const entry = app.journalEntry;
     if (!entry || !entry.lines || entry.lines.length === 0) {
@@ -463,8 +485,8 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
               <Loader className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
             </div>
           ) : (
-            <table className="w-full text-left text-sm text-slate-600 dark:text-slate-200">
-              <thead className="bg-slate-50 dark:bg-slate-900/30 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+            <table className="w-full text-left text-base text-slate-600 dark:text-slate-200">
+              <thead className="bg-slate-50 dark:bg-slate-900/30 text-sm uppercase font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                   <th className="px-4 py-3 whitespace-nowrap w-24">種別</th>
                   <th className="px-4 py-3">件名</th>
@@ -486,7 +508,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                       className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40 cursor-pointer"
                     >
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
+                        <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-sm font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
                           {app.application_code?.name || 'N/A'}
                         </span>
                       </td>
@@ -494,7 +516,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                         <div className="font-bold text-slate-800 dark:text-slate-100 truncate max-w-xs">
                           {buildTitle(app)}
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-xs">
+                        <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-xs">
                           {buildTitle(app) === (app.formData?.invoice?.supplierName || '') ? '' : app.formData?.invoice?.supplierName || ''}
                         </div>
                       </td>
@@ -504,19 +526,19 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                       <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
                         {amountText ? amountText : '-'}
                       </td>
-                      <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm font-mono text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">
                         {formatDate(app.approvedAt)}
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border ${getAccountingStatusBadgeClass(
+                          className={`inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-sm font-semibold border ${getAccountingStatusBadgeClass(
                             status
                           )}`}
                         >
                           {getAccountingStatusLabel(status)}
                         </span>
                         {app.journalEntry?.lines && app.journalEntry.lines.length > 0 && (
-                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate max-w-[12rem]">
+                          <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate max-w-[12rem]">
                             {(() => {
                               const dl = app.journalEntry!.lines!.find((l: any) => (l.debit_amount ?? 0) > 0);
                               const cl = app.journalEntry!.lines!.find((l: any) => (l.credit_amount ?? 0) > 0);

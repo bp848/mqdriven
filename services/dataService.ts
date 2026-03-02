@@ -203,7 +203,7 @@ async function fetchJournalBatches(supabase: any, ids: string[]) {
   const parts = chunk(valid, 50);
   const res = await Promise.all(parts.map(p =>
     supabase
-      .from('journal_batches')
+      .from('v_journal_batches')
       .select('id,source_application_id,status')
       .in('source_application_id', p)
   ));
@@ -1804,7 +1804,7 @@ export const getJournalEntries = async (status?: string): Promise<JournalEntry[]
     const targetStatus = status || 'posted';
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, status')
         .eq('status', targetStatus);
 
@@ -1848,7 +1848,7 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
     const supabase = getSupabase();
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, status')
         .eq('status', status);
 
@@ -1918,7 +1918,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
 
     // batch_idからsource_application_idを取得
     const { data: batch, error: batchFetchError } = await supabase
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, source_application_id')
         .eq('id', entry.batch_id)
         .single();
@@ -1944,7 +1944,7 @@ export const updateJournalEntryStatus = async (journalEntryId: string, status: s
     } else {
         // NOTE: 未確定へ戻す（unpost）は監査/権限設計が絡むため、ここでは行わない。
         const { error: batchError } = await supabase
-            .from('journal_batches')
+            .from('v_journal_batches')
             .update({
                 status,
                 posted_at: null,
@@ -1968,7 +1968,7 @@ export const addJournalEntry = async (entryData: Omit<JournalEntry, 'id' | 'date
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     // まずjournal_batchを作成
     const { data: batch, error: batchError } = await supabase
-        .from('journal_batches')
+        .from('v_journal_batches')
         .insert({
             status: 'draft',
             created_by: entryData.created_by || null,
@@ -4427,7 +4427,7 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
     const supabase = getSupabase();
     // publicスキーマのVIEW経由でaccounting.journal_batchesにアクセス
     const { data: batches, error: batchesError } = await supabase
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('id, status')
         .eq('status', 'draft');
 
@@ -5219,7 +5219,7 @@ export const getJournalBatches = async (options?: PaginationOptions): Promise<an
     const ascending = options?.ascending ?? false;
 
     const { data, error } = await supabase
-        .from('journal_batches')
+        .from('v_journal_batches')
         .select('*')
         .order(orderBy, { ascending })
         .range(offset, offset + limit - 1);

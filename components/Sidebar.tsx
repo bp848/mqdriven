@@ -18,6 +18,7 @@ type NavItemType = {
   icon?: React.ElementType;
   adminOnly?: boolean;
   children?: NavItemType[];
+  externalUrl?: string;
 };
 
 type NavCategoryType = {
@@ -48,7 +49,7 @@ const BASE_NAV_CATEGORIES: NavCategoryType[] = [
     name: 'カレンダー',
     icon: Calendar,
     items: [
-      { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar },
+      { page: 'my_schedule', name: '日報タスクカレンダー', icon: Calendar, externalUrl: 'https://task.b-p.co.jp' },
     ],
   },
   {
@@ -333,8 +334,11 @@ const Sidebar: React.FC<SidebarWithCountsProps> = ({
                     return (
                       <li key={item.page}>
                         <a
-                          href="#"
+                          href={item.externalUrl || '#'}
+                          target={item.externalUrl ? '_blank' : undefined}
+                          rel={item.externalUrl ? 'noopener noreferrer' : undefined}
                           onClick={(e) => {
+                            if (item.externalUrl) return; // 外部リンクはデフォルト動作
                             e.preventDefault();
                             if (item.children) {
                               e.stopPropagation();
