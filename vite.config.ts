@@ -6,16 +6,29 @@ export default defineConfig(({ mode }) => {
   // Load environment variables
   const env = loadEnv(mode, '.', '');
 
-  // Debug: Print loaded environment variables
-  console.log('Vite loaded env vars:', {
-    VITE_GEMINI_API_KEY: env.VITE_GEMINI_API_KEY ? '***SET***' : 'NOT SET',
-    GEMINI_API_KEY: env.GEMINI_API_KEY ? '***SET***' : 'NOT SET',
-    VITE_SUPABASE_URL: env.VITE_SUPABASE_URL ? '***SET***' : 'NOT SET',
-    VITE_SUPABASE_ANON_KEY: env.VITE_SUPABASE_ANON_KEY ? '***SET***' : 'NOT SET',
-    VITE_AI_OFF: env.VITE_AI_OFF
+  // Resolve Supabase credentials from any env var naming convention.
+  // Vite only exposes VITE_-prefixed vars to import.meta.env by default,
+  // so we must map SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL → VITE_SUPABASE_URL
+  // to ensure the client build always has the credentials.
+  const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL || '';
+  const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_KEY || '';
+  const geminiKey = env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY || '';
+  const aiOff = env.VITE_AI_OFF || '';
+
+  console.log('Vite env resolution:', {
+    SUPABASE_URL: supabaseUrl ? '***SET***' : 'NOT SET',
+    SUPABASE_KEY: supabaseKey ? '***SET***' : 'NOT SET',
+    GEMINI_API_KEY: geminiKey ? '***SET***' : 'NOT SET',
+    VITE_AI_OFF: aiOff,
   });
 
   return {
+    define: {
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseKey),
+      'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(geminiKey),
+      'import.meta.env.VITE_AI_OFF': JSON.stringify(aiOff),
+    },
     server: {
       port: 8080,
       host: '0.0.0.0',
