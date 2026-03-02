@@ -485,20 +485,20 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
               <Loader className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
             </div>
           ) : (
-            <table className="w-full text-left text-base text-slate-600 dark:text-slate-200">
-              <thead className="bg-slate-50 dark:bg-slate-900/30 text-sm font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="px-3 py-3 whitespace-nowrap">種別</th>
-                  <th className="px-3 py-3">件名</th>
-                  <th className="px-3 py-3 text-right whitespace-nowrap">金額</th>
-                  <th className="px-3 py-3 whitespace-nowrap">日時</th>
-                  <th className="px-3 py-3 whitespace-nowrap">仕訳</th>
-                  <th className="px-3 py-3 whitespace-nowrap text-center">提案</th>
-                  <th className="px-3 py-3 whitespace-nowrap text-center">修正</th>
-                  <th className="px-3 py-3 whitespace-nowrap text-center">確定</th>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">種別</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400">件名</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 text-right whitespace-nowrap">金額</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">日時</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">仕訳</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">提案</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">修正</th>
+                  <th className="px-5 py-4 text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">確定</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+              <tbody>
                 {filteredApps.map((app) => {
                   const amount = deriveAmount(app);
                   const status = app.accountingStatus ?? app.accounting_status ?? 'none';
@@ -509,122 +509,88 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                   const journalSummary = hasJournal ? (() => {
                     const dl = app.journalEntry!.lines!.find((l: any) => (l.debit_amount ?? 0) > 0);
                     const cl = app.journalEntry!.lines!.find((l: any) => (l.credit_amount ?? 0) > 0);
-                    return `${dl?.account_name || '?'} → ${cl?.account_name || '?'}`;
+                    return `${dl?.account_name || '?'} / ${cl?.account_name || '?'}`;
                   })() : null;
                   const isConfirming = confirmingAppId === app.id;
                   const isInlineWorking = inlineWorkingId === app.id;
                   return (
-                    <tr
-                      key={app.id}
-                      className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40"
-                    >
-                      <td className="px-3 py-3">
-                        <span className="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-sm font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
-                          {app.application_code?.name || 'N/A'}
-                        </span>
+                    <tr key={app.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-800/60">
+                      <td className="px-5 py-4 whitespace-nowrap text-[15px] text-slate-700 dark:text-slate-200">
+                        {app.application_code?.name || '-'}
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="font-semibold text-slate-800 dark:text-slate-100 truncate max-w-sm">
+                      <td className="px-5 py-4">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedApplicationId(app.id)}
+                          className="text-[15px] text-teal-700 dark:text-teal-400 hover:underline text-left truncate block max-w-md"
+                        >
                           {buildTitle(app)}
-                        </div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400 truncate max-w-sm">
+                        </button>
+                        <div className="text-[13px] text-slate-400 dark:text-slate-500 truncate max-w-md">
                           {app.applicant?.name}{buildTitle(app) !== (app.formData?.invoice?.supplierName || '') && app.formData?.invoice?.supplierName ? ` / ${app.formData.invoice.supplierName}` : ''}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                      <td className="px-5 py-4 text-right text-[15px] tabular-nums text-slate-800 dark:text-slate-100 whitespace-nowrap">
                         {amountText || '-'}
                       </td>
-                      <td className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="px-5 py-4 text-[13px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
                         {formatDate(app.approvedAt)}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         {hasJournal ? (
-                          <div>
-                            <span className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-semibold border ${getAccountingStatusBadgeClass(status)}`}>
-                              {getAccountingStatusLabel(status)}
-                            </span>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[10rem]">
-                              {journalSummary}
-                            </div>
-                          </div>
+                          <>
+                            <div className="text-[13px] text-slate-700 dark:text-slate-200">{isPosted ? '確定済' : '下書き'}</div>
+                            <div className="text-[12px] text-slate-400 dark:text-slate-500">{journalSummary}</div>
+                          </>
                         ) : (
-                          <span className="text-sm text-slate-400">未生成</span>
+                          <span className="text-[13px] text-slate-300 dark:text-slate-600">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {!hasJournal && !isPosted && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setSelectedApplicationId(app.id); }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold hover:bg-violet-100 dark:bg-violet-500/20 dark:text-violet-200 dark:border-violet-400/40 dark:hover:bg-violet-500/30"
-                            title="AI仕訳提案を開く"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            提案
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        {!hasJournal && !isPosted ? (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedApplicationId(app.id); }} className="text-[13px] text-teal-700 dark:text-teal-400 hover:underline">
+                            AI提案
                           </button>
+                        ) : hasJournal && !isPosted ? (
+                          <span className="text-[13px] text-slate-400">済</span>
+                        ) : (
+                          <span className="text-[13px] text-slate-300 dark:text-slate-600">-</span>
                         )}
-                        {hasJournal && !isPosted && (
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">済</span>
-                        )}
-                        {isPosted && <span className="text-xs text-slate-400">-</span>}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {hasJournal && !isPosted && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setSelectedApplicationId(app.id); }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600"
-                            title="仕訳を修正"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        {hasJournal && !isPosted ? (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedApplicationId(app.id); }} className="text-[13px] text-teal-700 dark:text-teal-400 hover:underline">
                             修正
                           </button>
+                        ) : (
+                          <span className="text-[13px] text-slate-300 dark:text-slate-600">-</span>
                         )}
-                        {!hasJournal && <span className="text-xs text-slate-400">-</span>}
-                        {isPosted && <span className="text-xs text-slate-400">-</span>}
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         {isDraft && hasJournal && !isConfirming && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setConfirmingAppId(app.id); }}
-                            disabled={isInlineWorking}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-400/40 dark:hover:bg-emerald-500/30"
-                            title="仕訳を確定"
-                          >
-                            <Check className="w-3.5 h-3.5" />
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmingAppId(app.id); }} disabled={isInlineWorking} className="text-[13px] text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50">
                             確定
                           </button>
                         )}
                         {isDraft && hasJournal && isConfirming && (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => handleInlineConfirm(app)}
-                              disabled={isInlineWorking}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                            >
-                              {isInlineWorking ? <Loader className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                              実行
+                          <span className="inline-flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button type="button" onClick={() => handleInlineConfirm(app)} disabled={isInlineWorking} className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline disabled:opacity-50">
+                              {isInlineWorking ? '処理中...' : '実行'}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingAppId(null)}
-                              className="px-2 py-1 rounded-md text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                            >
+                            <button type="button" onClick={() => setConfirmingAppId(null)} className="text-[13px] text-slate-400 hover:underline">
                               取消
                             </button>
-                          </div>
+                          </span>
                         )}
-                        {isPosted && <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold"><Check className="w-3.5 h-3.5" />確定済</span>}
-                        {!isDraft && !isPosted && <span className="text-xs text-slate-400">-</span>}
+                        {isPosted && <span className="text-[13px] text-slate-400">確定済</span>}
+                        {!isDraft && !isPosted && <span className="text-[13px] text-slate-300 dark:text-slate-600">-</span>}
                       </td>
                     </tr>
                   );
                 })}
                 {filteredApps.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+                    <td colSpan={8} className="px-5 py-16 text-center text-slate-400 dark:text-slate-500">
                       該当する承認済み申請がありません。
                     </td>
                   </tr>

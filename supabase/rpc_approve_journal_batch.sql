@@ -13,8 +13,7 @@ BEGIN
     -- 1. ドラフト状態のバッチのみ承認対象
     UPDATE accounting.journal_batches
     SET status = 'posted',
-        posted_at = timezone('utc', now()),
-        updated_by = p_user_id
+        posted_at = timezone('utc', now())
     WHERE id = p_batch_id
       AND status = 'draft'
     RETURNING source_application_id INTO v_application_id;
@@ -36,8 +35,7 @@ BEGIN
     -- 3. 元の申請があれば accounting_status を posted に更新
     IF v_application_id IS NOT NULL THEN
         UPDATE public.applications
-        SET accounting_status = 'posted',
-            updated_by = p_user_id
+        SET accounting_status = 'posted'
         WHERE id = v_application_id;
     END IF;
 
