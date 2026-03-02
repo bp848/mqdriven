@@ -36,6 +36,8 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
   const [isAiAutoSuggest, setIsAiAutoSuggest] = useState(true);
   const [selectedDebitAccountId, setSelectedDebitAccountId] = useState<string>('');
   const [selectedCreditAccountId, setSelectedCreditAccountId] = useState<string>('');
+  const [bulkAiRunning, setBulkAiRunning] = useState(false);
+  const [bulkAiProgress, setBulkAiProgress] = useState({ done: 0, total: 0, errors: 0 });
 
   const normalizeHandlingStatus = (value: unknown): 'unhandled' | 'in_progress' | 'done' | 'blocked' => {
     const raw = typeof value === 'string' ? value.trim() : '';
@@ -239,6 +241,59 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     [accountItems, buildTitle, deriveAmount]
   );
 
+  const handleBulkAiGenerate = useCallback(async () => {
+    if (accountItems.length === 0) {
+      notify?.('勘定科目マスタの読み込み中です。', 'info');
+      return;
+    }
+    const targets = applications.filter(app => {
+      const st = app.accountingStatus ?? app.accounting_status ?? 'none';
+      return st === 'none' || !st;
+    });
+    if (targets.length === 0) {
+      notify?.('仕訳未生成の申請がありません。', 'info');
+      return;
+    }
+    setBulkAiRunning(true);
+    setBulkAiProgress({ done: 0, total: targets.length, errors: 0 });
+    let errors = 0;
+    const BATCH = 2;
+    for (let i = 0; i < targets.length; i += BATCH) {
+      const batch = targets.slice(i, i + BATCH);
+      const results = await Promise.allSettled(
+        batch.map(async (app) => {
+          const prompt = buildSuggestionPrompt(app);
+          if (prompt.replace(/\s+/g, '').length < 30) throw new Error('内容不足');
+          const suggestion = await suggestJournalEntry(prompt);
+          const debitId = resolveAccountId(suggestion.debitAccount);
+          const creditId = resolveAccountId(suggestion.creditAccount);
+          const amount = deriveAmount(app);
+          if (!debitId || !creditId || !amount || amount <= 0) throw new Error('勘定科目未解決');
+          await dataService.createJournalFromAiSelection({
+            applicationId: app.id,
+            debitAccountId: debitId,
+            creditAccountId: creditId,
+            amount,
+            description: buildTitle(app),
+            reasoning: suggestion.reasoning,
+            confidence: suggestion.confidence,
+            createdBy: currentUserId || undefined,
+          });
+          await dataService.updateApplicationAccountingStatus(app.id, 'draft');
+        })
+      );
+      const batchErrors = results.filter(r => r.status === 'rejected').length;
+      errors += batchErrors;
+      setBulkAiProgress(prev => ({ ...prev, done: Math.min(i + BATCH, targets.length), errors }));
+    }
+    setBulkAiRunning(false);
+    await loadApprovedApplications();
+    notify?.(
+      `AI仕訳提案完了: ${targets.length - errors}件成功${errors > 0 ? `、${errors}件失敗` : ''}`,
+      errors > 0 ? 'info' : 'success'
+    );
+  }, [accountItems, applications, buildSuggestionPrompt, buildTitle, currentUserId, deriveAmount, loadApprovedApplications, notify, resolveAccountId]);
+
   const handleAiSuggest = useCallback(async () => {
     if (!selectedApplication) return;
     if (accountItems.length === 0) {
@@ -354,13 +409,31 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileCheck className="w-6 h-6 text-indigo-600" />
             {title}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{description}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {bulkAiRunning && (
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <Loader className="w-4 h-4 animate-spin" />
+              <span>AI提案中 {bulkAiProgress.done}/{bulkAiProgress.total}</span>
+              {bulkAiProgress.errors > 0 && <span className="text-red-500">({bulkAiProgress.errors}件失敗)</span>}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleBulkAiGenerate}
+            disabled={bulkAiRunning || isLoading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
+          >
+            {bulkAiRunning ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            全件AI仕訳提案
+          </button>
         </div>
       </div>
 
@@ -393,12 +466,12 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
             <table className="w-full text-left text-sm text-slate-600 dark:text-slate-200">
               <thead className="bg-slate-50 dark:bg-slate-900/30 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="px-6 py-4">種別</th>
-                  <th className="px-6 py-4">件名</th>
-                  <th className="px-6 py-4 hidden md:table-cell">申請者</th>
-                  <th className="px-6 py-4 text-right">金額</th>
-                  <th className="px-6 py-4 hidden lg:table-cell">承認日時</th>
-                  <th className="px-6 py-4">会計</th>
+                  <th className="px-4 py-3 whitespace-nowrap w-24">種別</th>
+                  <th className="px-4 py-3">件名</th>
+                  <th className="px-4 py-3 hidden md:table-cell whitespace-nowrap w-20">申請者</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap w-28">金額</th>
+                  <th className="px-4 py-3 hidden lg:table-cell whitespace-nowrap w-36">承認日時</th>
+                  <th className="px-4 py-3 whitespace-nowrap w-48">会計ステータス</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -412,41 +485,45 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
                       onClick={() => setSelectedApplicationId(app.id)}
                       className="hover:bg-slate-50/50 dark:hover:bg-slate-900/40 cursor-pointer"
                     >
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/40">
                           {app.application_code?.name || 'N/A'}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-800 dark:text-slate-100">
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-slate-800 dark:text-slate-100 truncate max-w-xs">
                           {buildTitle(app)}
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-xs">
                           {buildTitle(app) === (app.formData?.invoice?.supplierName || '') ? '' : app.formData?.invoice?.supplierName || ''}
                         </div>
                       </td>
-                      <td className="px-6 py-4 hidden md:table-cell">
+                      <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">
                         <div className="text-slate-700 dark:text-slate-200">{app.applicant?.name}</div>
                       </td>
-                      <td className="px-6 py-4 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                      <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
                         {amountText ? amountText : '-'}
                       </td>
-                      <td className="px-6 py-4 text-xs font-mono text-slate-500 dark:text-slate-400 hidden lg:table-cell">
+                      <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">
                         {formatDate(app.approvedAt)}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-start gap-2">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getAccountingStatusBadgeClass(
-                              status
-                            )}`}
-                          >
-                            {getAccountingStatusLabel(status)}
-                          </span>
-                          <div className="text-slate-700 dark:text-slate-200">
-                            {getAccountingSummary(app)}
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold border ${getAccountingStatusBadgeClass(
+                            status
+                          )}`}
+                        >
+                          {getAccountingStatusLabel(status)}
+                        </span>
+                        {app.journalEntry?.lines && app.journalEntry.lines.length > 0 && (
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate max-w-[12rem]">
+                            {(() => {
+                              const dl = app.journalEntry!.lines!.find((l: any) => (l.debit_amount ?? 0) > 0);
+                              const cl = app.journalEntry!.lines!.find((l: any) => (l.credit_amount ?? 0) > 0);
+                              return `${dl?.account_name || '?'} → ${cl?.account_name || '?'}`;
+                            })()}
                           </div>
-                        </div>
+                        )}
                       </td>
                     </tr>
                   );
