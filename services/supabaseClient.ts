@@ -3,19 +3,85 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 type SupabaseEnv = {
     VITE_SUPABASE_URL?: string;
     VITE_SUPABASE_ANON_KEY?: string;
+    NEXT_PUBLIC_SUPABASE_URL?: string;
+    NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
     SUPABASE_URL?: string;
     SUPABASE_KEY?: string;
 };
 
-export const resolveSupabaseCredentials = (env: SupabaseEnv): { url: string; key: string } => {
-    const url = env.VITE_SUPABASE_URL || env.SUPABASE_URL || '';
-    const key = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_KEY || '';
+const readRuntimeEnvValue = (key: string): string | undefined => {
+    if (typeof window !== 'undefined') {
+        const win = window as any;
+        if (win.__ENV && win.__ENV[key] !== undefined) return win.__ENV[key];
+        if (win[key] !== undefined) return win[key];
+        if (win.process?.env && win.process.env[key] !== undefined) return win.process.env[key];
+    }
+
+    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+        return process.env[key];
+    }
+
+    return undefined;
+};
+
+const pickValue = (
+    env: SupabaseEnv | undefined,
+    keys: Array<keyof SupabaseEnv>,
+    runtimeReader?: (key: string) => string | undefined,
+): string => {
+    if (env) {
+        for (const key of keys) {
+            const v = (env as Record<string, any>)[key];
+            if (v && typeof v === 'string') return v.trim();
+        }
+    }
+
+    if (runtimeReader) {
+        for (const key of keys) {
+            const v = runtimeReader(String(key));
+            if (v && typeof v === 'string') return v.trim();
+        }
+    }
+
+    return '';
+};
+
+export const resolveSupabaseCredentials = (
+    env: SupabaseEnv | undefined,
+    runtimeReader?: (key: string) => string | undefined,
+): { url: string; key: string } => {
+    const url = pickValue(
+        env,
+        ['VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'],
+        runtimeReader,
+    );
+    const key = pickValue(
+        env,
+        ['VITE_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_KEY'],
+        runtimeReader,
+    );
     return { url, key };
 };
 
-const resolvedCredentials = resolveSupabaseCredentials(import.meta.env as SupabaseEnv);
+const getBuildTimeEnv = (): SupabaseEnv | undefined => {
+    try {
+        if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+            return (import.meta as any).env as SupabaseEnv;
+        }
+    } catch {
+        // Safe skip
+    }
+    return undefined;
+};
+
+const resolvedCredentials = resolveSupabaseCredentials(
+    getBuildTimeEnv(),
+    readRuntimeEnvValue
+);
+
 export const SUPABASE_URL = resolvedCredentials.url;
 export const SUPABASE_KEY = resolvedCredentials.key;
+
 
 let supabase: SupabaseClient | null = null;
 
