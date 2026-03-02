@@ -200,7 +200,7 @@ async function fetchJournalBatches(supabase: any, ids: string[]) {
   const valid = safeIds(ids);
   if (valid.length === 0) return [];
   
-  const parts = chunk(valid, 200);
+  const parts = chunk(valid, 50);
   const res = await Promise.all(parts.map(p =>
     supabase
       .from('journal_batches')
@@ -213,6 +213,26 @@ async function fetchJournalBatches(supabase: any, ids: string[]) {
   
   if (error) console.warn('partial error in journal batches:', error);
   return data;
+}
+
+async function chunkedIn(
+  supabase: any,
+  table: string,
+  select: string,
+  inColumn: string,
+  values: string[],
+  extra?: (q: any) => any,
+): Promise<any[]> {
+  if (values.length === 0) return [];
+  const parts = chunk(values, 50);
+  const results = await Promise.all(parts.map(p => {
+    let q = supabase.from(table).select(select).in(inColumn, p);
+    if (extra) q = extra(q);
+    return q;
+  }));
+  const err = results.find((r: any) => r.error)?.error;
+  if (err) throw new Error(`${err.message || 'Query error'}: ${err.details || ''}`);
+  return results.flatMap((r: any) => r.data ?? []);
 }
 
 const filterUuidValues = (values: string[]): string[] => values.filter(v => UUID_REGEX.test(v));
@@ -1803,15 +1823,12 @@ export const getJournalEntries = async (status?: string): Promise<JournalEntry[]
     }
 
     // 明示的にカラムを指定し、リレーションを推測させない
-    const { data: entries, error: entriesError } = await supabase
-        .from('journal_entries')
-        .select('id, batch_id, entry_date, description, created_at')
-        .in('batch_id', batchIds)
-        .order('entry_date', { ascending: false });
-
-    if (entriesError) {
-        console.error('Failed to fetch journal entries:', entriesError);
-        // エラーをスローせず、空配列を返す（既存の動作を維持）
+    let entries: any[];
+    try {
+        entries = await chunkedIn(supabase, 'journal_entries', 'id, batch_id, entry_date, description, created_at', 'batch_id', batchIds,
+            (q: any) => q.order('entry_date', { ascending: false }));
+    } catch (e) {
+        console.error('Failed to fetch journal entries:', e);
         return [];
     }
 
@@ -1845,25 +1862,19 @@ export const getJournalEntriesByStatus = async (status: string): Promise<Journal
     }
 
     const batchIds = batches.map(b => b.id).filter(Boolean);
-    const { data: entries, error: entriesError } = await supabase
-        .from('journal_entries')
-        .select('id, batch_id, entry_date, description, created_at')
-        .in('batch_id', batchIds)
-        .order('created_at', { ascending: false });
-    ensureSupabaseSuccess(entriesError, 'Failed to fetch journal entries');
+    const entries = await chunkedIn(supabase, 'journal_entries', 'id, batch_id, entry_date, description, created_at', 'batch_id', batchIds,
+        (q: any) => q.order('created_at', { ascending: false }));
 
     if (!entries || entries.length === 0) {
         return [];
     }
 
-    const entryIds = entries.map(e => e.id).filter(Boolean);
-    const { data: lines, error: linesError } = await supabase
-        .from('v_journal_lines')
-        .select('id, journal_entry_id, account_id, debit, credit, description')
-        .in('journal_entry_id', entryIds);
-
-    if (linesError) {
-        console.warn('Failed to fetch journal entry lines:', linesError);
+    const entryIds = entries.map((e: any) => e.id).filter(Boolean);
+    let lines: any[] = [];
+    try {
+        lines = await chunkedIn(supabase, 'v_journal_lines', 'id, journal_entry_id, account_id, debit, credit, description', 'journal_entry_id', entryIds);
+    } catch (e) {
+        console.warn('Failed to fetch journal entry lines:', e);
     }
 
     const linesByEntryId = new Map<string, JournalEntryLine[]>();
@@ -2349,12 +2360,8 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
         return mapAppsWithoutJournal();
     }
 
-    // accountingスキーマのjournal_entriesテーブルを使用
-    const { data: journalEntries, error: journalError } = await supabase
-        .from('journal_entries')
-        .select('id, batch_id, entry_date, description, created_at')
-        .in('batch_id', batchIds);
-    ensureSupabaseSuccess(journalError, 'Failed to fetch journal entries for approved applications');
+    // accountingスキーマのjournal_entriesテーブルを使用（チャンク分割）
+    const journalEntries = await chunkedIn(supabase, 'journal_entries', 'id, batch_id, entry_date, description, created_at', 'batch_id', batchIds);
 
     const entryByAppId = new Map<string, JournalEntry>();
     (journalEntries || []).forEach(entry => {
@@ -2382,22 +2389,15 @@ export const getApprovedApplications = async (codes?: string[]): Promise<Applica
     const entryIds = Array.from(entryByAppId.values()).map(entry => entry.id).filter(Boolean);
     const linesByEntryId = new Map<string, any[]>();
     if (entryIds.length > 0) {
-        // publicスキーマのVIEW経由でaccounting.journal_linesにアクセス
-        const { data: journalLines, error: linesError } = await supabase
-            .from('v_journal_lines')
-            .select('id, journal_entry_id, account_id, debit, credit, description')
-            .in('journal_entry_id', entryIds);
-        ensureSupabaseSuccess(linesError, 'Failed to fetch journal entry lines');
+        // publicスキーマのVIEW経由でaccounting.journal_linesにアクセス（チャンク分割）
+        const journalLines = await chunkedIn(supabase, 'v_journal_lines', 'id, journal_entry_id, account_id, debit, credit, description', 'journal_entry_id', entryIds);
 
-        // account_idからaccount情報を別途取得
-        const accountIds = [...new Set((journalLines || []).map(l => l.account_id).filter(Boolean))];
+        // account_idからaccount情報を別途取得（チャンク分割）
+        const accountIds = [...new Set((journalLines || []).map((l: any) => l.account_id).filter(Boolean))];
         const accountMap = new Map<string, { code: string; name: string }>();
         if (accountIds.length > 0) {
-            const { data: accounts } = await supabase
-                .from('chart_of_accounts')
-                .select('id, code, name')
-                .in('id', accountIds);
-            (accounts || []).forEach(acc => {
+            const accounts = await chunkedIn(supabase, 'chart_of_accounts', 'id, code, name', 'id', accountIds);
+            (accounts || []).forEach((acc: any) => {
                 accountMap.set(acc.id, { code: acc.code, name: acc.name });
             });
         }
@@ -4441,37 +4441,27 @@ export const getDraftJournalEntries = async (): Promise<DraftJournalEntry[]> => 
     }
 
     const batchIds = batches.map(b => b.id).filter(Boolean);
-    const { data: entries, error: entriesError } = await supabase
-        .from('journal_entries')
-        .select('id, batch_id, entry_date, description')
-        .in('batch_id', batchIds)
-        .order('entry_date', { ascending: false });
-
-    ensureSupabaseSuccess(entriesError, '仕訳下書きの取得に失敗しました。');
+    const entries = await chunkedIn(supabase, 'journal_entries', 'id, batch_id, entry_date, description', 'batch_id', batchIds,
+        (q: any) => q.order('entry_date', { ascending: false }));
 
     if (!entries || entries.length === 0) {
         return [];
     }
 
-    const entryIds = entries.map(e => e.id).filter(Boolean);
-    const { data: lines, error: linesError } = await supabase
-        .from('v_journal_lines')
-        .select('journal_entry_id, account_id, debit, credit, description')
-        .in('journal_entry_id', entryIds);
-
-    if (linesError) {
-        console.warn('Failed to fetch journal entry lines:', linesError);
+    const entryIds = entries.map((e: any) => e.id).filter(Boolean);
+    let lines: any[] = [];
+    try {
+        lines = await chunkedIn(supabase, 'v_journal_lines', 'journal_entry_id, account_id, debit, credit, description', 'journal_entry_id', entryIds);
+    } catch (e) {
+        console.warn('Failed to fetch journal entry lines:', e);
     }
 
-    // account_idからaccount情報を別途取得
-    const accountIds = [...new Set((lines || []).map(l => l.account_id).filter(Boolean))];
+    // account_idからaccount情報を別途取得（チャンク分割）
+    const accountIds = [...new Set((lines || []).map((l: any) => l.account_id).filter(Boolean))];
     const accountMap = new Map<string, { code: string; name: string }>();
     if (accountIds.length > 0) {
-        const { data: accounts } = await supabase
-            .from('chart_of_accounts')
-            .select('id, code, name')
-            .in('id', accountIds);
-        (accounts || []).forEach(acc => {
+        const accounts = await chunkedIn(supabase, 'chart_of_accounts', 'id, code, name', 'id', accountIds);
+        (accounts || []).forEach((acc: any) => {
             accountMap.set(acc.id, { code: acc.code, name: acc.name });
         });
     }
