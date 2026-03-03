@@ -3,6 +3,7 @@ import { RefreshCw, Loader, CheckCircle, FileText, Plus, ArrowRight } from 'luci
 import { ApplicationWithDetails, AIJournalSuggestion, User } from '../../../types';
 import * as dataService from '../../../services/dataService';
 import { suggestJournalEntry } from '../../../services/geminiService';
+import { isAccountingTargetApplication } from './accountingApplicationFilter';
 
 interface JournalReviewPageProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -29,8 +30,9 @@ export const JournalReviewPage: React.FC<JournalReviewPageProps> = ({ notify, cu
     setError(null);
     try {
       const data = await dataService.getApprovedApplications();
-      setApplications(data);
-      setSelectedId(data[0]?.id ?? null);
+      const filtered = data.filter(isAccountingTargetApplication);
+      setApplications(filtered);
+      setSelectedId(filtered[0]?.id ?? null);
     } catch (err) {
       console.error('Failed to load approved applications:', err);
       setError('承認済み申請の取得に失敗しました。');

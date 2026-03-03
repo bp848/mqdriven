@@ -3,6 +3,7 @@ import { FileCheck, Search, Eye, Loader, X, RefreshCw, Check, Pencil, Sparkles }
 import { ApplicationWithDetails, AIJournalSuggestion, Page } from '../../../types';
 import * as dataService from '../../../services/dataService';
 import { suggestJournalEntry } from '../../../services/geminiService';
+import { isAccountingTargetApplication } from './accountingApplicationFilter';
 
 interface ApprovedApplicationsProps {
   notify?: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -52,7 +53,7 @@ export const ApprovedApplications: React.FC<ApprovedApplicationsProps> = ({
     setError(null);
     try {
       const data = await dataService.getApprovedApplications(codes);
-      setApplications(data);
+      setApplications(data.filter(isAccountingTargetApplication));
     } catch (err) {
       setError('承認済み申請の取得に失敗しました。');
       console.error(err);
