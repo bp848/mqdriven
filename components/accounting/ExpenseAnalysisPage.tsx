@@ -42,101 +42,7 @@ const ExpenseAnalysisPage: React.FC = () => {
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   // 勘定科目別タブ: 展開中の行キー ("YYYY-MM-DD::account_id")
   const [expandedAccountKey, setExpandedAccountKey] = useState<string | null>(null);
-  // 仕入先別タブ: 展開中の行キー ("YYYY-MM-DD::supplier_name")
-  const [expandedSupplierKey, setExpandedSupplierKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-
-  // TSV生成: 月別×科目のクロス集計（スプレッドシート貼り付け用）
-  const generateMonthlyTSV = useCallback(() => {
-    if (monthlyDetailData.length === 0) return '';
-
-    // 全科目を収集（コード順）
-    const allAccounts = new Map<string, { code: string; name: string }>();
-    for (const md of monthlyDetailData) {
-      for (const [key, acc] of md.accounts) {
-        if (!allAccounts.has(key)) {
-          allAccounts.set(key, { code: acc.code, name: acc.name });
-        }
-      }
-    }
-    const accountList = [...allAccounts.entries()].sort((a, b) => a[1].code.localeCompare(b[1].code));
-
-    // 月を古い順にソート
-    const months = [...monthlyDetailData].sort((a, b) => a.month.localeCompare(b.month));
-
-    // ヘッダー行: 科目コード\t科目名\t月1\t月2\t...
-    const header = ['科目コード', '勘定科目', ...months.map(m => m.label)].join('\t');
-
-    // データ行: 各科目×月
-    const rows = accountList.map(([accKey, acc]) => {
-      const values = months.map(md => {
-        const found = md.accounts.get(accKey);
-        return found ? Math.round(found.amount) : '';
-      });
-      return [acc.code, acc.name, ...values].join('\t');
-    });
-
-    // 合計行
-    const totalRow = ['', '合計', ...months.map(m => Math.round(m.total))].join('\t');
-
-    return [header, ...rows, totalRow].join('\n');
-  }, [monthlyDetailData]);
-
-  const copyToClipboard = useCallback(async (text: string) => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, []);
-
-  // 勘定科目別タブTSV
-  const generateByAccountTSV = useCallback(() => {
-    if (filteredByAccount.length === 0) return '';
-    const header = ['月', '科目コード', '科目名', '件数', '金額'].join('\t');
-    const rows = filteredByAccount.map(item =>
-      [formatMonth(item.month), item.account_code || '', item.account_name || '', item.line_count, Math.round(item.total_amount || 0)].join('\t')
-    );
-    return [header, ...rows].join('\n');
-  }, [filteredByAccount]);
-
-  // 仕入先別タブTSV
-  const generateBySupplierTSV = useCallback(() => {
-    if (filteredBySupplier.length === 0) return '';
-    const header = ['月', '仕入先名', '件数', '金額'].join('\t');
-    const rows = filteredBySupplier.map(item =>
-      [formatMonth(item.month), item.supplier_name || '', item.line_count, Math.round(item.total_amount || 0)].join('\t')
-    );
-    return [header, ...rows].join('\n');
-  }, [filteredBySupplier]);
-
-  // プロジェクト別タブTSV
-  const generateByProjectTSV = useCallback(() => {
-    if (filteredByProject.length === 0) return '';
-    const header = ['月', 'プロジェクトコード', '件数', '金額'].join('\t');
-    const rows = filteredByProject.map(item =>
-      [formatMonth(item.month), item.project_code || '', item.line_count, Math.round(item.total_amount || 0)].join('\t')
-    );
-    return [header, ...rows].join('\n');
-  }, [filteredByProject]);
-
-  // 明細一覧タブTSV
-  const generateDetailsTSV = useCallback(() => {
-    if (sortedExpenseLines.length === 0) return '';
-    const header = ['発生日', '科目コード', '勘定科目', '仕入先/摘要', '金額'].join('\t');
-    const rows = sortedExpenseLines.map(line =>
-      [line.occurred_on?.slice(0, 10) || '', line.account_code || '', line.account_name || '', line.supplier_name || '', Math.round(line.amount || 0)].join('\t')
-    );
-    return [header, ...rows].join('\n');
-  }, [sortedExpenseLines]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -362,6 +268,106 @@ const ExpenseAnalysisPage: React.FC = () => {
       return month;
     }
   };
+
+  // -- TSV生成（スプレッドシート貼り付け用） --
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
+
+  const generateMonthlyTSV = useCallback(() => {
+    if (monthlyDetailData.length === 0) return '';
+    const allAccounts = new Map<string, { code: string; name: string }>();
+    for (const md of monthlyDetailData) {
+      for (const [key, acc] of md.accounts) {
+        if (!allAccounts.has(key)) {
+          allAccounts.set(key, { code: acc.code, name: acc.name });
+        }
+      }
+    }
+    const accountList = [...allAccounts.entries()].sort((a, b) => a[1].code.localeCompare(b[1].code));
+    const months = [...monthlyDetailData].sort((a, b) => a.month.localeCompare(b.month));
+    const header = ['科目コード', '勘定科目', ...months.map(m => m.label)].join('\t');
+    const rows = accountList.map(([accKey, acc]) => {
+      const values = months.map(md => {
+        const found = md.accounts.get(accKey);
+        return found ? Math.round(found.amount) : '';
+      });
+      return [acc.code, acc.name, ...values].join('\t');
+    });
+    const totalRow = ['', '合計', ...months.map(m => Math.round(m.total))].join('\t');
+    return [header, ...rows, totalRow].join('\n');
+  }, [monthlyDetailData]);
+
+  const generateByAccountTSV = useCallback(() => {
+    if (filteredByAccount.length === 0) return '';
+    const monthSet = new Set<string>();
+    const accountMap = new Map<string, { code: string; name: string; byMonth: Map<string, number> }>();
+    for (const item of filteredByAccount) {
+      const mk = item.month ? item.month.slice(0, 7) : '';
+      if (!mk) continue;
+      monthSet.add(mk);
+      const ak = item.account_id || item.account_code || 'x';
+      if (!accountMap.has(ak)) {
+        accountMap.set(ak, { code: item.account_code || '', name: item.account_name || '不明', byMonth: new Map() });
+      }
+      const prev = accountMap.get(ak)!.byMonth.get(mk) || 0;
+      accountMap.get(ak)!.byMonth.set(mk, prev + Number(item.total_amount || 0));
+    }
+    const months = [...monthSet].sort();
+    const accounts = [...accountMap.values()]
+      .map(a => ({ ...a, total: [...a.byMonth.values()].reduce((s, n) => s + n, 0) }))
+      .sort((a, b) => b.total - a.total);
+    const monthLabels = months.map(m => { const [y, mo] = m.split('-'); return `${y}年${parseInt(mo)}月`; });
+    const header = ['コード', '科目名', ...monthLabels, '合計'].join('\t');
+    const rows = accounts.map(a => {
+      const vals = months.map(m => Math.round(a.byMonth.get(m) || 0) || '');
+      return [a.code, a.name, ...vals, Math.round(a.total)].join('\t');
+    });
+    const monthTotals = months.map(m => accounts.reduce((s, a) => s + (a.byMonth.get(m) || 0), 0));
+    const grandTotal = monthTotals.reduce((s, n) => s + n, 0);
+    const totalRow = ['', '月合計', ...monthTotals.map(t => Math.round(t)), Math.round(grandTotal)].join('\t');
+    return [header, ...rows, totalRow].join('\n');
+  }, [filteredByAccount]);
+
+  const generateBySupplierTSV = useCallback(() => {
+    if (filteredBySupplier.length === 0) return '';
+    const header = ['月', '仕入先名', '件数', '金額'].join('\t');
+    const rows = filteredBySupplier.map(item =>
+      [formatMonth(item.month), item.supplier_name || '', item.line_count, Math.round(item.total_amount || 0)].join('\t')
+    );
+    return [header, ...rows].join('\n');
+  }, [filteredBySupplier]);
+
+  const generateByProjectTSV = useCallback(() => {
+    if (filteredByProject.length === 0) return '';
+    const header = ['月', 'プロジェクトコード', '件数', '金額'].join('\t');
+    const rows = filteredByProject.map(item =>
+      [formatMonth(item.month), item.project_code || '', item.line_count, Math.round(item.total_amount || 0)].join('\t')
+    );
+    return [header, ...rows].join('\n');
+  }, [filteredByProject]);
+
+  const generateDetailsTSV = useCallback(() => {
+    if (sortedExpenseLines.length === 0) return '';
+    const header = ['発生日', '科目コード', '勘定科目', '仕入先/摘要', '金額'].join('\t');
+    const rows = sortedExpenseLines.map(line =>
+      [line.occurred_on?.slice(0, 10) || '', line.account_code || '', line.account_name || '', line.supplier_name || '', Math.round(line.amount || 0)].join('\t')
+    );
+    return [header, ...rows].join('\n');
+  }, [sortedExpenseLines]);
 
   const requestSort = (key: string) => {
     setSortConfig(prev => {
@@ -827,6 +833,7 @@ const ExpenseAnalysisPage: React.FC = () => {
 
           return (
             <div>
+              {renderCopyButton(generateByAccountTSV)}
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm border-collapse whitespace-nowrap">
                   <thead>
